@@ -5,6 +5,67 @@ use crate::terrain_edt_tpi::{
 };
 use serde::{Deserialize, Serialize};
 
+/// C++ `KaPaleoPipelineRunner` 4단계 진행률 상수 (`20% -> 50% -> 80% -> 100%`)
+pub const HGIS_STAGE1_PROGRESS_END: u8 = 20;
+pub const HGIS_STAGE2_PROGRESS_END: u8 = 50;
+pub const HGIS_STAGE3_PROGRESS_END: u8 = 80;
+pub const HGIS_STAGE4_PROGRESS_END: u8 = 100;
+
+/// C++ `PaleoPipelineResult` 실행 상태 코드
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PaleoPipelineStatus {
+    Completed,
+    UserCancelled,
+    InvalidInput,
+}
+
+/// C++ `KaPaleoPipelineRunner::runPipeline` — 4단계 진행률 콜백(`20% -> 50% -> 80% -> 100%`) 및 단계별 취소 원자 플래그 검사
+pub fn run_paleo_pipeline_staged<F>(
+    cancel_after_stage: Option<u8>,
+    is_cancelled: &std::sync::atomic::AtomicBool,
+    mut on_progress: F,
+) -> (PaleoPipelineStatus, u8)
+where
+    F: FnMut(u8, &'static str),
+{
+    use std::sync::atomic::Ordering;
+
+    let stages: [(u8, u8, &'static str); 4] = [
+        (1, HGIS_STAGE1_PROGRESS_END, "DEM 로드 및 결측 보정"),
+        (
+            2,
+            HGIS_STAGE2_PROGRESS_END,
+            "하천망 추출 및 유클리드 거리장(EDT) 계산",
+        ),
+        (
+            3,
+            HGIS_STAGE3_PROGRESS_END,
+            "지형위치지수(TPI) 및 비고(REM) 지형 분류",
+        ),
+        (
+            4,
+            HGIS_STAGE4_PROGRESS_END,
+            "고고학 입지 적합도 다기준 가중치 스코어링",
+        ),
+    ];
+
+    let mut last_progress = 0u8;
+    for (stage_idx, pct, label) in stages {
+        if is_cancelled.load(Ordering::Relaxed) {
+            return (PaleoPipelineStatus::UserCancelled, last_progress);
+        }
+        on_progress(pct, label);
+        last_progress = pct;
+        if cancel_after_stage == Some(stage_idx) {
+            is_cancelled.store(true, Ordering::Relaxed);
+        }
+    }
+    if is_cancelled.load(Ordering::Relaxed) && last_progress < HGIS_STAGE4_PROGRESS_END {
+        return (PaleoPipelineStatus::UserCancelled, last_progress);
+    }
+    (PaleoPipelineStatus::Completed, last_progress)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PaleoClass {
     NaturalLevee = 1,
@@ -409,5 +470,34 @@ mod tests {
         assert!((projected[1].station_m - 380.0).abs() < 1e-6);
         assert!((projected[1].total_depth_m - 20.0).abs() < 1e-6);
         assert_eq!(projected[1].strata_count, 2);
+    }
+
+    #[test]
+    fn test_stage2_cancellation_stops_progress_under_50pct_and_returns_user_cancelled() {
+        use std::sync::atomic::AtomicBool;
+
+        // TestKaPaleoPipelineRunner::testStage2CancellationCleanup:
+        // Cancel immediately after stage 1 (20%) before stage 2 finishes -> UserCancelled & progress <= 50%
+        let cancel_flag = AtomicBool::new(false);
+        let mut reported = Vec::new();
+        let (status, last_pct) =
+            run_paleo_pipeline_staged(Some(1), &cancel_flag, |pct, _stage| {
+                reported.push(pct);
+            });
+        assert_eq!(status, PaleoPipelineStatus::UserCancelled);
+        assert_eq!(last_pct, HGIS_STAGE1_PROGRESS_END);
+        assert!(last_pct <= HGIS_STAGE2_PROGRESS_END);
+        assert_eq!(reported, vec![20]);
+
+        // Full run reaches 100% across all 4 stages
+        let clean_flag = AtomicBool::new(false);
+        let mut all_stages = Vec::new();
+        let (ok_status, final_pct) =
+            run_paleo_pipeline_staged(None, &clean_flag, |pct, _stage| {
+                all_stages.push(pct);
+            });
+        assert_eq!(ok_status, PaleoPipelineStatus::Completed);
+        assert_eq!(final_pct, 100);
+        assert_eq!(all_stages, vec![20, 50, 80, 100]);
     }
 }

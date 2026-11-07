@@ -1,5 +1,52 @@
 use crate::viewport::ViewportTransform;
 
+/// C++ `HGIS_MIN_FEATURE_PIXEL_SIZE` (1.5f) — 서브픽셀 컬링 최소 화면 투영 바운딩 박스 크기(px)
+pub const HGIS_MIN_FEATURE_PIXEL_SIZE: f32 = 1.5;
+
+/// C++ `HGIS_SELECTION_OUTLINE_COLOR` (`#00E5FF` Cyan Accent) 및 반투명 글로우 상수
+pub const HGIS_SELECTION_OUTLINE_COLOR: [u8; 4] = [0, 229, 255, 255];
+pub const HGIS_SELECTION_GLOW_COLOR: [u8; 4] = [0, 229, 255, 100];
+
+/// C++ `KaCanvasPainter::shouldDrawFeature` 1:1 대응:
+/// 화면 투영 바운딩 박스의 가로·세로가 모두 `1.5px` 미만(`width < 1.5 && height < 1.5`)이거나
+/// 폴리곤 정점 수가 3개 미만인 퇴화 기하일 때 `false`를 반환하여 드로우 콜을 생략한다.
+#[must_use]
+pub fn should_draw_polygon_feature(screen_pts: &[[f32; 2]]) -> bool {
+    if screen_pts.len() < 3 {
+        return false;
+    }
+    let mut min_x = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut min_y = f32::INFINITY;
+    let mut max_y = f32::NEG_INFINITY;
+    for &[x, y] in screen_pts {
+        if !x.is_finite() || !y.is_finite() {
+            return false;
+        }
+        min_x = min_x.min(x);
+        max_x = max_x.max(x);
+        min_y = min_y.min(y);
+        max_y = max_y.max(y);
+    }
+    let width = max_x - min_x;
+    let height = max_y - min_y;
+    !(width < HGIS_MIN_FEATURE_PIXEL_SIZE && height < HGIS_MIN_FEATURE_PIXEL_SIZE)
+}
+
+/// C++ `KaFeatureStyleRenderer` 선택 피처 외곽선 폭(2.0배) 및 색상(`#00E5FF`) 계산
+#[must_use]
+pub fn compute_selection_outline_style(
+    base_width_mm: f32,
+    base_color: [u8; 4],
+    is_selected: bool,
+) -> (f32, [u8; 4]) {
+    if is_selected {
+        (base_width_mm * 2.0, HGIS_SELECTION_OUTLINE_COLOR)
+    } else {
+        (base_width_mm, base_color)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorldPolygonItem {
     pub layer_key: String,
@@ -134,5 +181,24 @@ mod tests {
         assert!(prims.len() >= 2);
         assert!(prims.iter().any(|p| p.layer_key == "survey_area"));
         assert!(prims.iter().any(|p| p.layer_key == "trial_trench"));
+    }
+
+    #[test]
+    fn test_subpixel_culling_under_1_5px_and_selection_outline_width_doubled() {
+        // 1. TestKaCanvasPainter::testSubpixelCullingUnder1_5px: width = 0.8px, height = 0.7px -> false
+        let tiny_poly = [[10.0_f32, 20.0], [10.8, 20.0], [10.8, 20.7], [10.0, 20.7]];
+        assert!(!should_draw_polygon_feature(&tiny_poly));
+
+        // Degenerate polygon (< 3 vertices) -> false
+        assert!(!should_draw_polygon_feature(&[[10.0, 20.0], [30.0, 40.0]]));
+
+        // Normal polygon (10px x 10px) -> true
+        let normal_poly = [[10.0_f32, 20.0], [20.0, 20.0], [20.0, 30.0], [10.0, 30.0]];
+        assert!(should_draw_polygon_feature(&normal_poly));
+
+        // 2. TestKaFeatureStyleRenderer::testSelectionOutlineWidthDoubled: 0.35mm selected -> 0.70mm & #00E5FF
+        let (w_sel, col_sel) = compute_selection_outline_style(0.35, [139, 69, 19, 255], true);
+        assert!((w_sel - 0.70).abs() < 1e-6);
+        assert_eq!(col_sel, HGIS_SELECTION_OUTLINE_COLOR);
     }
 }
