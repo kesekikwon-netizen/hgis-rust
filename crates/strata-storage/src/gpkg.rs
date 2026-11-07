@@ -3,11 +3,26 @@ use rusqlite::{params, Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 use strata_types::crs::WorkCrs;
 use strata_types::error::{StrataError, StrataResult};
 use strata_types::schema::DomainLayerKey;
 
 pub const GPKG_MAGIC_HEADER: &[u8; 16] = b"SQLite format 3\0";
+
+static GPKG_REPO_MUTEX: Mutex<()> = Mutex::new(());
+
+/// C++ `GpkgAtomicWrite::commitLayer` 결과 코드 (`enum class GpkgResultCode`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GpkgResultCode {
+    Success,
+    LockFailed,
+    SchemaMismatch,
+    DiskFull,
+    WriteError,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SurveyWorkspace {
@@ -21,6 +36,64 @@ pub struct SurveyWorkspace {
 pub struct GpkgRepository;
 
 impl GpkgRepository {
+    /// C++ `GpkgAtomicWrite::commitLayer(gpkgPath, layerName, layer) -> GpkgResultCode`
+    /// 프로세스 내 상호 배제(`GPKG_REPO_MUTEX`), Windows 파일 잠금 재시도 루프,
+    /// SQLite 트랜잭션 커밋 후 `PRAGMA integrity_check == "ok"` 검증을 수행합니다.
+    pub fn commit_layer_atomic(
+        path: &Path,
+        layer_name: &str,
+        layer: &LayerEditBuffer,
+    ) -> GpkgResultCode {
+        if layer_name.trim().is_empty() {
+            return GpkgResultCode::SchemaMismatch;
+        }
+        let _guard = match GPKG_REPO_MUTEX.lock() {
+            Ok(g) => g,
+            Err(_) => return GpkgResultCode::LockFailed,
+        };
+
+        let mut ws = match Self::open_read_only(path) {
+            Ok(ws) => ws,
+            Err(_) => return GpkgResultCode::SchemaMismatch,
+        };
+        if ws.schema_version != 3 {
+            return GpkgResultCode::SchemaMismatch;
+        }
+
+        let mut updated_layer = layer.clone();
+        updated_layer.assign_positive_ids_on_commit();
+        ws.layers.insert(layer_name.to_owned(), updated_layer);
+
+        let staging_path = path.with_extension("gpkg.atomic-tmp");
+        if Self::write_workspace_file(&staging_path, &ws).is_err() {
+            let _ = std::fs::remove_file(&staging_path);
+            return GpkgResultCode::WriteError;
+        }
+
+        let integrity_ok = Connection::open_with_flags(
+            &staging_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .and_then(|conn| conn.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0)))
+        .map(|res| res.eq_ignore_ascii_case("ok"))
+        .unwrap_or(false);
+
+        if !integrity_ok {
+            let _ = std::fs::remove_file(&staging_path);
+            return GpkgResultCode::WriteError;
+        }
+
+        for attempt in 0..4 {
+            let _ = std::fs::remove_file(path);
+            if std::fs::rename(&staging_path, path).is_ok() {
+                return GpkgResultCode::Success;
+            }
+            thread::sleep(Duration::from_millis(15 * (attempt + 1)));
+        }
+        let _ = std::fs::remove_file(&staging_path);
+        GpkgResultCode::LockFailed
+    }
+
     pub fn create_new_survey(path: &Path, work_crs: WorkCrs) -> StrataResult<SurveyWorkspace> {
         let ws = SurveyWorkspace {
             schema_version: 3,
@@ -176,6 +249,47 @@ mod tests {
             )
             .map_err(|e| StrataError::Storage(e.to_string()))?;
         assert_eq!(srs_count, 3);
+        Ok(())
+    }
+
+    #[test]
+    fn test_gpkg_atomic_write_commits_1000_features_and_verifies_pragma_integrity_ok(
+    ) -> StrataResult<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("atomic_1000_features.gpkg");
+        GpkgRepository::create_new_survey(&path, WorkCrs::Epsg5187)?;
+
+        let mut buf = LayerEditBuffer::new(DomainLayerKey::FeaturePoly);
+        for i in 0..1000 {
+            let x = 219_800.0 + f64::from(i % 50) * 5.0;
+            let y = 361_500.0 + f64::from(i / 50) * 5.0;
+            let wkt = format!(
+                "POLYGON(({x:.1} {y:.1}, {:.1} {y:.1}, {:.1} {:.1}, {x:.1} {:.1}, {x:.1} {y:.1}))",
+                x + 3.0,
+                x + 3.0,
+                y + 3.0,
+                y + 3.0
+            );
+            let mut attrs = BTreeMap::new();
+            attrs.insert("FEAT_NO".to_owned(), format!("유구-{}", i + 1));
+            buf.add_unsaved_feature(wkt, attrs);
+        }
+
+        let code =
+            GpkgRepository::commit_layer_atomic(&path, DomainLayerKey::FeaturePoly.id(), &buf);
+        assert_eq!(code, GpkgResultCode::Success);
+        assert_eq!(
+            GpkgRepository::commit_layer_atomic(&path, "", &buf),
+            GpkgResultCode::SchemaMismatch
+        );
+
+        let reopened = GpkgRepository::open_read_only(&path)?;
+        let committed_layer = reopened
+            .layers
+            .get(DomainLayerKey::FeaturePoly.id())
+            .expect("committed layer must exist");
+        assert_eq!(committed_layer.features.len(), 1000);
+        assert!(committed_layer.features.iter().all(|f| f.fid > 0));
         Ok(())
     }
 }

@@ -301,9 +301,41 @@ impl RealSurveyData {
                     self.layer_visible.insert(k.to_owned(), false);
                 }
             }
-        } else if HERITAGE_LEAVES.contains(&name) && next {
-            self.layer_visible.insert("지정유산".to_owned(), true);
-            self.layer_visible.insert("참조 지도".to_owned(), true);
+        } else if HERITAGE_LEAVES.contains(&name) {
+            let any_leaf_on = HERITAGE_LEAVES.iter().any(|k| self.is_layer_visible(k));
+            self.layer_visible.insert("지정유산".to_owned(), any_leaf_on);
+            self.layer_visible.insert("참조 지도".to_owned(), any_leaf_on);
+        }
+    }
+
+    /// C++ `KaLayerSectionDelegate` (`Qt::CheckState`: 0 = Unchecked, 1 = PartiallyChecked, 2 = Checked)
+    pub fn layer_check_state(&self, name: &str) -> u8 {
+        const HERITAGE_LEAVES: [&str; 5] = [
+            "국가등록문화유산",
+            "국가지정유산",
+            "국가지정유산보호구역",
+            "시도지정유산",
+            "시도지정유산보호구역",
+        ];
+        if name == "지정유산" || name == "참조 지도" {
+            if !self.is_layer_visible(name) {
+                return 0;
+            }
+            let on_cnt = HERITAGE_LEAVES
+                .iter()
+                .filter(|&&k| self.is_layer_visible(k))
+                .count();
+            if on_cnt == 0 {
+                0
+            } else if on_cnt < HERITAGE_LEAVES.len() {
+                1
+            } else {
+                2
+            }
+        } else if self.is_layer_visible(name) {
+            2
+        } else {
+            0
         }
     }
     pub fn is_label_visible(&self, name: &str) -> bool { *self.label_visible.get(name).unwrap_or(&true) }

@@ -60,6 +60,43 @@ pub fn synthesize_dem_from_contours_and_spots(
     idw_interpolate_grid(tf, &pts_3d, 2.0, 15.0)
 }
 
+/// C++ `NgiiContourElevation::interpolateDemFromContours` 1:1 대응:
+/// 입력 등고선/표고점 유효성 검사, `std::atomic<bool>` 취소 체크, 표준 고도 범위(`-50.0..=2000.0 m`) 검증
+pub fn interpolate_dem_from_contours_validated(
+    tf: &GridTransform,
+    contours: &[TopographicContourFeature],
+    spot_elevations_xyz: &[[f64; 3]],
+    cancel_requested: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<Vec<f64>, String> {
+    use std::sync::atomic::Ordering;
+
+    if tf.width == 0 || tf.height == 0 || tf.cell_size <= 0.0 {
+        return Err("유효하지 않은 격자 해상도 또는 크기입니다".to_owned());
+    }
+    if contours.is_empty() && spot_elevations_xyz.is_empty() {
+        return Err("등고선 및 표고점 입력이 비어 있습니다".to_owned());
+    }
+    for c in contours {
+        if cancel_requested.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            return Err("등고선 DEM 보간 작업이 취소되었습니다".to_owned());
+        }
+        if c.vertices_xy.is_empty() || !c.elevation_m.is_finite() {
+            return Err("누락된 등고선 표고 속성 또는 파손된 기하가 감지되었습니다".to_owned());
+        }
+        if !(-50.0..=2000.0).contains(&c.elevation_m) {
+            return Err(format!(
+                "표준 고도 범위(-50.0~2000.0m)를 벗어난 등고선 표고값: {}",
+                c.elevation_m
+            ));
+        }
+    }
+    let mut dem = synthesize_dem_from_contours_and_spots(tf, contours, spot_elevations_xyz);
+    for z in &mut dem {
+        *z = z.clamp(-50.0, 2000.0);
+    }
+    Ok(dem)
+}
+
 /// `PaleoAnalysisPipeline.cpp` (`ceb5fd2`) — 다중 도엽 DEM 병합 (겹치는 도엽 경계 평균 블렌딩 + 빈 칸 IDW 보간)
 #[must_use]
 pub fn merge_multi_sheet_dem_grids(
@@ -209,5 +246,39 @@ mod tests {
             .expect("atomic DEM write should succeed");
         assert!(written.exists());
         let _ = std::fs::remove_file(written);
+    }
+
+    #[test]
+    fn test_ngii_contour_interpolation_1m_resolution_and_valid_elevation_bounds() {
+        use std::sync::atomic::AtomicBool;
+
+        let tf_1m = GridTransform {
+            origin_x: 219_800.0,
+            origin_y: 361_620.0,
+            cell_size: 1.0,
+            width: 20,
+            height: 20,
+        };
+        let contours = vec![
+            TopographicContourFeature {
+                vertices_xy: vec![[219_800.0, 361_618.0], [219_820.0, 361_618.0]],
+                elevation_m: 35.0,
+            },
+            TopographicContourFeature {
+                vertices_xy: vec![[219_800.0, 361_610.0], [219_820.0, 361_610.0]],
+                elevation_m: 30.0,
+            },
+            TopographicContourFeature {
+                vertices_xy: vec![[219_800.0, 361_602.0], [219_820.0, 361_602.0]],
+                elevation_m: 25.0,
+            },
+        ];
+        let spots = vec![[219_810.0, 361_614.0, 32.5]];
+        let cancel = AtomicBool::new(false);
+        let dem = interpolate_dem_from_contours_validated(&tf_1m, &contours, &spots, Some(&cancel))
+            .expect("1.0m contour DEM interpolation must succeed");
+        assert_eq!(dem.len(), 400);
+        assert!((tf_1m.cell_size - 1.0).abs() < 1e-9);
+        assert!(dem.iter().all(|&z| (-50.0..=2000.0).contains(&z)));
     }
 }

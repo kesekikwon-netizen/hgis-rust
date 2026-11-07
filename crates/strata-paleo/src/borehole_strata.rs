@@ -179,6 +179,56 @@ pub fn decluster_boreholes_by_grid(
         .collect()
 }
 
+/// C++ `BoreholeDeclustering::decluster(rawBoreholes, minDistanceMeters = 30.0)`
+/// 및 `std::atomic<bool> m_cancelRequested` 취소 플래그 지원 거리 임계 디클러스터링
+pub fn decluster_boreholes_with_cancel(
+    raw: &[BoreholeRawInput],
+    min_distance_m: f64,
+    max_holes: usize,
+    cancel_requested: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<Vec<BoreholeRawInput>, &'static str> {
+    use std::sync::atomic::Ordering;
+
+    let mut ranked: Vec<(f64, usize, &BoreholeRawInput)> = Vec::with_capacity(raw.len());
+    for bh in raw {
+        if cancel_requested.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            return Err("시추공 디클러스터링 작업이 취소되었습니다");
+        }
+        let max_depth = bh
+            .strata
+            .iter()
+            .map(|s| s.depth_to_m)
+            .fold(0.0_f64, f64::max);
+        ranked.push((max_depth, bh.strata.len(), bh));
+    }
+
+    ranked.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.1.cmp(&a.1))
+    });
+
+    let min_dist_sq = min_distance_m.max(1.0).powi(2);
+    let mut kept: Vec<BoreholeRawInput> = Vec::new();
+    for (_, _, cand) in ranked {
+        if cancel_requested.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            return Err("시추공 디클러스터링 작업이 취소되었습니다");
+        }
+        let too_close = kept.iter().any(|existing| {
+            let dx = existing.x - cand.x;
+            let dy = existing.y - cand.y;
+            dx * dx + dy * dy < min_dist_sq
+        });
+        if !too_close {
+            kept.push(cand.clone());
+            if kept.len() >= max_holes.max(1) {
+                break;
+            }
+        }
+    }
+    Ok(kept)
+}
+
 /// `PaleoLayerWriter.cpp` (`8c9f9df`) — KIGAM 지질도·토양도 단일/멀티폴리곤 링 정규화 (열린 링 자동 폐합 및 퇴화 링 제거)
 #[must_use]
 pub fn normalize_polygons_to_multipolygon(rings: Vec<Vec<[f64; 2]>>) -> Vec<Vec<[f64; 2]>> {
@@ -256,5 +306,44 @@ mod tests {
         ]);
         assert_eq!(polys.len(), 1);
         assert_eq!(polys[0].len(), 4);
+    }
+
+    #[test]
+    fn test_borehole_declustering_15_holes_within_100m_reduces_to_at_most_4_and_keeps_45m_deepest()
+    {
+        use std::sync::atomic::AtomicBool;
+
+        let holes: Vec<BoreholeRawInput> = (0..15)
+            .map(|i| {
+                let depth = if i == 7 { 45.0 } else { 5.0 + f64::from(i) * 2.5 };
+                let x = 200_000.0 + f64::from(i % 5) * 12.0;
+                let y = 350_000.0 + f64::from(i / 5) * 14.0;
+                BoreholeRawInput {
+                    hole_id: format!("BH-{i:02}"),
+                    x,
+                    y,
+                    ground_elev_m: 20.0,
+                    water_depth_m: 2.0,
+                    strata: vec![StratumLayer {
+                        depth_from_m: 0.0,
+                        depth_to_m: depth,
+                        layer_name: "충적층".to_owned(),
+                        uscs_code: "SM".to_owned(),
+                        description: "실트질 모래".to_owned(),
+                        n_value: 15.0,
+                    }],
+                }
+            })
+            .collect();
+
+        let cancel = AtomicBool::new(false);
+        let declustered = decluster_boreholes_with_cancel(&holes, 30.0, 50, Some(&cancel))
+            .expect("decluster should succeed when not cancelled");
+        assert!(declustered.len() <= 4);
+        assert_eq!(declustered[0].hole_id, "BH-07");
+        assert!((declustered[0].strata[0].depth_to_m - 45.0).abs() < 1e-6);
+
+        let cancelled = AtomicBool::new(true);
+        assert!(decluster_boreholes_with_cancel(&holes, 30.0, 50, Some(&cancelled)).is_err());
     }
 }

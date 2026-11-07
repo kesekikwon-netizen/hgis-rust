@@ -15,9 +15,9 @@ enum SwatchKind {
     HeritageSub,
 }
 
-fn paint_checkbox_state(p: &egui::Painter, center: Pos2, checked: bool) {
+fn paint_checkbox_state(p: &egui::Painter, center: Pos2, check_state: u8) {
     let r = Rect::from_center_size(center, Vec2::new(13.0, 13.0));
-    if checked {
+    if check_state == 2 {
         p.rect_filled(r, 2.5, Color32::from_rgb(28, 28, 26));
         let c = r.center();
         p.line_segment(
@@ -27,6 +27,13 @@ fn paint_checkbox_state(p: &egui::Painter, center: Pos2, checked: bool) {
         p.line_segment(
             [Pos2::new(c.x - 0.8, c.y + 2.8), Pos2::new(c.x + 3.6, c.y - 2.6)],
             Stroke::new(1.7, Color32::WHITE),
+        );
+    } else if check_state == 1 {
+        p.rect_filled(r, 2.5, Color32::from_rgb(88, 86, 80));
+        let c = r.center();
+        p.line_segment(
+            [Pos2::new(c.x - 3.5, c.y), Pos2::new(c.x + 3.5, c.y)],
+            Stroke::new(2.0, Color32::WHITE),
         );
     } else {
         p.rect_filled(r, 2.5, Color32::WHITE);
@@ -215,8 +222,8 @@ impl StrataAppState {
                                 p.text(Pos2::new(x, ry), egui::Align2::LEFT_CENTER, *arr, egui::FontId::proportional(10.0), Color32::from_rgb(95, 94, 88));
                             }
                             x += 12.0;
-                            let l_vis = self.home_map.real_survey.is_layer_visible(name);
-                            paint_checkbox_state(&p, Pos2::new(x + 6.0, ry), l_vis);
+                            let l_state = self.home_map.real_survey.layer_check_state(name);
+                            paint_checkbox_state(&p, Pos2::new(x + 6.0, ry), l_state);
                             x += 18.0;
                             paint_symbol_swatch(&p, Pos2::new(x + 7.5, ry), *sw_kind);
                             x += 20.0;
@@ -234,7 +241,7 @@ impl StrataAppState {
                             }
                             if let Some(rl) = right_lbl {
                                 let lbl_vis = self.home_map.real_survey.is_label_visible(name);
-                                paint_checkbox_state(&p, Pos2::new(right_col_x + 6.0, ry), lbl_vis);
+                                paint_checkbox_state(&p, Pos2::new(right_col_x + 6.0, ry), if lbl_vis { 2 } else { 0 });
                                 p.text(Pos2::new(right_col_x + 16.0, ry), egui::Align2::LEFT_CENTER, *rl, egui::FontId::proportional(10.5), Color32::from_rgb(75, 74, 70));
                             } else {
                                 p.text(Pos2::new(right_col_x + 4.0, ry), egui::Align2::LEFT_CENTER, "—", egui::FontId::proportional(10.5), Color32::from_rgb(135, 133, 126));
