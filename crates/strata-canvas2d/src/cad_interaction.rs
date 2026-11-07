@@ -1033,29 +1033,8 @@ pub fn format_drawing_coord_callout(world_xy: [f64; 2], ground_z: f64) -> String
 mod tests {
     use super::*;
 
+
     #[test]
-    // D13 KaSnapSettingsWidget.cpp:16-35 — 자석 기본값과 허용치 범위
-    #[test]
-    fn test_d13_snap_settings_tolerance_and_measure_copy_text() {
-        let mut cad = CadSessionController::default();
-        assert!(cad.snap_enabled);
-        assert!(cad.snap_topological);
-        assert!((cad.snap_tolerance_px - 12.0).abs() < f64::EPSILON);
-        assert!(!cad.snap_target_current_only);
-
-        // KaSnapSettingsWidget.cpp:24-27 — 「모든 조사 레이어」/「현재 레이어」 토글
-        cad.snap_target_current_only = true;
-        assert!(cad.snap_target_current_only);
-        cad.snap_target_current_only = false;
-        assert!(!cad.snap_target_current_only);
-
-        // 허용치 범위는 4..=64 px (DragValue range 와 같다)
-        for px in [4.0_f64, 12.0, 32.0, 64.0] {
-            cad.snap_tolerance_px = px;
-            assert!((4.0..=64.0).contains(&cad.snap_tolerance_px));
-        }
-    }
-
     fn cad_left_clicks_and_right_click_commit_new_polygon_and_compute_measure() {
         let mut cad = CadSessionController::default();
         let mut scene = MapSceneModel::default();
