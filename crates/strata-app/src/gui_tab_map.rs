@@ -204,7 +204,12 @@ impl StrataAppState {
                         | MapToolKind::DrawLine
                         | MapToolKind::PlacePoint
                         | MapToolKind::Measure => {
-                            self.home_map.on_canvas_left_click(wxy, effective_tool);
+                            let cur_layer = self.right_inspector.selected_layer_key.clone();
+                            self.home_map.on_canvas_left_click_on_layer(
+                                wxy,
+                                effective_tool,
+                                cur_layer.as_deref(),
+                            );
                         }
                         MapToolKind::TrenchPlace => {
                             let len_m = self.modals.trench_length.meters();
@@ -535,6 +540,8 @@ impl StrataAppState {
                     self.home_map.real_survey.measure_area_tab = true;
                 }
 
+                // KaMeasureMapTool.cpp:331-355,400 — 좌표계 이름은 작업 좌표계에서 그대로 가져온다
+                let auth_id = self.work_crs.auth_id();
                 let readout = if let Some(m) = &self.home_map.cad.last_measure {
                     if area_mode {
                         format!("{:.2} m²", m.polygon_area_m2)
@@ -551,10 +558,23 @@ impl StrataAppState {
                     FontId::proportional(19.0),
                     Color32::BLACK,
                 );
+                let detail = match (&self.home_map.cad.last_measure, area_mode) {
+                    (Some(m), true) => format!(
+                        "둘레 {:.2} m · 면적만 산출 · 작업좌표\n{auth_id} 평면",
+                        m.polygon_perimeter_m
+                    ),
+                    (Some(m), false) => format!(
+                        "{:.3} m · 도북 방위 · 작업좌표\n{auth_id} 평면",
+                        m.total_distance_m
+                    ),
+                    (None, _) => format!(
+                        "세 점 이상 찍고 우클릭 → 마침 · 작업좌표\n{auth_id} 평면"
+                    ),
+                };
                 p.text(
                     Pos2::new(mr.left() + 12.0, mr.top() + 86.0),
                     egui::Align2::LEFT_CENTER,
-                    "두 점 이상 찍고 우클릭 → 마침 · 작업좌표\nEPSG:5187 평면",
+                    &detail,
                     FontId::proportional(11.5),
                     Color32::from_rgb(55, 54, 50),
                 );
@@ -588,7 +608,31 @@ impl StrataAppState {
                                     .cad
                                     .on_right_click(MapToolKind::Measure, &mut self.home_map.scene);
                             }
-                            1 => ui.ctx().copy_text(readout.clone()),
+                            1 => {
+                                // KaMeasureMapTool::copyText() — 한 줄이 아니라 여러 줄을 복사한다
+                                let mut lines = Vec::new();
+                                if let Some(m) = &self.home_map.cad.last_measure {
+                                    if area_mode {
+                                        lines.push(format!(
+                                            "면적 {readout}"
+                                        ));
+                                        lines.push(format!(
+                                            "둘레 {:.2} m",
+                                            m.polygon_perimeter_m
+                                        ));
+                                    } else {
+                                        lines.push(format!("거리 {readout}"));
+                                    }
+                                } else if area_mode {
+                                    lines.push("면적 0.00 ㎡".to_owned());
+                                } else {
+                                    lines.push("거리 0.00 m".to_owned());
+                                }
+                                lines.push(format!("작업좌표 {auth_id} 평면"));
+                                self.status_bar_hint =
+                                    "줄자 숫자를 복사했습니다.".to_owned();
+                                ui.ctx().copy_text(lines.join("\n"));
+                            }
                             2 => self.home_map.cad.on_backspace(&mut self.home_map.scene),
                             _ => self.home_map.cad.on_escape(&mut self.home_map.scene),
                         }

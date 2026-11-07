@@ -221,10 +221,26 @@ impl HomeMapTabState {
     }
 
     pub fn on_canvas_left_click(&mut self, world_xy: [f64; 2], tool: MapToolKind) {
+        self.on_canvas_left_click_on_layer(world_xy, tool, None);
+    }
+
+    /// `KaSnapSettingsWidget.cpp:24-27` — 「현재 레이어」를 고르면 `current_layer_key` 도형에만 붙는다
+    pub fn on_canvas_left_click_on_layer(
+        &mut self,
+        world_xy: [f64; 2],
+        tool: MapToolKind,
+        current_layer_key: Option<&str>,
+    ) {
         let refs = self.snap_reference_rings(world_xy, 300.0);
         let mupp = self.viewport.meters_per_pixel;
-        self.cad
-            .on_left_click_with_refs(world_xy, tool, &mut self.scene, &refs, mupp);
+        self.cad.on_left_click_with_refs_and_layer(
+            world_xy,
+            tool,
+            &mut self.scene,
+            &refs,
+            mupp,
+            current_layer_key,
+        );
     }
 
     /// `SnapTraceOps::snapCanvasShapesToNearestLines` 1:1 대응

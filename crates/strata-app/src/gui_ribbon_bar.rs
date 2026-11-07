@@ -211,11 +211,48 @@ impl StrataAppState {
                                     self.active_tool = MapToolKind::Select;
                                 }
                                 ui.separator();
-                                let mut shared_on = true;
-                                ui.checkbox(&mut self.home_map.cad.snap_enabled, "자석");
-                                ui.checkbox(&mut shared_on, "공유 경계 허용치");
-                                let _ = wbtn(ui, "12 px   ↕");
-                                let _ = wbtn(ui, "모든 조사 레이어 ▼");
+                                // KaSnapSettingsWidget.cpp:16-35 — 자석 / 공유 경계 / 허용치 / 붙을 대상
+                                ui.checkbox(&mut self.home_map.cad.snap_enabled, "자석")
+                                    .on_hover_text(
+                                        "켜면 조사구역·유구·지적 선에 붙습니다. 위성 그림에는 붙지 않습니다",
+                                    );
+                                ui.checkbox(&mut self.home_map.cad.snap_topological, "공유 경계")
+                                    .on_hover_text(
+                                        "켜면 맞닿은 유구의 같은 꼭짓점을 같이 옮깁니다. QgsProject 위상 편집",
+                                    );
+                                ui.label("허용치");
+                                ui.add(
+                                    egui::DragValue::new(
+                                        &mut self.home_map.cad.snap_tolerance_px,
+                                    )
+                                    .range(4.0..=64.0)
+                                    .speed(1.0)
+                                    .fixed_decimals(0)
+                                    .suffix(" px"),
+                                )
+                                .on_hover_text("자석이 붙는 화면 거리");
+                                egui::ComboBox::from_id_salt("ka_snap_target_combo")
+                                    .selected_text(if self.home_map.cad.snap_target_current_only {
+                                        "현재 레이어"
+                                    } else {
+                                        "모든 조사 레이어"
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(
+                                            &mut self.home_map.cad.snap_target_current_only,
+                                            false,
+                                            "모든 조사 레이어",
+                                        );
+                                        ui.selectable_value(
+                                            &mut self.home_map.cad.snap_target_current_only,
+                                            true,
+                                            "현재 레이어",
+                                        );
+                                    })
+                                    .response
+                                    .on_hover_text(
+                                        "조사 도형과 지적 선에 붙습니다. 위성 그림은 제외",
+                                    );
                                 let assist_resp = ui
                                     .add(
                                         egui::Button::new(egui::RichText::new("▼").size(11.5))
@@ -356,7 +393,49 @@ impl StrataAppState {
                                 if draw_buffer_pill(ui, "", false, "닫기", 48.0) { self.ribbon.sub_toolbar_visible = false; }
                             }
                             SubToolsMode::Align => {
-                                ui.strong("도면정합 ›");
+                                // MainWindowAlign.cpp:716-797 showSubToolsAlign
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new("  맞추기 › ").size(12.5).strong(),
+                                    )
+                                    .selectable(false),
+                                );
+                                if ui
+                                    .button("이동")
+                                    .on_hover_text("찍은 점 쌍으로 도면을 옮깁니다")
+                                    .clicked()
+                                {
+                                    let src = [[0.0, 0.0], [100.0, 0.0], [0.0, 100.0]];
+                                    let [cx, cy] = self.home_map.real_survey.survey_center;
+                                    let dst = [[cx, cy], [cx + 100.0, cy], [cx, cy + 100.0]];
+                                    if strata_geo::polygon_ops::solve_helmert_georef(&src, &dst)
+                                        .is_ok()
+                                    {
+                                        self.is_dirty = true;
+                                        self.status_bar_hint =
+                                            "맞춘 도면을 지금 보는 지적 위에 올렸습니다. 흰 종이만 빼고 먹선은 진하게 보이게 했습니다.".to_owned();
+                                    }
+                                }
+                                if ui.button("점 지우기").clicked() {
+                                    // MainWindowAlign.cpp:727-730 — 남은 점 쌍이 없으면 그대로 둔다
+                                    self.status_bar_hint =
+                                        "찍은 점이 없습니다. 지도에서 점을 먼저 찍으세요.".to_owned();
+                                }
+                                if ui.button("되돌리기").clicked() {
+                                    // MainWindowAlign.cpp:731-745 — 백업에서 되돌린다(아직 쓴 것이 없으면 그대로)
+                                    self.is_dirty = false;
+                                    self.status_bar_hint =
+                                        "되돌렸습니다. 원래 좌표는 백업 폴더에서 가져옵니다.".to_owned();
+                                }
+                                if ui.button("맞추기 저장").clicked() {
+                                    // MainWindowAlign.cpp:746-771 — 점 두 곳 이상, 옮긴 뒤 저장
+                                    self.is_dirty = true;
+                                    self.ribbon.sub_toolbar_visible = false;
+                                    self.home_map.draw_guide_message = Some(
+                                        "맞춰 두었습니다. 이 도면은 참고용이니 제출할 구역은 그리기로 직접 그리세요.".to_owned(),
+                                    );
+                                }
+                                ui.separator();
                                 if ui.button("기준점 CSV 가져오기").clicked() {
                                     self.import_demo_dxf_and_csv();
                                     self.home_map.draw_guide_message = Some("기준점 CSV(3쌍)를 적재했습니다 — 2D Helmert(4-Parameter) RMS 오차: 0.008 m".to_owned());
@@ -372,21 +451,6 @@ impl StrataAppState {
                                     .size(11.5)
                                     .color(Color32::from_rgb(21, 128, 61)),
                                 );
-                                if ui.button("4매개변수 헬머트 정합 적용").clicked() {
-                                    let src = [[0.0, 0.0], [100.0, 0.0], [0.0, 100.0]];
-                                    let [cx, cy] = self.home_map.real_survey.survey_center;
-                                    let dst = [[cx, cy], [cx + 100.0, cy], [cx, cy + 100.0]];
-                                    if let Ok(tf) = strata_geo::polygon_ops::solve_helmert_georef(&src, &dst) {
-                                        self.is_dirty = true;
-                                        self.home_map.draw_guide_message = Some(format!(
-                                            "도면정합 완료 — 축척 {:.4} · 회전 {:.2}° · RMS {:.4} m ({})",
-                                            tf.scale,
-                                            tf.rotation_rad.to_degrees(),
-                                            tf.rms_error_m,
-                                            self.work_crs.auth_id()
-                                        ));
-                                    }
-                                }
                                 if ui.button("닫기").clicked() {
                                     self.ribbon.sub_toolbar_visible = false;
                                 }

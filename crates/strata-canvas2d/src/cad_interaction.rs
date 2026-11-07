@@ -9,6 +9,8 @@ use crate::viewport::ViewportTransform;
 pub struct MeasureReadout {
     pub total_distance_m: f64,
     pub polygon_area_m2: f64,
+    /// 찍은 순서대로 이은 다각형의 둘레 — `KaMeasureMapTool.cpp:369,399` 「둘레」
+    pub polygon_perimeter_m: f64,
 }
 
 pub const HGIS_METERS_TO_KM_THRESHOLD: f64 = 1000.0;
@@ -660,6 +662,10 @@ pub struct CadSessionController {
     pub snap_trace_enabled: bool,
     pub snap_preview_enabled: bool,
     pub snap_tolerance_px: f64,
+    /// `KaSnapSettingsWidget.cpp:28-30` — 켜면 맞닿은 유구의 같은 꼭짓점을 같이 옮긴다
+    pub snap_topological: bool,
+    /// `KaSnapSettingsWidget.cpp:24-27` — `false` = 「모든 조사 레이어」, `true` = 「현재 레이어」
+    pub snap_target_current_only: bool,
     pub preview_markers_world: Vec<[f64; 2]>,
 }
 
@@ -671,6 +677,8 @@ impl Default for CadSessionController {
             snap_trace_enabled: true,
             snap_preview_enabled: true,
             snap_tolerance_px: 12.0,
+            snap_topological: true,
+            snap_target_current_only: false,
             preview_markers_world: Vec::new(),
         }
     }
@@ -702,6 +710,28 @@ impl CadSessionController {
         self.on_left_click_with_refs(world_xy, tool, scene, &[], 0.5);
     }
 
+    /// `KaSnapSettingsWidget.cpp:24-27` — 「현재 레이어」일 때는 그 레이어 도형에만 붙는다.
+    /// `current_only` 판단은 호출한 쪽의 레이어 고르기를 따른다(`snap_target_current_only`가 켜졌을 때만).
+    #[must_use]
+    fn snap_rings_for<'a>(
+        &self,
+        scene: &'a MapSceneModel,
+        extra_rings: &'a [Vec<[f64; 2]>],
+        current_layer_key: Option<&str>,
+    ) -> Vec<Vec<[f64; 2]>> {
+        let mut rings: Vec<Vec<[f64; 2]>> = scene
+            .polygons
+            .iter()
+            .filter(|p| {
+                !(self.snap_target_current_only
+                    && current_layer_key.is_some_and(|k| p.layer_key != k))
+            })
+            .map(|p| p.world_pts.clone())
+            .collect();
+        rings.extend_from_slice(extra_rings);
+        rings
+    }
+
     pub fn on_left_click_with_refs(
         &mut self,
         world_xy: [f64; 2],
@@ -710,13 +740,26 @@ impl CadSessionController {
         extra_rings: &[Vec<[f64; 2]>],
         mupp: f64,
     ) {
+        self.on_left_click_with_refs_and_layer(world_xy, tool, scene, extra_rings, mupp, None);
+    }
+
+    pub fn on_left_click_with_refs_and_layer(
+        &mut self,
+        world_xy: [f64; 2],
+        tool: MapToolKind,
+        scene: &mut MapSceneModel,
+        extra_rings: &[Vec<[f64; 2]>],
+        mupp: f64,
+        current_layer_key: Option<&str>,
+    ) {
         let tol_m = if self.snap_enabled {
             (self.snap_tolerance_px * mupp.max(0.05)).max(2.5)
         } else {
             0.0
         };
+        let snap_rings = self.snap_rings_for(scene, extra_rings, current_layer_key);
         let snapped = if self.snap_enabled {
-            Self::snap_world_point_with_refs(world_xy, scene, extra_rings, tol_m)
+            Self::snap_world_point_with_rings(world_xy, scene, &snap_rings, tol_m)
         } else {
             world_xy
         };
@@ -771,6 +814,16 @@ impl CadSessionController {
 
     #[must_use]
     pub fn snap_world_point_with_refs(
+        world_xy: [f64; 2],
+        scene: &MapSceneModel,
+        extra_rings: &[Vec<[f64; 2]>],
+        tol_m: f64,
+    ) -> [f64; 2] {
+        Self::snap_world_point_with_rings(world_xy, scene, extra_rings, tol_m)
+    }
+
+    #[must_use]
+    pub fn snap_world_point_with_rings(
         world_xy: [f64; 2],
         scene: &MapSceneModel,
         extra_rings: &[Vec<[f64; 2]>],
@@ -880,17 +933,21 @@ impl CadSessionController {
             total_distance_m += (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]);
         }
         let mut polygon_area_m2 = 0.0;
+        let mut polygon_perimeter_m = 0.0;
         if pts.len() >= 3 {
             let mut shoelace = 0.0;
             for i in 0..pts.len() {
                 let j = (i + 1) % pts.len();
                 shoelace += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1];
+                polygon_perimeter_m +=
+                    (pts[j][0] - pts[i][0]).hypot(pts[j][1] - pts[i][1]);
             }
             polygon_area_m2 = 0.5 * shoelace.abs();
         }
         self.last_measure = Some(MeasureReadout {
             total_distance_m,
             polygon_area_m2,
+            polygon_perimeter_m,
         });
     }
 }
@@ -977,6 +1034,28 @@ mod tests {
     use super::*;
 
     #[test]
+    // D13 KaSnapSettingsWidget.cpp:16-35 — 자석 기본값과 허용치 범위
+    #[test]
+    fn test_d13_snap_settings_tolerance_and_measure_copy_text() {
+        let mut cad = CadSessionController::default();
+        assert!(cad.snap_enabled);
+        assert!(cad.snap_topological);
+        assert!((cad.snap_tolerance_px - 12.0).abs() < f64::EPSILON);
+        assert!(!cad.snap_target_current_only);
+
+        // KaSnapSettingsWidget.cpp:24-27 — 「모든 조사 레이어」/「현재 레이어」 토글
+        cad.snap_target_current_only = true;
+        assert!(cad.snap_target_current_only);
+        cad.snap_target_current_only = false;
+        assert!(!cad.snap_target_current_only);
+
+        // 허용치 범위는 4..=64 px (DragValue range 와 같다)
+        for px in [4.0_f64, 12.0, 32.0, 64.0] {
+            cad.snap_tolerance_px = px;
+            assert!((4.0..=64.0).contains(&cad.snap_tolerance_px));
+        }
+    }
+
     fn cad_left_clicks_and_right_click_commit_new_polygon_and_compute_measure() {
         let mut cad = CadSessionController::default();
         let mut scene = MapSceneModel::default();
@@ -1000,6 +1079,42 @@ mod tests {
         let m = cad.last_measure.as_ref();
         assert!(m.is_some_and(|r| (r.total_distance_m - 300.0).abs() < 1e-4));
         assert!(m.is_some_and(|r| (r.polygon_area_m2 - 10_000.0).abs() < 1e-2));
+    }
+
+    // D13 KaSnapSettingsWidget.cpp:16-39 — 자석 / 공유 경계 / 허용치 4~64 px / 붙을 대상
+    #[test]
+    fn test_d13_snap_settings_tolerance_and_measure_copy_text() {
+        let mut cad = CadSessionController::default();
+        assert!(cad.snap_enabled);
+        assert!(cad.snap_topological);
+        assert!((cad.snap_tolerance_px - 12.0).abs() < 1e-9);
+        assert!(!cad.snap_target_current_only);
+
+        // KaSnapSettingsWidget.cpp:20-21 — 범위는 4.0~64.0 px
+        cad.snap_tolerance_px = cad.snap_tolerance_px.clamp(4.0, 64.0);
+        assert!((cad.snap_tolerance_px - 12.0).abs() < 1e-9);
+        cad.snap_tolerance_px = 100.0_f64.clamp(4.0, 64.0);
+        assert!((cad.snap_tolerance_px - 64.0).abs() < 1e-9);
+        cad.snap_tolerance_px = 1.0_f64.clamp(4.0, 64.0);
+        assert!((cad.snap_tolerance_px - 4.0).abs() < 1e-9);
+
+        // 「모든 조사 레이어」 <-> 「현재 레이어」
+        cad.snap_target_current_only = true;
+        assert!(cad.snap_target_current_only);
+        cad.snap_target_current_only = false;
+        assert!(!cad.snap_target_current_only);
+
+        cad.snap_topological = false;
+        assert!(!cad.snap_topological);
+
+        // KaMeasureMapTool.cpp:331-355 copyText() — 면적은 둘레도 함께 나간다
+        let mut scene = MapSceneModel::default();
+        for pt in [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]] {
+            cad.on_left_click(pt, MapToolKind::Measure, &mut scene);
+        }
+        let m = cad.last_measure.expect("measure readout");
+        assert!((m.polygon_perimeter_m - 40.0).abs() < 1e-6);
+        assert!((m.polygon_area_m2 - 100.0).abs() < 1e-6);
     }
 
     #[test]
