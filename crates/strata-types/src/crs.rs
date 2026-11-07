@@ -130,9 +130,45 @@ pub fn format_status_bar_coordinates(x: f64, y: f64) -> String {
     format!("X: {x:.2}, Y: {y:.2}")
 }
 
+pub const HGIS_LON_BOUNDARY_WEST_MID: f64 = 126.0;
+pub const HGIS_LON_BOUNDARY_MID_EAST: f64 = 128.0;
+pub const HGIS_LON_BOUNDARY_EAST_DONGHAE: f64 = 130.0;
+pub const HGIS_KOREA_MIN_LON: f64 = 124.0;
+pub const HGIS_KOREA_MAX_LON: f64 = 132.0;
+
+/// C++ `KaCrsRegistry::recommendKoreanBeltFromLon` — 경도 기준 서부(5185)·중부(5186)·동부(5187)·동해(5188) 자동 추천 및 한반도 영역 밖(124°~132° 이탈) 입력 시 중부원점(5186) 폴백
+#[must_use]
+pub fn recommend_korean_belt_from_lon(longitude: f64) -> u32 {
+    if !longitude.is_finite()
+        || !(HGIS_KOREA_MIN_LON..=HGIS_KOREA_MAX_LON).contains(&longitude)
+    {
+        return 5186;
+    }
+    if longitude < HGIS_LON_BOUNDARY_WEST_MID {
+        5185
+    } else if longitude < HGIS_LON_BOUNDARY_MID_EAST {
+        5186
+    } else if longitude < HGIS_LON_BOUNDARY_EAST_DONGHAE {
+        5187
+    } else {
+        5188
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_recommend_korean_belt_gyeongju_5187_seoul_5186_baengnyeong_5185_dokdo_5188_and_fallback()
+    {
+        assert_eq!(recommend_korean_belt_from_lon(129.22), 5187);
+        assert_eq!(recommend_korean_belt_from_lon(126.97), 5186);
+        assert_eq!(recommend_korean_belt_from_lon(124.67), 5185);
+        assert_eq!(recommend_korean_belt_from_lon(131.86), 5188);
+        assert_eq!(recommend_korean_belt_from_lon(10.50), 5186);
+        assert_eq!(recommend_korean_belt_from_lon(f64::NAN), 5186);
+    }
 
     #[test]
     fn test_crs_registry_transform_bessel_5174_to_grs80_5186_within_005m_and_status_bar_nan_guard()

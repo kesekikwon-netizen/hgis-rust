@@ -108,6 +108,56 @@ impl Default for KaAppBarSearch {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PnuBuildError {
+    InvalidBjdCode,
+    InvalidBunNumber,
+}
+
+impl KaAppBarSearch {
+    pub const HGIS_PNU_TOTAL_LENGTH: usize = 19;
+    pub const HGIS_BUN_PADDING_WIDTH: usize = 4;
+    pub const HGIS_PARCEL_ZOOM_MARGIN_M: f64 = 50.0;
+
+    /// C++ `KaAddressSearchService::buildPnuCode` — 10자리 법정동코드 + 산 여부('1'/'2') + 4자리 0패딩 본번 + 4자리 0패딩 부번으로 19자리 표준 PNU 조합
+    pub fn build_pnu_code(
+        bjd_code10: &str,
+        is_mountain: bool,
+        main_bun: i32,
+        sub_bun: i32,
+    ) -> Result<String, (PnuBuildError, String)> {
+        let trimmed = bjd_code10.trim();
+        if trimmed.len() != 10 || !trimmed.chars().all(|c| c.is_ascii_digit()) {
+            return Err((
+                PnuBuildError::InvalidBjdCode,
+                "법정동 코드는 10자리 숫자여야 합니다.".to_owned(),
+            ));
+        }
+        if !(1..=9999).contains(&main_bun) || !(0..=9999).contains(&sub_bun) {
+            return Err((
+                PnuBuildError::InvalidBunNumber,
+                "본번은 1 이상의 정수여야 합니다.".to_owned(),
+            ));
+        }
+        let m_char = if is_mountain { '2' } else { '1' };
+        let pnu = format!("{trimmed}{m_char}{main_bun:04}{sub_bun:04}");
+        debug_assert_eq!(pnu.len(), Self::HGIS_PNU_TOTAL_LENGTH);
+        Ok(pnu)
+    }
+
+    /// C++ `KaAddressSearchService::zoomToParcelExtent` — 필지 외곽 경계 사각형 전 방향에 50.0m 여백 가산
+    #[must_use]
+    pub fn zoom_to_parcel_extent(parcel_bbox: [f64; 4]) -> [f64; 4] {
+        let m = Self::HGIS_PARCEL_ZOOM_MARGIN_M;
+        [
+            parcel_bbox[0] - m,
+            parcel_bbox[1] - m,
+            parcel_bbox[2] + m,
+            parcel_bbox[3] + m,
+        ]
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct KaBeginnerRibbon {
     pub active_category: RibbonCategory,
@@ -238,5 +288,21 @@ mod tests {
             hint,
             "클릭하여 측정을 시작하세요. [우클릭/더블클릭]: 측정 완료, [ESC]: 취소"
         );
+    }
+
+    #[test]
+    fn test_build_pnu_gyeongju_4713010300_76_0_yields_exact_19_digits_and_50m_margin() {
+        let pnu = KaAppBarSearch::build_pnu_code("4713010300", false, 76, 0)
+            .expect("valid Gyeongju PNU");
+        assert_eq!(pnu, "4713010300100760000");
+        assert_eq!(pnu.len(), KaAppBarSearch::HGIS_PNU_TOTAL_LENGTH);
+
+        let err = KaAppBarSearch::build_pnu_code("4713010300", false, 0, 0)
+            .expect_err("main_bun 0 must fail");
+        assert_eq!(err.0, PnuBuildError::InvalidBunNumber);
+        assert_eq!(err.1, "본번은 1 이상의 정수여야 합니다.");
+
+        let zoomed = KaAppBarSearch::zoom_to_parcel_extent([1000.0, 2000.0, 1050.0, 2040.0]);
+        assert_eq!(zoomed, [950.0, 1950.0, 1100.0, 2090.0]);
     }
 }
