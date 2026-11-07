@@ -213,6 +213,107 @@ pub fn feather_seam_overlap_cell(
     }
 }
 
+pub const HGIS_CONTOUR_INDEX_FACTOR: i64 = 5;
+pub const HGIS_DEFAULT_STREAM_THRESH_CELL: i32 = 500;
+pub const HGIS_D8_EAST: u8 = 1;
+pub const HGIS_D8_SOUTHEAST: u8 = 2;
+pub const HGIS_D8_SOUTH: u8 = 4;
+pub const HGIS_D8_SOUTHWEST: u8 = 8;
+pub const HGIS_D8_WEST: u8 = 16;
+pub const HGIS_D8_NORTHWEST: u8 = 32;
+pub const HGIS_D8_NORTH: u8 = 64;
+pub const HGIS_D8_NORTHEAST: u8 = 128;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContourType {
+    Intermediate,
+    Index,
+}
+
+/// C++ `KaMarchingSquaresEngine` — 등치선 모서리 선형 내분비 `t = (iso - z0) / (z1 - z0)` 산출 (`|z1 - z0| <= 1e-6` 평탄 모서리는 `0.5` 클램핑)
+#[must_use]
+pub fn interpolate_contour_edge_fraction(iso_elev_m: f64, z0: f64, z1: f64) -> f64 {
+    let diff = z1 - z0;
+    if diff.abs() <= 1e-6 || !diff.is_finite() {
+        return 0.5;
+    }
+    ((iso_elev_m - z0) / diff).clamp(0.0, 1.0)
+}
+
+/// C++ `KaContourGenerator` — 주곡선 간격 `base_interval_m`의 5배수(`HGIS_CONTOUR_INDEX_FACTOR = 5`) 표고 여부를 판정하여 계곡선(`ContourType::Index`) 분류
+#[must_use]
+pub fn classify_contour_type(iso_elev_m: f64, base_interval_m: f64) -> ContourType {
+    if base_interval_m <= 1e-6 || !base_interval_m.is_finite() {
+        return ContourType::Intermediate;
+    }
+    let step = (iso_elev_m / base_interval_m).round() as i64;
+    if step % HGIS_CONTOUR_INDEX_FACTOR == 0 {
+        ContourType::Index
+    } else {
+        ContourType::Intermediate
+    }
+}
+
+/// C++ `KaFlowDirectionD8::computeD8FlowDirection` — 8방위(`[E, SE, S, SW, W, NW, N, NE]`) 중 최대 하강 경사(`(z_c - z_n) / dist > 0`) 방향의 D8 비트마스크 코드 반환 (싱크/평탄면은 `0`)
+#[must_use]
+pub fn compute_d8_cell_flow_direction(
+    center_z: f32,
+    neighbors_clockwise_from_east: &[f32; 8],
+    cell_size_m: f64,
+) -> u8 {
+    if !center_z.is_finite() || center_z <= HGIS_DEM_NODATA_THRESHOLD {
+        return 0;
+    }
+    let cs = cell_size_m.max(1e-3);
+    let diag = cs * std::f64::consts::SQRT_2;
+    let codes: [u8; 8] = [
+        HGIS_D8_EAST,
+        HGIS_D8_SOUTHEAST,
+        HGIS_D8_SOUTH,
+        HGIS_D8_SOUTHWEST,
+        HGIS_D8_WEST,
+        HGIS_D8_NORTHWEST,
+        HGIS_D8_NORTH,
+        HGIS_D8_NORTHEAST,
+    ];
+    let mut best_slope = 0.0_f64;
+    let mut best_code = 0_u8;
+    for (idx, &nz) in neighbors_clockwise_from_east.iter().enumerate() {
+        if !nz.is_finite() || nz <= HGIS_DEM_NODATA_THRESHOLD {
+            continue;
+        }
+        let drop = f64::from(center_z - nz);
+        if drop <= 0.0 {
+            continue;
+        }
+        let dist = if idx % 2 == 0 { cs } else { diag };
+        let slope = drop / dist;
+        if slope > best_slope {
+            best_slope = slope;
+            best_code = codes[idx];
+        }
+    }
+    best_code
+}
+
+/// C++ `KaPaleoStreamExtractor::extractPaleoStreamNetwork` — 흐름 누적 셀 수 `acc >= streamThresholdCells` 수계 셀 인덱스 필터링
+#[must_use]
+pub fn filter_stream_cells_by_threshold(
+    accumulation_cells: &[i32],
+    threshold_cells: i32,
+) -> Vec<usize> {
+    let thresh = if threshold_cells > 0 {
+        threshold_cells
+    } else {
+        HGIS_DEFAULT_STREAM_THRESH_CELL
+    };
+    accumulation_cells
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &acc)| if acc >= thresh { Some(idx) } else { None })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,5 +443,22 @@ mod tests {
             HGIS_SEAM_BLEND_WIDTH_M,
         );
         assert!((both_nodata - HGIS_DEM_NODATA_VAL).abs() < 1e-5);
+
+        // 3. TestKaContourGenerator & TestKaPaleoStreamExtractor
+        assert!((interpolate_contour_edge_fraction(15.0, 10.0, 20.0) - 0.5).abs() < 1e-9);
+        assert_eq!(classify_contour_type(8.0, 2.0), ContourType::Intermediate);
+        assert_eq!(classify_contour_type(10.0, 2.0), ContourType::Index);
+        assert_eq!(classify_contour_type(12.0, 2.0), ContourType::Intermediate);
+
+        // Center 50.0m, South(idx 2) = 40.0m (slope 1.0), Southeast(idx 1) = 30.0m (slope 20 / 14.142 = 1.414) -> SE (code 2)
+        let neighbors = [50.0_f32, 30.0, 40.0, 50.0, 50.0, 50.0, 50.0, 50.0];
+        assert_eq!(
+            compute_d8_cell_flow_direction(50.0, &neighbors, 10.0),
+            HGIS_D8_SOUTHEAST
+        );
+        assert_eq!(
+            filter_stream_cells_by_threshold(&[300, 600], 500),
+            vec![1]
+        );
     }
 }
