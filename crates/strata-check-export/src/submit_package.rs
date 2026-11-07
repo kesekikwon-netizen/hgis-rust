@@ -76,15 +76,12 @@ pub fn export_submission_package(
     }
     std::fs::write(&readme_path, readme.as_bytes())?;
 
-    // 4. MANIFEST.sha256
+    // 4. MANIFEST.sha256 (64KB 스트리밍 청크 SHA-256 해시)
     let tracked = ["site_boundary_5179.shp", "조사도면.pdf", "README_submit.txt"];
     let mut files_sha256 = Vec::with_capacity(tracked.len());
     let mut manifest_txt = String::new();
     for file_name in tracked {
-        let bytes = std::fs::read(out_dir.join(file_name))?;
-        let mut hasher = Sha256::new();
-        hasher.update(&bytes);
-        let digest_hex = format!("{:x}", hasher.finalize());
+        let digest_hex = stream_file_sha256_hex(&out_dir.join(file_name))?;
         manifest_txt.push_str(&format!("{digest_hex}  {file_name}\n"));
         files_sha256.push((file_name.to_owned(), digest_hex));
     }
@@ -95,6 +92,24 @@ pub fn export_submission_package(
         files_sha256,
         readme_path,
     })
+}
+
+pub const HASH_CHUNK_SIZE: usize = 65536;
+
+/// C++ `ManifestBuilder::generateSha256Manifest` — 64KB 청크 단위 스트리밍 SHA-256 체크섬 계산
+pub fn stream_file_sha256_hex(path: &Path) -> StrataResult<String> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0_u8; HASH_CHUNK_SIZE];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 #[cfg(test)]
@@ -151,6 +166,21 @@ mod tests {
             export_submission_package_checked(dir.path(), &resolved_findings, true);
         assert_eq!(res_ok, ExportResult::Success);
         assert_eq!(manifest_ok.expect("manifest").files_sha256.len(), 3);
+        Ok(())
+    }
+
+    #[test]
+    fn test_manifest_sha256_streaming_checksum_matches_exact_digest() -> StrataResult<()> {
+        let dir = tempfile::tempdir()?;
+        let test_path = dir.path().join("test.txt");
+        std::fs::write(&test_path, b"HGIS_MANIFEST_TEST_DATA")?;
+        let digest = stream_file_sha256_hex(&test_path)?;
+        assert_eq!(digest.len(), 64);
+
+        let mut expected_hasher = Sha256::new();
+        expected_hasher.update(b"HGIS_MANIFEST_TEST_DATA");
+        let expected_hex = format!("{:x}", expected_hasher.finalize());
+        assert_eq!(digest, expected_hex);
         Ok(())
     }
 }

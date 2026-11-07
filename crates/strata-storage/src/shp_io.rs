@@ -1,6 +1,42 @@
 use std::path::Path;
 use strata_types::error::StrataResult;
 
+pub const DBF_MAX_FIELD_NAME_LEN: usize = 10;
+
+/// C++ `ShapefileWriter` — CP949(EUC-KR) 기준 바이트 길이 계산 (ASCII 1바이트, 한글 등 다중바이트 음절 2바이트)
+#[must_use]
+pub fn cp949_byte_len(s: &str) -> usize {
+    s.chars().map(|ch| if ch.is_ascii() { 1 } else { 2 }).sum()
+}
+
+/// C++ `ShapefileWriter::exportLayerToShp` — DBF 10바이트 컬럼명 제한에 맞춰 한글 음절 경계를 보존하며 절단 및 `_1` 접미사 부여
+#[must_use]
+pub fn truncate_dbf_field_name_cp949(name: &str, collision_index: usize) -> String {
+    if cp949_byte_len(name) <= DBF_MAX_FIELD_NAME_LEN && collision_index == 0 {
+        return name.to_owned();
+    }
+    let idx = collision_index.max(1);
+    let suffix = format!("_{idx}");
+    let has_multibyte = !name.is_ascii();
+    // 다중바이트(한글) 포함 시 3음절(CP949 6바이트) + `_N`(2바이트) = 8바이트(<= 10바이트)로 음절 경계 안전 절단
+    let max_prefix_cp949 = if has_multibyte {
+        6_usize.min(DBF_MAX_FIELD_NAME_LEN.saturating_sub(suffix.len()))
+    } else {
+        DBF_MAX_FIELD_NAME_LEN.saturating_sub(suffix.len())
+    };
+    let mut prefix = String::new();
+    let mut used_bytes = 0_usize;
+    for ch in name.chars() {
+        let ch_bytes = if ch.is_ascii() { 1 } else { 2 };
+        if used_bytes + ch_bytes > max_prefix_cp949 {
+            break;
+        }
+        prefix.push(ch);
+        used_bytes += ch_bytes;
+    }
+    format!("{prefix}{suffix}")
+}
+
 #[derive(Debug, Clone)]
 pub struct ShpFeatureRow {
     pub wkt: String,
@@ -51,4 +87,24 @@ pub fn write_shapefile_utf8(
     std::fs::write(&prj_path, prj_text)?;
     std::fs::write(&cpg_path, "UTF-8")?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_shapefile_export_cp949_truncates_16byte_korean_field_to_10bytes_on_syllable_boundary() {
+        let col = "발굴조사기관명칭";
+        assert_eq!(cp949_byte_len(col), 16);
+        let truncated = truncate_dbf_field_name_cp949(col, 1);
+        assert_eq!(truncated, "발굴조_1");
+        assert!(cp949_byte_len(&truncated) <= DBF_MAX_FIELD_NAME_LEN);
+        assert_eq!(cp949_byte_len(&truncated), 8);
+
+        // 10바이트 이하 컬럼명은 충돌 없을 때 그대로 유지
+        let short_col = "유구번호";
+        assert_eq!(cp949_byte_len(short_col), 8);
+        assert_eq!(truncate_dbf_field_name_cp949(short_col, 0), "유구번호");
+    }
 }
