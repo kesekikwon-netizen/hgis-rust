@@ -10,8 +10,47 @@ pub const MAX_CONCURRENT_TILE_REQUESTS: usize = 6;
 pub const HGIS_WEB_MERCATOR_MAX_LAT: f64 = 85.051_128_78;
 pub const HGIS_TILE_MEM_CACHE_MAX_COUNT: usize = 256;
 pub const HGIS_TILE_DISK_CACHE_MAX_BYTES: u64 = 524_288_000;
+pub const HGIS_PNG_MAGIC_BYTES: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+pub const HGIS_JPEG_MAGIC_BYTES: [u8; 3] = [0xFF, 0xD8, 0xFF];
+pub const HGIS_MAX_DISK_CACHE_BYTES: u64 = 536_870_912;
+pub const HGIS_PRUNE_TARGET_BYTES: u64 = 419_430_400;
 pub const HGIS_TILE_MAX_RETRIES: u32 = 3;
 pub const HGIS_TILE_BACKOFF_BASE_MS: u64 = 1000;
+
+/// C++ `KaTileDiskCache::generateTileKey` — `/{sourceId}/{z}/{x}/{y}.png` 상대 경로 키 생성
+#[must_use]
+pub fn generate_tile_cache_key(source_id: &str, z: u8, x: u32, y: u32) -> String {
+    format!("{source_id}/{z}/{x}/{y}.png")
+}
+
+/// C++ `KaTileDiskCache::verifyTileImageMagic` — PNG 8바이트 매직(`\x89PNG\r\n\x1a\n`) 또는 JPEG 3바이트 매직(`\xFF\xD8\xFF`) 검사로 HTML 에러 페이지 저장 방어
+#[must_use]
+pub fn verify_tile_image_magic(data: &[u8]) -> bool {
+    if data.len() < 8 {
+        return false;
+    }
+    data.starts_with(&HGIS_PNG_MAGIC_BYTES) || data.starts_with(&HGIS_JPEG_MAGIC_BYTES)
+}
+
+/// C++ `KaTileDiskCache::pruneDiskCacheIfNeeded` — `HGIS_MAX_DISK_CACHE_BYTES`(512MB) 초과 시 최종 접근 시각 오름차순으로 `HGIS_PRUNE_TARGET_BYTES`(400MB, 80%) 이하까지 삭제
+pub fn prune_disk_cache_entries_lru(
+    entries: &mut Vec<(String, u64, u64)>,
+    max_bytes: u64,
+    target_bytes: u64,
+) -> usize {
+    let mut total_bytes: u64 = entries.iter().map(|(_, size_bytes, _)| *size_bytes).sum();
+    if total_bytes <= max_bytes {
+        return 0;
+    }
+    entries.sort_by_key(|(_, _, last_access_ts)| *last_access_ts);
+    let mut removed = 0_usize;
+    while total_bytes > target_bytes && !entries.is_empty() {
+        let (_, sz, _) = entries.remove(0);
+        total_bytes = total_bytes.saturating_sub(sz);
+        removed += 1;
+    }
+    removed
+}
 
 /// C++ `KaTileFetcher::lonLatToTileIndex` — 위도 `[-85.05112878°, +85.05112878°]` 클램핑 및 Web Mercator 슬리피 타일 인덱스 `(tx, ty)` 산출
 #[must_use]
@@ -242,5 +281,36 @@ mod tests {
         assert_eq!(compute_tile_exponential_backoff_ms(1), Some(2000));
         assert_eq!(compute_tile_exponential_backoff_ms(2), Some(4000));
         assert_eq!(compute_tile_exponential_backoff_ms(3), None);
+    }
+
+    #[test]
+    fn test_reject_html_response_as_tile_and_prune_512mb_to_400mb() {
+        let html_err = b"<HTML><HEAD><TITLE>Service Error</TITLE></HEAD><BODY></BODY></HTML>";
+        assert!(!verify_tile_image_magic(html_err));
+        let mut valid_png = Vec::from(HGIS_PNG_MAGIC_BYTES);
+        valid_png.extend_from_slice(&[0, 0, 0, 13, b'I', b'H', b'D', b'R']);
+        assert!(verify_tile_image_magic(&valid_png));
+        assert_eq!(
+            generate_tile_cache_key("vworld_base", 15, 28145, 12886),
+            "vworld_base/15/28145/12886.png"
+        );
+
+        let chunk = 100 * 1_048_576_u64; // 100 MB each
+        let mut disk_entries = vec![
+            ("t1.png".to_owned(), chunk, 10),
+            ("t2.png".to_owned(), chunk, 20),
+            ("t3.png".to_owned(), chunk, 30),
+            ("t4.png".to_owned(), chunk, 40),
+            ("t5.png".to_owned(), chunk, 50),
+            ("t6.png".to_owned(), chunk, 60),
+        ]; // 600 MB > 512 MB
+        let removed = prune_disk_cache_entries_lru(
+            &mut disk_entries,
+            HGIS_MAX_DISK_CACHE_BYTES,
+            HGIS_PRUNE_TARGET_BYTES,
+        );
+        assert_eq!(removed, 2);
+        let remaining_bytes: u64 = disk_entries.iter().map(|(_, sz, _)| *sz).sum();
+        assert!(remaining_bytes <= HGIS_PRUNE_TARGET_BYTES);
     }
 }

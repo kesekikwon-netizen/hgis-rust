@@ -387,6 +387,30 @@ pub fn elide_title_block_text_right(raw_text: &str, max_chars: usize) -> String 
     format!("{prefix}…")
 }
 
+pub const HGIS_TITLE_BLOCK_DEFAULT_W_MM: f64 = 180.0;
+pub const HGIS_TITLE_BLOCK_ROW_H_MM: f64 = 8.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LegendLayerCandidate {
+    pub layer_key: strata_types::schema::DomainLayerKey,
+    pub visible: bool,
+    pub feature_count: usize,
+}
+
+/// C++ `KaLegendItem::collectVisibleLegendEntries` — 가시(`visible == true`) 및 비어 있지 않은(`featureCount > 0`) 레이어만 범례 항목으로 수집하고 표준 순서로 정렬
+#[must_use]
+pub fn collect_visible_non_empty_legend_entries(
+    candidates: &[LegendLayerCandidate],
+) -> Vec<strata_types::schema::DomainLayerKey> {
+    let mut keys: Vec<strata_types::schema::DomainLayerKey> = candidates
+        .iter()
+        .filter(|c| c.visible && c.feature_count > 0)
+        .map(|c| c.layer_key)
+        .collect();
+    sort_legend_layers_canonical(&mut keys);
+    keys
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -504,5 +528,35 @@ mod tests {
         let cy = 0.5 * (new_ext[1] + new_ext[3]);
         assert!((cx - 200_000.0).abs() < 1e-6);
         assert!((cy - 500_000.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_exclude_empty_layer_from_legend_4_visible_with_1_empty_yields_3() {
+        use strata_types::schema::DomainLayerKey;
+        let candidates = [
+            LegendLayerCandidate {
+                layer_key: DomainLayerKey::SurveyArea,
+                visible: true,
+                feature_count: 10,
+            },
+            LegendLayerCandidate {
+                layer_key: DomainLayerKey::TrialTrench,
+                visible: true,
+                feature_count: 5,
+            },
+            LegendLayerCandidate {
+                layer_key: DomainLayerKey::FeaturePoly,
+                visible: true,
+                feature_count: 0,
+            },
+            LegendLayerCandidate {
+                layer_key: DomainLayerKey::ArtifactPoint,
+                visible: true,
+                feature_count: 2,
+            },
+        ];
+        let entries = collect_visible_non_empty_legend_entries(&candidates);
+        assert_eq!(entries.len(), 3);
+        assert!(!entries.contains(&DomainLayerKey::FeaturePoly));
     }
 }
