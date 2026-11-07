@@ -29,6 +29,7 @@ pub enum ActiveModalDialog {
     LineColor,
     DemClass,
     ReferenceStatus,
+    HeritageBrowser,
 }
 
 #[derive(Debug, Clone)]
@@ -98,6 +99,18 @@ pub struct ModalDialogController {
     pub dem_applied_relief_enabled: bool,
     pub dem_applied_exaggeration: f32,
     pub dem_applied_relief_strength_pct: u32,
+    // T8 KaHeritageBrowser ("주변유적 받기") 상태
+    pub heritage_sido: String,
+    pub heritage_city: String,
+    pub heritage_scope_idx: usize,
+    pub heritage_dataset_checks: [bool; 7],
+    pub heritage_reuse_recent: bool,
+    pub heritage_stage_idx: usize,
+    pub heritage_progress_pct: f32,
+    pub heritage_status_detail: String,
+    pub heritage_show_details: bool,
+    pub heritage_request_log: Vec<String>,
+    pub heritage_selected_row: Option<usize>,
 }
 
 impl Default for ModalDialogController {
@@ -164,6 +177,30 @@ impl Default for ModalDialogController {
             dem_applied_relief_enabled: true,
             dem_applied_exaggeration: 1.0,
             dem_applied_relief_strength_pct: 30,
+            heritage_sido: "경상북도".to_owned(),
+            heritage_city: "경주시".to_owned(),
+            heritage_scope_idx: 2,
+            heritage_dataset_checks: [true; 7],
+            heritage_reuse_recent: false,
+            heritage_stage_idx: 10,
+            heritage_progress_pct: 1.0,
+            heritage_status_detail: "경상북도 경주시 — 검색결과 4,569건. 내려받기 완료 (서약서 자동 동의 및 영수증 주변유적/receipts 기록됨).".to_owned(),
+            heritage_show_details: false,
+            heritage_request_log: vec![
+                strata_net::heritage_intranet::HeritageIntranetFlow::redact_request_line(
+                    "POST",
+                    strata_net::heritage_intranet::HeritageIntranetFlow::LOGIN_URL,
+                ),
+                strata_net::heritage_intranet::HeritageIntranetFlow::redact_request_line(
+                    "GET",
+                    "https://intranet.gis-heritage.go.kr/intranet/codedeta/selectCodeDetaList.do?sido=47&sigungu=47130",
+                ),
+                strata_net::heritage_intranet::HeritageIntranetFlow::redact_request_line(
+                    "POST",
+                    "https://intranet.gis-heritage.go.kr/intranet/codedeta/downloadFilesAll.do",
+                ),
+            ],
+            heritage_selected_row: Some(0),
         }
     }
 }
@@ -2183,6 +2220,7 @@ mod tests {
             ActiveModalDialog::LineColor,
             ActiveModalDialog::DemClass,
             ActiveModalDialog::ReferenceStatus,
+            ActiveModalDialog::HeritageBrowser,
         ] {
             ctrl.active = None;
             assert!(ctrl.show_exclusive_modal(variant));
