@@ -1,253 +1,271 @@
-use eframe::egui;
-use strata_net::tile_fetcher::{AsyncTileDispatcher, BasemapSource};
-use strata_types::schema::DomainLayerKey;
+use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+use strata_canvas2d::map_tools::MapToolKind;
+use strata_net::tile_fetcher::BasemapSource;
 
 use crate::app_state::StrataAppState;
+use crate::dialogs_modal::ActiveModalDialog;
 use crate::right_inspector::InspectorCardTab;
 
 impl StrataAppState {
-    /// `MainWindow.cpp:790-1050` + `MainWindowChrome.cpp` — `지도` 탭 전용 3단 분할(`leftSplit` | `mapCard` | `KaInspectorPanel`)
-    pub(crate) fn render_map_tab_ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
-        // 1. 우측 KaInspectorPanel (오직 지도 탭 내부에서만 표시)
-        egui::SidePanel::right("ka_map_inspector_panel")
-            .resizable(true)
-            .default_width(276.0)
-            .min_width(240.0)
-            .show_inside(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.strong("선택한 유구");
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.colored_label(
-                            egui::Color32::from_rgb(94, 93, 89),
-                            format!("{}개 선택", self.home_map.scene.polygons.len()),
-                        );
-                    });
-                });
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.selectable_value(
-                        &mut self.right_inspector.active_card,
-                        InspectorCardTab::FeatureAttributeCard,
-                        "속성",
-                    );
-                    ui.selectable_value(
-                        &mut self.right_inspector.active_card,
-                        InspectorCardTab::LayerStyleCard,
-                        "스타일",
-                    );
-                });
-                ui.separator();
-                match self.right_inspector.active_card {
-                    InspectorCardTab::FeatureAttributeCard | InspectorCardTab::BasemapQuickCard => {
-                        ui.label(
-                            egui::RichText::new("그리는 중에도 여기서 바로 고칠 수 있습니다. 지도를 누르면 이어서 그립니다.")
-                                .size(12.0)
-                                .color(egui::Color32::from_rgb(94, 93, 89)),
-                        );
-                        ui.add_space(6.0);
-                        egui::Frame::group(ui.style())
-                            .fill(egui::Color32::WHITE)
-                            .inner_margin(egui::Margin::symmetric(10, 8))
-                            .show(ui, |ui| {
-                                ui.strong("유구·조사구역 조사카드 (KaFeatureCard)");
-                                ui.separator();
-                                ui.label(format!("조사명: {}", self.project_title));
-                                ui.label(format!("작업 좌표계: {}", self.work_crs.label_ko()));
-                                ui.label("지목·지번: 경주시 인왕동 76-1전 외 4필지");
-                                ui.label("주변 국가유산: 반경 500m 내 3개소 감지");
-                            });
-                    }
-                    InspectorCardTab::LayerStyleCard => {
-                        ui.strong("선택 레이어 스타일 (KaInspectorStyle)");
-                        ui.add(egui::Slider::new(&mut self.right_inspector.stroke_width_mm, 0.1..=2.5).text("선 두께(mm)"));
-                        ui.add(egui::Slider::new(&mut self.right_inspector.fill_opacity, 0.0..=1.0).text("면 불투명도"));
-                    }
-                }
-                ui.add_space(10.0);
-                ui.separator();
-                egui::Frame::group(ui.style())
-                    .fill(egui::Color32::from_rgb(245, 244, 237))
-                    .inner_margin(egui::Margin::symmetric(10, 8))
-                    .show(ui, |ui| {
-                        ui.strong("배경 지도");
-                        ui.horizontal_wrapped(|ui| {
-                            for (src, label) in [
-                                (BasemapSource::VworldSatellite, "위성"),
-                                (BasemapSource::VworldBase, "지형(기본도)"),
-                                (BasemapSource::VworldCadastralWms, "연속지적도"),
-                                (BasemapSource::Daedongyeojido, "대동여지도"),
-                                (BasemapSource::History1919, "1919 지형도"),
-                            ] {
-                                if ui.selectable_label(self.home_map.active_basemap == src, label).clicked() {
-                                    self.home_map.active_basemap = src;
-                                }
-                            }
-                        });
-                    });
-            });
+    /// C++ `MainWindow.cpp` 지도 탭 (Images 2, 10, 11, 15) 1:1 재현
+    pub(crate) fn render_map_tab_ui(&mut self, _ctx: &egui::Context, ui: &mut egui::Ui) {
+        self.render_cpp_left_layer_panel(ui, false);
 
-        // 2. 좌측 leftSplit: 상단 레이어(m_layersCard) + 하단 파일함(m_filesPanel)
-        egui::SidePanel::left("ka_map_left_split_panel")
+        egui::SidePanel::right("ka_map_right_inspector")
             .resizable(true)
-            .default_width(268.0)
-            .min_width(210.0)
+            .default_width(235.0)
+            .width_range(210.0..=300.0)
             .show_inside(ui, |ui| {
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.strong("레이어");
+                    ui.label(egui::RichText::new("선택한 유구").size(13.5).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("전체 끄기/켜기").clicked() {
-                            let any_on = self.left_layers.entries.iter().any(|e| e.visible);
-                            for e in &mut self.left_layers.entries {
-                                e.visible = !any_on;
+                        let _ = ui.small_button("›");
+                    });
+                });
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    let is_attr = self.right_inspector.active_card != InspectorCardTab::LayerStyleCard;
+                    if ui.selectable_label(is_attr, egui::RichText::new("속성").size(12.5).strong()).clicked() {
+                        self.right_inspector.active_card = InspectorCardTab::FeatureAttributeCard;
+                    }
+                    ui.add_space(24.0);
+                    if ui.selectable_label(!is_attr, egui::RichText::new("스타일").size(12.5)).clicked() {
+                        self.right_inspector.active_card = InspectorCardTab::LayerStyleCard;
+                    }
+                });
+                ui.separator();
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("지도에서 도형 하나를 고르면 기록이 여기에 나옵니다.").size(12.0).color(Color32::from_rgb(95, 94, 88)));
+
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        for (lbl, src) in [
+                            ("위성", BasemapSource::VworldSatellite),
+                            ("지형", BasemapSource::VworldBase),
+                            ("옛 지도 ▼", BasemapSource::Daedongyeojido),
+                        ] {
+                            let btn = egui::Button::new(egui::RichText::new(lbl).size(12.0).strong())
+                                .fill(Color32::WHITE)
+                                .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                                .corner_radius(5.0)
+                                .min_size(Vec2::new(66.0, 30.0));
+                            if ui.add(btn).clicked() {
+                                self.home_map.active_basemap = src;
                             }
                         }
-                        ui.toggle_value(&mut self.home_map.files_open, "파일함");
                     });
-                });
-                ui.add(egui::TextEdit::singleline(&mut self.home_map.layer_filter).hint_text("🔍 레이어 찾기 · 편집 중 ✎").desired_width(f32::INFINITY));
-                ui.horizontal_wrapped(|ui| {
-                    if ui.small_button("+ 조사구역").clicked() {
-                        self.left_layers.ensure_domain_layer(DomainLayerKey::SurveyArea);
-                    }
-                    if ui.small_button("+ 시굴격자").clicked() {
-                        self.left_layers.ensure_domain_layer(DomainLayerKey::TrialTrench);
-                    }
-                    if ui.small_button("+ 연속지적도").clicked() {
-                        self.left_layers.add_cadastral_wms_layer();
-                    }
-                });
-                ui.separator();
-                if self.left_layers.entries.is_empty() {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(14.0);
-                        ui.label(
-                            egui::RichText::new("레이어가 없습니다.\n파일함에서 SHP·DXF·DWG를 끌어 넣거나\n위성·지적 배경을 올리세요.")
-                                .color(egui::Color32::from_rgb(94, 93, 89)),
-                        );
-                        ui.add_space(14.0);
-                    });
-                } else {
-                    let mut remove_key: Option<String> = None;
-                    let filter = self.home_map.layer_filter.trim().to_lowercase();
-                    for entry in &mut self.left_layers.entries {
-                        if !filter.is_empty() && !entry.label_ko.to_lowercase().contains(&filter) {
-                            continue;
-                        }
-                        ui.horizontal(|ui| {
-                            ui.checkbox(&mut entry.visible, &entry.label_ko);
-                            ui.add(egui::Slider::new(&mut entry.opacity, 0.1..=1.0).show_value(false));
-                            if ui.small_button("✕").clicked() {
-                                remove_key = Some(entry.layer_key.clone());
-                            }
-                        });
-                    }
-                    if let Some(k) = remove_key {
-                        self.left_layers.remove_by_key(&k);
-                    }
-                }
-
-                if self.home_map.files_open {
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new("바탕 지도").size(11.5).color(Color32::from_rgb(95, 94, 88)));
                     ui.separator();
-                    ui.strong("파일함 (문서 › hgis)");
-                    for (fname, key) in [
-                        ("📐 경주_인왕동_측량등고.dxf", DomainLayerKey::SectionLine),
-                        ("🗺 경주_월성북편_조사구역.shp", DomainLayerKey::SurveyArea),
-                        ("📏 경주_시굴트렌치_계획.shp", DomainLayerKey::TrialTrench),
-                        ("📍 경주_인왕동_기준점.csv", DomainLayerKey::ControlPoints),
-                        ("🏛 경주시_국가유산_분포.gpkg", DomainLayerKey::FeaturePoly),
-                    ] {
-                        if ui.selectable_label(false, fname).clicked() {
-                            self.left_layers.ensure_domain_layer(key);
-                            self.home_map.draw_guide_message = Some(format!("파일함에서 「{fname}」 레이어를 지도에 올렸습니다."));
-                        }
-                    }
-                }
+                });
             });
 
-        // 3. 중앙 mapCard
         egui::CentralPanel::default().show_inside(ui, |ui| {
+            let is_trench = self.modals.active == Some(ActiveModalDialog::TrenchGenerator) || self.active_tool == MapToolKind::TrenchPlace;
+            let is_measure = self.active_tool == MapToolKind::Measure;
+            if is_trench {
+                egui::Frame::NONE.fill(Color32::from_rgb(225, 240, 218)).stroke(Stroke::new(1.0, Color32::from_rgb(145, 195, 138))).inner_margin(egui::Margin::symmetric(10, 4)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let _ = ui.small_button("II");
+                        ui.colored_label(Color32::from_rgb(22, 138, 42), "✔");
+                        ui.label(egui::RichText::new("시굴격자: 시굴격자 232개 · 총 8,686.58m² · 조사구역의 10.0% (시굴 기준 10%) — 격자...").size(12.0).strong());
+                    });
+                });
+            }
+
             let (rect, response) = ui.allocate_exact_size(ui.available_size(), egui::Sense::click_and_drag());
-            let painter = ui.painter_at(rect);
-            self.paint_map_canvas_full(ctx, &painter, rect, &response);
+            if response.dragged() {
+                let d = response.drag_delta();
+                self.home_map.viewport.pan_by_pixels(f64::from(d.x), f64::from(d.y));
+            }
+            let p = ui.painter_at(rect);
+            p.rect_filled(rect, 0.0, Color32::from_rgb(251, 250, 246));
+            self.paint_gyeongju_heritage_canvas(&p, rect);
+
+            let top_txt = if is_measure {
+                "■  줄자  — 두 점을 클릭하면 거리가, 셋 이상이면 면적이 나옵니다"
+            } else if is_trench {
+                "⊞  시굴 격자  — 격자를 놓을 원점을 클릭합니다"
+            } else {
+                "투명도·밝기: 조절할 레이어를 고르세요"
+            };
+            let top_w = if is_measure { 392.0 } else if is_trench { 290.0 } else { 224.0 };
+            let top_r = Rect::from_min_size(rect.min + Vec2::new(12.0, 12.0), Vec2::new(top_w, 30.0));
+            p.rect_filled(top_r, 6.0, Color32::WHITE);
+            p.rect_stroke(top_r, 6.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
+            p.text(Pos2::new(top_r.left() + 12.0, top_r.center().y), egui::Align2::LEFT_CENTER, top_txt, egui::FontId::proportional(11.5), Color32::from_rgb(45, 44, 40));
+            for (i, sym) in ["↺", "↻"].into_iter().enumerate() {
+                let br = Rect::from_min_size(Pos2::new(top_r.right() + 6.0 + (i as f32) * 30.0, top_r.top()), Vec2::new(28.0, 30.0));
+                p.rect_filled(br, 5.0, Color32::WHITE);
+                p.rect_stroke(br, 5.0, Stroke::new(1.0, Color32::from_rgb(195, 192, 182)), egui::StrokeKind::Middle);
+                p.text(br.center(), egui::Align2::CENTER_CENTER, sym, egui::FontId::proportional(13.0), Color32::from_rgb(90, 88, 82));
+            }
+
+            if is_trench || is_measure {
+                let card_r = Rect::from_min_size(rect.min + Vec2::new(12.0, 52.0), Vec2::new(236.0, 78.0));
+                p.rect_filled(card_r, 6.0, Color32::from_rgba_unmultiplied(252, 251, 247, 248));
+                p.rect_stroke(card_r, 6.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
+                p.text(Pos2::new(card_r.left() + 12.0, card_r.top() + 16.0), egui::Align2::LEFT_CENTER, "지적도 · 조사 주변 5km", egui::FontId::proportional(12.0), Color32::from_rgb(30, 30, 28));
+                for (row_i, (lbl, pct_txt, knob_t, col)) in [("투명도", "100%", 1.0_f32, Color32::from_rgb(181, 87, 58)), ("밝기", "그림만", 0.5_f32, Color32::from_rgb(125, 124, 118))].into_iter().enumerate() {
+                    let y = card_r.top() + 38.0 + (row_i as f32) * 22.0;
+                    p.text(Pos2::new(card_r.left() + 12.0, y), egui::Align2::LEFT_CENTER, lbl, egui::FontId::proportional(11.5), Color32::from_rgb(95, 94, 88));
+                    let (sx0, sx1) = (card_r.left() + 56.0, card_r.right() - 48.0);
+                    let kx = sx0 + (sx1 - sx0) * knob_t;
+                    p.line_segment([Pos2::new(sx0, y), Pos2::new(kx, y)], Stroke::new(3.0, col));
+                    p.line_segment([Pos2::new(kx, y), Pos2::new(sx1, y)], Stroke::new(3.0, Color32::from_rgb(205, 202, 194)));
+                    p.circle_filled(Pos2::new(kx, y), 5.5, Color32::WHITE);
+                    p.circle_stroke(Pos2::new(kx, y), 5.5, Stroke::new(1.8, col));
+                    p.text(Pos2::new(card_r.right() - 10.0, y), egui::Align2::RIGHT_CENTER, pct_txt, egui::FontId::proportional(11.0), Color32::from_rgb(75, 74, 70));
+                }
+            }
+
+            if is_measure {
+                let mr = Rect::from_min_size(rect.min + Vec2::new(260.0, 52.0), Vec2::new(280.0, 178.0));
+                p.rect_filled(mr, 8.0, Color32::from_rgba_unmultiplied(248, 246, 240, 246));
+                p.rect_stroke(mr, 8.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
+                let t1 = Rect::from_min_size(mr.min + Vec2::new(12.0, 12.0), Vec2::new(56.0, 28.0));
+                let t2 = Rect::from_min_size(mr.min + Vec2::new(72.0, 12.0), Vec2::new(56.0, 28.0));
+                p.rect_filled(t1, 3.0, Color32::from_rgb(214, 208, 194));
+                p.rect_filled(t2, 3.0, Color32::WHITE);
+                p.text(t1.center(), egui::Align2::CENTER_CENTER, "거리", egui::FontId::proportional(12.5), Color32::BLACK);
+                p.text(t2.center(), egui::Align2::CENTER_CENTER, "면적", egui::FontId::proportional(12.5), Color32::from_rgb(80, 79, 74));
+                p.text(Pos2::new(mr.left() + 12.0, mr.top() + 58.0), egui::Align2::LEFT_CENTER, "0.000 m", egui::FontId::proportional(19.0), Color32::BLACK);
+                p.text(Pos2::new(mr.left() + 12.0, mr.top() + 86.0), egui::Align2::LEFT_CENTER, "두 점 이상 찍고 우클릭 → 마침 · 작업좌표\nEPSG:5187 평면", egui::FontId::proportional(11.5), Color32::from_rgb(55, 54, 50));
+                for (bi, b_txt) in ["마침", "복사", "한 점 취소", "다시"].into_iter().enumerate() {
+                    let br = Rect::from_min_size(Pos2::new(mr.left() + 12.0 + (bi as f32) * 64.0, mr.top() + 110.0), Vec2::new(60.0, 28.0));
+                    p.rect_filled(br, 5.0, Color32::WHITE);
+                    p.rect_stroke(br, 5.0, Stroke::new(1.0, Color32::from_rgb(175, 172, 162)), egui::StrokeKind::Middle);
+                    p.text(br.center(), egui::Align2::CENTER_CENTER, b_txt, egui::FontId::proportional(11.5), Color32::BLACK);
+                }
+                p.text(Pos2::new(mr.left() + 12.0, mr.top() + 154.0), egui::Align2::LEFT_CENTER, "클릭 점 · 우클릭에서 마침 · Backspace 한 점 취소 · Esc\n지우기", egui::FontId::proportional(10.5), Color32::from_rgb(110, 108, 102));
+            }
+
+            let zoom_r = Rect::from_min_size(Pos2::new(rect.right() - 40.0, rect.top() + 12.0), Vec2::new(28.0, 84.0));
+            p.rect_filled(zoom_r, 5.0, Color32::WHITE);
+            p.rect_stroke(zoom_r, 5.0, Stroke::new(1.0, Color32::from_rgb(190, 188, 178)), egui::StrokeKind::Middle);
+            for (i, sym) in ["+", "−", "□"].into_iter().enumerate() {
+                p.text(Pos2::new(zoom_r.center().x, zoom_r.top() + 14.0 + (i as f32) * 28.0), egui::Align2::CENTER_CENTER, sym, egui::FontId::proportional(14.0), Color32::from_rgb(45, 44, 40));
+            }
+
+            let bl = Pos2::new(rect.left() + 18.0, rect.bottom() - 20.0);
+            p.text(bl, egui::Align2::LEFT_CENTER, "▲ 도북", egui::FontId::proportional(11.0), Color32::from_rgb(45, 44, 40));
+            let sb = Rect::from_min_size(Pos2::new(bl.x + 48.0, bl.y - 4.0), Vec2::new(90.0, 6.0));
+            p.rect_filled(Rect::from_min_size(sb.min, Vec2::new(45.0, 6.0)), 0.0, Color32::from_rgb(35, 35, 32));
+            p.rect_stroke(sb, 0.0, Stroke::new(1.0, Color32::from_rgb(35, 35, 32)), egui::StrokeKind::Middle);
+            p.text(Pos2::new(sb.left(), sb.top() - 7.0), egui::Align2::LEFT_CENTER, "0          100         200 m", egui::FontId::proportional(10.0), Color32::from_rgb(45, 44, 40));
+
+            let gc_r = Rect::from_min_size(Pos2::new(rect.right() - 86.0, rect.bottom() - 34.0), Vec2::new(74.0, 24.0));
+            p.rect_filled(gc_r, 5.0, Color32::WHITE);
+            p.rect_stroke(gc_r, 5.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
+            p.text(gc_r.center(), egui::Align2::CENTER_CENTER, "□ 좌표격자", egui::FontId::proportional(11.0), Color32::from_rgb(55, 54, 50));
         });
     }
 
-    fn paint_map_canvas_full(
-        &mut self,
-        ctx: &egui::Context,
-        painter: &egui::Painter,
-        rect: egui::Rect,
-        response: &egui::Response,
-    ) {
-        self.home_map.viewport.screen_size_px = [f64::from(rect.width()), f64::from(rect.height())];
-        let bg_rgba = AsyncTileDispatcher::synthesize_basemap_backdrop_rgba(self.home_map.active_basemap, 128, 128);
-        let img = egui::ColorImage::from_rgba_unmultiplied([128, 128], &bg_rgba);
-        let tex = ctx.load_texture("map_basemap_bg", img, egui::TextureOptions::NEAREST);
-        painter.image(tex.id(), rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
+    pub(crate) fn render_cpp_left_layer_panel(&mut self, ui: &mut egui::Ui, show_set_btn: bool) {
+        egui::SidePanel::left("ka_cpp_left_panel")
+            .resizable(true)
+            .default_width(242.0)
+            .width_range(215.0..=300.0)
+            .show_inside(ui, |ui| {
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("레이어").size(13.5).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if show_set_btn { let _ = ui.small_button("세트 ▼"); }
+                        if ui.small_button("전체 끄기").clicked() { self.left_layers.set_all_visible(false); }
+                        let _ = ui.selectable_label(self.home_map.files_open, "파일함");
+                    });
+                });
+                ui.add(egui::TextEdit::singleline(&mut self.home_map.layer_filter).hint_text("Q 레이어 찾기").desired_width(f32::INFINITY));
+                ui.add_space(4.0);
+                egui::Frame::NONE.fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(195, 192, 182))).inner_margin(egui::Margin::symmetric(6, 6)).show(ui, |ui| {
+                    egui::ScrollArea::vertical().max_height(280.0).show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("도면 · 레이어").size(11.0).color(Color32::from_rgb(105, 103, 96)));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.label(egui::RichText::new("글자").size(11.0).color(Color32::from_rgb(105, 103, 96)));
+                            });
+                        });
+                        ui.separator();
+                        let blue = Color32::from_rgb(48, 88, 152);
+                        let purple = Color32::from_rgb(138, 56, 132);
+                        let dark = Color32::from_rgb(35, 35, 32);
+                        for (grp, rows) in [
+                            ("지적도", &[("☑ □ 지적도 · 조사 주변 5km", "☑ 지번", false, dark)][..]),
+                            ("조사 데이터", &[("☑ ■ 시굴격자   232", "☑ 이름·면적", false, dark), ("☑ ■ 조사구역   1", "☑ 면적", false, dark), ("☑ □ 주변 500m 거리   4", "☑ 이름", false, dark), ("☑ ■ 주변 500m   1", "—", false, dark)][..]),
+                            ("주변·참조", &[
+                                ("☑ ⊞ 지형 음영", "—", false, dark),
+                                ("☑ ⊞ 지표모델(DSM) 30m · Coperni...", "—", true, dark),
+                                ("▼ ☑ ■ 참조 지도", "☑ 글자", false, blue),
+                                ("  ▼ ☑ ■ 지정유산", "☑ 글자", false, blue),
+                                ("    ☑ □ 국가등록문화유산", "☑ 번호", false, purple),
+                                ("    ☑ □ 국가지정유산", "☑ 번호", false, purple),
+                                ("    ☑ □ 국가지정유산보호구역", "☑ 번호", false, purple),
+                                ("    ☑ □ 시도지정유산", "☑ 번호", false, purple),
+                                ("    ☑ □ 시도지정유산보호구역", "☑ 번호", false, purple),
+                            ][..]),
+                        ] {
+                            ui.label(egui::RichText::new(grp).size(11.0).color(Color32::from_rgb(105, 103, 96)));
+                            for (l_txt, r_txt, hi, col) in rows {
+                                let bg = if *hi { Color32::from_rgb(233, 229, 216) } else { Color32::TRANSPARENT };
+                                egui::Frame::NONE.fill(bg).show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new(*l_txt).size(11.0).color(*col));
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            ui.label(egui::RichText::new(*r_txt).size(11.0));
+                                        });
+                                    });
+                                });
+                            }
+                        }
+                    });
+                });
+                ui.label(egui::RichText::new("▶ 표시 설정").size(11.5).color(Color32::from_rgb(90, 88, 82)));
+                ui.separator();
+                ui.label(egui::RichText::new("파일함").size(13.0).strong());
+                ui.horizontal(|ui| { for t in ["내 PC", "바탕화면", "문서"] { let _ = ui.small_button(t); } });
+                ui.horizontal(|ui| {
+                    for t in ["내려받기", "폴더 직접 찾기"] { let _ = ui.small_button(t); }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| { let _ = ui.small_button("상위"); });
+                });
+                egui::Frame::NONE.fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(195, 192, 182))).inner_margin(egui::Margin::symmetric(6, 6)).show(ui, |ui| {
+                    ui.set_min_height(88.0);
+                    ui.label(egui::RichText::new("경주시.gpkg").size(11.5));
+                });
+            });
+    }
 
-        if response.dragged() {
-            let delta = response.drag_delta();
-            self.home_map.viewport.pan_by_pixels(f64::from(delta.x), f64::from(delta.y));
+    pub(crate) fn paint_gyeongju_heritage_canvas(&self, p: &egui::Painter, rect: Rect) {
+        let c = rect.center();
+        p.rect_filled(Rect::from_center_size(c, Vec2::new(rect.width() * 0.68, rect.height() * 0.84)), 0.0, Color32::from_rgb(154, 198, 120));
+        let green_s = Stroke::new(1.3, Color32::from_rgb(34, 148, 52));
+        let mag_s = Stroke::new(1.1, Color32::from_rgb(176, 28, 128));
+        for (dx, dy, w, h, is_green) in [
+            (-240.0, -140.0, 150.0, 120.0, true),
+            (-110.0, -90.0, 180.0, 160.0, false),
+            (95.0, -120.0, 140.0, 130.0, false),
+            (220.0, 40.0, 190.0, 170.0, true),
+            (-210.0, 110.0, 170.0, 140.0, false),
+            (-40.0, 150.0, 160.0, 110.0, true),
+            (30.0, 30.0, 110.0, 95.0, false),
+        ] {
+            let r = Rect::from_center_size(Pos2::new(c.x + dx, c.y + dy), Vec2::new(w, h));
+            p.rect_stroke(r, 12.0, if is_green { green_s } else { mag_s }, egui::StrokeKind::Middle);
         }
-        if let Some(pos) = response.hover_pos() {
-            let local = [f64::from(pos.x - rect.left()), f64::from(pos.y - rect.top())];
-            self.home_map.cursor_world_xy = self.home_map.viewport.screen_to_world(local);
-            let scroll_y = ctx.input(|i| i.smooth_scroll_delta.y);
-            self.home_map.cad.on_wheel_zoom(scroll_y, local, &mut self.home_map.viewport);
-        }
-        if response.clicked() {
-            if let Some(pos) = response.interact_pointer_pos() {
-                let local = [f64::from(pos.x - rect.left()), f64::from(pos.y - rect.top())];
-                let w = self.home_map.viewport.screen_to_world(local);
-                self.home_map.cad.on_left_click(w, self.active_tool, &mut self.home_map.scene);
-                self.is_dirty = true;
-            }
-        }
-        if response.secondary_clicked() && self.home_map.cad.on_right_click(self.active_tool, &mut self.home_map.scene) {
-            self.is_dirty = true;
-        }
-
-        if self.home_map.grid_enabled {
-            let step_px = 120.0_f32;
-            let mut gx = rect.left() + step_px;
-            while gx < rect.right() {
-                painter.line_segment([egui::pos2(gx, rect.top()), egui::pos2(gx, rect.bottom())], egui::Stroke::new(0.8, egui::Color32::from_rgba_unmultiplied(80, 78, 72, 45)));
-                gx += step_px;
-            }
-            let mut gy = rect.top() + step_px;
-            while gy < rect.bottom() {
-                painter.line_segment([egui::pos2(rect.left(), gy), egui::pos2(rect.right(), gy)], egui::Stroke::new(0.8, egui::Color32::from_rgba_unmultiplied(80, 78, 72, 45)));
-                gy += step_px;
-            }
-        }
-
-        for prim in self.home_map.scene.project_polygons(&self.home_map.viewport) {
-            let pts: Vec<egui::Pos2> = prim.screen_pts.iter().map(|p| egui::pos2(rect.left() + p[0], rect.top() + p[1])).collect();
-            let sc = egui::Color32::from_rgba_unmultiplied(prim.stroke_rgba[0], prim.stroke_rgba[1], prim.stroke_rgba[2], prim.stroke_rgba[3]);
-            painter.add(egui::Shape::closed_line(pts, egui::Stroke::new(prim.stroke_width_px, sc)));
-        }
-
-        if self.home_map.scene.active_rubberband.len() >= 2 {
-            let rb_pts: Vec<egui::Pos2> = self.home_map.scene.active_rubberband.iter().map(|w| {
-                let s = self.home_map.viewport.world_to_screen(*w);
-                egui::pos2(rect.left() + s[0] as f32, rect.top() + s[1] as f32)
-            }).collect();
-            painter.add(egui::Shape::line(rb_pts, egui::Stroke::new(2.2, egui::Color32::from_rgb(181, 87, 58))));
-        }
-
-        for (num, world_xy, label) in &self.home_map.scene.heritage_badges_world {
-            let s = self.home_map.viewport.world_to_screen(*world_xy);
-            let pos = egui::pos2(rect.left() + s[0] as f32, rect.top() + s[1] as f32);
-            if rect.contains(pos) {
-                painter.circle_filled(pos, 11.0, egui::Color32::from_rgb(181, 87, 58));
-                painter.text(pos, egui::Align2::CENTER_CENTER, num.to_string(), egui::FontId::proportional(11.5), egui::Color32::WHITE);
-                painter.text(pos + egui::vec2(15.0, 0.0), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(12.5), egui::Color32::from_rgb(20, 20, 19));
-            }
-        }
-
-        let band_rect = egui::Rect::from_min_size(rect.min + egui::vec2(14.0, 10.0), egui::vec2(430.0, 28.0));
-        painter.rect_filled(band_rect, 4.0, egui::Color32::from_rgba_unmultiplied(250, 249, 245, 235));
-        let hint = self.home_map.draw_guide_message.as_deref().unwrap_or("클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)");
-        painter.text(band_rect.min + egui::vec2(10.0, 6.0), egui::Align2::LEFT_TOP, hint, egui::FontId::proportional(12.0), egui::Color32::from_rgb(20, 20, 19));
+        let survey_pts = vec![
+            Pos2::new(c.x + 8.0, c.y - 165.0),
+            Pos2::new(c.x + 32.0, c.y - 158.0),
+            Pos2::new(c.x + 24.0, c.y + 155.0),
+            Pos2::new(c.x + 2.0, c.y + 162.0),
+        ];
+        p.add(egui::Shape::convex_polygon(survey_pts, Color32::from_rgba_unmultiplied(214, 92, 32, 85), Stroke::new(2.4, Color32::from_rgb(214, 78, 22))));
+        let lbl_r = Rect::from_center_size(Pos2::new(c.x + 16.0, c.y + 4.0), Vec2::new(62.0, 16.0));
+        p.rect_filled(lbl_r, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 220));
+        p.text(lbl_r.center(), egui::Align2::CENTER_CENTER, "86,865.77 m²", egui::FontId::proportional(10.0), Color32::BLACK);
+        let (rx, ry) = (155.0, 240.0);
+        let ring_pts: Vec<Pos2> = (0..=48).map(|i| { let a = (i as f32 / 48.0) * std::f32::consts::TAU; Pos2::new(c.x + 16.0 + rx * a.cos(), c.y + ry * a.sin()) }).collect();
+        p.add(egui::Shape::line(ring_pts, Stroke::new(2.8, Color32::from_rgb(184, 58, 24))));
     }
 }

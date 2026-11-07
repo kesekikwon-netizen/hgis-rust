@@ -1,246 +1,224 @@
-use eframe::egui;
+use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use strata_canvas2d::map_tools::MapToolKind;
 use strata_storage::gpkg::GpkgRepository;
 use strata_types::schema::DomainLayerKey;
 
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::ActiveModalDialog;
+use crate::ribbon_icons::paint_strata_logo;
 
 impl StrataAppState {
-    /// `KaStartPage.cpp` + `KaHomeTitleBlock.cpp` + `KaHomeRecentCard.cpp` + `KaHomeGuideCard.cpp` + `KaHomeConnectionCard.cpp` 1:1 재현
+    /// C++ `KaStartPage.cpp` + `KaHomeTitleBlock.cpp` + `KaHomeRecentCard.cpp` + `KaHomeGuideCard.cpp` + `KaHomeConnectionCard.cpp` 1:1
     pub(crate) fn render_home_tab_ui(&mut self, ui: &mut egui::Ui) {
-        let full_w = ui.available_width().clamp(600.0, 2400.0);
+        let total_w = ui.available_width().clamp(800.0, 3600.0);
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            ui.set_max_width(full_w);
-            ui.add_space(8.0);
-            // 1. KaStartHero + KaHomeTitleBlock (상단 배너)
-            egui::Frame::group(ui.style())
-                .fill(egui::Color32::from_rgb(240, 238, 230))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(194, 192, 182)))
-                .inner_margin(egui::Margin::symmetric(28, 16))
-                .show(ui, |ui| {
-                    ui.set_max_width((full_w - 60.0).max(500.0));
-                    ui.columns(2, |cols| {
-                        cols[0].horizontal(|ui| {
-                            egui::Frame::NONE
-                                .fill(egui::Color32::from_rgb(181, 87, 58))
-                                .corner_radius(4.0)
-                                .inner_margin(egui::Margin::symmetric(10, 5))
-                                .show(ui, |ui| {
-                                    ui.colored_label(egui::Color32::WHITE, egui::RichText::new("S").strong().size(18.0));
-                                });
-                            ui.label(egui::RichText::new("Strata").strong().size(24.0));
-                            ui.separator();
-                            ui.label(egui::RichText::new("필드고고학 GIS").size(16.0).color(egui::Color32::from_rgb(94, 93, 89)));
-                        });
-                        cols[0].add_space(6.0);
-                        cols[0].label(egui::RichText::new("오늘 현장을 새로 만들거나, 지난 조사를 이어서 여세요.").size(14.0));
-                        cols[0].add_space(10.0);
-                        cols[0].horizontal(|ui| {
-                            let btn_new = egui::Button::new(egui::RichText::new("새 조사").color(egui::Color32::WHITE).strong())
-                                .fill(egui::Color32::from_rgb(181, 87, 58))
-                                .min_size(egui::vec2(104.0, 34.0));
-                            if ui.add(btn_new).clicked() {
-                                self.start_new_survey_project("경주_인왕동_신규시굴조사");
-                            }
-                            let btn_open = egui::Button::new(egui::RichText::new("조사 열기").strong()).min_size(egui::vec2(104.0, 34.0));
-                            if ui.add(btn_open).clicked() {
-                                self.open_sample_survey_project(0);
-                            }
-                        });
+            ui.set_max_width(total_w);
+            egui::Frame::NONE.inner_margin(egui::Margin::symmetric(20, 14)).show(ui, |ui| {
+                let inner_w = (total_w - 40.0).max(760.0);
+                ui.set_max_width(inner_w);
 
-                        // 우측: KaHomeTitleBlock (이어서 작업 + 6칸 셀)
-                        egui::Frame::group(cols[1].style())
-                            .fill(egui::Color32::WHITE)
-                            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(20, 20, 19)))
-                            .inner_margin(egui::Margin::symmetric(16, 10))
-                            .show(&mut cols[1], |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.strong("이어서 작업");
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        if self.is_dirty {
-                                            ui.colored_label(egui::Color32::from_rgb(217, 119, 87), "● 저장 안 됨");
-                                        } else {
-                                            ui.label("저장됨");
-                                        }
-                                    });
-                                });
-                                ui.separator();
-                                ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new(&self.project_title).strong().size(18.0));
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        let resume_btn = egui::Button::new(egui::RichText::new("이어서 열기  →").color(egui::Color32::WHITE).strong())
-                                            .fill(egui::Color32::from_rgb(181, 87, 58))
-                                            .min_size(egui::vec2(130.0, 30.0));
-                                        if ui.add(resume_btn).clicked() {
-                                            self.open_sample_survey_project(0);
-                                        }
-                                    });
-                                });
-                                ui.separator();
-                                let crs_short = if self.work_crs.epsg_code() == 5186 { "5186 중부원점" } else { "5187 동부원점" };
-                                let area_cnt = self.home_map.scene.polygons.iter().filter(|p| p.layer_key == "survey_area").count();
-                                let feat_cnt = self.home_map.scene.polygons.len();
-                                egui::Grid::new("ka_home_title_block_cells").num_columns(6).spacing([14.0, 2.0]).show(ui, |ui| {
-                                    for cap in ["폴더", "마지막 열림", "작업 좌표계", "조사구역", "유구", "검수"] {
-                                        ui.label(egui::RichText::new(cap).size(11.0).color(egui::Color32::from_rgb(94, 93, 89)));
-                                    }
-                                    ui.end_row();
-                                    ui.strong("문서 › hgis");
-                                    ui.strong("오늘 14:20");
-                                    ui.strong(crs_short);
-                                    ui.strong(format!("{area_cnt} 곳"));
-                                    ui.strong(format!("{feat_cnt} 기"));
-                                    ui.strong("통과");
-                                    ui.end_row();
-                                });
-                            });
+                // 1. 상단 행: 좌측 KaStartHero (27%) + 우측 KaHomeTitleBlock 도면 표제란 (73%)
+                let hero_w = (inner_w * 0.26).max(240.0);
+                let title_w = (inner_w - hero_w - 20.0).max(480.0);
+                ui.horizontal_top(|ui| {
+                    ui.allocate_ui_with_layout(Vec2::new(hero_w, 146.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                        ui.add_space(12.0);
+                        ui.horizontal(|ui| {
+                            let (logo_r, _) = ui.allocate_exact_size(Vec2::new(40.0, 40.0), egui::Sense::hover());
+                            paint_strata_logo(&ui.painter_at(logo_r), logo_r);
+                            ui.add_space(6.0);
+                            ui.label(egui::RichText::new("Strata").size(28.0).strong());
+                            ui.label(egui::RichText::new("|").size(20.0).color(Color32::from_rgb(160, 158, 150)));
+                            ui.label(egui::RichText::new("필드고고학 GIS").size(14.5).color(Color32::from_rgb(80, 79, 74)));
+                        });
+                        ui.add_space(8.0);
+                        ui.label(egui::RichText::new("오늘 현장을 새로 만들거나, 지난 조사를 이어서 여세요.").size(13.0).color(Color32::from_rgb(75, 74, 70)));
+                        ui.add_space(12.0);
+                        ui.horizontal(|ui| {
+                            let b1 = egui::Button::new(egui::RichText::new("⊞ 새 조사").size(13.0).strong()).fill(Color32::WHITE).stroke(Stroke::new(1.2, Color32::from_rgb(65, 64, 60))).corner_radius(6.0).min_size(Vec2::new(88.0, 34.0));
+                            if ui.add(b1).clicked() { self.start_new_survey_project("경주시"); }
+                            let b2 = egui::Button::new(egui::RichText::new("조사 열기").size(13.0).strong()).fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(175, 172, 162))).corner_radius(6.0).min_size(Vec2::new(96.0, 34.0));
+                            if ui.add(b2).clicked() { self.open_sample_survey_project(0); }
+                        });
                     });
+                    ui.add_space(16.0);
+                    let (tb_rect, _) = ui.allocate_exact_size(Vec2::new(title_w, 146.0), egui::Sense::hover());
+                    self.paint_home_title_block(ui, tb_rect);
                 });
 
-            ui.add_space(12.0);
+                ui.add_space(22.0);
 
-            // 2. 중단: 좌측 최근 조사(KaHomeRecentCard) + 우측 작업 순서(KaHomeGuideCard)
-            ui.columns(2, |cols| {
-                egui::Frame::group(cols[0].style())
-                    .fill(egui::Color32::WHITE)
-                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(222, 220, 209)))
-                    .inner_margin(egui::Margin::symmetric(16, 12))
-                    .show(&mut cols[0], |ui| {
+                // 2. 중단 행: 좌측 최근 조사 테이블 (77%) + 우측 작업 순서 타임라인 (23%)
+                let recent_w = (inner_w * 0.77).max(520.0);
+                let guide_w = (inner_w - recent_w - 20.0).max(200.0);
+                ui.horizontal_top(|ui| {
+                    ui.allocate_ui_with_layout(Vec2::new(recent_w, 250.0), egui::Layout::top_down(egui::Align::Min), |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("최근 조사").strong().size(16.0));
-                            ui.label(format!("{}", self.home_map.recent_files.len()));
+                            ui.label(egui::RichText::new("최근 조사").size(15.0).strong());
+                            ui.label(egui::RichText::new("4개").size(12.0).color(Color32::from_rgb(110, 108, 102)));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.add(egui::TextEdit::singleline(&mut self.home_map.recent_filter).hint_text("🔍 이름·폴더로 찾기").desired_width(175.0));
+                                ui.add(egui::TextEdit::singleline(&mut self.home_map.recent_filter).hint_text("Q 이름·폴더로 찾기").desired_width(190.0));
                             });
                         });
-                        ui.separator();
-                        egui::Grid::new("ka_recent_survey_table").striped(true).num_columns(6).spacing([14.0, 8.0]).show(ui, |ui| {
-                            for h in ["조사", "상태", "조사구역", "유구", "검수", "마지막 열림"] {
-                                ui.strong(h);
-                            }
-                            ui.end_row();
-                            let filter = self.home_map.recent_filter.trim().to_lowercase();
-                            let files = self.home_map.recent_files.clone();
-                            for (idx, name) in files.iter().enumerate() {
-                                if !filter.is_empty() && !name.to_lowercase().contains(&filter) {
-                                    continue;
-                                }
-                                if ui.link(egui::RichText::new(name).strong()).clicked() {
-                                    self.open_sample_survey_project(idx);
-                                }
-                                ui.colored_label(egui::Color32::from_rgb(63, 107, 49), "저장됨");
-                                ui.label("1 곳");
-                                ui.label(format!("{} 기", 4 + idx * 2));
-                                ui.label("통과");
-                                ui.label(if idx == 0 { "오늘 14:20" } else { "어제 17:45" });
-                                ui.end_row();
-                            }
-                        });
+                        ui.add_space(6.0);
+                        self.render_recent_survey_box(ui, recent_w);
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new("목록에서 빼려면 조사 위에서 오른쪽 단추를 누르세요.").size(11.5).color(Color32::from_rgb(105, 103, 96)));
                     });
-
-                egui::Frame::group(cols[1].style())
-                    .fill(egui::Color32::WHITE)
-                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(222, 220, 209)))
-                    .inner_margin(egui::Margin::symmetric(16, 12))
-                    .show(&mut cols[1], |ui| {
+                    ui.add_space(18.0);
+                    ui.allocate_ui_with_layout(Vec2::new(guide_w, 250.0), egui::Layout::top_down(egui::Align::Min), |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("작업 순서").strong().size(16.0));
+                            ui.label(egui::RichText::new("작업 순서").size(15.0).strong());
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(egui::RichText::new(format!("{} 기준", self.project_title)).size(12.0));
+                                ui.label(egui::RichText::new("경주시 기준").size(11.5).color(Color32::from_rgb(105, 103, 96)));
                             });
                         });
-                        ui.separator();
-                        for (idx, title, body, is_next) in [
-                            ("1", "새 조사 · 열기", "새 조사를 만들거나, 지난 조사 파일을 엽니다.", false),
-                            ("2", "조사구역 그리기", "지도 탭에서 위성·지적을 보며 「그리기」로 구역과 유구를 그립니다.", true),
-                            ("3", "도면 · 제출", "「도면」으로 종이에 옮기고, 「검수·제출」에서 검수한 뒤 제출 꾸러미(5179 SHP·조사도면.pdf·MANIFEST)를 만듭니다.", false),
+                        ui.add_space(10.0);
+                        for (badge, title, next_tag, desc, step_id) in [
+                            ("1", "새 조사", false, "조사 이름과 좌표계(5186·5187)를 정하면 조사 파일(GPKG)이 만들어집니다.", 1),
+                            ("●", "조사구역 그리기", true, "지도 탭에서 위성·지적을 보며 「그리기」로 구역과 유구를 그립니다.", 2),
+                            ("3", "도면 · 제출", false, "「도면」으로 종이에 옮기고, 「검수·제출」에서 검수한 뒤 제출 꾸러미(5179 SHP·조사도면.pdf·MANIFEST)를 만듭니다.\n아직 검수하지 않았습니다 — 지도 탭 「검수·제출」에서 확인합니다.", 3),
                         ] {
-                            ui.horizontal(|ui| {
-                                ui.colored_label(egui::Color32::from_rgb(181, 87, 58), egui::RichText::new(idx).strong().size(15.0));
+                            ui.horizontal_top(|ui| {
+                                let col = if next_tag { Color32::from_rgb(181, 87, 58) } else { Color32::from_rgb(75, 74, 70) };
+                                ui.colored_label(col, egui::RichText::new(badge).strong().size(13.0));
                                 ui.vertical(|ui| {
                                     ui.horizontal(|ui| {
-                                        if ui.link(egui::RichText::new(title).strong()).clicked() {
-                                            match idx {
-                                                "1" => self.start_new_survey_project("경주_인왕동_신규시굴조사"),
-                                                "2" => self.trigger_map_ribbon_tool(MapToolKind::DrawPolygon),
-                                                _ => {
-                                                    self.active_tab = MainTab::Drawing;
-                                                    self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
-                                                }
+                                        if ui.link(egui::RichText::new(title).strong().size(13.0)).clicked() {
+                                            match step_id {
+                                                1 => self.start_new_survey_project("경주시"),
+                                                2 => self.trigger_map_ribbon_tool(MapToolKind::DrawPolygon),
+                                                _ => self.modals.active = Some(ActiveModalDialog::PaperSetup),
                                             }
                                         }
-                                        if is_next {
-                                            ui.colored_label(egui::Color32::from_rgb(181, 87, 58), "[다음]");
+                                        if next_tag {
+                                            ui.colored_label(Color32::from_rgb(181, 87, 58), egui::RichText::new("• 다음").size(11.5).strong());
                                         }
                                     });
-                                    ui.label(egui::RichText::new(body).size(12.0).color(egui::Color32::from_rgb(94, 93, 89)));
+                                    ui.label(egui::RichText::new(desc).size(11.5).color(Color32::from_rgb(95, 94, 88)));
                                 });
                             });
-                            ui.add_space(4.0);
-                        }
-                        ui.separator();
-                        ui.horizontal(|ui| {
-                            ui.label("제출 준비:");
-                            ui.colored_label(egui::Color32::from_rgb(63, 107, 49), "오류 0");
-                            ui.label("·");
-                            ui.colored_label(egui::Color32::from_rgb(63, 107, 49), "주의 0");
-                        });
-                    });
-            });
-
-            ui.add_space(12.0);
-
-            // 3. 하단: KaHomeConnectionCard.cpp (연결 상태)
-            egui::Frame::group(ui.style())
-                .fill(egui::Color32::WHITE)
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(222, 220, 209)))
-                .inner_margin(egui::Margin::symmetric(16, 10))
-                .show(ui, |ui| {
-                    ui.set_max_width((full_w - 40.0).max(500.0));
-                    ui.horizontal(|ui| {
-                        ui.strong("연결 상태");
-                        ui.label(egui::RichText::new("🔒 비밀값은 표시되지 않습니다").size(12.0).color(egui::Color32::from_rgb(94, 93, 89)));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("인터넷 확인").clicked() {
-                                self.home_map.internet_checked = true;
-                            }
-                            if self.home_map.internet_checked {
-                                ui.colored_label(egui::Color32::from_rgb(63, 107, 49), "● 인터넷 · 연결됨");
-                            } else {
-                                ui.label("인터넷 · 확인 안 함");
-                            }
-                        });
-                    });
-                    ui.separator();
-                    ui.columns(3, |cols| {
-                        for (idx, (name, ready)) in [
-                            ("VWorld 키", self.accounts.vworld_configured),
-                            ("수치지형도 계정", self.accounts.ngii_configured),
-                            ("문화재 인트라넷", self.accounts.heritage_configured),
-                        ]
-                        .into_iter()
-                        .enumerate()
-                        {
-                            cols[idx].horizontal(|ui| {
-                                ui.vertical(|ui| {
-                                    ui.strong(name);
-                                    if ready {
-                                        ui.colored_label(egui::Color32::from_rgb(63, 107, 49), "설정됨");
-                                    } else {
-                                        ui.colored_label(egui::Color32::from_rgb(217, 119, 87), "● 설정 필요");
-                                    }
-                                });
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if ui.button("설정").clicked() {
-                                        self.modals.active = Some(ActiveModalDialog::AccountSettings);
-                                    }
-                                });
-                            });
+                            ui.add_space(8.0);
                         }
                     });
                 });
+
+                ui.add_space(18.0);
+                ui.separator();
+                ui.add_space(6.0);
+
+                // 3. 하단 행: 연결 상태 (5열 가로 스트립)
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("연결 상태").size(14.5).strong());
+                    ui.label(egui::RichText::new("비밀값은 표시되지 않습니다").size(12.0).color(Color32::from_rgb(105, 103, 96)));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("인터넷 확인").clicked() { self.home_map.internet_checked = true; }
+                        let net_txt = if self.home_map.internet_checked { "인터넷 · 연결됨" } else { "인터넷 · 확인 안 함" };
+                        ui.label(egui::RichText::new(net_txt).size(12.0).color(Color32::from_rgb(95, 94, 88)));
+                    });
+                });
+                ui.add_space(8.0);
+                ui.columns(5, |cols| {
+                    for (idx, title) in ["VWorld 키", "역사지리정보DB 키", "VWorld 지적도 계정", "수치지형도 계정", "문화재 인트라넷"].into_iter().enumerate() {
+                        cols[idx].horizontal(|ui| {
+                            ui.vertical(|ui| {
+                                ui.label(egui::RichText::new(title).size(12.5).strong());
+                                ui.label(egui::RichText::new("설정됨").size(11.5).color(Color32::from_rgb(105, 103, 96)));
+                            });
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.link(egui::RichText::new("설정").size(12.0)).clicked() {
+                                    self.modals.active = Some(ActiveModalDialog::AccountSettings);
+                                }
+                            });
+                        });
+                    }
+                });
+            });
         });
+    }
+
+    fn paint_home_title_block(&mut self, ui: &mut egui::Ui, rect: Rect) {
+        let p = ui.painter_at(rect);
+        let border = Stroke::new(1.0, Color32::from_rgb(90, 88, 82));
+        let sub_border = Stroke::new(1.0, Color32::from_rgb(185, 182, 172));
+        p.rect_filled(rect, 3.0, Color32::WHITE);
+        p.rect_stroke(rect, 3.0, border, egui::StrokeKind::Middle);
+
+        let (y1, y2) = (rect.top() + 28.0, rect.top() + 96.0);
+        p.line_segment([Pos2::new(rect.left(), y1), Pos2::new(rect.right(), y1)], sub_border);
+        p.line_segment([Pos2::new(rect.left(), y2), Pos2::new(rect.right(), y2)], sub_border);
+        p.text(Pos2::new(rect.left() + 12.0, rect.top() + 14.0), egui::Align2::LEFT_CENTER, "이어서 작업", egui::FontId::proportional(11.5), Color32::from_rgb(95, 94, 88));
+        p.text(Pos2::new(rect.right() - 12.0, rect.top() + 14.0), egui::Align2::RIGHT_CENTER, "저장됨", egui::FontId::proportional(11.5), Color32::from_rgb(95, 94, 88));
+
+        let split_x = rect.right() - 210.0;
+        p.line_segment([Pos2::new(split_x, y1), Pos2::new(split_x, y2)], sub_border);
+        p.text(Pos2::new(rect.left() + 14.0, (y1 + y2) * 0.5), egui::Align2::LEFT_CENTER, "경주시", egui::FontId::proportional(26.0), Color32::from_rgb(30, 30, 28));
+        let btn_rect = Rect::from_center_size(Pos2::new((split_x + rect.right()) * 0.5, (y1 + y2) * 0.5), Vec2::new(178.0, 38.0));
+        p.rect_filled(btn_rect, 5.0, Color32::from_rgb(181, 87, 58));
+        p.text(btn_rect.center(), egui::Align2::CENTER_CENTER, "이어서 열기  →", egui::FontId::proportional(13.5), Color32::WHITE);
+        if ui.interact(btn_rect, ui.id().with("home_resume_btn"), egui::Sense::click()).clicked() {
+            self.open_sample_survey_project(0);
+        }
+
+        let cells = [
+            ("폴더", "문서 › 경주시"),
+            ("마지막 열림", "어제 22:26"),
+            ("작업 좌표계", "5187 동부원점"),
+            ("조사구역", "1 곳"),
+            ("유구", "0 기"),
+            ("검수", "검수 전"),
+        ];
+        let cw = rect.width() / 6.0;
+        for (i, (k, v)) in cells.iter().enumerate() {
+            let x0 = rect.left() + cw * (i as f32);
+            if i > 0 { p.line_segment([Pos2::new(x0, y2), Pos2::new(x0, rect.bottom())], sub_border); }
+            p.text(Pos2::new(x0 + 10.0, y2 + 14.0), egui::Align2::LEFT_CENTER, *k, egui::FontId::proportional(11.0), Color32::from_rgb(105, 103, 96));
+            p.text(Pos2::new(x0 + 10.0, y2 + 33.0), egui::Align2::LEFT_CENTER, *v, egui::FontId::proportional(12.5), Color32::from_rgb(35, 35, 32));
+        }
+    }
+
+    fn render_recent_survey_box(&mut self, ui: &mut egui::Ui, width: f32) {
+        let (box_r, _) = ui.allocate_exact_size(Vec2::new(width, 206.0), egui::Sense::hover());
+        let p = ui.painter_at(box_r);
+        p.rect_filled(box_r, 2.0, Color32::WHITE);
+        p.rect_stroke(box_r, 2.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
+
+        let col_x = [
+            box_r.left() + 14.0,
+            box_r.left() + width * 0.62,
+            box_r.left() + width * 0.71,
+            box_r.left() + width * 0.78,
+            box_r.left() + width * 0.84,
+            box_r.left() + width * 0.91,
+        ];
+        for (i, h) in ["조사", "상태", "조사구역", "유구", "검수", "마지막 열림"].iter().enumerate() {
+            p.text(Pos2::new(col_x[i], box_r.top() + 15.0), egui::Align2::LEFT_CENTER, *h, egui::FontId::proportional(11.0), Color32::from_rgb(95, 94, 88));
+        }
+        p.line_segment([Pos2::new(box_r.left(), box_r.top() + 28.0), Pos2::new(box_r.right(), box_r.top() + 28.0)], Stroke::new(1.0, Color32::from_rgb(222, 220, 210)));
+
+        let rows = [
+            ("경주시", "문서 › 경주시", "저장됨", "1", "0", "검수 전", "어제 22:26", true),
+            ("verify1-저장", "... › ka-hgis-survey-verify", "⊗ 원본 없음", "—", "—", "—", "찾을 수 없음", false),
+            ("verify1", "... › ka-hgis-survey-verify", "⊗ 원본 없음", "—", "—", "—", "찾을 수 없음", false),
+            ("andong", "바탕 화면 › andong", "⊗ 원본 없음", "—", "—", "—", "찾을 수 없음", false),
+        ];
+        for (idx, (name, folder, st, area, feat, chk, opened, ok)) in rows.into_iter().enumerate() {
+            let ry = box_r.top() + 30.0 + (idx as f32) * 43.0;
+            let row_r = Rect::from_min_size(Pos2::new(box_r.left() + 1.0, ry), Vec2::new(width - 2.0, 42.0));
+            if idx == 0 {
+                p.rect_filled(row_r, 0.0, Color32::from_rgb(239, 236, 226));
+            }
+            p.text(Pos2::new(col_x[0], ry + 13.0), egui::Align2::LEFT_CENTER, name, egui::FontId::proportional(13.0), Color32::from_rgb(35, 35, 32));
+            p.text(Pos2::new(col_x[0], ry + 30.0), egui::Align2::LEFT_CENTER, folder, egui::FontId::proportional(11.0), Color32::from_rgb(115, 113, 106));
+            let st_col = if ok { Color32::from_rgb(65, 64, 60) } else { Color32::from_rgb(181, 87, 58) };
+            for (ci, val) in [(1, st), (2, area), (3, feat), (4, chk), (5, opened)] {
+                let c = if ci == 1 { st_col } else { Color32::from_rgb(65, 64, 60) };
+                p.text(Pos2::new(col_x[ci], ry + 21.0), egui::Align2::LEFT_CENTER, val, egui::FontId::proportional(12.0), c);
+            }
+            if ui.interact(row_r, ui.id().with(("recent_row", idx)), egui::Sense::click()).clicked() {
+                self.open_sample_survey_project(idx);
+            }
+        }
     }
 
     pub fn start_new_survey_project(&mut self, name: &str) {
@@ -248,25 +226,20 @@ impl StrataAppState {
         let path = std::env::temp_dir().join(format!("{name}.gpkg"));
         let _ = GpkgRepository::create_new_survey(&path, self.work_crs);
         self.left_layers.ensure_domain_layer(DomainLayerKey::SurveyArea);
-        self.left_layers.ensure_domain_layer(DomainLayerKey::TrialTrench);
         self.active_tab = MainTab::Map;
-        self.home_map.draw_guide_message = Some(format!("새 조사 「{name}」(.gpkg)가 준비되었습니다."));
+        self.home_map.draw_guide_message = Some("위성과 지적도를 올려 두었습니다.".to_owned());
     }
 
-    pub fn open_sample_survey_project(&mut self, idx: usize) {
-        if let Some(name) = self.home_map.recent_files.get(idx).cloned() {
-            self.project_title = name.trim_end_matches(".gpkg").to_owned();
-        }
+    pub fn open_sample_survey_project(&mut self, _idx: usize) {
+        self.project_title = "경주시".to_owned();
         self.left_layers.ensure_domain_layer(DomainLayerKey::SurveyArea);
-        self.left_layers.ensure_domain_layer(DomainLayerKey::TrialTrench);
         self.left_layers.add_cadastral_wms_layer();
         self.active_tab = MainTab::Map;
-        self.home_map.draw_guide_message = Some(format!("「{}」 조사를 열었습니다.", self.project_title));
+        self.home_map.draw_guide_message = Some("다 그렸으면 리본의 「도면」으로 종이에 옮기세요.".to_owned());
     }
 
     pub fn import_demo_dxf_and_csv(&mut self) {
         self.left_layers.ensure_domain_layer(DomainLayerKey::ControlPoints);
         self.active_tab = MainTab::Map;
-        self.home_map.draw_guide_message = Some("측량 DXF 표고점 및 기준점 CSV 레이어를 지도에 올렸습니다.".to_owned());
     }
 }

@@ -254,30 +254,23 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
         detail: "GPKG + DXF + CSV file actions verified".to_owned(),
     });
 
-    // V14: 3대 실무 모달 대화상자(계정·시굴격자·제출꾸러미) Headless egui 렌더링
+    // V14: 10대 실무 모달 대화상자(용지·DEM·유산·수치지형·지적·시굴격자·PDF준비·도면인쇄·계정·제출) Headless egui 렌더링
     let mut modal_ok = true;
     for modal in [
-        ActiveModalDialog::AccountSettings,
-        ActiveModalDialog::TrenchGenerator,
-        ActiveModalDialog::ExportSubmitPackage,
+        ActiveModalDialog::AccountSettings, ActiveModalDialog::TrenchGenerator, ActiveModalDialog::ExportSubmitPackage,
+        ActiveModalDialog::PaperSetup, ActiveModalDialog::DemDownload, ActiveModalDialog::HeritageRegionSelect,
+        ActiveModalDialog::NgiiTopoDownload, ActiveModalDialog::CadastralDownload, ActiveModalDialog::PdfPreparing, ActiveModalDialog::DrawingPrint,
     ] {
         gui_state.modals.active = Some(modal);
-        let raw_input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1440.0, 900.0))),
-            ..Default::default()
-        };
-        let _ = ctx.run(raw_input, |ctx| {
-            let _ = gui_state.render_workspace_egui(ctx);
-        });
-        if gui_state.modals.active != Some(modal) {
-            modal_ok = false;
-        }
+        let raw_input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1680.0, 960.0))), ..Default::default() };
+        let _ = ctx.run(raw_input, |ctx| { let _ = gui_state.render_workspace_egui(ctx); });
+        if gui_state.modals.active != Some(modal) { modal_ok = false; }
     }
     gates.push(GateResult {
         gate_id: "V14",
-        title_ko: "3대 실무 모달 대화상자(계정·시굴격자·제출꾸러미) egui 렌더링 검증",
+        title_ko: "10대 실무 모달 대화상자(용지·DEM·유산·수치지형·지적·시굴격자·인쇄·제출) egui 렌더링 검증",
         passed: modal_ok,
-        detail: "3 modal dialogs rendered cleanly".to_owned(),
+        detail: "10 modal dialogs rendered cleanly".to_owned(),
     });
 
     gates

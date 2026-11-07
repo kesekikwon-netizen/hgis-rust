@@ -156,4 +156,14 @@ impl KaBeginnerRibbon {
                 | MapToolKind::FeatureCardNote
         )
     }
+
+    pub fn toggle_sub_mode(&mut self, mode: SubToolsMode) {
+        if self.sub_toolbar_visible && self.sub_mode == mode {
+            self.sub_toolbar_visible = false;
+            self.sub_mode = SubToolsMode::None;
+        } else {
+            self.sub_toolbar_visible = true;
+            self.sub_mode = mode;
+        }
+    }
 }

@@ -1,5 +1,7 @@
 pub mod app_state;
+pub mod debug_control;
 pub mod dialogs_account;
+pub mod dialogs_download_print;
 pub mod dialogs_modal;
 pub mod gui_ribbon_bar;
 pub mod gui_shell;
@@ -11,6 +13,7 @@ pub mod gui_tab_terrain3d;
 pub mod gui_theme_fonts;
 pub mod left_layer_panel;
 pub mod ribbon;
+pub mod ribbon_icons;
 pub mod right_inspector;
 pub mod tab_drawing;
 pub mod tabs_home_map;
@@ -42,8 +45,9 @@ fn main() {
     }
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_title(app.window_title())
-            .with_inner_size([1440.0, 900.0])
+            .with_title("Strata")
+            .with_position([40.0, 16.0])
+            .with_inner_size([1620.0, 860.0])
             .with_min_inner_size([1120.0, 720.0])
             .with_active(true)
             .with_visible(true),
@@ -51,7 +55,7 @@ fn main() {
         ..Default::default()
     };
     if let Err(err) = eframe::run_native(
-        "Strata (ka-hgis)",
+        "Strata",
         options,
         Box::new(|cc| {
             let state = app_state::StrataAppState::new_startup();

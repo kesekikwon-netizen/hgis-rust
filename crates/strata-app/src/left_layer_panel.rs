@@ -60,4 +60,10 @@ impl LeftLayerPanel {
         self.entries.retain(|e| e.layer_key != layer_key);
         self.entries.len() < before
     }
+
+    pub fn set_all_visible(&mut self, visible: bool) {
+        for e in &mut self.entries {
+            e.visible = visible;
+        }
+    }
 }
