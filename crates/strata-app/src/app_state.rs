@@ -167,6 +167,53 @@ impl StrataAppState {
         }
     }
 
+    pub const HGIS_STANDARD_DPI: f64 = 96.0;
+    pub const HGIS_METERS_PER_INCH: f64 = 0.0254;
+    pub const HGIS_PRESET_SCALES: [u32; 6] = [100, 500, 1_000, 2_500, 5_000, 10_000];
+
+    /// C++ `KaStatusBar::computeRepresentativeScale(metersPerPixel, screenDpi)` — 0 나누기/NaN 방어 및 1:N 축척 분모 산출
+    #[must_use]
+    pub fn compute_representative_scale(meters_per_pixel: f64, screen_dpi: f64) -> Option<f64> {
+        if !meters_per_pixel.is_finite()
+            || meters_per_pixel <= 1e-9
+            || !screen_dpi.is_finite()
+            || screen_dpi <= 0.0
+        {
+            return None;
+        }
+        let pixels_per_meter = screen_dpi / Self::HGIS_METERS_PER_INCH;
+        Some(meters_per_pixel * pixels_per_meter)
+    }
+
+    /// C++ `KaStatusBar` 축척 라벨 포맷 — `"1:1,000"` 또는 비정상 입력 시 `"1: ---"`
+    #[must_use]
+    pub fn format_representative_scale(meters_per_pixel: f64, screen_dpi: f64) -> String {
+        let Some(scale) = Self::compute_representative_scale(meters_per_pixel, screen_dpi) else {
+            return "1: ---".to_owned();
+        };
+        let n = scale.round() as u64;
+        let digits = n.to_string();
+        let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+        for (idx, ch) in digits.chars().rev().enumerate() {
+            if idx > 0 && idx % 3 == 0 {
+                out.push(',');
+            }
+            out.push(ch);
+        }
+        let formatted: String = out.chars().rev().collect();
+        format!("1:{formatted}")
+    }
+
+    /// C++ `KaStatusBar` 더티 플래그 문구 전환
+    #[must_use]
+    pub const fn dirty_status_label_ko(is_dirty: bool) -> &'static str {
+        if is_dirty {
+            "● 저장 필요"
+        } else {
+            "✓ 저장됨"
+        }
+    }
+
     /// C++ `KaHomeScreen::createNewProject(const ProjectTemplateConfig &config) -> std::optional<QString>` 1:1
     pub fn create_new_project(
         &mut self,
@@ -364,5 +411,32 @@ mod tests {
         assert_eq!(reader.left_layers.entries.len(), 4);
 
         let _ = std::fs::remove_file(&tmp_path);
+    }
+
+    #[test]
+    fn test_status_bar_scale_1000_from_0264583333m_and_dirty_label_and_studio_tab_close() {
+        let mpp = 0.264_583_333_333_333_3_f64;
+        let scale = StrataAppState::compute_representative_scale(mpp, StrataAppState::HGIS_STANDARD_DPI)
+            .expect("valid scale");
+        assert!((scale - 1000.0).abs() < 1e-4);
+        assert_eq!(
+            StrataAppState::format_representative_scale(mpp, StrataAppState::HGIS_STANDARD_DPI),
+            "1:1,000"
+        );
+        assert_eq!(
+            StrataAppState::format_representative_scale(-1.0, StrataAppState::HGIS_STANDARD_DPI),
+            "1: ---"
+        );
+        assert_eq!(StrataAppState::dirty_status_label_ko(true), "● 저장 필요");
+        assert_eq!(StrataAppState::dirty_status_label_ko(false), "✓ 저장됨");
+
+        let mut app = StrataAppState::new_startup();
+        app.open_studio_tab(MainTab::Drawing);
+        app.open_studio_tab(MainTab::Paleo);
+        app.active_tab = MainTab::Drawing;
+        assert_eq!(app.open_studio_tabs.len(), 2);
+        app.close_studio_tab(MainTab::Drawing);
+        assert_eq!(app.open_studio_tabs.len(), 1);
+        assert_eq!(app.active_tab, MainTab::Map);
     }
 }

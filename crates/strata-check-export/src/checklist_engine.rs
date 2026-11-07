@@ -236,6 +236,18 @@ impl ChecklistEngine {
             ChecklistSeverity::Warning
         }
     }
+
+    pub const HGIS_MIN_ERROR_ZOOM_MARGIN: f64 = 20.0;
+
+    /// C++ `KaSubmitFlow::zoomToErrorLocation` — 점/미세 슬리버 오류로 이동 시 최소 20.0m 여백 BBOX(`40m x 40m`) 확장 공식 1:1
+    #[must_use]
+    pub fn compute_error_zoom_bbox(min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> [f64; 4] {
+        let cx = (min_x + max_x) * 0.5;
+        let cy = (min_y + max_y) * 0.5;
+        let half_w = ((max_x - min_x).abs() * 0.5 * 1.5).max(Self::HGIS_MIN_ERROR_ZOOM_MARGIN);
+        let half_h = ((max_y - min_y).abs() * 0.5 * 1.5).max(Self::HGIS_MIN_ERROR_ZOOM_MARGIN);
+        [cx - half_w, cy - half_h, cx + half_w, cy + half_h]
+    }
 }
 
 #[cfg(test)]
@@ -315,5 +327,10 @@ mod tests {
             ChecklistEngine::check_r22_date_format_valid("2026/11/07"),
             ChecklistSeverity::Warning
         );
+
+        let bbox = ChecklistEngine::compute_error_zoom_bbox(200_000.0, 500_000.0, 200_000.0, 500_000.0);
+        assert_eq!(bbox, [199_980.0, 499_980.0, 200_020.0, 500_020.0]);
+        assert!((bbox[2] - bbox[0] - 40.0).abs() < 1e-9);
+        assert!((bbox[3] - bbox[1] - 40.0).abs() < 1e-9);
     }
 }
