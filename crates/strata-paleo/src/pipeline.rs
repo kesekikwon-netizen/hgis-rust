@@ -78,27 +78,49 @@ pub enum PaleoClass {
 }
 
 impl PaleoClass {
+    pub const ALL: [Self; 7] = [
+        Self::NaturalLevee,
+        Self::PaleochannelBackswamp,
+        Self::ArtificialFill,
+        Self::FluvialTerrace,
+        Self::ActiveFloodplain,
+        Self::GentleHillslope,
+        Self::SteepMountain,
+    ];
+
     pub const fn name_ko(self) -> &'static str {
         match self {
-            Self::NaturalLevee => "자연제방·미고지",
-            Self::FluvialTerrace => "하안단구·홍적대지",
-            Self::GentleHillslope => "구릉 완사면·산록완사면",
-            Self::PaleochannelBackswamp => "구하도·배후습지",
-            Self::ActiveFloodplain => "현하도·범람원",
-            Self::ArtificialFill => "깊은 매립·교란지",
-            Self::SteepMountain => "산지 급경사지",
+            Self::NaturalLevee => "자연제방",
+            Self::PaleochannelBackswamp => "구하도",
+            Self::ArtificialFill => "배후습지",
+            Self::FluvialTerrace => "선상지",
+            Self::ActiveFloodplain => "범람원",
+            Self::GentleHillslope => "구릉사면",
+            Self::SteepMountain => "산지",
+        }
+    }
+
+    pub const fn arch_potential_ko(self) -> &'static str {
+        match self {
+            Self::NaturalLevee => "유적 입지 최우선 고잠재력 (취락·생산)",
+            Self::PaleochannelBackswamp => "유기물·목기·수리시설 매장이상대",
+            Self::ArtificialFill => "저습지·고대 수전(논) 유구 유망",
+            Self::FluvialTerrace => "선사·고대 생활유구 완경사 미고지",
+            Self::ActiveFloodplain => "충적층 심도별 다층 문화층 부존 가능",
+            Self::GentleHillslope => "분묘·주거지 사면 말단부 입지",
+            Self::SteepMountain => "산성·관방·봉수·제사 유적 입지",
         }
     }
 
     pub const fn color_rgba(self) -> [u8; 4] {
         match self {
-            Self::NaturalLevee => [217, 119, 6, 210],
-            Self::FluvialTerrace => [180, 83, 9, 210],
-            Self::GentleHillslope => [101, 163, 13, 210],
-            Self::PaleochannelBackswamp => [37, 99, 235, 210],
-            Self::ActiveFloodplain => [56, 189, 248, 210],
-            Self::ArtificialFill => [107, 114, 128, 210],
-            Self::SteepMountain => [75, 85, 99, 210],
+            Self::NaturalLevee => [217, 119, 6, 240],
+            Self::PaleochannelBackswamp => [37, 99, 235, 240],
+            Self::ArtificialFill => [16, 185, 129, 240],
+            Self::FluvialTerrace => [234, 179, 8, 240],
+            Self::ActiveFloodplain => [132, 204, 22, 240],
+            Self::GentleHillslope => [180, 83, 9, 240],
+            Self::SteepMountain => [120, 113, 108, 240],
         }
     }
 }
@@ -263,29 +285,76 @@ pub fn run_paleo_pipeline(
     let mut levee_cnt = 0usize;
 
     for i in 0..n {
-        let cls = if slope_deg[i] >= 15.0 {
+        let s = slope_deg[i];
+        let r_m = rem[i];
+        let tpi = tpi_50m[i];
+        let d_riv = dist_to_river_m[i];
+        let is_river_cell = river_mask.get(i).copied().unwrap_or(0) != 0;
+
+        let cls = if s >= 13.0 || r_m >= 26.0 {
             PaleoClass::SteepMountain
-        } else if fill_grid[i] >= 3.5 {
-            PaleoClass::ArtificialFill
-        } else if slope_deg[i] >= 5.0 {
+        } else if s >= 5.2 || r_m >= 12.5 {
             PaleoClass::GentleHillslope
-        } else if rem[i] >= 4.0 {
+        } else if (s >= 1.9 && (3.6..12.5).contains(&r_m) && tpi >= -0.25)
+            || (4.8..12.5).contains(&r_m)
+        {
             PaleoClass::FluvialTerrace
-        } else if tpi_50m[i] >= -0.2 && dist_to_river_m[i] <= 600.0 {
+        } else if is_river_cell || d_riv <= 42.0 || (r_m < 1.35 && tpi < -0.16) {
+            PaleoClass::PaleochannelBackswamp
+        } else if (d_riv <= 220.0 && (1.05..4.2).contains(&r_m) && tpi >= 0.04)
+            || ((1.35..3.8).contains(&r_m) && tpi >= 0.14)
+        {
             levee_cnt += usize::from(aoi_mask.get(i).copied().unwrap_or(1) != 0);
             PaleoClass::NaturalLevee
-        } else if tpi_50m[i] < -0.3 {
-            PaleoClass::PaleochannelBackswamp
+        } else if (r_m < 2.4 && tpi < -0.025) || fill_grid[i] >= 3.5 {
+            PaleoClass::ArtificialFill
+        } else if d_riv <= 500.0 && tpi >= 0.0 && r_m < 1.05 {
+            levee_cnt += usize::from(aoi_mask.get(i).copied().unwrap_or(1) != 0);
+            PaleoClass::NaturalLevee
         } else {
             PaleoClass::ActiveFloodplain
         };
         paleo_class_grid.push(cls);
+    }
+
+    if tf.width >= 16 && tf.height >= 16 {
+        let mut smoothed = paleo_class_grid.clone();
+        for r in 0..tf.height {
+            for c in 0..tf.width {
+                let mut counts = [0u16; 8];
+                for dr in -1isize..=1 {
+                    let rr = (r as isize + dr).clamp(0, tf.height as isize - 1) as usize;
+                    for dc in -1isize..=1 {
+                        let cc = (c as isize + dc).clamp(0, tf.width as isize - 1) as usize;
+                        let code = paleo_class_grid[rr * tf.width + cc] as usize;
+                        if code < counts.len() {
+                            counts[code] += if dr == 0 && dc == 0 { 2 } else { 1 };
+                        }
+                    }
+                }
+                let mut best = paleo_class_grid[r * tf.width + c];
+                let mut best_cnt = counts[best as usize];
+                for cand in PaleoClass::ALL {
+                    let cnt = counts[cand as usize];
+                    if cnt > best_cnt {
+                        best_cnt = cnt;
+                        best = cand;
+                    }
+                }
+                smoothed[r * tf.width + c] = best;
+            }
+        }
+        paleo_class_grid = smoothed;
+    }
+
+    for i in 0..n {
+        let cls = paleo_class_grid[i];
         let [r, g, b, a] = cls.color_rgba();
-        let shade = multidirectional_hillshade[i];
+        let shade = multidirectional_hillshade[i].clamp(0.72, 1.06);
         paleo_rgba_buffer.extend_from_slice(&[
-            ((r as f64) * shade).clamp(0.0, 255.0) as u8,
-            ((g as f64) * shade).clamp(0.0, 255.0) as u8,
-            ((b as f64) * shade).clamp(0.0, 255.0) as u8,
+            ((r as f64) * shade).round().clamp(0.0, 255.0) as u8,
+            ((g as f64) * shade).round().clamp(0.0, 255.0) as u8,
+            ((b as f64) * shade).round().clamp(0.0, 255.0) as u8,
             a,
         ]);
     }

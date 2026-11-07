@@ -46,62 +46,180 @@ impl Default for PaleoTerrain3dTabState {
 
 impl PaleoTerrain3dTabState {
     pub fn run_sample_10km_analysis(&mut self) {
+        let width = 120usize;
+        let height = 84usize;
+        let cell_size = 18.0_f64;
         let tf = GridTransform {
-            origin_x: 0.0,
-            origin_y: 240.0,
-            cell_size: 30.0,
-            width: 8,
-            height: 8,
+            origin_x: 218_600.0,
+            origin_y: 361_680.0,
+            cell_size,
+            width,
+            height,
         };
-        let mut z_curr = Vec::with_capacity(64);
-        for r in 0..8 {
-            for c in 0..8 {
-                let ridge = ((r as f64 - 3.5).powi(2) + (c as f64 - 4.0).powi(2)).sqrt();
-                z_curr.push(28.0 + (6.0 - ridge).max(0.0) * 8.5);
+        let n = width * height;
+        let mut z_curr = Vec::with_capacity(n);
+        let mut river_mask = vec![0_u8; n];
+        let aoi_mask = vec![1_u8; n];
+
+        for r in 0..height {
+            let v = (r as f64 + 0.5) / (height as f64);
+            for c in 0..width {
+                let u = (c as f64 + 0.5) / (width as f64);
+                // 주 하천 유로 (서남서 -> 동북동 사행 유로)
+                let v_riv = 0.50 + 0.08 * (u * 6.0 - 0.5).sin() - 0.04 * (u - 0.5);
+                let d_riv_norm = (v - v_riv).abs();
+                // 남측 우각호·구하도 분기 유로
+                let v_oxbow = 0.65 + 0.06 * ((u - 0.24) * 8.2).sin();
+                let in_oxbow_span = (0.20..=0.74).contains(&u);
+                let d_oxbow_norm = if in_oxbow_span {
+                    (v - v_oxbow).abs()
+                } else {
+                    1.0
+                };
+
+                // 기본 하상 경사 표고 (서쪽 22.0m -> 동쪽 24.4m)
+                let base_river_z = 22.0 + 2.4 * u;
+
+                // 1) 구하도 및 현하도 저수로 (청색)
+                let channel_dip = if d_riv_norm < 0.026 {
+                    river_mask[r * width + c] = 1;
+                    -0.35
+                } else if d_oxbow_norm < 0.026 {
+                    river_mask[r * width + c] = 1;
+                    -0.25
+                } else {
+                    0.0
+                };
+
+                // 2) 자연제방 미고지 (주황색: 하도 양안의 완만한 사질 미고지 띠)
+                let levee_bump = if (0.026..=0.105).contains(&d_riv_norm) {
+                    let t = 1.0 - ((d_riv_norm - 0.062).abs() / 0.045).clamp(0.0, 1.0);
+                    2.45 * t
+                } else if in_oxbow_span && (0.026..=0.075).contains(&d_oxbow_norm) {
+                    let t = 1.0 - ((d_oxbow_norm - 0.048).abs() / 0.028).clamp(0.0, 1.0);
+                    1.85 * t
+                } else {
+                    0.0
+                };
+
+                // 3) 배후습지 저지대 (청록색: 자연제방 배후의 폐쇄형 미저지)
+                let swamp_north =
+                    ((u - 0.34).powi(2) / (0.19 * 0.19)) + ((v - 0.31).powi(2) / (0.075 * 0.075));
+                let swamp_south =
+                    ((u - 0.60).powi(2) / (0.17 * 0.17)) + ((v - 0.72).powi(2) / (0.068 * 0.068));
+                let backswamp_dip = if swamp_north < 1.0 {
+                    -0.85 * (1.0 - swamp_north)
+                } else if swamp_south < 1.0 {
+                    -0.80 * (1.0 - swamp_south)
+                } else {
+                    0.0
+                };
+
+                // 4) 선상지·하안단구 완경사면 (황색: 북동·남서 곡구에서 퍼져 나오는 선상지)
+                let fan_ne =
+                    ((u - 0.72).powi(2) / (0.20 * 0.20)) + ((v - 0.24).powi(2) / (0.13 * 0.13));
+                let fan_sw =
+                    ((u - 0.22).powi(2) / (0.18 * 0.18)) + ((v - 0.77).powi(2) / (0.12 * 0.12));
+                let fan_rise = if fan_ne < 1.0 {
+                    8.6 * (1.0 - fan_ne).powf(1.15)
+                } else if fan_sw < 1.0 {
+                    7.8 * (1.0 - fan_sw).powf(1.15)
+                } else {
+                    0.0
+                };
+
+                // 5) 범람원 일반 평탄면 기본 비고 (+2.5m)
+                let floodplain_base = if channel_dip < 0.0 {
+                    0.3
+                } else if backswamp_dip < -0.15 {
+                    1.45 + backswamp_dip
+                } else {
+                    2.55
+                };
+
+                // 6) 구릉사면 (갈색: 북측·남측 산록 완사면, 경사 6~12°) 및 7) 산지 (회색: 외곽 급경사 산지, 경사 14°+)
+                let north_margin = (0.24 - v).max(0.0) / 0.24;
+                let south_margin = (v - 0.78).max(0.0) / 0.22;
+                let east_ridge =
+                    ((u - 0.94).max(0.0) / 0.06) * (1.0 - (v - 0.5).abs() * 1.4).max(0.0);
+                let hill_mtn_rise = 28.0 * north_margin.powf(1.85)
+                    + 26.0 * south_margin.powf(1.85)
+                    + 18.0 * east_ridge.powf(1.6);
+
+                let z = base_river_z
+                    + floodplain_base
+                    + channel_dip
+                    + levee_bump
+                    + fan_rise
+                    + hill_mtn_rise;
+                z_curr.push(z);
             }
         }
-        let mut river_mask = vec![0_u8; 64];
-        river_mask[0] = 1;
-        let aoi_mask = vec![1_u8; 64];
-        let raw_boreholes: Vec<BoreholeRawInput> = (0..12)
-            .map(|idx| BoreholeRawInput {
-                hole_id: format!("BH-{:02}", idx + 1),
-                x: 20.0 + (idx as f64) * 35.0,
-                y: 40.0 + (idx as f64) * 15.0,
-                ground_elev_m: 16.5,
-                water_depth_m: 2.8,
-                strata: vec![
-                    StratumLayer {
-                        depth_from_m: 0.0,
-                        depth_to_m: 1.2,
-                        layer_name: "성토층".to_owned(),
-                        uscs_code: "SM".to_owned(),
-                        description: "매립".to_owned(),
-                        n_value: 6.0,
-                    },
-                    StratumLayer {
-                        depth_from_m: 1.2,
-                        depth_to_m: 3.8 + (idx % 3) as f64,
-                        layer_name: "충적층".to_owned(),
-                        uscs_code: "CL".to_owned(),
-                        description: "유기물 포함 암회색 점토".to_owned(),
-                        n_value: 4.0,
-                    },
-                    StratumLayer {
-                        depth_from_m: 3.8 + (idx % 3) as f64,
-                        depth_to_m: 8.5,
-                        layer_name: "풍화토".to_owned(),
-                        uscs_code: "SC".to_owned(),
-                        description: "기반암 풍화대".to_owned(),
-                        n_value: 50.0,
-                    },
-                ],
+
+        // A-A' 단면선(중간 행 r = height / 2)을 따라 배치된 8개 대표 시추공 (BH-01 ~ BH-08)
+        let mid_y = tf.origin_y - (height as f64 * 0.5) * cell_size;
+        let raw_boreholes: Vec<BoreholeRawInput> = (0..8)
+            .map(|idx| {
+                let frac = (idx as f64 + 0.6) / 8.2;
+                let bx = tf.origin_x + frac * (width as f64 * cell_size);
+                let col = ((frac * width as f64) as usize).min(width - 1);
+                let ground_z = z_curr[(height / 2) * width + col];
+                let fill_m = 0.8 + (idx % 3) as f64 * 0.35;
+                let alluv_m = match idx {
+                    1 | 2 | 5 => 3.8 + (idx % 2) as f64 * 0.9, // 자연제방·선상지 두꺼운 사질 충적층
+                    3 | 4 => 4.6,                              // 구하도·배후습지 유기질 점토층
+                    _ => 2.6,
+                };
+                let is_coarse = matches!(idx, 1 | 2 | 5 | 6);
+                let uscs = if is_coarse { "SM" } else { "CL" };
+                let desc = if is_coarse {
+                    "황갈색 세립~중립 사질토 (자연제방·문화층 유망)"
+                } else {
+                    "암회색 유기물 혼입 실트질 점토 (구하도·수전 유망)"
+                };
+                BoreholeRawInput {
+                    hole_id: format!("BH-{:02}", idx + 1),
+                    x: bx,
+                    y: mid_y + ((idx as f64 - 3.5) * 18.0),
+                    ground_elev_m: ground_z,
+                    water_depth_m: 2.1 + (idx % 3) as f64 * 0.45,
+                    strata: vec![
+                        StratumLayer {
+                            depth_from_m: 0.0,
+                            depth_to_m: fill_m,
+                            layer_name: "성토층".to_owned(),
+                            uscs_code: "SM".to_owned(),
+                            description: "현대 매립·경작토".to_owned(),
+                            n_value: 6.0,
+                        },
+                        StratumLayer {
+                            depth_from_m: fill_m,
+                            depth_to_m: fill_m + alluv_m,
+                            layer_name: "충적층".to_owned(),
+                            uscs_code: uscs.to_owned(),
+                            description: desc.to_owned(),
+                            n_value: if is_coarse { 12.0 } else { 5.0 },
+                        },
+                        StratumLayer {
+                            depth_from_m: fill_m + alluv_m,
+                            depth_to_m: fill_m + alluv_m + 4.2,
+                            layer_name: "풍화토".to_owned(),
+                            uscs_code: "SC".to_owned(),
+                            description: "기반암 풍화대 (생토면)".to_owned(),
+                            n_value: 50.0,
+                        },
+                    ],
+                }
             })
             .collect();
         let declustered = decluster_boreholes_by_grid(&raw_boreholes, 30.0, 50);
         self.declustered_borehole_count = declustered.len();
         let (_, imhof_rgba) = compute_imhof_multidirectional_hillshade_and_slope_rgba(&tf, &z_curr);
         self.imhof_slope_rgba = imhof_rgba;
+        let center_xy = (
+            tf.origin_x + (width as f64 * cell_size) * 0.5,
+            tf.origin_y - (height as f64 * cell_size) * 0.5,
+        );
         let out = run_paleo_pipeline(
             &z_curr,
             &tf,
@@ -110,10 +228,11 @@ impl PaleoTerrain3dTabState {
             &[],
             &river_mask,
             &aoi_mask,
-            (120.0, 120.0),
+            center_xy,
         );
         self.cross_section_rgba = render_cross_section_rgba(&out.center_cross_section, 320, 120);
-        self.terrain_patches = build_quadtree_patches([120.0, 120.0], 240.0, 2);
+        self.terrain_patches =
+            build_quadtree_patches([center_xy.0, center_xy.1], width as f64 * cell_size, 2);
         self.last_paleo_output = Some(out);
         self.rebuild_3d_preview();
     }
@@ -121,8 +240,14 @@ impl PaleoTerrain3dTabState {
     pub fn rebuild_3d_preview(&mut self) {
         self.camera_3d.z_exaggeration = self.z_exaggeration;
         if let Some(ref out) = self.last_paleo_output {
-            self.terrain3d_rgba =
-                render_terrain3d_rgba(&out.z_paleo, 8, 8, &self.camera_3d, 320, 200);
+            self.terrain3d_rgba = render_terrain3d_rgba(
+                &out.z_paleo,
+                out.transform.width,
+                out.transform.height,
+                &self.camera_3d,
+                320,
+                200,
+            );
         }
     }
 
