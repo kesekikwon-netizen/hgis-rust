@@ -599,5 +599,77 @@ mod tests {
         assert!((inset_box.rect_mm.width_mm - 3.0).abs() < 1e-9);
         assert!((inset_box.rect_mm.height_mm - 3.0).abs() < 1e-9);
         assert!(inset_box.has_crosshair);
+
+        // TestKaFigureNumberingEngine::testCascadingFigureNumbering
+        let roles = [
+            ViewportRole::MainPlan,
+            ViewportRole::CrossSection,
+            ViewportRole::DetailFeature,
+        ];
+        let labels = assign_cascading_figure_numbers(2, &roles);
+        assert_eq!(labels, vec!["도면 2-1", "도면 2-2", "도면 2-3"]);
+        assert!((sanitize_viewport_scale(0.0) - HGIS_DEFAULT_PLAN_SCALE).abs() < 1e-6);
     }
+}
+
+/// 단일 시트 내 최대 배치 뷰포트 수 (C++ `HGIS_MAX_FIGURES_PER_SHEET`)
+pub const HGIS_MAX_FIGURES_PER_SHEET: usize = 8;
+/// 주 평면도 기본 축척 분모 (1:500, C++ `HGIS_DEFAULT_PLAN_SCALE`)
+pub const HGIS_DEFAULT_PLAN_SCALE: f64 = 500.0;
+/// 세부 유구도 기본 축척 분모 (1:50, C++ `HGIS_DEFAULT_DETAIL_SCALE`)
+pub const HGIS_DEFAULT_DETAIL_SCALE: f64 = 50.0;
+
+/// 다중 뷰포트 프레임 역할 분류 (C++ `ViewportRole`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewportRole {
+    /// 주 평면도
+    MainPlan,
+    /// 토층/유구 횡단면도
+    CrossSection,
+    /// 세부 유구 확대도
+    DetailFeature,
+}
+
+/// 다중 뷰포트 프레임 설정 (C++ `ViewportFrameConfig`)
+#[derive(Debug, Clone, PartialEq)]
+pub struct ViewportFrameConfig {
+    pub role: ViewportRole,
+    pub page_layout_rect_mm: SheetRectMm,
+    pub world_extent: [f64; 4],
+    pub scale_denominator: f64,
+    pub auto_figure_label: String,
+}
+
+/// 축척 분모가 0 이하이거나 비정상일 때 기본 축척(`1:500`)으로 폴백
+#[must_use]
+pub fn sanitize_viewport_scale(scale_denominator: f64) -> f64 {
+    if scale_denominator <= 0.0 || !scale_denominator.is_finite() {
+        HGIS_DEFAULT_PLAN_SCALE
+    } else {
+        scale_denominator
+    }
+}
+
+/// 시트 번호와 서브 프레임 인덱스에 따라 국가유산청 보고서 규격 도면 번호 포맷팅
+/// (C++ `KaFigureNumberingEngine::formatFigureNumber` 1:1 대응)
+#[must_use]
+pub fn format_figure_number(sheet_no: usize, sub_index_1based: Option<usize>) -> String {
+    let s = sheet_no.max(1);
+    match sub_index_1based {
+        Some(sub) => format!("도면 {s}-{}", sub.max(1)),
+        None => format!("도면 {s}"),
+    }
+}
+
+/// 단일 시트 내 다중 뷰포트 목록에 대해 `"도면 {sheet}-{idx}"` 연속 도면 번호 자동 채번
+/// (C++ `KaMultiViewportSheet::layoutMultiViewportSheet` & `KaFigureNumberingEngine`)
+#[must_use]
+pub fn assign_cascading_figure_numbers(
+    base_sheet_number: usize,
+    roles: &[ViewportRole],
+) -> Vec<String> {
+    let clamped = roles.len().min(HGIS_MAX_FIGURES_PER_SHEET);
+    (0..clamped)
+        .map(|idx| format_figure_number(base_sheet_number, Some(idx + 1)))
+        .collect()
 }
