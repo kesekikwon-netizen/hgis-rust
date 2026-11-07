@@ -121,6 +121,17 @@ pub struct ModalDialogController {
     pub topo_progress_pct: f32,
     pub topo_status_text: String,
     pub topo_imported_count: usize,
+    // D4 KaTopographicBrowser ("수치지형도 내려받기") 상태
+    /// false = compact summary panel, true = expanded official details
+    pub topo_browser_detail: bool,
+    /// 0..=5 -> "도엽 확인" .. "지도에 올리기"
+    pub topo_browser_stage: usize,
+    pub topo_browser_login_id: String,
+    pub topo_browser_login_pw: String,
+    pub topo_browser_birth_date: String,
+    pub topo_browser_purpose: String,
+    pub topo_browser_auto_stopped: bool,
+    pub topo_browser_log: Vec<String>,
 }
 
 impl Default for ModalDialogController {
@@ -219,6 +230,16 @@ impl Default for ModalDialogController {
             topo_progress_pct: 1.0,
             topo_status_text: "레이어 6개 · 파일 6개 확인 · 캐시 4개. 추가할 항목에 체크하세요.\n검토 필요: DXF 파일(35905086_행정경계.dxf)은 .prj가 없어 중부원점(EPSG:5186)과 동부원점(EPSG:5187) 판별이 애매합니다. 자동으로 지도에 추가하지 않습니다.".to_owned(),
             topo_imported_count: 2,
+            topo_browser_detail: false,
+            topo_browser_stage: 0,
+            topo_browser_login_id: String::new(),
+            topo_browser_login_pw: String::new(),
+            topo_browser_birth_date: String::new(),
+            topo_browser_purpose: "고고학 발굴조사 현장 도면 작성 및 지형 확인".to_owned(),
+            topo_browser_auto_stopped: false,
+            topo_browser_log: vec![
+                "도엽 확인 — 현재 조사 주변 1:25,000 DXF 도엽을 고릅니다.".to_owned(),
+            ],
         }
     }
 }
@@ -2193,6 +2214,43 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // D4 KaTopographicBrowser: compact/expanded toggle, 6-stage progression,
+    // and fallback to the coordinate-confirm import dialog.
+    #[test]
+    fn test_topo_browser_compact_toggle_stage_progress_and_import_fallback() {
+        let mut ctrl = ModalDialogController::default();
+        ctrl.show_exclusive_modal(ActiveModalDialog::NgiiTopoDownload);
+        assert_eq!(ctrl.active, Some(ActiveModalDialog::NgiiTopoDownload));
+
+        // compact by default (KaTopographicBrowser.cpp: compact summary first)
+        assert!(!ctrl.topo_browser_detail);
+        ctrl.topo_browser_detail = true;
+        assert!(ctrl.topo_browser_detail);
+        ctrl.topo_browser_detail = false;
+
+        // 6 stages: 도엽 확인 -> 로그인 -> 신청 -> 파일 준비 -> 다운로드 -> 지도에 올리기
+        assert_eq!(ctrl.topo_browser_stage, 0);
+        for expect in 1..=5usize {
+            ctrl.topo_browser_stage = (ctrl.topo_browser_stage + 1).min(5);
+            assert_eq!(ctrl.topo_browser_stage, expect);
+        }
+        assert_eq!(
+            ctrl.topo_browser_log.first().map(|s| s.as_str()),
+            Some("도엽 확인 — 현재 조사 주변 1:25,000 DXF 도엽을 고릅니다.")
+        );
+
+        // last stage hands off to the coordinate-confirm import dialog
+        // (KaTopographicBrowser.cpp:215 m_importFallback)
+        ctrl.active = Some(ActiveModalDialog::TopographicImport);
+        assert_eq!(ctrl.active, Some(ActiveModalDialog::TopographicImport));
+
+        // purpose pre-filled with the C++ default text
+        assert_eq!(
+            ctrl.topo_browser_purpose,
+            "고고학 발굴조사 현장 도면 작성 및 지형 확인"
+        );
+    }
 
     #[test]
     fn test_modal_exclusive_guard_blocks_duplicate_popup_and_dirty_reject_confirmation() {
