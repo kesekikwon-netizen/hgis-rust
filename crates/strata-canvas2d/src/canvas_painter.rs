@@ -7,6 +7,89 @@ pub const HGIS_MIN_FEATURE_PIXEL_SIZE: f32 = 1.5;
 pub const HGIS_SELECTION_OUTLINE_COLOR: [u8; 4] = [0, 229, 255, 255];
 pub const HGIS_SELECTION_GLOW_COLOR: [u8; 4] = [0, 229, 255, 100];
 
+/// C++ `HGIS_PICK_TOLERANCE_PX` (6.0f) — 2D 캔버스 클릭 히트 테스트 픽셀 반경
+pub const HGIS_PICK_TOLERANCE_PX: f64 = 6.0;
+
+/// C++ `HGIS_MARQUEE_ALPHA_VAL` (64) — 마키 드래그 선택 박스 채우기 알파값
+pub const HGIS_MARQUEE_ALPHA_VAL: u8 = 64;
+
+/// C++ `KaSpatialHitTester` 기하 차원(Dimension) 우선순위 (`Point(0) < LineString(1) < Polygon(2)`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HitGeometryDim {
+    Point = 0,
+    LineString = 1,
+    Polygon = 2,
+}
+
+/// C++ `KaSpatialHitTester::pickFeatureAt` 입력 피처 후보
+#[derive(Debug, Clone)]
+pub struct PickableFeatureCandidate {
+    pub fid: i64,
+    pub dim: HitGeometryDim,
+    pub visible: bool,
+    pub locked: bool,
+    pub bbox_min_xy: [f64; 2],
+    pub bbox_max_xy: [f64; 2],
+    pub distance_to_click_m: f64,
+}
+
+/// C++ `KaSpatialHitTester::pickFeatureAt` 1:1 대응:
+/// - 비가시(`!visible`) 또는 잠금(`locked`) 레이어 피처는 피킹에서 즉시 배제
+/// - 월드 검색 반경 `r_world = HGIS_PICK_TOLERANCE_PX * meters_per_pixel` 이내 후보 중
+///   `Point -> LineString -> Polygon` 차원 우선순위로 최우선 피처 ID를 반환한다.
+#[must_use]
+pub fn pick_feature_at_with_priority(
+    candidates: &[PickableFeatureCandidate],
+    meters_per_pixel: f64,
+) -> Option<i64> {
+    let r_world = HGIS_PICK_TOLERANCE_PX * meters_per_pixel.abs().max(1e-6);
+    candidates
+        .iter()
+        .filter(|c| c.visible && !c.locked && c.distance_to_click_m <= r_world)
+        .min_by(|a, b| {
+            a.dim.cmp(&b.dim).then_with(|| {
+                a.distance_to_click_m
+                    .partial_cmp(&b.distance_to_click_m)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+        })
+        .map(|c| c.fid)
+}
+
+/// C++ `KaSpatialHitTester::selectByMarquee` — 왼쪽->오른쪽 드래그(`start_x < end_x`)는 내부 완전 포함(Contain),
+/// 오른쪽->왼쪽 드래그(`start_x >= end_x`)는 경계 교차(Crossing/Intersect) 모드로 동작한다.
+#[must_use]
+pub fn select_by_marquee_directional(
+    candidates: &[PickableFeatureCandidate],
+    drag_start_world_xy: [f64; 2],
+    drag_end_world_xy: [f64; 2],
+) -> Vec<i64> {
+    let is_left_to_right_contain = drag_start_world_xy[0] < drag_end_world_xy[0];
+    let box_min_x = drag_start_world_xy[0].min(drag_end_world_xy[0]);
+    let box_max_x = drag_start_world_xy[0].max(drag_end_world_xy[0]);
+    let box_min_y = drag_start_world_xy[1].min(drag_end_world_xy[1]);
+    let box_max_y = drag_start_world_xy[1].max(drag_end_world_xy[1]);
+
+    candidates
+        .iter()
+        .filter(|c| c.visible && !c.locked)
+        .filter(|c| {
+            if is_left_to_right_contain {
+                c.bbox_min_xy[0] >= box_min_x
+                    && c.bbox_max_xy[0] <= box_max_x
+                    && c.bbox_min_xy[1] >= box_min_y
+                    && c.bbox_max_xy[1] <= box_max_y
+            } else {
+                c.bbox_max_xy[0] >= box_min_x
+                    && c.bbox_min_xy[0] <= box_max_x
+                    && c.bbox_max_xy[1] >= box_min_y
+                    && c.bbox_min_xy[1] <= box_max_y
+            }
+        })
+        .map(|c| c.fid)
+        .collect()
+}
+
 /// C++ `KaCanvasPainter::shouldDrawFeature` 1:1 대응:
 /// 화면 투영 바운딩 박스의 가로·세로가 모두 `1.5px` 미만(`width < 1.5 && height < 1.5`)이거나
 /// 폴리곤 정점 수가 3개 미만인 퇴화 기하일 때 `false`를 반환하여 드로우 콜을 생략한다.
@@ -200,5 +283,35 @@ mod tests {
         let (w_sel, col_sel) = compute_selection_outline_style(0.35, [139, 69, 19, 255], true);
         assert!((w_sel - 0.70).abs() < 1e-6);
         assert_eq!(col_sel, HGIS_SELECTION_OUTLINE_COLOR);
+
+        // 3. TestKaSpatialHitTester::testPointOverPolygonPriority & testMarqueeLeftRightMode
+        let candidates = vec![
+            PickableFeatureCandidate {
+                fid: 200, // Polygon B
+                dim: HitGeometryDim::Polygon,
+                visible: true,
+                locked: false,
+                bbox_min_xy: [90.0, 90.0],
+                bbox_max_xy: [120.0, 120.0],
+                distance_to_click_m: 0.0,
+            },
+            PickableFeatureCandidate {
+                fid: 101, // Artifact Point A at (100.0, 100.0)
+                dim: HitGeometryDim::Point,
+                visible: true,
+                locked: false,
+                bbox_min_xy: [100.0, 100.0],
+                bbox_max_xy: [100.0, 100.0],
+                distance_to_click_m: 0.2,
+            },
+        ];
+        assert_eq!(pick_feature_at_with_priority(&candidates, 1.0), Some(101));
+
+        // Marquee [80..110, 80..110] only partially overlaps Polygon B [90..120, 90..120]
+        let only_poly = &candidates[0..1];
+        let contain_res = select_by_marquee_directional(only_poly, [80.0, 80.0], [110.0, 110.0]);
+        assert!(contain_res.is_empty());
+        let crossing_res = select_by_marquee_directional(only_poly, [110.0, 110.0], [80.0, 80.0]);
+        assert_eq!(crossing_res, vec![200]);
     }
 }
