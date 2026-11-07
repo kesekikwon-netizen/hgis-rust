@@ -19,6 +19,15 @@ impl Default for OrbitCamera3D {
     }
 }
 
+impl OrbitCamera3D {
+    /// C++ `TerrainOrbitController::updateMouseDrag` — 방위각(`yaw_deg`) 회전, 짐벌락 방어 앙각(`[-89.0°, +89.0°]`) 및 수직 과장비(`[1.0, 5.0]`) 클램핑 1:1
+    pub fn apply_orbit_drag(&mut self, delta_yaw_deg: f32, delta_pitch_deg: f32) {
+        self.yaw_deg = (self.yaw_deg + delta_yaw_deg).rem_euclid(360.0);
+        self.pitch_deg = (self.pitch_deg + delta_pitch_deg).clamp(-89.0, 89.0);
+        self.z_exaggeration = self.z_exaggeration.clamp(1.0, 5.0);
+    }
+}
+
 #[must_use]
 pub fn render_terrain3d_rgba(
     dem: &[f64],
@@ -79,5 +88,14 @@ mod tests {
         let cam = OrbitCamera3D::default();
         let buf = render_terrain3d_rgba(&dem, 16, 16, &cam, 160, 100);
         assert_eq!(buf.len(), 160 * 100 * 4);
+    }
+
+    #[test]
+    fn test_terrain_camera_pitch_clamping_120deg_clamps_to_exact_89deg() {
+        let mut cam = OrbitCamera3D::default();
+        cam.apply_orbit_drag(15.0, 120.0);
+        assert!((cam.pitch_deg - 89.0).abs() < 1e-5);
+        cam.apply_orbit_drag(0.0, -300.0);
+        assert!((cam.pitch_deg - (-89.0)).abs() < 1e-5);
     }
 }

@@ -242,6 +242,48 @@ impl DrawingSheet {
             in_frame
         }
     }
+
+    /// C++ `PlateScaleBar::calculateDivisions(mapScale, targetWidthMm)` — 1-2-5 계열 정수 단위 축척막대 간격(m) 산출 1:1
+    #[must_use]
+    pub fn calculate_scale_bar_nice_interval_m(map_scale_denom: f64, target_width_mm: f64) -> f64 {
+        if map_scale_denom <= 0.0 || target_width_mm <= 0.0 || !map_scale_denom.is_finite() {
+            return 10.0;
+        }
+        let raw_meters = map_scale_denom * (target_width_mm / 1000.0);
+        if raw_meters <= 1.0 {
+            return 1.0;
+        }
+        let exp = raw_meters.log10().floor();
+        let base = 10.0_f64.powf(exp);
+        let frac = raw_meters / base;
+        let nice_mult = if frac >= 5.0 {
+            5.0
+        } else if frac >= 2.0 {
+            2.0
+        } else {
+            1.0
+        };
+        nice_mult * base
+    }
+}
+
+/// C++ `RasterMaskClipper::clipRasterByPolygon` — 조사구역 내·외부 픽셀 알파 채널 마스킹(`inside=255`, `outside=round(outsideAlpha * 255)`) 1:1
+pub fn apply_polygon_alpha_mask_rgba(
+    rgba_buf: &mut [u8],
+    width: usize,
+    height: usize,
+    inside_predicate: impl Fn(usize, usize) -> bool,
+    outside_alpha_ratio: f32,
+) {
+    let out_a = (outside_alpha_ratio.clamp(0.0, 1.0) * 255.0).floor() as u8;
+    for y in 0..height {
+        for x in 0..width {
+            let idx = (y * width + x) * 4;
+            if idx + 3 < rgba_buf.len() {
+                rgba_buf[idx + 3] = if inside_predicate(x, y) { 255 } else { out_a };
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -294,5 +336,17 @@ mod tests {
         // Rotated map grid cannot be applied to sheet coordinate grid
         assert!(!sheet.apply_map_coordinate_grid(true, 15.0, 20.0, [0.0, 0.0]));
         assert!(!sheet.grid_follow_map);
+    }
+
+    #[test]
+    fn test_plate_scale_bar_nice_interval_1200_at_60mm_yields_50m_and_raster_mask_alpha_255_76() {
+        let interval = DrawingSheet::calculate_scale_bar_nice_interval_m(1_200.0, 60.0);
+        assert!((interval - 50.0).abs() < 1e-6);
+
+        let mut rgba = vec![200_u8; 4 * 2 * 4];
+        apply_polygon_alpha_mask_rgba(&mut rgba, 2, 2, |x, y| x == 0 && y == 0, 0.3);
+        assert_eq!(rgba[3], 255);
+        assert_eq!(rgba[7], 76);
+        assert_eq!(rgba[11], 76);
     }
 }
