@@ -10,6 +10,11 @@ impl StrataAppState {
         egui::SidePanel::left("ka_terrain3d_left_panel")
             .resizable(false)
             .exact_width(240.0)
+            .frame(
+                egui::Frame::NONE
+                    .fill(Color32::from_rgb(244, 246, 248))
+                    .inner_margin(egui::Margin::same(10)),
+            )
             .show_inside(ui, |ui| {
                 ui.add_space(4.0);
                 ui.label(

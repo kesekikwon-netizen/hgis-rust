@@ -10,8 +10,8 @@ impl StrataAppState {
         // 1. 우측 스크롤 패널 (KaPaleoStudio.cpp:123-204)
         egui::SidePanel::right("ka_paleo_right_panel")
             .resizable(true)
-            .default_width(345.0)
-            .width_range(290.0..=420.0)
+            .default_width(380.0)
+            .width_range(330.0..=440.0)
             .show_inside(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.strong("고지형 · 기본층서 종합 분석 (반경 10km)");
@@ -26,12 +26,18 @@ impl StrataAppState {
                         ),
                     );
                     ui.add_space(4.0);
-                    if ui
-                        .button("수치지질도 · 시추주상도(지반) · KIGAM 별도 내려받기")
-                        .clicked()
-                    {
-                        self.modals.active = Some(ActiveModalDialog::PaleoSourceDownload);
-                    }
+                    // C++ KaPaleoStudio.cpp:143-150: two separate download entries side by side.
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button("수치지질·시추·KIGAM 별도 받기…")
+                            .clicked()
+                        {
+                            self.modals.active = Some(ActiveModalDialog::PaleoSourceDownload);
+                        }
+                        if ui.button("국토지리원 DEM 받기…").clicked() {
+                            self.modals.active = Some(ActiveModalDialog::TopographicImport);
+                        }
+                    });
                     ui.checkbox(
                         &mut self.paleo_3d.show_imhof_slope_overlay,
                         "다중방위 음영기복(Hillshade) 중첩 적용",

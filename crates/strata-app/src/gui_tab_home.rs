@@ -47,11 +47,14 @@ impl StrataAppState {
                 ui.add_space(22.0);
 
                 // C++ KaStartPage.cpp: recent list takes ~77% and the guide column the rest.
-                // Leave room for the 18px gap so the pair never exceeds inner_w (otherwise
-                // the guide column is pushed off the right edge).
+                // Reserve the gap AND the guide column before sizing the table, otherwise the
+                // guide column is pushed past the right edge (window 2308 -> table ran to 2307).
                 const GUIDE_GAP: f32 = 18.0;
-                let recent_w = (inner_w * 0.77).max(520.0).min((inner_w - GUIDE_GAP - 220.0).max(320.0));
-                let guide_w = (inner_w - recent_w - GUIDE_GAP).max(200.0);
+                const GUIDE_MIN_W: f32 = 300.0;
+                let recent_w = (inner_w - GUIDE_GAP - GUIDE_MIN_W)
+                    .min((inner_w * 0.77).max(520.0))
+                    .max(320.0);
+                let guide_w = (inner_w - recent_w - GUIDE_GAP).max(GUIDE_MIN_W);
                 ui.horizontal_top(|ui| {
                     ui.allocate_ui_with_layout(Vec2::new(recent_w, 250.0), egui::Layout::top_down(egui::Align::Min), |ui| {
                         ui.horizontal(|ui| {
