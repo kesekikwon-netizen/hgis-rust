@@ -254,12 +254,13 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
         detail: "GPKG + DXF + CSV file actions verified".to_owned(),
     });
 
-    // V14: 10대 실무 모달 대화상자(용지·DEM·유산·수치지형·지적·시굴격자·PDF준비·도면인쇄·계정·제출) Headless egui 렌더링
+    // V14: 11대 실무 모달 대화상자(용지·DEM·유산·수치지형·지적·시굴격자·고지형자료·PDF준비·도면인쇄·계정·제출) Headless egui 렌더링
     let mut modal_ok = true;
     for modal in [
         ActiveModalDialog::AccountSettings, ActiveModalDialog::TrenchGenerator, ActiveModalDialog::ExportSubmitPackage,
         ActiveModalDialog::PaperSetup, ActiveModalDialog::DemDownload, ActiveModalDialog::HeritageRegionSelect,
-        ActiveModalDialog::NgiiTopoDownload, ActiveModalDialog::CadastralDownload, ActiveModalDialog::PdfPreparing, ActiveModalDialog::DrawingPrint,
+        ActiveModalDialog::NgiiTopoDownload, ActiveModalDialog::CadastralDownload, ActiveModalDialog::PaleoSourceDownload,
+        ActiveModalDialog::PdfPreparing, ActiveModalDialog::DrawingPrint,
     ] {
         gui_state.modals.active = Some(modal);
         let raw_input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1680.0, 960.0))), ..Default::default() };

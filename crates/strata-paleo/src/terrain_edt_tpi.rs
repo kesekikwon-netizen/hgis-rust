@@ -17,6 +17,25 @@ impl GridTransform {
             self.origin_y - (r as f64 + 0.5) * self.cell_size,
         ]
     }
+
+    #[must_use]
+    pub fn world_to_cell(&self, wx: f64, wy: f64) -> Option<(usize, usize)> {
+        if self.cell_size <= 0.0 {
+            return None;
+        }
+        let col_f = ((wx - self.origin_x) / self.cell_size).floor();
+        let row_f = ((self.origin_y - wy) / self.cell_size).floor();
+        if col_f < 0.0 || row_f < 0.0 {
+            return None;
+        }
+        let c = col_f as usize;
+        let r = row_f as usize;
+        if r < self.height && c < self.width {
+            Some((r, c))
+        } else {
+            None
+        }
+    }
 }
 
 pub fn idw_interpolate_grid(
@@ -151,4 +170,105 @@ pub fn compute_slope_and_hillshade(
         }
     }
     (slope, shade)
+}
+
+/// `HgisPaleoTerrain.cpp` (`67a3f33`) — Imhof 4방향(225°·270°·315°·360°) 다중방위 음영기복도 및 경사도 색상 램프(35% 블렌딩) RGBA 합성
+#[must_use]
+pub fn compute_imhof_multidirectional_hillshade_and_slope_rgba(
+    tf: &GridTransform,
+    z_grid: &[f64],
+) -> (Vec<f64>, Vec<u8>) {
+    let w = tf.width;
+    let h = tf.height;
+    let n = w * h;
+    let mut slope_deg = vec![0.0_f64; n];
+    let mut rgba = vec![240_u8; n * 4];
+    for i in 0..n {
+        rgba[i * 4 + 3] = 255;
+    }
+    if w < 3 || h < 3 || z_grid.len() < n {
+        return (slope_deg, rgba);
+    }
+
+    let cs8 = 8.0 * tf.cell_size.max(0.1);
+    let alt = 45.0_f64.to_radians();
+    let azimuths: [(f64, f64); 4] = [
+        (225.0_f64.to_radians(), 0.15),
+        (270.0_f64.to_radians(), 0.25),
+        (315.0_f64.to_radians(), 0.40),
+        (360.0_f64.to_radians(), 0.20),
+    ];
+
+    for r in 1..(h - 1) {
+        for c in 1..(w - 1) {
+            let z = |dr: isize, dc: isize| -> f64 {
+                z_grid[(r as isize + dr) as usize * w + (c as isize + dc) as usize]
+            };
+            let dzdx = ((z(-1, 1) + 2.0 * z(0, 1) + z(1, 1))
+                - (z(-1, -1) + 2.0 * z(0, -1) + z(1, -1)))
+                / cs8;
+            let dzdy = ((z(1, -1) + 2.0 * z(1, 0) + z(1, 1))
+                - (z(-1, -1) + 2.0 * z(-1, 0) + z(-1, 1)))
+                / cs8;
+            let slp_rad = (dzdx * dzdx + dzdy * dzdy).sqrt().atan();
+            let slp_deg = slp_rad.to_degrees();
+            let idx = r * w + c;
+            slope_deg[idx] = slp_deg;
+
+            let aspect = dzdy.atan2(-dzdx);
+            let mut hs_weighted = 0.0_f64;
+            for &(az, weight) in &azimuths {
+                let hs = (alt.sin() * slp_rad.cos()
+                    + alt.cos() * slp_rad.sin() * (az - aspect).cos())
+                .clamp(0.05, 1.0);
+                hs_weighted += hs * weight;
+            }
+            // Imhof warm sunlight / cool indigo shadow base
+            let imhof_r = (hs_weighted * 248.0 + (1.0 - hs_weighted) * 52.0).clamp(0.0, 255.0);
+            let imhof_g = (hs_weighted * 244.0 + (1.0 - hs_weighted) * 64.0).clamp(0.0, 255.0);
+            let imhof_b = (hs_weighted * 228.0 + (1.0 - hs_weighted) * 92.0).clamp(0.0, 255.0);
+
+            // Slope tint ramp: 0~5° pale yellow, 5~15° warm ochre, >15° deep terracotta
+            let (slp_r, slp_g, slp_b) = if slp_deg <= 5.0 {
+                (245.0, 238.0, 185.0)
+            } else if slp_deg <= 15.0 {
+                (217.0, 142.0, 48.0)
+            } else {
+                (168.0, 58.0, 36.0)
+            };
+
+            let blend = 0.35;
+            rgba[idx * 4] = (imhof_r * (1.0 - blend) + slp_r * blend).round() as u8;
+            rgba[idx * 4 + 1] = (imhof_g * (1.0 - blend) + slp_g * blend).round() as u8;
+            rgba[idx * 4 + 2] = (imhof_b * (1.0 - blend) + slp_b * blend).round() as u8;
+            rgba[idx * 4 + 3] = 255;
+        }
+    }
+    (slope_deg, rgba)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn imhof_multidirectional_hillshade_and_slope_detect_east_and_north_ridges() {
+        let tf = GridTransform {
+            origin_x: 0.0,
+            origin_y: 80.0,
+            cell_size: 10.0,
+            width: 8,
+            height: 8,
+        };
+        let mut dem = vec![10.0_f64; 64];
+        for r in 0..8 {
+            for c in 0..8 {
+                dem[r * 8 + c] = 10.0 + (r as f64) * 3.0 + (c as f64) * 2.0;
+            }
+        }
+        let (slope, rgba) = compute_imhof_multidirectional_hillshade_and_slope_rgba(&tf, &dem);
+        assert_eq!(slope.len(), 64);
+        assert_eq!(rgba.len(), 64 * 4);
+        assert!(slope[3 * 8 + 3] > 5.0);
+    }
 }

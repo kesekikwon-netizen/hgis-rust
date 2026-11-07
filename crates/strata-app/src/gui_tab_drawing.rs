@@ -1,4 +1,5 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+use strata_layout::badge_placer::LayoutBadgePlacer;
 
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::ActiveModalDialog;
@@ -39,8 +40,7 @@ impl StrataAppState {
                         ui.checkbox(&mut bold_on, "B");
                         ui.checkbox(&mut italic_on, "I");
                     });
-                    let mut show_site_name = false;
-                    ui.checkbox(&mut show_site_name, "1:5,000 이하에서 유적 이름으로 표시");
+                    ui.checkbox(&mut self.drawing.sheet.show_site_names_under_5000, "1:5,000 이하에서 유적 이름으로 표시");
 
                     ui.separator();
                     ui.label(egui::RichText::new("방위 (도북)").size(11.5).color(Color32::from_rgb(95, 94, 88)));
@@ -74,7 +74,8 @@ impl StrataAppState {
                     ui.label(egui::RichText::new("도면 정보").size(11.5).color(Color32::from_rgb(95, 94, 88)));
                     ui.horizontal(|ui| {
                         ui.label("1 :");
-                        let _ = ui.add_sized([165.0, 24.0], egui::Button::new("6532                               ▼"));
+                        let scale_txt = format!("{}                               ▼", self.drawing.sheet.scale_denominator);
+                        let _ = ui.add_sized([165.0, 24.0], egui::Button::new(scale_txt));
                         let _ = ui.button("적용");
                     });
                     ui.add_space(4.0);
@@ -83,11 +84,19 @@ impl StrataAppState {
                         .spacing([3.0, 3.0])
                         .show(ui, |ui| {
                             for s in ["20", "30", "50", "100", "200", "250", "300"] {
-                                let _ = ui.add_sized([31.0, 20.0], egui::Button::new(egui::RichText::new(s).size(10.0)));
+                                if ui.add_sized([31.0, 20.0], egui::Button::new(egui::RichText::new(s).size(10.0))).clicked() {
+                                    if let Ok(v) = s.parse::<u32>() {
+                                        self.drawing.sheet.scale_denominator = v;
+                                    }
+                                }
                             }
                             ui.end_row();
                             for s in ["400", "500", "1000", "2000", "5000", "10000", "25000"] {
-                                let _ = ui.add_sized([31.0, 20.0], egui::Button::new(egui::RichText::new(s).size(10.0)));
+                                if ui.add_sized([31.0, 20.0], egui::Button::new(egui::RichText::new(s).size(10.0))).clicked() {
+                                    if let Ok(v) = s.parse::<u32>() {
+                                        self.drawing.sheet.scale_denominator = v;
+                                    }
+                                }
                             }
                             ui.end_row();
                         });
@@ -110,9 +119,23 @@ impl StrataAppState {
                     ui.add_space(4.0);
                     ui.columns(3, |cols| {
                         for (i, lbl) in ["축척 글자", "좌표계", "좌표 격자"].into_iter().enumerate() {
-                            let _ = cols[i].add_sized([cols[i].available_width(), 24.0], egui::Button::new(egui::RichText::new(lbl).size(11.0)));
+                            if cols[i].add_sized([cols[i].available_width(), 24.0], egui::Button::new(egui::RichText::new(lbl).size(11.0))).clicked() && i == 2 {
+                                let next_follow = !self.drawing.sheet.grid_follow_map;
+                                if next_follow {
+                                    self.drawing.sheet.apply_map_coordinate_grid(
+                                        true,
+                                        0.0,
+                                        20.0,
+                                        self.home_map.real_survey.survey_center,
+                                    );
+                                    self.home_map.draw_guide_message = Some("도면 격자를 지도 좌표격자와 같게 설정했습니다 (20 m).".to_owned());
+                                } else {
+                                    self.drawing.sheet.grid_follow_map = false;
+                                }
+                            }
                         }
                     });
+                    ui.checkbox(&mut self.drawing.sheet.grid_follow_map, "지도 좌표격자와 같게 (20 m)");
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
                         let pdf_btn = egui::Button::new(
@@ -165,13 +188,67 @@ impl StrataAppState {
             p.rect_stroke(map_rect, 0.0, Stroke::new(1.2, Color32::from_rgb(70, 95, 115)), egui::StrokeKind::Middle);
 
             let mc = map_rect.center();
-            for i in 0..115 {
-                let fx = ((i * 37 + 19) % 100) as f32 / 100.0 - 0.5;
-                let fy = ((i * 61 + 43) % 100) as f32 / 100.0 - 0.5;
-                let dot_p = Pos2::new(mc.x + fx * map_rect.width() * 0.88, mc.y + fy * map_rect.height() * 0.88);
-                let col = if i % 3 == 0 { Color32::from_rgb(45, 165, 75) } else { Color32::from_rgb(198, 28, 118) };
-                p.circle_filled(dot_p, 2.7, col);
-                p.circle_stroke(dot_p, 2.7, Stroke::new(0.7, Color32::BLACK));
+            if self.drawing.sheet.grid_follow_map {
+                let grid_stroke = Stroke::new(0.6, Color32::from_rgba_unmultiplied(40, 48, 56, 110));
+                for gx in 1..8 {
+                    let x = map_rect.left() + map_rect.width() * (gx as f32 / 8.0);
+                    p.line_segment([Pos2::new(x, map_rect.top()), Pos2::new(x, map_rect.bottom())], grid_stroke);
+                }
+                for gy in 1..10 {
+                    let y = map_rect.top() + map_rect.height() * (gy as f32 / 10.0);
+                    p.line_segment([Pos2::new(map_rect.left(), y), Pos2::new(map_rect.right(), y)], grid_stroke);
+                }
+            }
+            if LayoutBadgePlacer::should_render_site_names(
+                self.drawing.sheet.scale_denominator,
+                self.drawing.sheet.show_site_names_under_5000,
+            ) {
+                let sample_sites: Vec<(u32, String, f64, f64, f64, f64)> = self
+                    .home_map
+                    .real_survey
+                    .heritage_polys
+                    .iter()
+                    .take(8)
+                    .enumerate()
+                    .map(|(idx, hp)| {
+                        let ox = f64::from(mc.x) + ((idx as f64 % 3.0) - 1.0) * 38.0;
+                        let oy = f64::from(mc.y) + ((idx as f64 / 3.0) - 1.0) * 28.0;
+                        ((idx + 1) as u32, hp.site_name.clone(), ox, oy, 64.0, 14.0)
+                    })
+                    .collect();
+                let placed = LayoutBadgePlacer::place_all_boxes(
+                    &sample_sites,
+                    Some((
+                        f64::from(map_rect.left()),
+                        f64::from(map_rect.top()),
+                        f64::from(map_rect.right()),
+                        f64::from(map_rect.bottom()),
+                    )),
+                );
+                for nb in placed {
+                    let br = Rect::from_center_size(
+                        Pos2::new(nb.center_x_mm as f32, nb.center_y_mm as f32),
+                        Vec2::new(nb.width_mm as f32, nb.height_mm as f32),
+                    );
+                    p.rect_filled(br, 2.5, Color32::from_rgba_unmultiplied(255, 255, 255, 230));
+                    p.rect_stroke(br, 2.5, Stroke::new(0.8, Color32::from_rgb(45, 44, 40)), egui::StrokeKind::Middle);
+                    p.text(
+                        br.center(),
+                        egui::Align2::CENTER_CENTER,
+                        &nb.name,
+                        egui::FontId::proportional(8.5),
+                        Color32::BLACK,
+                    );
+                }
+            } else {
+                for i in 0..115 {
+                    let fx = ((i * 37 + 19) % 100) as f32 / 100.0 - 0.5;
+                    let fy = ((i * 61 + 43) % 100) as f32 / 100.0 - 0.5;
+                    let dot_p = Pos2::new(mc.x + fx * map_rect.width() * 0.88, mc.y + fy * map_rect.height() * 0.88);
+                    let col = if i % 3 == 0 { Color32::from_rgb(45, 165, 75) } else { Color32::from_rgb(198, 28, 118) };
+                    p.circle_filled(dot_p, 2.7, col);
+                    p.circle_stroke(dot_p, 2.7, Stroke::new(0.7, Color32::BLACK));
+                }
             }
             let poly = vec![
                 Pos2::new(mc.x - 4.0, mc.y - map_rect.height() * 0.28),
@@ -191,7 +268,7 @@ impl StrataAppState {
 
             let sb_y = map_rect.bottom() + 18.0;
             p.line_segment([Pos2::new(map_rect.left() + 4.0, sb_y), Pos2::new(map_rect.left() + 92.0, sb_y)], Stroke::new(3.0, Color32::BLACK));
-            p.text(Pos2::new(map_rect.left() + 48.0, sb_y + 11.0), egui::Align2::CENTER_CENTER, "축척 1 : 6532", egui::FontId::proportional(9.5), Color32::BLACK);
+            p.text(Pos2::new(map_rect.left() + 48.0, sb_y + 11.0), egui::Align2::CENTER_CENTER, format!("축척 1 : {}", self.drawing.sheet.scale_denominator), egui::FontId::proportional(9.5), Color32::BLACK);
             p.text(Pos2::new(map_rect.right() - 28.0, sb_y + 2.0), egui::Align2::RIGHT_CENTER, "동부원점(GRS80) · EPSG:5187", egui::FontId::proportional(8.5), Color32::BLACK);
             p.text(Pos2::new(map_rect.right() - 8.0, sb_y + 4.0), egui::Align2::CENTER_CENTER, "N\n▲", egui::FontId::proportional(10.0), Color32::BLACK);
 

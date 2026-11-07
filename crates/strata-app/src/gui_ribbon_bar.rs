@@ -117,13 +117,97 @@ impl StrataAppState {
                                     self.active_tool = MapToolKind::Select;
                                 }
                                 ui.separator();
-                                let mut snap_on = true;
                                 let mut shared_on = true;
-                                ui.checkbox(&mut snap_on, "자석");
+                                ui.checkbox(&mut self.home_map.cad.snap_enabled, "자석");
                                 ui.checkbox(&mut shared_on, "공유 경계 허용치");
                                 let _ = wbtn(ui, "12 px   ↕");
                                 let _ = wbtn(ui, "모든 조사 레이어 ▼");
-                                let _ = wbtn(ui, "▼");
+                                let assist_resp = ui
+                                    .add(
+                                        egui::Button::new(egui::RichText::new("▼").size(11.5))
+                                            .fill(Color32::WHITE)
+                                            .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                                            .corner_radius(5.0)
+                                            .min_size(Vec2::new(31.0, 26.0)),
+                                    )
+                                    .on_hover_text(
+                                        "자석 보조 — 선 따라 자동채움 · 근접 자석점 표시 · 가까운 선에 붙이기",
+                                    );
+                                if assist_resp.clicked() {
+                                    self.ribbon.snap_assist_menu_open = !self.ribbon.snap_assist_menu_open;
+                                }
+                                if self.ribbon.snap_assist_menu_open {
+                                    let popup_pos = Pos2::new(assist_resp.rect.left(), assist_resp.rect.bottom() + 4.0);
+                                    egui::Area::new(ui.id().with("ka_snap_assist_menu"))
+                                        .fixed_pos(popup_pos)
+                                        .order(egui::Order::Foreground)
+                                        .show(ctx, |ui| {
+                                            egui::Frame::popup(ui.style())
+                                                .fill(Color32::from_rgb(252, 251, 247))
+                                                .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                                                .inner_margin(egui::Margin::symmetric(8, 6))
+                                                .show(ui, |ui| {
+                                                    ui.set_min_width(188.0);
+                                                    let snap_now = ui
+                                                        .button("가까운 선에 붙이기")
+                                                        .on_hover_text(
+                                                            "지적도·사업자 도면 위에 그린 도형(방금 그린 도형 또는 선택한 도형)을\n가장 가까운 지적선·도면선에 자동으로 붙이고 빠진 사이 꺾임점도 채웁니다 (Ctrl+Z 되돌리기 가능).",
+                                                        );
+                                                    if snap_now.clicked() {
+                                                        let (changed, _, _) = self.home_map.snap_drawn_shapes_to_nearest_lines();
+                                                        if changed > 0 {
+                                                            self.is_dirty = true;
+                                                        }
+                                                        self.ribbon.snap_assist_menu_open = false;
+                                                    }
+                                                    ui.separator();
+                                                    let prev_trace = self.home_map.cad.snap_trace_enabled;
+                                                    if ui
+                                                        .checkbox(&mut self.home_map.cad.snap_trace_enabled, "선 따라 자동채움")
+                                                        .on_hover_text(
+                                                            "1번 기능(선 따라 빠진 사이 자석점 자동 채우기)\n· 그릴 때 자석점 한두 칸을 건너뛰어도 사이 꼭짓점을 선을 따라 자동으로 채우며,\n  이미 그린 도형이 있을 때 누르면 가장 가까운 선에 바로 붙입니다.",
+                                                        )
+                                                        .changed()
+                                                    {
+                                                        let on = self.home_map.cad.snap_trace_enabled;
+                                                        if on && !self.home_map.cad.snap_enabled {
+                                                            self.home_map.cad.snap_enabled = true;
+                                                        }
+                                                        if on && !prev_trace {
+                                                            let (changed, _, _) = self.home_map.snap_drawn_shapes_to_nearest_lines();
+                                                            if changed == 0 {
+                                                                self.home_map.draw_guide_message = Some(
+                                                                    "선 따라 자동채움 켜짐 — 자석점을 한두 칸 건너뛰어 찍어도 사이 꼭짓점을 자동으로 채웁니다."
+                                                                        .to_owned(),
+                                                                );
+                                                            } else {
+                                                                self.is_dirty = true;
+                                                            }
+                                                        } else if !on {
+                                                            self.home_map.draw_guide_message = Some("선 따라 자동채움 꺼짐".to_owned());
+                                                        }
+                                                    }
+                                                    if ui
+                                                        .checkbox(&mut self.home_map.cad.snap_preview_enabled, "근접 자석점 표시")
+                                                        .on_hover_text(
+                                                            "3번 기능(마우스가 가까이 갔을 때만 주변 자석점 미리 표시)\n· 마우스가 선·꼭짓점에 가까이 갔을 때만 주변 자석점을 미리 보여 줍니다.",
+                                                        )
+                                                        .changed()
+                                                    {
+                                                        let on = self.home_map.cad.snap_preview_enabled;
+                                                        if on && !self.home_map.cad.snap_enabled {
+                                                            self.home_map.cad.snap_enabled = true;
+                                                        }
+                                                        self.home_map.draw_guide_message = Some(if on {
+                                                            "근접 자석점 표시 켜짐 — 마우스가 가까이 갔을 때만 주변 자석점을 미리 보여 줍니다."
+                                                                .to_owned()
+                                                        } else {
+                                                            "근접 자석점 표시 꺼짐".to_owned()
+                                                        });
+                                                    }
+                                                });
+                                        });
+                                }
                                 ui.separator();
                                 for (b_lbl, tool) in [("／ 쉽게그리기", MapToolKind::DrawPolygon), ("□ 조사구역 그리기", MapToolKind::DrawPolygon), ("◇ 유구 그리기", MapToolKind::DrawPolygon), ("━ 유구 선", MapToolKind::DrawLine), ("● 유물위치표시", MapToolKind::PlacePoint)] {
                                     if wbtn(ui, b_lbl).clicked() {

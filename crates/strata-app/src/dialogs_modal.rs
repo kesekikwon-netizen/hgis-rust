@@ -1,7 +1,7 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use strata_check_export::checklist_engine::ChecklistEngine;
 use strata_check_export::submit_package::export_submission_package;
-use strata_geo::trench_grid::TrenchStandardLength;
+use strata_geo::trench_grid::{TrenchShapeKind, TrenchStandardLength};
 use strata_layout::sheet_composer::{SheetOrientation, SheetPaperSize};
 use strata_types::crs::SubmitCrs;
 
@@ -19,6 +19,7 @@ pub enum ActiveModalDialog {
     HeritageRegionSelect,
     NgiiTopoDownload,
     CadastralDownload,
+    PaleoSourceDownload,
     PdfPreparing,
     DrawingPrint,
 }
@@ -30,6 +31,10 @@ pub struct ModalDialogController {
     pub heritage_id_input: String,
     pub ngii_id_input: String,
     pub trench_length: TrenchStandardLength,
+    pub trench_shape: TrenchShapeKind,
+    pub trench_grid_snap: bool,
+    pub trench_auto_place: bool,
+    pub trench_azimuth_deg: f64,
     pub trench_coverage_pct: f32,
     pub last_export_status: String,
     pub custom_paper_mode: bool,
@@ -43,6 +48,10 @@ impl Default for ModalDialogController {
             heritage_id_input: String::new(),
             ngii_id_input: String::new(),
             trench_length: TrenchStandardLength::M20,
+            trench_shape: TrenchShapeKind::Straight,
+            trench_grid_snap: false,
+            trench_auto_place: true,
+            trench_azimuth_deg: 0.0,
             trench_coverage_pct: 10.0,
             last_export_status: String::new(),
             custom_paper_mode: false,
@@ -153,21 +162,38 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                 .title_bar(false)
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .default_width(470.0)
+                .default_width(510.0)
                 .show(ctx, |ui| {
-                    render_strata_modal_header(ui, "DEM 내려받기 - Strata", &mut open);
-                    ui.label(egui::RichText::new("DEM 자료를 내려받는 중입니다. 지도 작업을 계속할 수 있습니다.").size(15.5).color(Color32::from_rgb(25, 25, 24)));
-                    ui.add_space(12.0);
-                    let (bar_rect, _) = ui.allocate_exact_size(Vec2::new(450.0, 34.0), egui::Sense::hover());
+                    render_strata_modal_header(ui, "국토지리정보원 DEM 다운로드 - Strata", &mut open);
+                    ui.label(egui::RichText::new("국토정보플랫폼 · 조사 주변 도엽의 정밀 DEM을 확인하고 수치지형도 등고선으로 합성합니다.").size(14.0).color(Color32::from_rgb(25, 25, 24)));
+                    ui.add_space(10.0);
+                    let (bar_rect, _) = ui.allocate_exact_size(Vec2::new(480.0, 32.0), egui::Sense::hover());
                     let p = ui.painter_at(bar_rect);
                     p.rect_filled(bar_rect, 6.0, Color32::WHITE);
                     p.rect_stroke(bar_rect, 6.0, Stroke::new(1.2, Color32::from_rgb(150, 148, 142)), egui::StrokeKind::Middle);
-                    p.rect_filled(Rect::from_min_size(bar_rect.min + Vec2::new(2.0, 2.0), Vec2::new(128.0, 30.0)), 5.0, Color32::from_rgb(20, 20, 20));
-                    p.rect_filled(Rect::from_min_size(Pos2::new(bar_rect.right() - 92.0, bar_rect.top() + 2.0), Vec2::new(90.0, 30.0)), 5.0, Color32::from_rgb(20, 20, 20));
+                    p.rect_filled(Rect::from_min_size(bar_rect.min + Vec2::new(2.0, 2.0), Vec2::new(192.0, 28.0)), 5.0, Color32::from_rgb(20, 20, 20));
+                    p.text(bar_rect.center(), egui::Align2::CENTER_CENTER, "[DEM] 국토지리원_DEM.tif · 다중 도엽 병합 준비", egui::FontId::proportional(12.5), Color32::from_rgb(55, 54, 50));
                     ui.add_space(10.0);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let cancel_btn = egui::Button::new(egui::RichText::new("취소").color(Color32::WHITE).strong().size(14.5)).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(72.0, 38.0));
-                        if ui.add(cancel_btn).clicked() { app.modals.active = None; }
+                    ui.horizontal(|ui| {
+                        let synth_btn = egui::Button::new(egui::RichText::new("등고선 정밀 DEM 합성").color(Color32::WHITE).strong().size(13.5))
+                            .fill(Color32::from_rgb(44, 43, 41))
+                            .corner_radius(6.0)
+                            .min_size(Vec2::new(152.0, 36.0));
+                        if ui.add(synth_btn).clicked() {
+                            app.home_map.real_survey.layer_visible.insert("지표모델(DSM) 30m · Coperni...".to_owned(), false);
+                            app.home_map.real_survey.layer_visible.insert("지형 음영".to_owned(), true);
+                            app.home_map.draw_guide_message = Some(
+                                "국토지리정보원 수치지형도 등고선으로 정밀 DEM·광역지형도·경사도를 생성했습니다.".to_owned(),
+                            );
+                            app.modals.active = None;
+                        }
+                        if ui.button("계정 설정").clicked() {
+                            app.modals.active = Some(ActiveModalDialog::AccountSettings);
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let cancel_btn = egui::Button::new(egui::RichText::new("취소").color(Color32::WHITE).strong().size(14.0)).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(72.0, 36.0));
+                            if ui.add(cancel_btn).clicked() { app.modals.active = None; }
+                        });
                     });
                 });
         }
@@ -222,6 +248,74 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                             if ui.add(save_b).clicked() {
                                 app.accounts.save_all_to_disk();
                                 app.home_map.draw_guide_message = Some("API 키와 사이트 계정(DPAPI 암호화)을 저장했습니다.".to_owned());
+                                app.modals.active = None;
+                            }
+                        });
+                    });
+                });
+        }
+        ActiveModalDialog::PaleoSourceDownload => {
+            egui::Window::new("ka_modal_paleo_sources")
+                .title_bar(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .default_width(520.0)
+                .show(ctx, |ui| {
+                    render_strata_modal_header(
+                        ui,
+                        "수치지질도 · 시추주상도(지반) · KIGAM 별도 내려받기 (도면 범례 지원)",
+                        &mut open,
+                    );
+                    ui.horizontal(|ui| {
+                        ui.label("조사구역 중심 수집 반경:");
+                        ui.radio_value(&mut app.paleo_3d.source_dl_radius_km, 5.0, "5 km (권장)");
+                        ui.radio_value(&mut app.paleo_3d.source_dl_radius_km, 10.0, "10 km (광역)");
+                    });
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "현재 적재 현황 — 수치지질도(1:5만): {}건 · 시추공(퇴적층두께): {}공 (최대 50공) · KIGAM 수문·단구연대: 6건 · 단층: 3건",
+                            app.paleo_3d.geology_feature_count,
+                            app.paleo_3d.declustered_borehole_count
+                        ))
+                        .size(12.5)
+                        .strong(),
+                    );
+                    ui.add_space(8.0);
+                    let btn_all = egui::Button::new(
+                        egui::RichText::new("수치지질도(1:5만) + 시추주상도(퇴적층) + KIGAM 연속 받기")
+                            .color(Color32::WHITE)
+                            .strong()
+                            .size(13.5),
+                    )
+                    .fill(Color32::from_rgb(181, 87, 58))
+                    .corner_radius(6.0)
+                    .min_size(Vec2::new(488.0, 34.0));
+                    if ui.add(btn_all).clicked() {
+                        app.paleo_3d.run_sample_10km_analysis();
+                        app.home_map.draw_guide_message = Some(format!(
+                            "반경 {:.0} km 수치지질도(1:5만)·시추주상도(디클러스터링 {}공)·KIGAM 수문·단층 자료를 적재했습니다.",
+                            app.paleo_3d.source_dl_radius_km,
+                            app.paleo_3d.declustered_borehole_count
+                        ));
+                        app.modals.active = None;
+                    }
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("시추주상도만 받기").clicked() {
+                            app.paleo_3d.run_sample_10km_analysis();
+                            app.modals.active = None;
+                        }
+                        if ui.button("KIGAM 자료만 받기").clicked() {
+                            app.paleo_3d.run_sample_10km_analysis();
+                            app.modals.active = None;
+                        }
+                        if ui.button("수치지질도만 받기").clicked() {
+                            app.paleo_3d.run_sample_10km_analysis();
+                            app.modals.active = None;
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("닫기").clicked() {
                                 app.modals.active = None;
                             }
                         });

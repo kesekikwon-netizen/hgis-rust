@@ -26,11 +26,20 @@ impl StrataAppState {
             let is_measure = self.active_tool == MapToolKind::Measure;
             let is_style = self.right_inspector.active_card == InspectorCardTab::LayerStyleCard;
             if is_trench {
+                let trench_cnt = self.home_map.real_survey.trenches.len();
+                let trench_area: f64 = self.home_map.real_survey.trenches.iter().map(|t| t.area_m2).sum();
+                let survey_area: f64 = self.home_map.real_survey.survey_area_m2.max(1.0);
+                let ratio_pct = (trench_area / survey_area * 100.0).clamp(0.0, 100.0);
+                let shape_lbl = if self.modals.trench_shape.arm_bend().is_some() {
+                    self.modals.trench_shape.label_ko()
+                } else {
+                    self.modals.trench_length.label_ko()
+                };
                 egui::Frame::NONE.fill(Color32::from_rgb(225, 240, 218)).stroke(Stroke::new(1.0, Color32::from_rgb(145, 195, 138))).inner_margin(egui::Margin::symmetric(10, 4)).show(ui, |ui| {
                     ui.horizontal(|ui| {
                         let _ = ui.small_button("II");
                         ui.colored_label(Color32::from_rgb(22, 138, 42), "✔");
-                        ui.label(egui::RichText::new("시굴격자: 시굴격자 232개 · 총 8,686.58m² · 조사구역의 10.0% (시굴 기준 10%) — 격자...").size(12.0).strong());
+                        ui.label(egui::RichText::new(format!("시굴격자: {shape_lbl} 시굴격자 {trench_cnt}개 · 총 {trench_area:.2}m² · 조사구역의 {ratio_pct:.1}% (시굴 기준 10%)")).size(12.0).strong());
                     });
                 });
             }
@@ -39,6 +48,11 @@ impl StrataAppState {
             self.home_map.viewport.screen_size_px = [f64::from(rect.width()), f64::from(rect.height())];
             if let Some(hp) = response.hover_pos() {
                 self.home_map.cursor_world_xy = s2w(rect, &self.home_map.viewport, hp);
+                if matches!(self.active_tool, MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint) {
+                    self.home_map.update_cursor_snap_preview();
+                } else {
+                    self.home_map.cad.preview_markers_world.clear();
+                }
             }
             if response.hovered() {
                 let sy = ui.input(|i| i.smooth_scroll_delta.y);
@@ -56,7 +70,7 @@ impl StrataAppState {
                     let wxy = s2w(rect, &self.home_map.viewport, cp);
                     if matches!(self.active_tool, MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint | MapToolKind::Measure) {
                         let tool = self.active_tool;
-                        self.home_map.cad.on_left_click(wxy, tool, &mut self.home_map.scene);
+                        self.home_map.on_canvas_left_click(wxy, tool);
                     }
                 }
             }
@@ -281,6 +295,14 @@ impl StrataAppState {
                 let b500 = Rect::from_center_size(bp, Vec2::new(36.0, 15.0));
                 p.rect_filled(b500, 3.0, Color32::WHITE);
                 p.text(b500.center(), egui::Align2::CENTER_CENTER, lbl, egui::FontId::proportional(9.5), Color32::from_rgb(184, 58, 24));
+            }
+        }
+
+        if self.home_map.cad.snap_enabled && self.home_map.cad.snap_preview_enabled {
+            for &pt in &self.home_map.cad.preview_markers_world {
+                let sp = w2s(rect, vp, pt);
+                p.circle_filled(sp, 4.5, Color32::from_rgba_unmultiplied(255, 251, 235, 210));
+                p.circle_stroke(sp, 4.5, Stroke::new(2.0, Color32::from_rgba_unmultiplied(217, 119, 6, 230)));
             }
         }
 

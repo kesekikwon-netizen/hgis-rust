@@ -114,6 +114,7 @@ pub struct KaBeginnerRibbon {
     pub sub_toolbar_visible: bool,
     pub sub_mode: SubToolsMode,
     pub draw_sub_target: DrawSubTarget,
+    pub snap_assist_menu_open: bool,
     pub app_bar: KaAppBarSearch,
 }
 
@@ -124,6 +125,7 @@ impl Default for KaBeginnerRibbon {
             sub_toolbar_visible: false,
             sub_mode: SubToolsMode::None,
             draw_sub_target: DrawSubTarget::SurveyArea,
+            snap_assist_menu_open: false,
             app_bar: KaAppBarSearch::default(),
         }
     }

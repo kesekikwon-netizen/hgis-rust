@@ -6,10 +6,36 @@ pub struct HeritageBadge {
     pub radius_mm: f64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeritageNameBox {
+    pub number: u32,
+    pub name: String,
+    pub center_x_mm: f64,
+    pub center_y_mm: f64,
+    pub width_mm: f64,
+    pub height_mm: f64,
+}
+
+impl HeritageNameBox {
+    #[must_use]
+    pub fn overlaps(&self, other: &Self, margin_mm: f64) -> bool {
+        let half_w = (self.width_mm + other.width_mm) * 0.5 + margin_mm;
+        let half_h = (self.height_mm + other.height_mm) * 0.5 + margin_mm;
+        (self.center_x_mm - other.center_x_mm).abs() < half_w
+            && (self.center_y_mm - other.center_y_mm).abs() < half_h
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct LayoutBadgePlacer;
 
 impl LayoutBadgePlacer {
+    /// `HeritageLayoutNumbers.cpp` (`bfe8dd9`) — 1:5,000 이하 대축척에서 체크 켜짐 시에만 유적 이름으로 표시
+    #[must_use]
+    pub const fn should_render_site_names(scale_denominator: u32, prefer_names_under_5000: bool) -> bool {
+        prefer_names_under_5000 && scale_denominator <= 5_000
+    }
+
     #[must_use]
     pub fn place_non_overlapping_badges(points_mm: &[(u32, f64, f64)], radius_mm: f64) -> Vec<HeritageBadge> {
         let mut placed: Vec<HeritageBadge> = Vec::with_capacity(points_mm.len());
@@ -32,5 +58,118 @@ impl LayoutBadgePlacer {
             });
         }
         placed
+    }
+
+    /// `LayoutBadgePlacer::placeAllBoxes` (`bfe8dd9`) — 가로로 긴 유적 이름 상자끼리 AABB가 겹치지 않게 8방향 링 탐색 배치 (지시선 없음, 슬롯 교환 없음)
+    #[must_use]
+    pub fn place_all_boxes(
+        sites: &[(u32, String, f64, f64, f64, f64)],
+        allowed_rect_mm: Option<(f64, f64, f64, f64)>,
+    ) -> Vec<HeritageNameBox> {
+        const EDGE_MARGIN_MM: f64 = 0.6;
+        const DIAG: f64 = std::f64::consts::FRAC_1_SQRT_2;
+        const DIRS: [(f64, f64); 8] = [
+            (1.0, 0.0),
+            (0.0, -1.0),
+            (-1.0, 0.0),
+            (0.0, 1.0),
+            (DIAG, -DIAG),
+            (-DIAG, -DIAG),
+            (DIAG, DIAG),
+            (-DIAG, DIAG),
+        ];
+        let mut placed: Vec<HeritageNameBox> = Vec::with_capacity(sites.len());
+
+        for (number, name, ox, oy, w, h) in sites {
+            let width_mm = w.max(6.0);
+            let height_mm = h.max(3.5);
+            let fits_bounds = |cx: f64, cy: f64| -> bool {
+                if let Some((min_x, min_y, max_x, max_y)) = allowed_rect_mm {
+                    let hw = width_mm * 0.5 + EDGE_MARGIN_MM;
+                    let hh = height_mm * 0.5 + EDGE_MARGIN_MM;
+                    cx - hw >= min_x && cy - hh >= min_y && cx + hw <= max_x && cy + hh <= max_y
+                } else {
+                    true
+                }
+            };
+
+            let mut chosen = (*ox, *oy);
+            let initial_candidate = HeritageNameBox {
+                number: *number,
+                name: name.clone(),
+                center_x_mm: *ox,
+                center_y_mm: *oy,
+                width_mm,
+                height_mm,
+            };
+            if !fits_bounds(*ox, *oy) || placed.iter().any(|p| initial_candidate.overlaps(p, EDGE_MARGIN_MM)) {
+                'search: for ring in 1..=20 {
+                    let step_x = (width_mm * 0.65 + 1.2) * f64::from(ring);
+                    let step_y = (height_mm * 0.85 + 1.0) * f64::from(ring);
+                    for (dx, dy) in DIRS {
+                        let cx = *ox + dx * step_x;
+                        let cy = *oy + dy * step_y;
+                        if !fits_bounds(cx, cy) {
+                            continue;
+                        }
+                        let cand = HeritageNameBox {
+                            number: *number,
+                            name: name.clone(),
+                            center_x_mm: cx,
+                            center_y_mm: cy,
+                            width_mm,
+                            height_mm,
+                        };
+                        if !placed.iter().any(|p| cand.overlaps(p, EDGE_MARGIN_MM)) {
+                            chosen = (cx, cy);
+                            break 'search;
+                        }
+                    }
+                }
+            }
+
+            placed.push(HeritageNameBox {
+                number: *number,
+                name: name.clone(),
+                center_x_mm: chosen.0,
+                center_y_mm: chosen.1,
+                width_mm,
+                height_mm,
+            });
+        }
+        placed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn name_boxes_never_cover_each_other_and_respect_5000_scale_rule() {
+        assert!(LayoutBadgePlacer::should_render_site_names(5_000, true));
+        assert!(LayoutBadgePlacer::should_render_site_names(2_500, true));
+        assert!(!LayoutBadgePlacer::should_render_site_names(5_001, true));
+        assert!(!LayoutBadgePlacer::should_render_site_names(2_500, false));
+
+        let sites = vec![
+            (1, "경주 황남동 고분군".to_owned(), 50.0, 50.0, 24.0, 5.0),
+            (2, "경주 인왕동 사지".to_owned(), 51.0, 50.5, 22.0, 5.0),
+            (3, "경주 월성 해자".to_owned(), 50.5, 50.2, 20.0, 5.0),
+        ];
+        let boxes = LayoutBadgePlacer::place_all_boxes(&sites, Some((10.0, 10.0, 190.0, 260.0)));
+        assert_eq!(boxes.len(), 3);
+        for i in 0..boxes.len() {
+            for j in (i + 1)..boxes.len() {
+                assert!(
+                    !boxes[i].overlaps(&boxes[j], 0.5),
+                    "boxes {} and {} overlapped: {:?} vs {:?}",
+                    i,
+                    j,
+                    boxes[i],
+                    boxes[j]
+                );
+            }
+        }
     }
 }

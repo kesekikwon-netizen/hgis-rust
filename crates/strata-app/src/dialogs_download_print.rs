@@ -1,4 +1,5 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+use strata_geo::trench_grid::{TrenchShapeKind, TrenchStandardLength};
 
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::{render_strata_modal_header, ActiveModalDialog};
@@ -139,18 +140,31 @@ pub fn render_download_and_print_dialogs(
         ActiveModalDialog::TrenchGenerator => {
             egui::Window::new("ka_modal_trench").title_bar(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [60.0, 20.0]).default_width(360.0).show(ctx, |ui| {
                 render_strata_modal_header(ui, "시굴격자 속성 - Strata", open);
-                let mut auto_place = true;
-                ui.checkbox(&mut auto_place, egui::RichText::new("지금 그린(또는 선택한) 조사구역에 자동 배치").size(13.0));
+                ui.checkbox(&mut app.modals.trench_auto_place, egui::RichText::new("지금 그린(또는 선택한) 조사구역에 자동 배치").size(13.0));
                 ui.horizontal(|ui| { ui.label(egui::RichText::new("조사 종류").size(13.0)); let _ = ui.add_sized([260.0, 28.0], egui::Button::new("시굴조사 — 전체 면적의 10%             ▼")); });
                 let mut slope_align = false;
                 ui.checkbox(&mut slope_align, egui::RichText::new("지형 사면 방향으로 넣기(등고선 직교)").size(13.0).color(Color32::from_rgb(130, 128, 120)));
                 ui.label(egui::RichText::new("평지(평균 경사 0.4%)라 남북으로 깝니다. 방위 칸에 다른").size(11.5).color(Color32::from_rgb(95, 94, 88)));
-                ui.horizontal(|ui| { ui.label(egui::RichText::new("모양").size(13.0)); let _ = ui.add_sized([286.0, 28.0], egui::Button::new("곧은 트렌치                                     ▼")); });
-                let mut grid_snap = false;
-                ui.checkbox(&mut grid_snap, egui::RichText::new("좌표격자에 맞추기").size(13.0));
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("모양").size(13.0));
+                    let shape_lbl = format!("{}  ▼", app.modals.trench_shape.label_ko());
+                    if ui.add_sized([286.0, 28.0], egui::Button::new(shape_lbl)).clicked() {
+                        let idx = TrenchShapeKind::ALL.iter().position(|&k| k == app.modals.trench_shape).unwrap_or(0);
+                        app.modals.trench_shape = TrenchShapeKind::ALL[(idx + 1) % TrenchShapeKind::ALL.len()];
+                    }
+                });
+                if app.modals.trench_shape == TrenchShapeKind::Straight {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("트렌치 길이").size(13.0));
+                        for len_opt in [TrenchStandardLength::M20, TrenchStandardLength::M15, TrenchStandardLength::M10] {
+                            ui.radio_value(&mut app.modals.trench_length, len_opt, egui::RichText::new(len_opt.label_ko()).size(13.0));
+                        }
+                    });
+                }
+                ui.checkbox(&mut app.modals.trench_grid_snap, egui::RichText::new("좌표격자에 맞추기").size(13.0));
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("회전(방위)").size(13.0));
-                    let _ = ui.add_sized([110.0, 28.0], egui::Button::new("0.00 °             ↕"));
+                    let _ = ui.add_sized([110.0, 28.0], egui::Button::new(format!("{:.2} °             ↕", app.modals.trench_azimuth_deg)));
                     let (cr, _) = ui.allocate_exact_size(Vec2::new(22.0, 22.0), egui::Sense::hover());
                     let cp = ui.painter_at(cr);
                     cp.circle_stroke(cr.center(), 9.0, Stroke::new(1.2, Color32::from_rgb(120, 118, 110)));
@@ -159,13 +173,27 @@ pub fn render_download_and_print_dialogs(
                     ui.label(egui::RichText::new("위가 북쪽입니다").size(12.0).color(Color32::from_rgb(95, 94, 88)));
                 });
                 ui.add_space(6.0);
+                let trench_count = app.home_map.real_survey.trenches.len().max(1);
+                let total_trench_area: f64 = app.home_map.real_survey.trenches.iter().map(|t| t.area_m2).sum();
+                let survey_area: f64 = app.home_map.real_survey.survey_area_m2.max(1.0);
+                let ratio_pct = (total_trench_area / survey_area * 100.0).clamp(0.0, 100.0);
+                let shape_desc = if app.modals.trench_shape.arm_bend().is_some() {
+                    format!("{} {}개", app.modals.trench_shape.label_ko(), trench_count)
+                } else {
+                    format!("{} 트렌치 {}개", app.modals.trench_length.label_ko(), trench_count)
+                };
+                let summary_text = format!(
+                    "시굴조사 · {shape_desc} · 폭 2 m · 둑 10 m ·\n총 {total_trench_area:.2}㎡ · 비율 {ratio_pct:.1}% (목표 10%) · 방위 {:.0}°",
+                    app.modals.trench_azimuth_deg
+                );
                 egui::Frame::NONE.fill(Color32::from_rgb(225, 240, 218)).stroke(Stroke::new(1.0, Color32::from_rgb(155, 195, 145))).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 8)).show(ui, |ui| {
-                    ui.label(egui::RichText::new("시굴조사 · 트렌치 232개 · 폭 2 m · 최대 길이\n18.85 m · 둑 10 m · 총 8,686.58m² · 비율 10.0%").size(12.5).strong().color(Color32::from_rgb(28, 72, 32)));
+                    ui.label(egui::RichText::new(summary_text).size(12.5).strong().color(Color32::from_rgb(28, 72, 32)));
                 });
                 ui.add_space(4.0);
                 let (bar_r, _) = ui.allocate_exact_size(Vec2::new(340.0, 6.0), egui::Sense::hover());
                 ui.painter().rect_filled(bar_r, 3.0, Color32::from_rgb(222, 220, 210));
-                ui.painter().rect_filled(Rect::from_min_size(bar_r.min, Vec2::new(170.0, 6.0)), 3.0, Color32::from_rgb(35, 35, 32));
+                let fill_w = (340.0_f32 * (ratio_pct as f32 / 20.0_f32)).clamp(12.0_f32, 340.0_f32);
+                ui.painter().rect_filled(Rect::from_min_size(bar_r.min, Vec2::new(fill_w, 6.0)), 3.0, Color32::from_rgb(35, 35, 32));
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("0").size(10.5));
                     ui.add_space(130.0);
@@ -173,10 +201,30 @@ pub fn render_download_and_print_dialogs(
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| { ui.label(egui::RichText::new("20%").size(10.5)); });
                 });
                 ui.label(egui::RichText::new("깐 격자는 맵에서 끌고 옮깁니다. 개별 편집은 트렌치 하나\n이동·삭제입니다").size(11.5).color(Color32::from_rgb(95, 94, 88)));
-                ui.horizontal(|ui| { let _ = ui.add_sized([88.0, 28.0], egui::Button::new("개별 편집")); let _ = ui.add_sized([88.0, 28.0], egui::Button::new("전체 이동")); });
+                ui.horizontal(|ui| {
+                    let _ = ui.add_sized([88.0, 28.0], egui::Button::new("개별 편집"));
+                    if ui.add_sized([88.0, 28.0], egui::Button::new("전체 이동")).clicked() {
+                        let snap = if app.modals.trench_grid_snap { Some(5.0) } else { None };
+                        app.home_map.real_survey.translate_all_trenches(5.0, 0.0, snap);
+                        app.is_dirty = true;
+                    }
+                });
                 ui.horizontal(|ui| {
                     let b1 = egui::Button::new(egui::RichText::new("구역에 깔기").color(Color32::WHITE).strong()).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(104.0, 32.0));
-                    if ui.add(b1).clicked() { app.modals.active = None; }
+                    if ui.add(b1).clicked() {
+                        let (count, _, _) = app.home_map.real_survey.apply_trench_plan(
+                            app.modals.trench_length,
+                            app.modals.trench_shape,
+                            app.modals.trench_grid_snap,
+                        );
+                        app.home_map.draw_guide_message = Some(format!(
+                            "시굴격자 {}개를 배치했습니다 ({})",
+                            count,
+                            app.modals.trench_shape.label_ko()
+                        ));
+                        app.is_dirty = true;
+                        app.modals.active = None;
+                    }
                     let _ = ui.add_sized([88.0, 32.0], egui::Button::new("맵에 찍기"));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.add_sized([58.0, 32.0], egui::Button::new("닫기")).clicked() { app.modals.active = None; }

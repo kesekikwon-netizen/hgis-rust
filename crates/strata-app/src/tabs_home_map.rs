@@ -1,11 +1,11 @@
-use strata_canvas2d::cad_interaction::CadSessionController;
+use strata_canvas2d::cad_interaction::{snap_ring_to_nearest_lines, CadSessionController};
 use strata_canvas2d::canvas_painter::MapSceneModel;
 use strata_canvas2d::map_tools::MapToolKind;
 use strata_canvas2d::viewport::ViewportTransform;
 use strata_net::address_search::sido_presets;
 use strata_net::tile_fetcher::BasemapSource;
 
-use crate::real_survey::RealSurveyData;
+use crate::real_survey::{ring_area_m2, RealSurveyData};
 
 #[derive(Debug, Clone)]
 pub struct HomeMapTabState {
@@ -75,5 +75,98 @@ impl HomeMapTabState {
     pub fn fit_to_survey(&mut self) {
         self.viewport.center_xy = self.real_survey.survey_center;
         self.viewport.meters_per_pixel = 2.55;
+    }
+
+    #[must_use]
+    pub fn snap_reference_rings(&self, around_xy: [f64; 2], radius_m: f64) -> Vec<Vec<[f64; 2]>> {
+        let r_sq = radius_m * radius_m;
+        let mut out = Vec::new();
+        for p in &self.real_survey.cadastral_parcels {
+            if p.ring.first().is_some_and(|pt| {
+                let dx = pt[0] - around_xy[0];
+                let dy = pt[1] - around_xy[1];
+                dx * dx + dy * dy <= r_sq
+            }) {
+                out.push(p.ring.clone());
+            }
+        }
+        for h in &self.real_survey.heritage_polys {
+            if h.ring.first().is_some_and(|pt| {
+                let dx = pt[0] - around_xy[0];
+                let dy = pt[1] - around_xy[1];
+                dx * dx + dy * dy <= r_sq
+            }) {
+                out.push(h.ring.clone());
+            }
+        }
+        out
+    }
+
+    pub fn update_cursor_snap_preview(&mut self) {
+        let refs = self.snap_reference_rings(self.cursor_world_xy, 220.0);
+        let mupp = self.viewport.meters_per_pixel;
+        self.cad
+            .update_cursor_preview(self.cursor_world_xy, &self.scene, &refs, mupp);
+    }
+
+    pub fn on_canvas_left_click(&mut self, world_xy: [f64; 2], tool: MapToolKind) {
+        let refs = self.snap_reference_rings(world_xy, 300.0);
+        let mupp = self.viewport.meters_per_pixel;
+        self.cad
+            .on_left_click_with_refs(world_xy, tool, &mut self.scene, &refs, mupp);
+    }
+
+    /// `SnapTraceOps::snapCanvasShapesToNearestLines` 1:1 대응
+    pub fn snap_drawn_shapes_to_nearest_lines(&mut self) -> (usize, usize, usize) {
+        if self.real_survey.survey_rings.is_empty() && self.scene.polygons.is_empty() {
+            self.draw_guide_message = Some(
+                "먼저 지적도·도면 위에 도형을 그리거나 도형선택으로 도형을 고르세요.".to_owned(),
+            );
+            return (0, 0, 0);
+        }
+        let refs = self.snap_reference_rings(self.real_survey.survey_center, 800.0);
+        let mupp = self.viewport.meters_per_pixel;
+        let mut changed_count = 0usize;
+        let mut total_moved = 0usize;
+        let mut total_inserted = 0usize;
+
+        if let Some(last_ring) = self.real_survey.survey_rings.last_mut() {
+            let (snapped, moved, ins) = snap_ring_to_nearest_lines(last_ring, true, &refs, mupp);
+            if moved > 0 || ins > 0 {
+                *last_ring = snapped;
+                changed_count += 1;
+                total_moved += moved;
+                total_inserted += ins;
+            }
+        }
+        if changed_count > 0 {
+            self.real_survey.survey_area_m2 = self
+                .real_survey
+                .survey_rings
+                .iter()
+                .map(|r| ring_area_m2(r))
+                .sum();
+        }
+        for poly in &mut self.scene.polygons {
+            if poly.layer_key == "survey_area" || poly.layer_key == "feature_poly" {
+                let (snapped, moved, ins) =
+                    snap_ring_to_nearest_lines(&poly.world_pts, true, &refs, mupp);
+                if moved > 0 || ins > 0 {
+                    poly.world_pts = snapped;
+                    changed_count += 1;
+                    total_moved += moved;
+                    total_inserted += ins;
+                }
+            }
+        }
+        self.draw_guide_message = Some(if changed_count > 0 {
+            format!(
+                "도형을 가장 가까운 선에 붙였습니다 (꼭짓점 {total_moved}개 맞춤 · 사이점 {total_inserted}개 채움). Ctrl+Z로 되돌릴 수 있습니다."
+            )
+        } else {
+            "이미 가장 가까운 선에 붙어 있거나 주변에 붙일 기준 선(지적·도면)이 없습니다."
+                .to_owned()
+        });
+        (changed_count, total_moved, total_inserted)
     }
 }

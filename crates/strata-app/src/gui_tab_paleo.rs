@@ -1,6 +1,7 @@
 use eframe::egui;
 
 use crate::app_state::{MainTab, StrataAppState};
+use crate::dialogs_modal::ActiveModalDialog;
 
 impl StrataAppState {
     /// `KaPaleoStudio.cpp:36-260` — 3단 분할(`layersCard` | `centerSplit`[고지형 분류도 + 단면도] | `rightScroll`[6대 자료·7대 범례·요약])
@@ -15,19 +16,23 @@ impl StrataAppState {
                     ui.strong("6대 입력 자료 현황");
                     ui.colored_label(
                         egui::Color32::from_rgb(21, 128, 61),
-                        "● 국토지리원DEM · ● 토양도 · ● 지질도\n● 수계도 · ● KIGAM수문 · ● 시추(12공)",
+                        format!(
+                            "● 국토지리원DEM · ● 토양도 · ● 지질도({}건)\n● 수계도 · ● KIGAM수문 · ● 시추({}공·디클러스터링)",
+                            self.paleo_3d.geology_feature_count,
+                            self.paleo_3d.declustered_borehole_count
+                        ),
                     );
                     ui.add_space(6.0);
                     if ui
                         .button("수치지질도 · 시추주상도(지반) · KIGAM 별도 내려받기")
                         .clicked()
                     {
-                        self.paleo_3d.run_sample_10km_analysis();
-                        self.home_map.draw_guide_message = Some(
-                            "반경 5km 지오인포 시추공·KIGAM 수치지질도·수계망 자료를 갱신했습니다."
-                                .to_owned(),
-                        );
+                        self.modals.active = Some(ActiveModalDialog::PaleoSourceDownload);
                     }
+                    ui.checkbox(
+                        &mut self.paleo_3d.show_imhof_slope_overlay,
+                        "Imhof 다중방위 음영·경사도 중첩 시각화",
+                    );
                     let btn_run = egui::Button::new(
                         egui::RichText::new("준비된 자료로 고지형 분석 실행")
                             .color(egui::Color32::WHITE)
@@ -97,6 +102,10 @@ impl StrataAppState {
                             ui.label(format!("— {desc}"));
                         });
                     }
+                    ui.separator();
+                    ui.strong("시추공 충적층 두께 및 수치지질도(1:5만) 범례");
+                    ui.label("• 충적층 두께: ● <2m(연청) · ● 2~5m(황갈) · ● 5~10m(주황) · ● >10m(적갈)");
+                    ui.label("• 지질(KIGAM): Qa 제4기 충적층 · Qr 하안단구층 · Ks 경상누층군 · Kgr 불국사화강암");
                     ui.separator();
                     ui.strong("조사구역 고지형·기본층서 판독 요약 및 근거");
                     let mut summary = self
@@ -175,6 +184,16 @@ impl StrataAppState {
             );
             let painter = ui.painter_at(map_rect);
             painter.rect_filled(map_rect, 4.0, egui::Color32::from_rgb(232, 238, 226));
+            if self.paleo_3d.show_imhof_slope_overlay && self.paleo_3d.imhof_slope_rgba.len() == 8 * 8 * 4 {
+                let imhof_img = egui::ColorImage::from_rgba_unmultiplied([8, 8], &self.paleo_3d.imhof_slope_rgba);
+                let imhof_tex = ctx.load_texture("paleo_imhof_slope", imhof_img, egui::TextureOptions::LINEAR);
+                painter.image(
+                    imhof_tex.id(),
+                    map_rect,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 255, 165),
+                );
+            }
             // 구하도(청색 띠) 및 자연제방(황토색 미고지) 시각화
             painter.rect_filled(
                 egui::Rect::from_min_size(
@@ -199,7 +218,15 @@ impl StrataAppState {
                 [p_a, p_b],
                 egui::Stroke::new(2.0, egui::Color32::from_rgb(181, 87, 58)),
             );
-            for (i, code) in ["BH-01", "BH-02", "BH-03", "BH-04"].iter().enumerate() {
+            for (i, code) in [
+                "BH-01 · 충적 2.6m",
+                "BH-02 · 충적 3.6m",
+                "BH-03 · 충적 4.6m",
+                "BH-04 · 충적 2.6m",
+            ]
+            .iter()
+            .enumerate()
+            {
                 let t = (i as f32 + 0.5) / 4.0;
                 let pos = p_a.lerp(p_b, t);
                 painter.circle_filled(pos, 6.0, egui::Color32::from_rgb(20, 20, 19));
@@ -207,7 +234,7 @@ impl StrataAppState {
                     pos + egui::vec2(0.0, -14.0),
                     egui::Align2::CENTER_BOTTOM,
                     *code,
-                    egui::FontId::proportional(11.5),
+                    egui::FontId::proportional(11.0),
                     egui::Color32::from_rgb(20, 20, 19),
                 );
             }
