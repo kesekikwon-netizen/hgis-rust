@@ -169,7 +169,47 @@ impl StrataAppState {
 
     pub const HGIS_STANDARD_DPI: f64 = 96.0;
     pub const HGIS_METERS_PER_INCH: f64 = 0.0254;
+    pub const HGIS_FALLBACK_SCALE_DENOM: f64 = 1_000.0;
     pub const HGIS_PRESET_SCALES: [u32; 6] = [100, 500, 1_000, 2_500, 5_000, 10_000];
+    pub const HGIS_PRESET_SCALES_7: [u32; 7] = [500, 1_000, 2_500, 5_000, 10_000, 25_000, 50_000];
+
+    /// C++ `KaStatusBar::updateCoordinates(const QgsPointXY &point)` 1:1 대응:
+    /// 천단위 콤마 및 소수점 3자리(밀리미터 해상도) 고정폭 포맷팅 (`"X 219,897.093  Y 361,622.354"`).
+    /// 부동소수점 오염(`NaN`/`Infinity`) 시 `"X ---.---  Y ---.---"` 반환.
+    #[must_use]
+    pub fn format_status_bar_coordinates(x: f64, y: f64) -> String {
+        if !x.is_finite() || !y.is_finite() {
+            return "X ---.---  Y ---.---".to_owned();
+        }
+        fn fmt_coord(val: f64) -> String {
+            let sign = if val < 0.0 { "-" } else { "" };
+            let abs_v = val.abs();
+            let rounded_millis = (abs_v * 1000.0).round() as u64;
+            let int_part = rounded_millis / 1000;
+            let frac_part = rounded_millis % 1000;
+            let digits = int_part.to_string();
+            let mut rev_commas = String::with_capacity(digits.len() + digits.len() / 3);
+            for (idx, ch) in digits.chars().rev().enumerate() {
+                if idx > 0 && idx % 3 == 0 {
+                    rev_commas.push(',');
+                }
+                rev_commas.push(ch);
+            }
+            let int_str: String = rev_commas.chars().rev().collect();
+            format!("{sign}{int_str}.{frac_part:03}")
+        }
+        format!("X {:>11}  Y {:>11}", fmt_coord(x), fmt_coord(y))
+    }
+
+    /// C++ `KaStatusBar::computeRepresentativeScale` 폴백 버전 — 비정상 입력 시 `1000.0` (`1:1,000`) 반환
+    #[must_use]
+    pub fn compute_representative_scale_or_fallback(
+        meters_per_pixel: f64,
+        screen_dpi: f64,
+    ) -> f64 {
+        Self::compute_representative_scale(meters_per_pixel, screen_dpi)
+            .unwrap_or(Self::HGIS_FALLBACK_SCALE_DENOM)
+    }
 
     /// C++ `KaStatusBar::computeRepresentativeScale(metersPerPixel, screenDpi)` — 0 나누기/NaN 방어 및 1:N 축척 분모 산출
     #[must_use]

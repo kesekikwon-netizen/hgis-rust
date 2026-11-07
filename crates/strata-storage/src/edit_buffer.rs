@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use strata_types::schema::DomainLayerKey;
 
+/// C++ `HGIS_FIRST_TEMP_FID` (-1) — 미저장 신규 피처 최초 음수 임시 FID 상수
+pub const HGIS_FIRST_TEMP_FID: i64 = -1;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FeatureRecord {
     pub fid: i64,
@@ -105,5 +108,17 @@ mod tests {
         assert!(buf.redo());
         assert_eq!(buf.features.len(), 1);
         assert_eq!(buf.features[0].wkt_geom, wkt);
+
+        // TestKaLayerEditBuffer::testTempFidAndCommitPromotion:
+        // 3 unsaved features get -1, -2, -3 and promote to 1, 2, 3 on commit
+        let mut commit_buf = LayerEditBuffer::new(DomainLayerKey::FeaturePoly);
+        let id1 = commit_buf.add_unsaved_feature(wkt.clone(), BTreeMap::new());
+        let id2 = commit_buf.add_unsaved_feature(wkt.clone(), BTreeMap::new());
+        let id3 = commit_buf.add_unsaved_feature(wkt, BTreeMap::new());
+        assert_eq!([id1, id2, id3], [-1, -2, -3]);
+
+        commit_buf.assign_positive_ids_on_commit();
+        let promoted: Vec<i64> = commit_buf.features.iter().map(|f| f.fid).collect();
+        assert_eq!(promoted, vec![1, 2, 3]);
     }
 }

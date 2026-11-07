@@ -3,6 +3,15 @@ use strata_types::error::{StrataError, StrataResult};
 
 pub const UTF8_BOM_BYTES: [u8; 3] = [0xEF, 0xBB, 0xBF];
 
+/// C++ `HGIS_MAX_DXF_FILE_SIZE_BYTES` (256 MB) — DXF 최대 허용 파일 크기 상수
+pub const HGIS_MAX_DXF_FILE_SIZE_BYTES: usize = 268_435_456;
+
+/// C++ `HGIS_MIN_CSV_COLUMNS` (3) — CSV 기준점 최소 컬럼 수 (`ID, X, Y`)
+pub const HGIS_MIN_CSV_COLUMNS: usize = 3;
+
+/// C++ `HGIS_DXF_TEXT_SEARCH_RADIUS_M` (2.0m) — 2D DXF `POINT`(`Z == 0.0`) 주변 수치 `TEXT` 검색 탐색 반경
+pub const HGIS_DXF_TEXT_SEARCH_RADIUS_M: f64 = 2.0;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ControlPointRow {
     pub point_id: String,
@@ -216,6 +225,113 @@ pub fn parse_dxf_block_inserts(
     blocks
 }
 
+/// C++ `KaDxfSpotImporter::importSpotElevations` 1:1 대응:
+/// DXF `ENTITIES` 내 `POINT` 및 `TEXT`/`MTEXT` 엔티티를 스캔하여 그룹코드 `10`(X), `20`(Y), `30`(Z)을 파싱한다.
+/// `POINT`의 Z값이 누락되었거나 `0.0`일 때 반경 `HGIS_DXF_TEXT_SEARCH_RADIUS_M`(`2.0m`) 이내에서 가장 가까운 수치 `TEXT`(그룹코드 `1`)를 찾아 표고로 승격한다.
+#[must_use]
+pub fn extract_dxf_spot_elevations_with_text_fallback(dxf_bytes: &[u8]) -> Vec<[f64; 3]> {
+    if dxf_bytes.len() > HGIS_MAX_DXF_FILE_SIZE_BYTES {
+        return Vec::new();
+    }
+    let text = decode_korean_text(dxf_bytes);
+    let lines: Vec<&str> = text.lines().map(str::trim).collect();
+
+    let mut raw_points: Vec<(f64, f64, f64)> = Vec::new();
+    let mut text_labels: Vec<(f64, f64, f64)> = Vec::new();
+
+    let mut entity_kind = String::new();
+    let mut cur_x: Option<f64> = None;
+    let mut cur_y: Option<f64> = None;
+    let mut cur_z: Option<f64> = None;
+    let mut cur_text_val: Option<f64> = None;
+
+    let flush_entity = |kind: &str,
+                        x: Option<f64>,
+                        y: Option<f64>,
+                        z: Option<f64>,
+                        txt_z: Option<f64>,
+                        pts: &mut Vec<(f64, f64, f64)>,
+                        txts: &mut Vec<(f64, f64, f64)>| {
+        let Some(px) = x else { return };
+        let Some(py) = y else { return };
+        if kind.eq_ignore_ascii_case("POINT") {
+            pts.push((px, py, z.unwrap_or(0.0)));
+        } else if kind.eq_ignore_ascii_case("TEXT") || kind.eq_ignore_ascii_case("MTEXT") {
+            if let Some(tz) = txt_z {
+                txts.push((px, py, tz));
+            } else if let Some(pz) = z {
+                if pz.abs() > 1e-9 {
+                    txts.push((px, py, pz));
+                }
+            }
+        }
+    };
+
+    let mut i = 0;
+    while i + 1 < lines.len() {
+        let code = lines[i];
+        let val = lines[i + 1];
+        if code == "0" {
+            if !entity_kind.is_empty() {
+                flush_entity(
+                    &entity_kind,
+                    cur_x,
+                    cur_y,
+                    cur_z,
+                    cur_text_val,
+                    &mut raw_points,
+                    &mut text_labels,
+                );
+            }
+            entity_kind = val.to_owned();
+            cur_x = None;
+            cur_y = None;
+            cur_z = None;
+            cur_text_val = None;
+        } else {
+            match code {
+                "10" => cur_x = val.parse::<f64>().ok(),
+                "20" => cur_y = val.parse::<f64>().ok(),
+                "30" | "38" => cur_z = val.parse::<f64>().ok(),
+                "1" => cur_text_val = val.trim().parse::<f64>().ok(),
+                _ => {}
+            }
+        }
+        i += 2;
+    }
+    if !entity_kind.is_empty() {
+        flush_entity(
+            &entity_kind,
+            cur_x,
+            cur_y,
+            cur_z,
+            cur_text_val,
+            &mut raw_points,
+            &mut text_labels,
+        );
+    }
+
+    let r_sq = HGIS_DXF_TEXT_SEARCH_RADIUS_M * HGIS_DXF_TEXT_SEARCH_RADIUS_M;
+    let mut out = Vec::new();
+    for (px, py, pz) in raw_points {
+        if pz.abs() > 1e-9 && pz > -500.0 && pz < 9000.0 {
+            out.push([px, py, pz]);
+        } else {
+            let mut best: Option<(f64, f64)> = None;
+            for &(tx, ty, tz) in &text_labels {
+                let d2 = (px - tx).powi(2) + (py - ty).powi(2);
+                if d2 <= r_sq && best.is_none_or(|(best_d2, _)| d2 < best_d2) {
+                    best = Some((d2, tz));
+                }
+            }
+            if let Some((_, fallback_z)) = best {
+                out.push([px, py, fallback_z]);
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,5 +369,14 @@ mod tests {
         assert_eq!(result.points[0].point_id, "CP01");
         assert!((result.points[0].x - 200_123.45).abs() < 1e-6);
         assert_eq!(result.points[1].point_id, "CP03");
+
+        // TestKaDxfSpotImporter::testTextElevationFallback:
+        // POINT (100.0, 200.0, 0.0) + TEXT at 0.5m distance with "78.45" -> elevated to 78.45m
+        let dxf_2d_with_text = "0\nPOINT\n10\n100.0\n20\n200.0\n30\n0.0\n0\nTEXT\n10\n100.3\n20\n200.4\n1\n78.45\n";
+        let spots = extract_dxf_spot_elevations_with_text_fallback(dxf_2d_with_text.as_bytes());
+        assert_eq!(spots.len(), 1);
+        assert!((spots[0][0] - 100.0).abs() < 1e-6);
+        assert!((spots[0][1] - 200.0).abs() < 1e-6);
+        assert!((spots[0][2] - 78.45).abs() < 1e-6);
     }
 }
