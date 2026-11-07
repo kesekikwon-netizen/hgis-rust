@@ -4,6 +4,12 @@ use serde::{Deserialize, Serialize};
 pub const HGIS_NODATA_FLOAT: f64 = -9999.0;
 pub const EDT_INF: f64 = 1.0e20;
 
+/// C++ `HGIS_TPI_DEFAULT_RADIUS_M` (50.0m) — 기본 지형위치지수(TPI) 분석 반경 상수
+pub const HGIS_TPI_DEFAULT_RADIUS_M: f64 = 50.0;
+
+/// C++ `HGIS_MAX_EDT_DISTANCE_M` (10,000.0m) — 하천 픽셀 부재 시 최대 거리 클램프 상수 (10km)
+pub const HGIS_MAX_EDT_DISTANCE_M: f64 = 10_000.0;
+
 /// C++ `RemTpiClassifier::PaleoLandformType` — 7대 고지형 분류 및 NoData
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PaleoLandformType {
@@ -226,7 +232,7 @@ pub fn compute_river_distance_edt(tf: &GridTransform, river_mask: &[u8]) -> Vec<
         }
     }
     if river_pts.is_empty() {
-        return vec![1000.0; n];
+        return vec![HGIS_MAX_EDT_DISTANCE_M; n];
     }
     (0..n)
         .into_par_iter()
@@ -488,5 +494,26 @@ mod tests {
         let val = compute_idw_point_with_radius(100.0, 200.0, &pts, HGIS_IDW_DEFAULT_POWER, 500.0);
         assert_eq!(val, 35.5);
         assert_eq!((val - 35.5).abs(), 0.0);
+
+        // TestKaRiverEdtCalculator::testEmptyRiverMaskClamping: all-zero mask clamps to 10000.0m
+        let tf_edt = GridTransform {
+            origin_x: 0.0,
+            origin_y: 100.0,
+            cell_size: 5.0,
+            width: 21,
+            height: 21,
+        };
+        let empty_mask = vec![0_u8; 21 * 21];
+        let edt_empty = compute_river_distance_edt(&tf_edt, &empty_mask);
+        assert_eq!(edt_empty.len(), 21 * 21);
+        assert!((edt_empty[0] - HGIS_MAX_EDT_DISTANCE_M).abs() < 1e-6);
+
+        // TestKaIntegralImageTpi::testPeakCellPositiveTpi:
+        // 25.0m flat plain with a single 30.0m peak at center (10, 10) -> TPI in +4.8..=5.0m
+        let mut flat_with_peak = vec![25.0_f64; 21 * 21];
+        flat_with_peak[10 * 21 + 10] = 30.0;
+        let tpi = compute_tpi_integral_image(&tf_edt, &flat_with_peak, HGIS_TPI_DEFAULT_RADIUS_M);
+        let center_tpi = tpi[10 * 21 + 10];
+        assert!(center_tpi > 4.8 && center_tpi <= 5.0);
     }
 }
