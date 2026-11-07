@@ -426,70 +426,6 @@ impl ThemeTokens {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn paper_look_tokens_satisfy_wcag_contrast_and_clay_accent() {
-        let opts = DisplayOptions {
-            paper_look: true,
-            ..Default::default()
-        };
-        let t = ThemeTokens::for_options(&opts);
-        assert_eq!(t.accent, [0xB5, 0x57, 0x3A, 0xFF]);
-        assert_eq!(t.dialog_ground, [0xFA, 0xF9, 0xF5, 0xFF]);
-        assert!(t.contrast_ratio(t.ink_muted, t.surface) >= HGIS_WCAG_AA_MIN_CONTRAST);
-        assert!(t.contrast_ratio(t.primary_text, t.primary) >= HGIS_WCAG_AA_MIN_CONTRAST);
-    }
-
-    #[test]
-    fn test_large_font_mode_12pt_to_15pt_and_paper_bg_f5f3ed_fg_222222_wcag_13_72() {
-        let base_opts = DisplayOptions::default();
-        assert_eq!(base_opts.font_point_size(), 12);
-        let large_opts = DisplayOptions {
-            large_text: true,
-            ..Default::default()
-        };
-        assert_eq!(large_opts.font_point_size(), 15);
-        assert!(
-            ((f64::from(base_opts.font_point_size()) * HGIS_FONT_LARGE_RATIO) - 15.0).abs() < 1e-9
-        );
-
-        let ratio = ThemeTokens::compute_wcag_contrast_ratio(
-            [0x22, 0x22, 0x22, 0xFF],
-            [0xF5, 0xF3, 0xED, 0xFF],
-        );
-        assert!(
-            ratio >= 13.7,
-            "expected >= 13.7 contrast ratio, got {ratio}"
-        );
-        assert!(ratio >= HGIS_WCAG_AA_MIN_CONTRAST);
-        assert!(ratio >= HGIS_WCAG_AAA_MIN_CONTRAST);
-    }
-
-    #[test]
-    fn test_three_kingdoms_color_mapping_and_era_presets() {
-        // TestKaArchaeologicalThemePreset::testThreeKingdomsColorMapping:
-        // EraPreset::ThreeKingdoms -> #2C3E50 (RGB: 44, 62, 80)
-        assert_eq!(EraPreset::ThreeKingdoms.standard_rgb(), [44, 62, 80]);
-        assert_eq!(EraPreset::ThreeKingdoms.hex_color(), "#2C3E50");
-        assert_eq!(EraPreset::Paleolithic.standard_rgb(), [110, 44, 0]);
-        assert_eq!(EraPreset::BronzeAge.standard_rgb(), [211, 84, 0]);
-        assert_eq!(EraPreset::Goryeo.standard_rgb(), [17, 120, 100]);
-
-        let dwelling =
-            ArchaeologicalFeatureStyleRule::for_feature_type("Dwelling", EraPreset::ThreeKingdoms);
-        assert_eq!(dwelling.stroke_rgb, [44, 62, 80]);
-        assert!((dwelling.outline_width_mm - 0.35).abs() < 1e-6);
-
-        let kiln =
-            ArchaeologicalFeatureStyleRule::for_feature_type("Kiln", EraPreset::ThreeKingdoms);
-        assert_eq!(kiln.fill_rgb, [0xE7, 0x4C, 0x3C]);
-        assert!((kiln.fill_opacity - 0.70).abs() < 1e-6);
-    }
-}
-
 /// 고고학 9대 시대별 표준 테마 프리셋 (C++ `EraPreset` & `HGIS_ERA_STANDARD_COLORS`)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EraPreset {
@@ -605,5 +541,201 @@ impl ArchaeologicalFeatureStyleRule {
                 hatch_pattern: "SolidPattern",
             },
         }
+    }
+}
+
+impl ColorTheme {
+    /// 색상 테마 저장 키 (C++ `KaTheme::colorThemeKey`)
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::SkySnow => "sky",
+            Self::BoltYellow => "bolt",
+            Self::BlossomPastel => "blossom",
+        }
+    }
+
+    /// 색상 테마 저장 키로부터 열거형 복원 (C++ `KaTheme::colorThemeFromKey`)
+    #[must_use]
+    pub fn from_key(key: &str) -> Self {
+        match key.trim() {
+            "sky" => Self::SkySnow,
+            "bolt" => Self::BoltYellow,
+            "blossom" => Self::BlossomPastel,
+            _ => Self::Default,
+        }
+    }
+}
+
+/// 스플래시 지층 단면 3차 베지어 곡선 데이터 (C++ `StrataLayerCurve` in `KaSplashStrata.cpp`)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StrataLayerCurve {
+    pub layer_color_hex: &'static str,
+    pub start_pt: [f64; 2],
+    pub control_pt1: [f64; 2],
+    pub control_pt2: [f64; 2],
+    pub end_pt: [f64; 2],
+}
+
+/// OutCubic 이징 함수: `1.0 - (1.0 - clamp(x, 0, 1))^3` (C++ `ease` in `KaSplashStrata.cpp`)
+#[must_use]
+pub fn ease_out_cubic(x: f64) -> f64 {
+    let t = x.clamp(0.0, 1.0);
+    1.0 - (1.0 - t).powi(3)
+}
+
+/// 스플래시 지층 경계선 `index` (`0..4`)의 시간(`seconds`)에 따른 진행 비율 (`0.0..=1.0`)
+/// (C++ `KaSplashStrata::boundaryReveal` 1:1 대응)
+#[must_use]
+pub fn splash_boundary_reveal(index: usize, seconds: f64) -> f64 {
+    ease_out_cubic((seconds - 0.4 - 0.35 * (index as f64)) / 0.35)
+}
+
+/// 스플래시 표척(Staff)의 시간(`seconds`)에 따른 성장 비율 (`0.0..=1.0`)
+/// (C++ `KaSplashStrata::staffReveal` 1:1 대응)
+#[must_use]
+pub fn splash_staff_reveal(seconds: f64) -> f64 {
+    ease_out_cubic((seconds - 0.4) / 1.4)
+}
+
+/// 스플래시 하단 영역에 4개 퇴적 지층 단면 3차 베지어 곡선 생성
+/// (C++ `KaSplashStrata::generateProceduralStrata` / `boundaries()` 1:1 대응)
+#[must_use]
+pub fn generate_procedural_strata_curves(
+    splash_width: f64,
+    splash_height: f64,
+) -> [StrataLayerCurve; 4] {
+    let sx = (splash_width / 700.0).max(0.1);
+    let sy = (splash_height / 400.0).max(0.1);
+    let base_rows: [(&str, [f64; 8]); 4] = [
+        (
+            "#D7CCC8",
+            [0.0, 258.0, 200.0, 262.0, 480.0, 243.0, 632.0, 246.0],
+        ),
+        (
+            "#BCAAA4",
+            [0.0, 277.0, 190.0, 283.0, 490.0, 262.0, 632.0, 267.0],
+        ),
+        (
+            "#A1887F",
+            [0.0, 300.0, 210.0, 306.0, 480.0, 286.0, 632.0, 291.0],
+        ),
+        (
+            "#8D6E63",
+            [0.0, 324.0, 220.0, 328.0, 520.0, 312.0, 632.0, 316.0],
+        ),
+    ];
+    base_rows.map(|(hex, r)| StrataLayerCurve {
+        layer_color_hex: hex,
+        start_pt: [r[0] * sx, r[1] * sy],
+        control_pt1: [r[2] * sx, r[3] * sy],
+        control_pt2: [r[4] * sx, r[5] * sy],
+        end_pt: [r[6] * sx, r[7] * sy],
+    })
+}
+
+/// 타깃 위젯 사각형(`target_rect = [x, y, w, h]`), 팝오버 크기(`[pop_w, pop_h]`), 화면 영역(`screen_rect = [sx, sy, sw, sh]`)에 대해 화면 밖 잘림을 방지하는 팝오버 좌상단 좌표 계산
+/// (C++ `KaPopover::calculateClampedPosition` 1:1 대응)
+#[must_use]
+pub fn calculate_clamped_popover_position(
+    target_rect: [i32; 4],
+    popover_size: [i32; 2],
+    screen_rect: [i32; 4],
+) -> [i32; 2] {
+    let margin = 8;
+    let [tx, ty, tw, th] = target_rect;
+    let [pw, ph] = popover_size;
+    let [sx, sy, sw, sh] = screen_rect;
+
+    let raw_x = tx + tw / 2 - pw / 2;
+    let min_x = sx + margin;
+    let max_x = (sx + sw - pw - margin).max(min_x);
+    let clamped_x = raw_x.clamp(min_x, max_x);
+
+    let below_y = ty + th + 6;
+    let clamped_y = if below_y + ph <= sy + sh - margin {
+        below_y
+    } else {
+        (ty - ph - 6).max(sy + margin)
+    };
+    [clamped_x, clamped_y]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn paper_look_tokens_satisfy_wcag_contrast_and_clay_accent() {
+        let opts = DisplayOptions {
+            paper_look: true,
+            ..Default::default()
+        };
+        let t = ThemeTokens::for_options(&opts);
+        assert_eq!(t.accent, [0xB5, 0x57, 0x3A, 0xFF]);
+        assert_eq!(t.dialog_ground, [0xFA, 0xF9, 0xF5, 0xFF]);
+        assert!(t.contrast_ratio(t.ink_muted, t.surface) >= HGIS_WCAG_AA_MIN_CONTRAST);
+        assert!(t.contrast_ratio(t.primary_text, t.primary) >= HGIS_WCAG_AA_MIN_CONTRAST);
+    }
+
+    #[test]
+    fn test_large_font_mode_12pt_to_15pt_and_paper_bg_f5f3ed_fg_222222_wcag_13_72() {
+        let base_opts = DisplayOptions::default();
+        assert_eq!(base_opts.font_point_size(), 12);
+        let large_opts = DisplayOptions {
+            large_text: true,
+            ..Default::default()
+        };
+        assert_eq!(large_opts.font_point_size(), 15);
+        assert!(
+            ((f64::from(base_opts.font_point_size()) * HGIS_FONT_LARGE_RATIO) - 15.0).abs() < 1e-9
+        );
+
+        let ratio = ThemeTokens::compute_wcag_contrast_ratio(
+            [0x22, 0x22, 0x22, 0xFF],
+            [0xF5, 0xF3, 0xED, 0xFF],
+        );
+        assert!(
+            ratio >= 13.7,
+            "expected >= 13.7 contrast ratio, got {ratio}"
+        );
+        assert!(ratio >= HGIS_WCAG_AA_MIN_CONTRAST);
+        assert!(ratio >= HGIS_WCAG_AAA_MIN_CONTRAST);
+    }
+
+    #[test]
+    fn test_three_kingdoms_color_mapping_and_era_presets() {
+        // TestKaArchaeologicalThemePreset::testThreeKingdomsColorMapping:
+        // EraPreset::ThreeKingdoms -> #2C3E50 (RGB: 44, 62, 80)
+        assert_eq!(EraPreset::ThreeKingdoms.standard_rgb(), [44, 62, 80]);
+        assert_eq!(EraPreset::ThreeKingdoms.hex_color(), "#2C3E50");
+        assert_eq!(EraPreset::Paleolithic.standard_rgb(), [110, 44, 0]);
+        assert_eq!(EraPreset::BronzeAge.standard_rgb(), [211, 84, 0]);
+        assert_eq!(EraPreset::Goryeo.standard_rgb(), [17, 120, 100]);
+
+        let dwelling =
+            ArchaeologicalFeatureStyleRule::for_feature_type("Dwelling", EraPreset::ThreeKingdoms);
+        assert_eq!(dwelling.stroke_rgb, [44, 62, 80]);
+        assert!((dwelling.outline_width_mm - 0.35).abs() < 1e-6);
+
+        let kiln =
+            ArchaeologicalFeatureStyleRule::for_feature_type("Kiln", EraPreset::ThreeKingdoms);
+        assert_eq!(kiln.fill_rgb, [0xE7, 0x4C, 0x3C]);
+        assert!((kiln.fill_opacity - 0.70).abs() < 1e-6);
+
+        // TestKaSplashStrata::testProceduralStrataCurveGeneration (600x400 -> 4 curves in 150..=400 Y)
+        let curves = generate_procedural_strata_curves(600.0, 400.0);
+        assert_eq!(curves.len(), 4);
+        for c in &curves {
+            assert!((150.0..=400.0).contains(&c.control_pt1[1]));
+            assert!((150.0..=400.0).contains(&c.control_pt2[1]));
+        }
+
+        // TestKaPopover::testClampingToScreenBoundary:
+        // screen 1920x1080, target (1850, 500, 60, 30), popover width 200 -> clamped X = 1712
+        let pos =
+            calculate_clamped_popover_position([1850, 500, 60, 30], [200, 120], [0, 0, 1920, 1080]);
+        assert_eq!(pos[0], 1712);
     }
 }

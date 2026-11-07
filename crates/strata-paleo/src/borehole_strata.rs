@@ -513,6 +513,178 @@ pub fn compute_double_ruler_tick(ground_elevation_m: f64, depth_cm: f64) -> Doub
     }
 }
 
+/// USCS 통일분류기호(`uscs`), 지층 설명(`desc`), 충적층 두께(`alluvial_m`)로부터 퇴적환경 한국어 분류 도출
+/// (C++ `classifyUscsEnv` in `GeoInfoBoreholeService.cpp` 1:1 대응)
+#[must_use]
+pub fn classify_uscs_deposit_env_ko(
+    uscs: &str,
+    desc: &str,
+    alluvial_thickness_m: f64,
+) -> &'static str {
+    if alluvial_thickness_m <= 0.01 {
+        return "풍화대·기반암 우세";
+    }
+    let u = uscs.trim().to_ascii_uppercase();
+    if u.starts_with('G') || desc.contains("자갈") || desc.contains("호박돌") {
+        "자갈·붕적(선상지·하상)"
+    } else if u.starts_with('C')
+        || u.starts_with('M')
+        || u.starts_with('O')
+        || u.starts_with("PT")
+        || desc.contains("점토")
+        || desc.contains("실트")
+    {
+        "점토·실트 충적(구하도·저습지)"
+    } else {
+        "사질 충적(자연제방·미고지)"
+    }
+}
+
+fn extract_xml_attr<'a>(tag: &'a str, attr: &str) -> Option<&'a str> {
+    let pat = format!("{attr}=\"");
+    let start = tag.find(&pat)? + pat.len();
+    let rest = &tag[start..];
+    let end = rest.find('"')?;
+    Some(&rest[..end])
+}
+
+/// 국토지반정보(GeoInfo / K-Geo) XML 시추 주상도 텍스트에서 시추공 및 지층(`top`, `bottom`, `uscs`, `n`, `desc`) 파싱
+/// (C++ `GeoInfoBoreholeParser::parseRawLog` 1:1 대응)
+#[must_use]
+pub fn parse_geoinfo_borehole_xml(xml_text: &str) -> Vec<BoreholeRawInput> {
+    let mut records = Vec::new();
+    for block in xml_text.split("<Borehole").skip(1) {
+        let Some((header, body)) = block.split_once('>') else {
+            continue;
+        };
+        let hole_id = extract_xml_attr(header, "id")
+            .or_else(|| extract_xml_attr(header, "HCODE"))
+            .unwrap_or("BH-1")
+            .trim()
+            .to_owned();
+        let x = extract_xml_attr(header, "x")
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(200_000.0);
+        let y = extract_xml_attr(header, "y")
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(350_000.0);
+        let ground_elev_m = extract_xml_attr(header, "elevation")
+            .or_else(|| extract_xml_attr(header, "ALTITUDE"))
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        let water_depth_m = extract_xml_attr(header, "water")
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(5.0);
+
+        let mut strata = Vec::new();
+        let end_idx = body.find("</Borehole>").unwrap_or(body.len());
+        for s_tag in body[..end_idx].split("<Stratum").skip(1) {
+            let Some((s_attrs, _)) = s_tag.split_once('>') else {
+                continue;
+            };
+            let top = extract_xml_attr(s_attrs, "top")
+                .or_else(|| extract_xml_attr(s_attrs, "from"))
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let bottom = extract_xml_attr(s_attrs, "bottom")
+                .or_else(|| extract_xml_attr(s_attrs, "to"))
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let uscs = extract_xml_attr(s_attrs, "uscs")
+                .unwrap_or("")
+                .trim()
+                .to_owned();
+            let desc = extract_xml_attr(s_attrs, "desc")
+                .or_else(|| extract_xml_attr(s_attrs, "name"))
+                .unwrap_or("")
+                .trim()
+                .to_owned();
+            let n_val = extract_xml_attr(s_attrs, "n")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            strata.push(StratumLayer {
+                depth_from_m: top,
+                depth_to_m: bottom,
+                layer_name: desc.clone(),
+                uscs_code: uscs,
+                description: desc,
+                n_value: n_val,
+            });
+        }
+        sanitize_borehole_strata_depths(&mut strata);
+        records.push(BoreholeRawInput {
+            hole_id,
+            x,
+            y,
+            ground_elev_m,
+            water_depth_m,
+            strata,
+        });
+    }
+    records
+}
+
+/// 시추공 후보 목록을 중심점(`center_5186`) 거리순 정렬 후 격자 버킷(`projPrefix:gx:gy`) 라운드로빈으로 균형 선발
+/// (C++ `GeoInfoBoreholeService::selectSpatiallyBalancedCandidates` 1:1 대응)
+#[must_use]
+pub fn select_spatially_balanced_boreholes(
+    raw_candidates: &[(String, [f64; 2], bool)],
+    center_5186: [f64; 2],
+    max_count: usize,
+    cell_meters: f64,
+) -> Vec<String> {
+    if raw_candidates.is_empty() || max_count == 0 {
+        return Vec::new();
+    }
+    let mut sorted = raw_candidates.to_vec();
+    sorted.sort_by(|a, b| {
+        let da = (a.1[0] - center_5186[0]).powi(2) + (a.1[1] - center_5186[1]).powi(2);
+        let db = (b.1[0] - center_5186[0]).powi(2) + (b.1[1] - center_5186[1]).powi(2);
+        da.total_cmp(&db)
+    });
+    let cell = cell_meters.max(25.0);
+    let mut bucket_order: Vec<String> = Vec::new();
+    let mut buckets: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for (code, pt, has_pt) in sorted {
+        let proj_prefix = code.split("BH").next().unwrap_or("").trim();
+        let key = if has_pt {
+            let gx = (pt[0] / cell).floor() as i64;
+            let gy = (pt[1] / cell).floor() as i64;
+            format!("{proj_prefix}:{gx}:{gy}")
+        } else {
+            proj_prefix.to_owned()
+        };
+        if !buckets.contains_key(&key) {
+            bucket_order.push(key.clone());
+        }
+        buckets.entry(key).or_default().push(code);
+    }
+
+    let mut result = Vec::with_capacity(max_count);
+    for pass in 0.. {
+        if result.len() >= max_count {
+            break;
+        }
+        let mut added_any = false;
+        for key in &bucket_order {
+            if let Some(list) = buckets.get(key) {
+                if let Some(item) = list.get(pass) {
+                    result.push(item.clone());
+                    added_any = true;
+                    if result.len() >= max_count {
+                        break;
+                    }
+                }
+            }
+        }
+        if !added_any {
+            break;
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -695,5 +867,19 @@ mod tests {
         sanitize_borehole_strata_depths(&mut inv);
         assert!((inv[0].depth_from_m - 1.2).abs() < 1e-9);
         assert!((inv[0].depth_to_m - 4.5).abs() < 1e-9);
+
+        // TestGeoInfoBoreholeParser::testXmlStratumParsing:
+        // elevation 32.5m, stratum 1 (0.0~1.5m 표토), stratum 2 (1.5~4.2m, SM 모래, N=15)
+        let xml = r#"<GeoInfo><Borehole id="BH-1" elevation="32.5" depth="4.2"><Stratum top="0.0" bottom="1.5" uscs="ML" n="4" desc="표토"/><Stratum top="1.5" bottom="4.2" uscs="SM" n="15" desc="SM 모래"/></Borehole></GeoInfo>"#;
+        let parsed = parse_geoinfo_borehole_xml(xml);
+        assert_eq!(parsed.len(), 1);
+        assert!((parsed[0].ground_elev_m - 32.5).abs() < 1e-6);
+        assert_eq!(parsed[0].strata.len(), 2);
+        assert!((parsed[0].strata[1].depth_to_m - 4.2).abs() < 1e-6);
+        assert!((parsed[0].strata[1].n_value - 15.0).abs() < 1e-6);
+        assert_eq!(
+            classify_uscs_deposit_env_ko("CL", "암회색 점토", 2.7),
+            "점토·실트 충적(구하도·저습지)"
+        );
     }
 }

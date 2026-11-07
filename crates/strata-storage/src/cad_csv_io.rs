@@ -835,6 +835,77 @@ pub fn validate_vworld_parcel_pnu_19(
     parsed_main == main_no && parsed_sub == sub_no
 }
 
+/// 측량점 CSV/TXT 컬럼 배열 순서 분류 (C++ `SurveyPointColumnOrder`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurveyPointColumnOrder {
+    /// 토탈스테이션 기본 (`이름, Easting(X), Northing(Y), 표고(Z), 비고`)
+    NameXYZDesc,
+    /// 축 전도형 (`이름, Northing(Y), Easting(X), 표고(Z), 비고`)
+    NameYXZDesc,
+    /// GNSS RTK 기본 (`ID, 코드, X, Y, Z`)
+    IdCodeXYZ,
+    Unknown,
+}
+
+/// 측량점 CSV/TXT 샘플 행의 수치 대역(한국 Easting `140,000..=380,000`, Northing `350,000..=750,000`, 표고 `-10..=1,950`)을 분석하여 컬럼 순서 자동 추론
+/// (C++ `SurveyPointSchema::inferSchemaFromSamples` 1:1 대응)
+#[must_use]
+pub fn infer_survey_point_schema(
+    _header_row: &[&str],
+    sample_rows: &[&[&str]],
+) -> SurveyPointColumnOrder {
+    for row in sample_rows.iter().take(10) {
+        if row.len() >= 4 {
+            if let (Ok(v1), Ok(v2)) = (row[1].trim().parse::<f64>(), row[2].trim().parse::<f64>()) {
+                let v1_east = (140_000.0..=380_000.0).contains(&v1);
+                let v2_north = (350_000.0..=750_000.0).contains(&v2);
+                if v1_east && v2_north {
+                    return SurveyPointColumnOrder::NameXYZDesc;
+                }
+                let v1_north = (350_000.0..=750_000.0).contains(&v1);
+                let v2_east = (140_000.0..=380_000.0).contains(&v2);
+                if v1_north && v2_east {
+                    return SurveyPointColumnOrder::NameYXZDesc;
+                }
+            }
+        }
+        if row.len() >= 5 {
+            if let (Ok(v2), Ok(v3)) = (row[2].trim().parse::<f64>(), row[3].trim().parse::<f64>()) {
+                if (140_000.0..=380_000.0).contains(&v2) && (350_000.0..=750_000.0).contains(&v3) {
+                    return SurveyPointColumnOrder::IdCodeXYZ;
+                }
+            }
+        }
+    }
+    SurveyPointColumnOrder::Unknown
+}
+
+/// 윈도우 OS 금지 문자(`\ / : * ? " < > |`), 마침표(`.`), 제어 문자를 밑줄(`_`)로 치환하고 양끝 공백·밑줄을 정리하여 안전한 조사 프로젝트 폴더명 반환
+/// (C++ `SurveyNameSanitizer::sanitizeProjectName` 1:1 대응)
+#[must_use]
+pub fn sanitize_project_name(raw_input_name: &str) -> String {
+    let trimmed = raw_input_name.trim();
+    let mut out = String::with_capacity(trimmed.len());
+    let mut prev_underscore = false;
+    for ch in trimmed.chars() {
+        let forbidden = matches!(
+            ch,
+            '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | '.'
+        ) || (ch as u32) < 32;
+        if forbidden {
+            if !prev_underscore && !out.is_empty() {
+                out.push('_');
+                prev_underscore = true;
+            }
+        } else {
+            out.push(ch);
+            prev_underscore = ch == '_';
+        }
+    }
+    out.trim_matches(|c: char| c.is_whitespace() || c == '_')
+        .to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1002,5 +1073,19 @@ mod tests {
             76,
             0
         ));
+
+        // TestSurveyPointSchema::testSchemaInferenceEastNorth
+        let header = ["No", "Val1", "Val2", "EL"];
+        let row1 = ["1", "195420.5", "542100.8", "45.2"];
+        assert_eq!(
+            infer_survey_point_schema(&header, &[&row1]),
+            SurveyPointColumnOrder::NameXYZDesc
+        );
+
+        // TestSurveyNameSanitizer::testInvalidCharactersSubstitution
+        assert_eq!(
+            sanitize_project_name("  경주:황남동*발굴?조사/2026.  "),
+            "경주_황남동_발굴_조사_2026"
+        );
     }
 }

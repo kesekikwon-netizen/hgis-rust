@@ -122,6 +122,54 @@ pub fn select_optimal_grid_interval(meters_per_pixel: f64, target_screen_spacing
     best
 }
 
+/// 표준 고고학 축척 프리셋 배열 (C++ `HGIS_STANDARD_SCALES` in `KaScaleCombo` / `StandardScales.cpp`)
+pub const HGIS_STANDARD_SCALES: [f64; 9] = [
+    100.0, 200.0, 500.0, 600.0, 1_000.0, 1_200.0, 5_000.0, 25_000.0, 50_000.0,
+];
+/// 최대 허용 축척 분모 (`1:1,000,000`, C++ `HGIS_MAX_ALLOWED_SCALE_DENOM`)
+pub const HGIS_MAX_ALLOWED_SCALE_DENOM: f64 = 1_000_000.0;
+
+/// 축척 문자열 파싱 오류 (C++ `ScaleParseError`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScaleParseError {
+    InvalidScaleValue,
+}
+
+/// `"1:500"`, `"1 / 1,200"`, `"600"` 등 사용자 입력 축척 문자열을 정규화하여 분모(`500.0`, `1200.0`, `600.0`)로 파싱
+/// `denom <= 0` 또는 숫자가 아닌 문자열은 `Err(ScaleParseError::InvalidScaleValue)` 반환
+/// (C++ `KaScaleCombo::parseScaleString` 1:1 대응)
+pub fn parse_scale_string(text: &str) -> Result<f64, ScaleParseError> {
+    let cleaned: String = text
+        .chars()
+        .filter(|&c| !c.is_whitespace() && c != ',')
+        .collect();
+    if cleaned.is_empty() {
+        return Err(ScaleParseError::InvalidScaleValue);
+    }
+    let denom_str = cleaned
+        .strip_prefix("1:")
+        .or_else(|| cleaned.strip_prefix("1/"))
+        .unwrap_or(&cleaned);
+    let val = denom_str
+        .parse::<f64>()
+        .map_err(|_| ScaleParseError::InvalidScaleValue)?;
+    if !val.is_finite() || val <= 0.0 {
+        return Err(ScaleParseError::InvalidScaleValue);
+    }
+    Ok(val.clamp(1.0, HGIS_MAX_ALLOWED_SCALE_DENOM))
+}
+
+/// 축척 분모를 `"1:500"` 형식으로 포맷팅 (C++ `KaScaleCombo::formatScaleDenominator`)
+#[must_use]
+pub fn format_scale_denominator(denominator: f64) -> String {
+    let clamped = if denominator.is_finite() && denominator > 0.0 {
+        denominator.clamp(1.0, HGIS_MAX_ALLOWED_SCALE_DENOM).round() as u64
+    } else {
+        500
+    };
+    format!("1:{clamped}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,5 +220,19 @@ mod tests {
         assert!((inv[1] - pt[1]).abs() < 1e-9);
 
         assert!((select_optimal_grid_interval(0.5, 100.0) - 50.0).abs() < 1e-9);
+
+        // TestKaScaleCombo::testScaleParsingVariousFormats
+        assert!((parse_scale_string("1:500").expect("1:500") - 500.0).abs() < 1e-6);
+        assert!((parse_scale_string("1 / 1,200").expect("1 / 1,200") - 1200.0).abs() < 1e-6);
+        assert!((parse_scale_string("600").expect("600") - 600.0).abs() < 1e-6);
+        assert_eq!(
+            parse_scale_string("invalid_text"),
+            Err(ScaleParseError::InvalidScaleValue)
+        );
+        assert_eq!(
+            parse_scale_string("-500"),
+            Err(ScaleParseError::InvalidScaleValue)
+        );
+        assert_eq!(format_scale_denominator(500.0), "1:500");
     }
 }

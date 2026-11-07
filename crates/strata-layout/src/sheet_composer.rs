@@ -865,17 +865,89 @@ impl HeritageDatasetKind {
         }
     }
 
-    /// 도면 범례 기본 색상 HEX (C++ `HGIS_COLOR_*_HEX`)
+    /// 도면 범례 기본 색상 HEX (C++ `kTable` in `HeritageStyle.cpp`)
     #[must_use]
     pub const fn default_hex_color(self) -> &'static str {
         match self {
-            Self::DesignatedHeritage => "#E74C3C",
-            Self::AlterationStandard => "#9B59B6",
-            Self::BuriedHeritageArea => "#E67E22",
-            Self::HeritageDistributionMap => "#D35400",
-            Self::SurfaceSurveyArea => "#27AE60",
-            Self::ExcavationSurveyArea => "#2980B9",
+            Self::DesignatedHeritage => "#8E44AD",
+            Self::AlterationStandard => "#E67E22",
+            Self::BuriedHeritageArea => "#2E86C1",
+            Self::HeritageDistributionMap => "#27AE60",
+            Self::SurfaceSurveyArea => "#D4AA00",
+            Self::ExcavationSurveyArea => "#C2187D",
         }
+    }
+
+    /// 한국어 표준 레이어 이름 (C++ `HeritageStyle::layerName`)
+    #[must_use]
+    pub const fn layer_name_ko(self) -> &'static str {
+        match self {
+            Self::DesignatedHeritage => "지정유산",
+            Self::AlterationStandard => "현상변경허용기준",
+            Self::BuriedHeritageArea => "매장유산유존지역",
+            Self::HeritageDistributionMap => "문화유적분포지도",
+            Self::SurfaceSurveyArea => "지표조사구역",
+            Self::ExcavationSurveyArea => "발굴조사구역",
+        }
+    }
+
+    /// 인트라넷 탭 코드 (C++ `HeritageStyle::tabCode`)
+    #[must_use]
+    pub const fn tab_code(self) -> &'static str {
+        match self {
+            Self::DesignatedHeritage => "",
+            Self::AlterationStandard => "P",
+            Self::BuriedHeritageArea => "B",
+            Self::HeritageDistributionMap => "U",
+            Self::SurfaceSurveyArea => "R",
+            Self::ExcavationSurveyArea => "E",
+        }
+    }
+
+    /// 구형 색상(`#16A085`, `#A0522D`)을 최신 표준 도면 색상(`#D4AA00`, `#C2187D`)으로 자동 매핑
+    /// (C++ `HeritageStyle::layoutColor` 1:1 대응)
+    #[must_use]
+    pub fn layout_color_hex(self, source_hex: &str) -> &str {
+        let u = source_hex.trim();
+        if self == Self::SurfaceSurveyArea && u.eq_ignore_ascii_case("#16A085") {
+            "#D4AA00"
+        } else if self == Self::ExcavationSurveyArea && u.eq_ignore_ascii_case("#A0522D") {
+            "#C2187D"
+        } else {
+            u
+        }
+    }
+
+    /// 한국어 레이어 이름으로 데이터셋 역조회 (C++ `HeritageStyle::fromLayerName`)
+    #[must_use]
+    pub fn from_layer_name_ko(name: &str) -> Option<Self> {
+        match name.trim() {
+            "지정유산" => Some(Self::DesignatedHeritage),
+            "현상변경허용기준" => Some(Self::AlterationStandard),
+            "매장유산유존지역" => Some(Self::BuriedHeritageArea),
+            "문화유적분포지도" => Some(Self::HeritageDistributionMap),
+            "지표조사구역" => Some(Self::SurfaceSurveyArea),
+            "발굴조사구역" => Some(Self::ExcavationSurveyArea),
+            _ => None,
+        }
+    }
+
+    /// 표준 외곽선 두께 (`0.35 mm`, C++ `HeritageStyle::outlineWidthMm`)
+    #[must_use]
+    pub const fn outline_width_mm() -> f64 {
+        0.35
+    }
+
+    /// 유적명 라벨 최소 표시 축척 (`10000.0`, C++ `HeritageStyle::nameLabelMinScale`)
+    #[must_use]
+    pub const fn name_label_min_scale() -> f64 {
+        10_000.0
+    }
+
+    /// 이름 없는 유적 기본 라벨 (`"무명"`, C++ `HeritageStyle::unnamedLabel`)
+    #[must_use]
+    pub const fn unnamed_label_ko() -> &'static str {
+        "무명"
     }
 }
 

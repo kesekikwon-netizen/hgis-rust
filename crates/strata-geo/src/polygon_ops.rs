@@ -1180,6 +1180,61 @@ pub fn unique_georef_output_path(
     parent.join(format!("{stem}_9999.{ext}"))
 }
 
+/// Liang-Barsky 알고리즘을 사용해 선분(`seg_start -> seg_end`)을 조사구역 사각 경계(`bbox = [min_x, min_y, max_x, max_y]`) 내부로 정밀 절단(Clip)
+/// (C++ `SurveyScopeClip::clipVectorLayerByBoundary` 선형 교차 절단 1:1 대응)
+#[must_use]
+pub fn clip_line_segment_by_bbox(
+    seg_start: [f64; 2],
+    seg_end: [f64; 2],
+    bbox: [f64; 4],
+) -> Option<([f64; 2], [f64; 2])> {
+    let min_x = bbox[0].min(bbox[2]);
+    let min_y = bbox[1].min(bbox[3]);
+    let max_x = bbox[0].max(bbox[2]);
+    let max_y = bbox[1].max(bbox[3]);
+
+    let dx = seg_end[0] - seg_start[0];
+    let dy = seg_end[1] - seg_start[1];
+    let p = [-dx, dx, -dy, dy];
+    let q = [
+        seg_start[0] - min_x,
+        max_x - seg_start[0],
+        seg_start[1] - min_y,
+        max_y - seg_start[1],
+    ];
+
+    let mut u1 = 0.0_f64;
+    let mut u2 = 1.0_f64;
+    for i in 0..4 {
+        if p[i].abs() <= 1e-12 {
+            if q[i] < 0.0 {
+                return None;
+            }
+        } else {
+            let t = q[i] / p[i];
+            if p[i] < 0.0 {
+                if t > u2 {
+                    return None;
+                }
+                if t > u1 {
+                    u1 = t;
+                }
+            } else {
+                if t < u1 {
+                    return None;
+                }
+                if t < u2 {
+                    u2 = t;
+                }
+            }
+        }
+    }
+    Some((
+        [seg_start[0] + u1 * dx, seg_start[1] + u1 * dy],
+        [seg_start[0] + u2 * dx, seg_start[1] + u2 * dy],
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1562,5 +1617,13 @@ mod tests {
         taken.insert(base.clone());
         let uniq = unique_georef_output_path(&base, &taken);
         assert!(uniq.ends_with("plan_georef_2.tif"));
+
+        // TestSurveyScopeClip::testLineIntersectionClipping:
+        // 100m x 100m survey box [0, 0, 100, 100], contour line (-50, 50) -> (150, 50) (200m total) -> clipped length = 100.0m
+        let (c0, c1) =
+            clip_line_segment_by_bbox([-50.0, 50.0], [150.0, 50.0], [0.0, 0.0, 100.0, 100.0])
+                .expect("line intersects survey box");
+        let clipped_len = (c1[0] - c0[0]).hypot(c1[1] - c0[1]);
+        assert!((clipped_len - 100.0).abs() <= 1e-4);
     }
 }
