@@ -134,7 +134,9 @@ impl StrataAppState {
                             .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
                             .corner_radius(6.0)
                             .min_size(Vec2::new(68.0, 36.0));
-                        let _ = ui.add(prt_btn);
+                        if ui.add(prt_btn).clicked() {
+                            self.modals.active = Some(ActiveModalDialog::DrawingPrint);
+                        }
                     });
                 });
             });
@@ -163,6 +165,14 @@ impl StrataAppState {
             p.rect_stroke(map_rect, 0.0, Stroke::new(1.2, Color32::from_rgb(70, 95, 115)), egui::StrokeKind::Middle);
 
             let mc = map_rect.center();
+            for i in 0..115 {
+                let fx = ((i * 37 + 19) % 100) as f32 / 100.0 - 0.5;
+                let fy = ((i * 61 + 43) % 100) as f32 / 100.0 - 0.5;
+                let dot_p = Pos2::new(mc.x + fx * map_rect.width() * 0.88, mc.y + fy * map_rect.height() * 0.88);
+                let col = if i % 3 == 0 { Color32::from_rgb(45, 165, 75) } else { Color32::from_rgb(198, 28, 118) };
+                p.circle_filled(dot_p, 2.7, col);
+                p.circle_stroke(dot_p, 2.7, Stroke::new(0.7, Color32::BLACK));
+            }
             let poly = vec![
                 Pos2::new(mc.x - 4.0, mc.y - map_rect.height() * 0.28),
                 Pos2::new(mc.x + 14.0, mc.y - map_rect.height() * 0.26),
@@ -171,16 +181,12 @@ impl StrataAppState {
             ];
             p.add(egui::Shape::convex_polygon(
                 poly,
-                Color32::from_rgba_unmultiplied(214, 92, 32, 75),
+                Color32::from_rgba_unmultiplied(214, 92, 32, 95),
                 Stroke::new(2.2, Color32::from_rgb(214, 78, 22)),
             ));
-            for i in 0..42 {
-                let fx = ((i * 37) % 100) as f32 / 100.0 - 0.5;
-                let fy = ((i * 61) % 100) as f32 / 100.0 - 0.5;
-                let dot_p = Pos2::new(mc.x + fx * map_rect.width() * 0.82, mc.y + fy * map_rect.height() * 0.82);
-                let col = if i % 3 == 0 { Color32::from_rgb(45, 165, 75) } else { Color32::from_rgb(198, 28, 118) };
-                p.circle_filled(dot_p, 2.8, col);
-                p.circle_stroke(dot_p, 2.8, Stroke::new(0.8, Color32::BLACK));
+            for c_pt in [map_rect.left_top() + Vec2::new(12.0, 12.0), map_rect.right_top() + Vec2::new(-12.0, 12.0), map_rect.left_bottom() + Vec2::new(12.0, -12.0), map_rect.right_bottom() + Vec2::new(-12.0, -12.0)] {
+                p.circle_filled(c_pt, 7.0, Color32::from_rgba_unmultiplied(255, 255, 255, 210));
+                p.text(c_pt, egui::Align2::CENTER_CENTER, "↻", egui::FontId::proportional(9.5), Color32::from_rgb(55, 54, 50));
             }
 
             let sb_y = map_rect.bottom() + 18.0;
@@ -193,15 +199,7 @@ impl StrataAppState {
             let bar_r = Rect::from_center_size(Pos2::new(rect.center().x, rect.bottom() - 26.0), Vec2::new(bar_w, 42.0));
             p.rect_filled(bar_r, 6.0, Color32::WHITE);
             p.rect_stroke(bar_r, 6.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
-            let btns = [
-                ("■", "좌표점"),
-                ("◎", "레이어를 가운데"),
-                ("□", "지도 조정"),
-                ("▣", "화면 맞춤"),
-                ("✥", "항목 이동"),
-                ("▯", "용지/방향"),
-                ("≡", "도면 목록"),
-            ];
+            let btns = [("■", "좌표점"), ("◎", "레이어를 가운데"), ("□", "지도 조정"), ("▣", "화면 맞춤"), ("✥", "항목 이동"), ("▯", "용지/방향"), ("≡", "도면 목록")];
             let bw = bar_w / (btns.len() as f32);
             for (i, (ico, lbl)) in btns.iter().enumerate() {
                 let x0 = bar_r.left() + bw * (i as f32);

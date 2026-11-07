@@ -18,7 +18,7 @@ fn render_ka_download_header(ui: &mut egui::Ui, title: &str, subtitle: &str, min
     ui.add_space(10.0);
 }
 
-/// C++ 자료 받기·시굴격자·도면 인쇄 대화상자 (`KaDownloadUi.cpp`, `KaTrenchDialog.cpp`, `KaPrintDialog.cpp`) 1:1 재현
+/// C++ 자료 받기·시굴격자·도면 인쇄 대화상자 (`KaDownloadUi.cpp`, `KaTrenchDialog.cpp`, `KaPrintDialogPlate.cpp`) 1:1 재현
 pub fn render_download_and_print_dialogs(
     app: &mut StrataAppState,
     ctx: &egui::Context,
@@ -185,7 +185,7 @@ pub fn render_download_and_print_dialogs(
             });
         }
         ActiveModalDialog::PdfPreparing => {
-            egui::Window::new("ka_modal_pdf_prep").title_bar(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).default_width(360.0).show(ctx, |ui| {
+            egui::Window::new("ka_modal_pdf_prep").title_bar(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).fixed_size([360.0, 128.0]).show(ctx, |ui| {
                 render_strata_modal_header(ui, "인쇄 준비 - Strata", open);
                 ui.label(egui::RichText::new("PDF를 그리는 중... (용지 210x297 mm · 300 DPI)").size(13.0));
                 ui.label(egui::RichText::new("취소하면 그리기가 끝난 뒤 파일을 만들지 않습니다.").size(12.0).color(Color32::from_rgb(95, 94, 88)));
@@ -197,7 +197,8 @@ pub fn render_download_and_print_dialogs(
                 p.rect_filled(Rect::from_center_size(bar_r.center(), Vec2::new(160.0, 14.0)), 2.0, Color32::from_rgb(25, 25, 24));
                 ui.add_space(6.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add_sized([58.0, 28.0], egui::Button::new("취소")).clicked() { app.modals.active = None; }
+                    let cb = egui::Button::new("취소").fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(155, 152, 142))).corner_radius(5.0).min_size(Vec2::new(58.0, 28.0));
+                    if ui.add(cb).clicked() { app.modals.active = None; }
                 });
             });
         }
@@ -205,8 +206,14 @@ pub fn render_download_and_print_dialogs(
             egui::Window::new("ka_modal_drawing_print").title_bar(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).default_width(760.0).show(ctx, |ui| {
                 render_strata_modal_header(ui, "도면 인쇄 - Strata", open);
                 ui.columns(2, |cols| {
-                    cols[0].horizontal(|ui| { ui.add_sized([68.0, 28.0], egui::Label::new("프린터")); let _ = ui.add_sized([250.0, 28.0], egui::Button::new("ezViewX Virtual Image Printer         ▼")); });
-                    cols[0].horizontal(|ui| { ui.add_space(74.0); let _ = ui.button("프린터 속성..."); });
+                    cols[0].horizontal(|ui| {
+                        ui.add_sized([68.0, 30.0], egui::Label::new("프린터"));
+                        let _ = ui.add(egui::Button::new("ezViewX Virtual Image Printer              ▼").fill(Color32::WHITE).stroke(Stroke::new(1.3, Color32::from_rgb(35, 35, 32))).corner_radius(5.0).min_size(Vec2::new(258.0, 30.0)));
+                    });
+                    cols[0].horizontal(|ui| {
+                        ui.add_space(74.0);
+                        let _ = ui.add(egui::Button::new("프린터 속성...").fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(165, 162, 152))).corner_radius(5.0).min_size(Vec2::new(84.0, 24.0)));
+                    });
                     cols[0].add_space(8.0);
                     let mut single_sheet = true;
                     cols[0].horizontal_top(|ui| {
@@ -219,13 +226,18 @@ pub fn render_download_and_print_dialogs(
                     cols[0].add_space(8.0);
                     cols[0].horizontal(|ui| {
                         ui.add_sized([68.0, 28.0], egui::Label::new("용지"));
-                        let _ = ui.add_sized([42.0, 28.0], egui::Button::new("A4").fill(Color32::WHITE));
-                        let _ = ui.add_sized([42.0, 28.0], egui::Button::new("A3").fill(Color32::from_rgb(214, 208, 194)));
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        let _ = ui.add(egui::Button::new("A4").fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(155, 152, 142))).corner_radius(4.0).min_size(Vec2::new(38.0, 28.0)));
+                        let _ = ui.add(egui::Button::new("A3").fill(Color32::from_rgb(214, 208, 194)).stroke(Stroke::new(1.0, Color32::from_rgb(125, 122, 114))).corner_radius(4.0).min_size(Vec2::new(38.0, 28.0)));
                     });
                     cols[0].add_space(8.0);
-                    cols[0].horizontal(|ui| { ui.add_sized([68.0, 28.0], egui::Label::new("해상도")); let _ = ui.add_sized([250.0, 28.0], egui::Button::new("300 DPI (보통)                                ▼")); });
-                    cols[0].add_space(130.0);
-                    cols[0].separator();
+                    cols[0].horizontal(|ui| {
+                        ui.add_sized([68.0, 30.0], egui::Label::new("해상도"));
+                        let _ = ui.add(egui::Button::new("300 DPI (보통)                                      ▼").fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(165, 162, 152))).corner_radius(5.0).min_size(Vec2::new(258.0, 30.0)));
+                    });
+                    cols[0].add_space(126.0);
+                    let (top_rule, _) = cols[0].allocate_exact_size(Vec2::new(cols[0].available_width(), 2.0), egui::Sense::hover());
+                    cols[0].painter().line_segment([top_rule.left_center(), top_rule.right_center()], Stroke::new(1.2, Color32::from_rgb(45, 44, 40)));
                     for (k, v) in [("용지", "A3 세로 · 한 장"), ("인쇄 크기", "실제 크기 100%"), ("축척", "1:6,532")] {
                         cols[0].horizontal(|ui| {
                             ui.label(k);
@@ -233,6 +245,7 @@ pub fn render_download_and_print_dialogs(
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| { ui.strong(v); });
                         });
                     }
+                    cols[0].separator();
                     cols[1].horizontal(|ui| {
                         ui.label("미리보기");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -246,19 +259,32 @@ pub fn render_download_and_print_dialogs(
                     p.rect_filled(paper_r, 0.0, Color32::WHITE);
                     p.rect_stroke(paper_r, 0.0, Stroke::new(1.0, Color32::BLACK), egui::StrokeKind::Middle);
                     let map_r = Rect::from_min_max(paper_r.min + Vec2::new(28.0, 44.0), Pos2::new(paper_r.right() - 28.0, paper_r.bottom() - 56.0));
-                    p.rect_filled(map_r, 0.0, Color32::from_rgb(138, 192, 108));
-                    p.rect_stroke(map_r, 0.0, Stroke::new(1.2, Color32::BLACK), egui::StrokeKind::Middle);
-                    for i in 0..28 {
-                        let (fx, fy) = (((i * 37) % 100) as f32 / 100.0 - 0.5, ((i * 61) % 100) as f32 / 100.0 - 0.5);
-                        let dp = Pos2::new(map_r.center().x + fx * map_r.width() * 0.82, map_r.center().y + fy * map_r.height() * 0.82);
-                        p.circle_filled(dp, 2.2, if i % 3 == 0 { Color32::from_rgb(45, 165, 75) } else { Color32::from_rgb(198, 28, 118) });
+                    p.rect_filled(map_r, 0.0, Color32::from_rgb(154, 198, 120));
+                    for g in 1..12 {
+                        let gx = map_r.left() + (g as f32) * (map_r.width() / 12.0);
+                        let gy = map_r.top() + (g as f32) * (map_r.height() / 12.0);
+                        p.line_segment([Pos2::new(gx, map_r.top()), Pos2::new(gx, map_r.bottom())], Stroke::new(0.7, Color32::from_rgb(30, 30, 28)));
+                        p.line_segment([Pos2::new(map_r.left(), gy), Pos2::new(map_r.right(), gy)], Stroke::new(0.7, Color32::from_rgb(30, 30, 28)));
                     }
-                    p.rect_filled(Rect::from_center_size(map_r.center(), Vec2::new(14.0, map_r.height() * 0.56)), 0.0, Color32::from_rgba_unmultiplied(214, 92, 32, 130));
-                    p.line_segment([Pos2::new(map_r.left() + 4.0, map_r.bottom() + 12.0), Pos2::new(map_r.left() + 68.0, map_r.bottom() + 12.0)], Stroke::new(2.5, Color32::BLACK));
-                    p.text(Pos2::new(map_r.right() - 6.0, map_r.bottom() + 12.0), egui::Align2::CENTER_CENTER, "N\n▲", egui::FontId::proportional(8.5), Color32::BLACK);
+                    p.rect_stroke(map_r, 0.0, Stroke::new(1.2, Color32::BLACK), egui::StrokeKind::Middle);
+                    for i in 0..85 {
+                        let (fx, fy) = (((i * 37 + 13) % 100) as f32 / 100.0 - 0.5, ((i * 61 + 29) % 100) as f32 / 100.0 - 0.5);
+                        let dp = Pos2::new(map_r.center().x + fx * map_r.width() * 0.88, map_r.center().y + fy * map_r.height() * 0.88);
+                        let dc = if i % 4 == 0 { Color32::from_rgb(45, 165, 75) } else { Color32::from_rgb(198, 28, 118) };
+                        p.circle_filled(dp, 2.2, dc);
+                        p.circle_stroke(dp, 2.2, Stroke::new(0.6, Color32::BLACK));
+                    }
+                    let sr = Rect::from_center_size(map_r.center(), Vec2::new(14.0, map_r.height() * 0.56));
+                    p.rect_filled(sr, 0.0, Color32::from_rgba_unmultiplied(214, 92, 32, 130));
+                    p.rect_stroke(sr, 0.0, Stroke::new(1.4, Color32::from_rgb(214, 78, 22)), egui::StrokeKind::Middle);
+                    p.line_segment([Pos2::new(map_r.left() + 4.0, map_r.bottom() + 10.0), Pos2::new(map_r.left() + 68.0, map_r.bottom() + 10.0)], Stroke::new(2.5, Color32::BLACK));
+                    p.text(Pos2::new(map_r.left() + 36.0, map_r.bottom() + 20.0), egui::Align2::CENTER_CENTER, "축척 1 : 6532", egui::FontId::proportional(7.5), Color32::BLACK);
+                    p.text(Pos2::new(map_r.right() - 18.0, map_r.bottom() + 10.0), egui::Align2::RIGHT_CENTER, "동부원점(GRS80) · EPSG:5187", egui::FontId::proportional(7.0), Color32::BLACK);
+                    p.text(Pos2::new(map_r.right() - 5.0, map_r.bottom() + 12.0), egui::Align2::CENTER_CENTER, "N\n▲", egui::FontId::proportional(8.5), Color32::BLACK);
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add_sized([58.0, 34.0], egui::Button::new("닫기")).clicked() { app.modals.active = None; }
+                    let close_b = egui::Button::new("닫기").fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(155, 152, 142))).corner_radius(6.0).min_size(Vec2::new(58.0, 34.0));
+                    if ui.add(close_b).clicked() { app.modals.active = None; }
                     let prt = egui::Button::new(egui::RichText::new("인쇄 · 1장").color(Color32::WHITE).strong()).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(88.0, 34.0));
                     if ui.add(prt).clicked() { app.modals.active = None; }
                 });

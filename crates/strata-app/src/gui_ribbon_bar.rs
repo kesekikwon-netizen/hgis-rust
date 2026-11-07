@@ -8,8 +8,26 @@ use crate::dialogs_modal::ActiveModalDialog;
 use crate::ribbon::{SubToolsMode, PENINSULA_REGION_TILES};
 use crate::ribbon_icons::paint_ribbon_icon;
 
+fn draw_buffer_pill(ui: &mut egui::Ui, icon_key: &str, badge_bg: bool, text: &str, width: f32) -> bool {
+    let (r, resp) = ui.allocate_exact_size(Vec2::new(width, 28.0), egui::Sense::click());
+    let p = ui.painter_at(r);
+    p.rect_filled(r, 6.0, Color32::WHITE);
+    p.rect_stroke(r, 6.0, Stroke::new(1.0, Color32::from_rgb(160, 158, 150)), egui::StrokeKind::Middle);
+    if !icon_key.is_empty() {
+        let ir = Rect::from_center_size(Pos2::new(r.left() + 16.0, r.center().y), Vec2::new(20.0, 20.0));
+        if badge_bg {
+            p.rect_filled(ir, 4.0, Color32::from_rgb(236, 233, 224));
+        }
+        paint_ribbon_icon(&p, ir. expand(2.0), icon_key, Color32::from_rgb(38, 37, 34));
+        p.text(Pos2::new(r.left() + 31.0, r.center().y), egui::Align2::LEFT_CENTER, text, egui::FontId::proportional(12.5), Color32::from_rgb(30, 30, 28));
+    } else {
+        p.text(r.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(12.5), Color32::from_rgb(30, 30, 28));
+    }
+    resp.clicked()
+}
+
 impl StrataAppState {
-    /// C++ `MainWindowRibbon.cpp` + `KaBeginnerRibbon.cpp` 1:1 (Images 1, 2, 4, 9, 10, 11, 12)
+    /// C++ `MainWindowRibbon.cpp` + `KaBeginnerRibbon.cpp` 1:1 (Images 1, 2, 4, 9, 10, 11, 12, 15)
     pub(crate) fn render_cpp_top_bars(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let is_home = self.active_tab == MainTab::Home;
         let dirty_save = !is_home;
@@ -47,7 +65,7 @@ impl StrataAppState {
                                     let muted = is_home && *g_title == "기록";
                                     let highlight_save = label == "저장" && dirty_save;
                                     let dark_active = (label == "측거" && self.active_tool == MapToolKind::Measure)
-                                        || (label == "그리기" && self.ribbon.sub_toolbar_visible && self.ribbon.sub_mode == SubToolsMode::Draw)
+                                        || (label == "그리기" && (self.active_tool == MapToolKind::Measure || (self.ribbon.sub_toolbar_visible && self.ribbon.sub_mode == SubToolsMode::Draw)))
                                         || (label == "버퍼" && self.ribbon.sub_toolbar_visible && self.ribbon.sub_mode == SubToolsMode::Buffer);
                                     let warm_active = label == "DEM" && !is_home;
                                     if self.draw_ribbon_chip(ui, label, muted, highlight_save, dark_active, warm_active) {
@@ -87,7 +105,7 @@ impl StrataAppState {
                 .inner_margin(egui::Margin::symmetric(10, 5))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 4.0;
+                        ui.spacing_mut().item_spacing.x = 5.0;
                         match self.ribbon.sub_mode {
                             SubToolsMode::Draw => {
                                 let wbtn = |ui: &mut egui::Ui, txt: &str| -> egui::Response {
@@ -121,12 +139,11 @@ impl StrataAppState {
                                 }
                             }
                             SubToolsMode::Buffer => {
-                                ui.label(egui::RichText::new("주변유적경계 ›").size(13.0).strong());
-                                for b_lbl in ["◎ 500m", "◎ 1000m", "⬇ 엑셀 내보내기"] {
-                                    let btn = egui::Button::new(egui::RichText::new(b_lbl).size(12.5)).fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(175, 172, 162))).corner_radius(6.0).min_size(Vec2::new(82.0, 28.0));
-                                    let _ = ui.add(btn);
-                                }
-                                if ui.add(egui::Button::new("닫기").fill(Color32::WHITE).corner_radius(6.0).min_size(Vec2::new(52.0, 28.0))).clicked() {
+                                ui.label(egui::RichText::new("주변유적경계 ›").size(12.5).strong());
+                                let _ = draw_buffer_pill(ui, "버퍼", true, "500m", 78.0);
+                                let _ = draw_buffer_pill(ui, "버퍼", true, "1000m", 84.0);
+                                let _ = draw_buffer_pill(ui, "수치지형", false, "엑셀 내보내기", 118.0);
+                                if draw_buffer_pill(ui, "", false, "닫기", 48.0) {
                                     self.ribbon.sub_toolbar_visible = false;
                                 }
                             }
@@ -144,23 +161,28 @@ impl StrataAppState {
 
         egui::Frame::NONE
             .fill(Color32::from_rgb(239, 237, 228))
-            .inner_margin(egui::Margin::symmetric(12, 4))
+            .inner_margin(egui::Margin::symmetric(12, 3))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 12.0;
-                    for (tab, icon_txt) in [(MainTab::Home, "홈"), (MainTab::Map, "지도")] {
-                        if ui.selectable_label(self.active_tab == tab, egui::RichText::new(icon_txt).size(13.0).strong()).clicked() {
-                            self.active_tab = tab;
+                    ui.spacing_mut().item_spacing.x = 16.0;
+                    for (tab, ico, txt) in [(MainTab::Home, "유산", "홈"), (MainTab::Map, "옛 지도", "지도")] {
+                        let sel = self.active_tab == tab;
+                        let (tr, resp) = ui.allocate_exact_size(Vec2::new(56.0, 24.0), egui::Sense::click());
+                        let tp = ui.painter_at(tr);
+                        paint_ribbon_icon(&tp, Rect::from_center_size(Pos2::new(tr.left() + 10.0, tr.center().y), Vec2::new(20.0, 20.0)), ico, Color32::from_rgb(45, 44, 40));
+                        tp.text(Pos2::new(tr.left() + 24.0, tr.center().y), egui::Align2::LEFT_CENTER, txt, egui::FontId::proportional(12.5), Color32::from_rgb(30, 30, 28));
+                        if sel {
+                            tp.line_segment([Pos2::new(tr.left(), tr.bottom()), Pos2::new(tr.right(), tr.bottom())], Stroke::new(2.0, Color32::from_rgb(35, 35, 32)));
                         }
+                        if resp.clicked() { self.active_tab = tab; }
                     }
-                    for extra in [MainTab::Drawing, MainTab::Paleo, MainTab::Terrain3d] {
+                    for (extra, ico, lbl) in [(MainTab::Drawing, "도면", "도면     ×"), (MainTab::Paleo, "고지형", "고지형   ×"), (MainTab::Terrain3d, "검수·제출", "입체지형 ×")] {
                         if self.active_tab == extra {
-                            let lbl = match extra {
-                                MainTab::Drawing => "도면   ×",
-                                MainTab::Paleo => "고지형   ×",
-                                _ => "입체지형   ×",
-                            };
-                            let _ = ui.selectable_label(true, egui::RichText::new(lbl).size(13.0).strong());
+                            let (tr, _) = ui.allocate_exact_size(Vec2::new(82.0, 24.0), egui::Sense::click());
+                            let tp = ui.painter_at(tr);
+                            paint_ribbon_icon(&tp, Rect::from_center_size(Pos2::new(tr.left() + 10.0, tr.center().y), Vec2::new(20.0, 20.0)), ico, Color32::from_rgb(35, 35, 32));
+                            tp.text(Pos2::new(tr.left() + 24.0, tr.center().y), egui::Align2::LEFT_CENTER, lbl, egui::FontId::proportional(12.5), Color32::from_rgb(30, 30, 28));
+                            tp.line_segment([Pos2::new(tr.left(), tr.bottom()), Pos2::new(tr.right(), tr.bottom())], Stroke::new(2.0, Color32::from_rgb(35, 35, 32)));
                         }
                     }
 

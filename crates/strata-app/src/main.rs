@@ -3,6 +3,7 @@ pub mod debug_control;
 pub mod dialogs_account;
 pub mod dialogs_download_print;
 pub mod dialogs_modal;
+pub mod gui_layer_panel;
 pub mod gui_ribbon_bar;
 pub mod gui_shell;
 pub mod gui_tab_drawing;

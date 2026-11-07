@@ -82,26 +82,33 @@ impl StrataAppState {
             }
             let p = ui.painter_at(rect);
             p.rect_filled(rect, 0.0, Color32::from_rgb(251, 250, 246));
-            self.paint_gyeongju_heritage_canvas(&p, rect);
+            self.paint_gyeongju_heritage_canvas(&p, rect, is_trench || is_measure);
 
             let top_txt = if is_measure {
-                "■  줄자  — 두 점을 클릭하면 거리가, 셋 이상이면 면적이 나옵니다"
+                "     줄자  — 두 점을 클릭하면 거리가, 셋 이상이면 면적이 나옵니다"
             } else if is_trench {
                 "⊞  시굴 격자  — 격자를 놓을 원점을 클릭합니다"
             } else {
                 "투명도·밝기: 조절할 레이어를 고르세요"
             };
-            let top_w = if is_measure { 392.0 } else if is_trench { 290.0 } else { 224.0 };
+            let top_w = if is_measure { 404.0 } else if is_trench { 290.0 } else { 224.0 };
             let top_r = Rect::from_min_size(rect.min + Vec2::new(12.0, 12.0), Vec2::new(top_w, 30.0));
             p.rect_filled(top_r, 6.0, Color32::WHITE);
             p.rect_stroke(top_r, 6.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
-            p.text(Pos2::new(top_r.left() + 12.0, top_r.center().y), egui::Align2::LEFT_CENTER, top_txt, egui::FontId::proportional(11.5), Color32::from_rgb(45, 44, 40));
-            for (i, sym) in ["↺", "↻"].into_iter().enumerate() {
-                let br = Rect::from_min_size(Pos2::new(top_r.right() + 6.0 + (i as f32) * 30.0, top_r.top()), Vec2::new(28.0, 30.0));
-                p.rect_filled(br, 5.0, Color32::WHITE);
-                p.rect_stroke(br, 5.0, Stroke::new(1.0, Color32::from_rgb(195, 192, 182)), egui::StrokeKind::Middle);
-                p.text(br.center(), egui::Align2::CENTER_CENTER, sym, egui::FontId::proportional(13.0), Color32::from_rgb(90, 88, 82));
+            if is_measure {
+                let rc = Pos2::new(top_r.left() + 18.0, top_r.center().y);
+                p.line_segment([Pos2::new(rc.x - 5.0, rc.y + 4.5), Pos2::new(rc.x + 5.0, rc.y - 4.5)], Stroke::new(2.2, Color32::from_rgb(35, 35, 32)));
+                p.line_segment([Pos2::new(rc.x - 2.0, rc.y + 1.5), Pos2::new(rc.x - 0.5, rc.y + 3.0)], Stroke::new(1.2, Color32::from_rgb(35, 35, 32)));
+                p.line_segment([Pos2::new(rc.x + 1.0, rc.y - 1.5), Pos2::new(rc.x + 2.5, rc.y)], Stroke::new(1.2, Color32::from_rgb(35, 35, 32)));
             }
+            p.text(Pos2::new(top_r.left() + 12.0, top_r.center().y), egui::Align2::LEFT_CENTER, top_txt, egui::FontId::proportional(11.5), Color32::from_rgb(45, 44, 40));
+
+            let ur_r = Rect::from_min_size(Pos2::new(top_r.right() + 6.0, top_r.top()), Vec2::new(56.0, 30.0));
+            p.rect_filled(ur_r, 5.0, Color32::WHITE);
+            p.rect_stroke(ur_r, 5.0, Stroke::new(1.0, Color32::from_rgb(195, 192, 182)), egui::StrokeKind::Middle);
+            p.line_segment([Pos2::new(ur_r.center().x, ur_r.top() + 1.0), Pos2::new(ur_r.center().x, ur_r.bottom() - 1.0)], Stroke::new(1.0, Color32::from_rgb(212, 209, 200)));
+            p.text(Pos2::new(ur_r.left() + 14.0, ur_r.center().y), egui::Align2::CENTER_CENTER, "↺", egui::FontId::proportional(12.5), Color32::from_rgb(90, 88, 82));
+            p.text(Pos2::new(ur_r.right() - 14.0, ur_r.center().y), egui::Align2::CENTER_CENTER, "↻", egui::FontId::proportional(12.5), Color32::from_rgb(175, 172, 162));
 
             if is_trench || is_measure {
                 let card_r = Rect::from_min_size(rect.min + Vec2::new(12.0, 52.0), Vec2::new(236.0, 78.0));
@@ -163,85 +170,23 @@ impl StrataAppState {
         });
     }
 
-    pub(crate) fn render_cpp_left_layer_panel(&mut self, ui: &mut egui::Ui, show_set_btn: bool) {
-        egui::SidePanel::left("ka_cpp_left_panel")
-            .resizable(true)
-            .default_width(242.0)
-            .width_range(215.0..=300.0)
-            .show_inside(ui, |ui| {
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("레이어").size(13.5).strong());
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if show_set_btn { let _ = ui.small_button("세트 ▼"); }
-                        if ui.small_button("전체 끄기").clicked() { self.left_layers.set_all_visible(false); }
-                        let _ = ui.selectable_label(self.home_map.files_open, "파일함");
-                    });
-                });
-                ui.add(egui::TextEdit::singleline(&mut self.home_map.layer_filter).hint_text("Q 레이어 찾기").desired_width(f32::INFINITY));
-                ui.add_space(4.0);
-                egui::Frame::NONE.fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(195, 192, 182))).inner_margin(egui::Margin::symmetric(6, 6)).show(ui, |ui| {
-                    egui::ScrollArea::vertical().max_height(280.0).show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("도면 · 레이어").size(11.0).color(Color32::from_rgb(105, 103, 96)));
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(egui::RichText::new("글자").size(11.0).color(Color32::from_rgb(105, 103, 96)));
-                            });
-                        });
-                        ui.separator();
-                        let blue = Color32::from_rgb(48, 88, 152);
-                        let purple = Color32::from_rgb(138, 56, 132);
-                        let dark = Color32::from_rgb(35, 35, 32);
-                        for (grp, rows) in [
-                            ("지적도", &[("☑ □ 지적도 · 조사 주변 5km", "☑ 지번", false, dark)][..]),
-                            ("조사 데이터", &[("☑ ■ 시굴격자   232", "☑ 이름·면적", false, dark), ("☑ ■ 조사구역   1", "☑ 면적", false, dark), ("☑ □ 주변 500m 거리   4", "☑ 이름", false, dark), ("☑ ■ 주변 500m   1", "—", false, dark)][..]),
-                            ("주변·참조", &[
-                                ("☑ ⊞ 지형 음영", "—", false, dark),
-                                ("☑ ⊞ 지표모델(DSM) 30m · Coperni...", "—", true, dark),
-                                ("▼ ☑ ■ 참조 지도", "☑ 글자", false, blue),
-                                ("  ▼ ☑ ■ 지정유산", "☑ 글자", false, blue),
-                                ("    ☑ □ 국가등록문화유산", "☑ 번호", false, purple),
-                                ("    ☑ □ 국가지정유산", "☑ 번호", false, purple),
-                                ("    ☑ □ 국가지정유산보호구역", "☑ 번호", false, purple),
-                                ("    ☑ □ 시도지정유산", "☑ 번호", false, purple),
-                                ("    ☑ □ 시도지정유산보호구역", "☑ 번호", false, purple),
-                            ][..]),
-                        ] {
-                            ui.label(egui::RichText::new(grp).size(11.0).color(Color32::from_rgb(105, 103, 96)));
-                            for (l_txt, r_txt, hi, col) in rows {
-                                let bg = if *hi { Color32::from_rgb(233, 229, 216) } else { Color32::TRANSPARENT };
-                                egui::Frame::NONE.fill(bg).show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.label(egui::RichText::new(*l_txt).size(11.0).color(*col));
-                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                            ui.label(egui::RichText::new(*r_txt).size(11.0));
-                                        });
-                                    });
-                                });
-                            }
-                        }
-                    });
-                });
-                ui.label(egui::RichText::new("▶ 표시 설정").size(11.5).color(Color32::from_rgb(90, 88, 82)));
-                ui.separator();
-                ui.label(egui::RichText::new("파일함").size(13.0).strong());
-                ui.horizontal(|ui| { for t in ["내 PC", "바탕화면", "문서"] { let _ = ui.small_button(t); } });
-                ui.horizontal(|ui| {
-                    for t in ["내려받기", "폴더 직접 찾기"] { let _ = ui.small_button(t); }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| { let _ = ui.small_button("상위"); });
-                });
-                egui::Frame::NONE.fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(195, 192, 182))).inner_margin(egui::Margin::symmetric(6, 6)).show(ui, |ui| {
-                    ui.set_min_height(88.0);
-                    ui.label(egui::RichText::new("경주시.gpkg").size(11.5));
-                });
-            });
-    }
-
-    pub(crate) fn paint_gyeongju_heritage_canvas(&self, p: &egui::Painter, rect: Rect) {
+    pub(crate) fn paint_gyeongju_heritage_canvas(&self, p: &egui::Painter, rect: Rect, cadastral_detail: bool) {
         let c = rect.center();
-        p.rect_filled(Rect::from_center_size(c, Vec2::new(rect.width() * 0.68, rect.height() * 0.84)), 0.0, Color32::from_rgb(154, 198, 120));
+        let map_box = Rect::from_center_size(c, Vec2::new(rect.width() * 0.72, rect.height() * 0.86));
+        p.rect_filled(map_box, 0.0, if cadastral_detail { Color32::WHITE } else { Color32::from_rgb(154, 198, 120) });
+        if cadastral_detail {
+            let cad_s = Stroke::new(0.8, Color32::from_rgb(45, 44, 40));
+            for gx in 0..18 {
+                let x = map_box.left() + (gx as f32) * (map_box.width() / 18.0);
+                p.line_segment([Pos2::new(x, map_box.top()), Pos2::new(x + 12.0, map_box.bottom())], cad_s);
+            }
+            for gy in 0..14 {
+                let y = map_box.top() + (gy as f32) * (map_box.height() / 14.0);
+                p.line_segment([Pos2::new(map_box.left(), y), Pos2::new(map_box.right(), y - 8.0)], cad_s);
+            }
+        }
         let green_s = Stroke::new(1.3, Color32::from_rgb(34, 148, 52));
-        let mag_s = Stroke::new(1.1, Color32::from_rgb(176, 28, 128));
+        let mag_s = Stroke::new(1.2, Color32::from_rgb(176, 28, 128));
         for (dx, dy, w, h, is_green) in [
             (-240.0, -140.0, 150.0, 120.0, true),
             (-110.0, -90.0, 180.0, 160.0, false),
@@ -271,5 +216,10 @@ impl StrataAppState {
         let (rx, ry) = (155.0, 240.0);
         let ring_pts: Vec<Pos2> = (0..=48).map(|i| { let a = (i as f32 / 48.0) * std::f32::consts::TAU; Pos2::new(c.x + 16.0 + rx * a.cos(), c.y + ry * a.sin()) }).collect();
         p.add(egui::Shape::line(ring_pts, Stroke::new(2.8, Color32::from_rgb(184, 58, 24))));
+        for by in [c.y - ry, c.y + ry] {
+            let b500 = Rect::from_center_size(Pos2::new(c.x + 16.0, by), Vec2::new(36.0, 15.0));
+            p.rect_filled(b500, 3.0, Color32::WHITE);
+            p.text(b500.center(), egui::Align2::CENTER_CENTER, "500m", egui::FontId::proportional(9.5), Color32::from_rgb(184, 58, 24));
+        }
     }
 }
