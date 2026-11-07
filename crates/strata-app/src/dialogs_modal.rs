@@ -264,6 +264,34 @@ impl Default for ModalDialogController {
 }
 
 impl ModalDialogController {
+    /// C++ KaClosePrompt.cpp:12-22 `withObjectParticle` — attach 을/를 to a
+    /// Korean name using the Hangul batchim (final consonant) rule.
+    pub fn with_object_particle(name: &str) -> String {
+        match name.chars().last() {
+            Some(c) if ('\u{AC00}'..='\u{D7A3}').contains(&c) => {
+                let batchim = !((c as u32) - 0xAC00).is_multiple_of(28);
+                format!("{name}{}", if batchim { "을" } else { "를" })
+            }
+            Some(c) if c.is_ascii_digit() => {
+                // 0·1·3·6·7·8 read with a final consonant
+                let batchim = "013678".contains(c);
+                format!("{name}{}", if batchim { "을" } else { "를" })
+            }
+            _ => format!("{name}을(를)"),
+        }
+    }
+
+    /// C++ KaClosePrompt.cpp:30-46 — heading and body of the unsaved-work prompt.
+    pub fn format_close_prompt(survey_name: &str, unsaved_features: usize) -> (String, String) {
+        let heading = format!("{} 저장할까요?", Self::with_object_particle(survey_name));
+        let body = if unsaved_features > 0 {
+            format!("저장하지 않은 작업이 {unsaved_features}건 있습니다.")
+        } else {
+            "저장하지 않은 작업이 있습니다.".to_owned()
+        };
+        (heading, body)
+    }
+
     /// C++ `KaModalDialogController::showExclusiveModal` — 이미 활성화된 모달이 존재할 때 중복 모달 팝업을 차단하는 단일 가드
     pub fn show_exclusive_modal(&mut self, dialog: ActiveModalDialog) -> bool {
         if self.active.is_some() {
@@ -1011,20 +1039,8 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         ActiveModalDialog::ControlPoint => {
             // KaControlPointDialog.cpp:40-120 — GPS 기준점
             let full = ctx.screen_rect();
-            let native_ppp = ctx
-                .input(|i| i.viewport().native_pixels_per_point)
-                .unwrap_or(1.5)
-                .clamp(1.0, 2.5);
-            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
-                (full.width() / native_ppp - 8.0).max(800.0)
-            } else {
-                full.width()
-            };
-            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
-                (full.height() / native_ppp - 16.0).max(520.0)
-            } else {
-                full.height()
-            };
+            // screen_rect is already logical points (Task D7)
+            let (vis_w, vis_h) = (full.width(), full.height());
             let modal_w = 480.0_f32.min(vis_w - 40.0);
             let modal_h = 560.0_f32.min(vis_h - 40.0);
             let modal_pos = Pos2::new(
@@ -1109,101 +1125,122 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                         });
 
                     ui.add_space(6.0);
-                    // 2) 측량 기준 그룹 (KaControlPointDialog.cpp:74-86)
-                    egui::Frame::group(ui.style())
-                        .inner_margin(egui::Margin::symmetric(10, 8))
-                        .show(ui, |ui| {
-                            ui.label(egui::RichText::new("측량 기준").size(12.5).strong());
-                            ui.add_space(4.0);
-                            egui::Grid::new("ka_cp_datum_grid")
-                                .num_columns(2)
-                                .spacing([12.0, 6.0])
-                                .show(ui, |ui| {
-                                    ui.label("측지기준계");
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut app.modals.cp_datum)
-                                            .desired_width(300.0),
+                    // KaControlPointDialog.cpp:23-34 sectionHead — a word plus a hairline,
+                    // not a boxed group.
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new("측량 기준")
+                                .size(11.5)
+                                .strong()
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                        ui.add(egui::Separator::default().horizontal());
+                    });
+                    ui.add_space(4.0);
+                    // KaControlPointDialog.cpp:124-125 captionedRow, 4 across
+                    ui.columns(4, |cols| {
+                        cols[0].label(
+                            egui::RichText::new("측지기준계")
+                                .size(11.0)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                        cols[0].add(
+                            egui::TextEdit::singleline(&mut app.modals.cp_datum)
+                                .desired_width(f32::INFINITY),
+                        );
+                        cols[1].label(
+                            egui::RichText::new("타원체")
+                                .size(11.0)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                        cols[1].add(
+                            egui::TextEdit::singleline(&mut app.modals.cp_ellipsoid)
+                                .desired_width(f32::INFINITY),
+                        );
+                        cols[2].label(
+                            egui::RichText::new("투영")
+                                .size(11.0)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                        cols[2].add(
+                            egui::TextEdit::singleline(&mut app.modals.cp_projection)
+                                .desired_width(f32::INFINITY),
+                        );
+                        cols[3].label(
+                            egui::RichText::new("원점")
+                                .size(11.0)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                        egui::ComboBox::from_id_salt("ka_cp_origin_combo")
+                            .selected_text(&app.modals.cp_origin)
+                            .width(f32::INFINITY)
+                            .show_ui(&mut cols[3], |ui| {
+                                for orig in [
+                                    "서부원점",
+                                    "중부원점",
+                                    "동부원점",
+                                    "동해원점",
+                                    "단일원점(UTM-K)",
+                                ] {
+                                    ui.selectable_value(
+                                        &mut app.modals.cp_origin,
+                                        orig.to_owned(),
+                                        orig,
                                     );
-                                    ui.end_row();
-
-                                    ui.label("타원체");
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut app.modals.cp_ellipsoid)
-                                            .desired_width(300.0),
-                                    );
-                                    ui.end_row();
-
-                                    ui.label("투영");
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut app.modals.cp_projection)
-                                            .desired_width(300.0),
-                                    );
-                                    ui.end_row();
-
-                                    ui.label("원점");
-                                    egui::ComboBox::from_id_salt("ka_cp_origin_combo")
-                                        .selected_text(&app.modals.cp_origin)
-                                        .width(300.0)
-                                        .show_ui(ui, |ui| {
-                                            for orig in [
-                                                "서부원점",
-                                                "중부원점",
-                                                "동부원점",
-                                                "동해원점",
-                                                "단일원점(UTM-K)",
-                                            ] {
-                                                ui.selectable_value(
-                                                    &mut app.modals.cp_origin,
-                                                    orig.to_owned(),
-                                                    orig,
-                                                );
-                                            }
-                                        });
-                                    ui.end_row();
-                                });
-                        });
+                                }
+                            });
+                    });
 
                     ui.add_space(6.0);
-                    // 3) 수신 그룹 (KaControlPointDialog.cpp:89-103)
-                    egui::Frame::group(ui.style())
-                        .inner_margin(egui::Margin::symmetric(10, 8))
-                        .show(ui, |ui| {
-                            ui.label(egui::RichText::new("수신").size(12.5).strong());
-                            ui.add_space(4.0);
-                            egui::Grid::new("ka_cp_rx_grid")
-                                .num_columns(2)
-                                .spacing([12.0, 6.0])
-                                .show(ui, |ui| {
-                                    ui.label("정확도(m)");
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut app.modals.cp_accuracy)
-                                            .desired_width(300.0),
+                    // KaControlPointDialog.cpp:23-34 sectionHead
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new("수신")
+                                .size(11.5)
+                                .strong()
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                        ui.add(egui::Separator::default().horizontal());
+                    });
+                    ui.add_space(4.0);
+                    // KaControlPointDialog.cpp:129 captionedRow, 3 across
+                    ui.columns(3, |cols| {
+                        cols[0].label(
+                            egui::RichText::new("정확도(m)")
+                                .size(11.0)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                        cols[0].add(
+                            egui::TextEdit::singleline(&mut app.modals.cp_accuracy)
+                                .desired_width(f32::INFINITY),
+                        );
+                        cols[1].label(
+                            egui::RichText::new("PDOP")
+                                .size(11.0)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                        cols[1].add(
+                            egui::TextEdit::singleline(&mut app.modals.cp_pdop)
+                                .desired_width(f32::INFINITY),
+                        );
+                        cols[2].label(
+                            egui::RichText::new("수신 상태")
+                                .size(11.0)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                        egui::ComboBox::from_id_salt("ka_cp_fix_combo")
+                            .selected_text(&app.modals.cp_fix)
+                            .width(f32::INFINITY)
+                            .show_ui(&mut cols[2], |ui| {
+                                for fix in ["RTK", "PPK", "DGPS", "단독측위"] {
+                                    ui.selectable_value(
+                                        &mut app.modals.cp_fix,
+                                        fix.to_owned(),
+                                        fix,
                                     );
-                                    ui.end_row();
-
-                                    ui.label("PDOP");
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut app.modals.cp_pdop)
-                                            .desired_width(300.0),
-                                    );
-                                    ui.end_row();
-
-                                    ui.label("수신 상태");
-                                    egui::ComboBox::from_id_salt("ka_cp_fix_combo")
-                                        .selected_text(&app.modals.cp_fix)
-                                        .width(300.0)
-                                        .show_ui(ui, |ui| {
-                                            for fix in ["RTK", "PPK", "DGPS", "단독측위"] {
-                                                ui.selectable_value(
-                                                    &mut app.modals.cp_fix,
-                                                    fix.to_owned(),
-                                                    fix,
-                                                );
-                                            }
-                                        });
-                                    ui.end_row();
-                                });
-                        });
+                                }
+                            });
+                    });
 
                     ui.add_space(8.0);
                     // 하단 버튼 행 (KaControlPointDialog.cpp:106-119)
@@ -1275,20 +1312,8 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         ActiveModalDialog::SurveyArea => {
             // KaSurveyAreaDialog.cpp:45-160 — 조사구역 그리기 설정
             let full = ctx.screen_rect();
-            let native_ppp = ctx
-                .input(|i| i.viewport().native_pixels_per_point)
-                .unwrap_or(1.5)
-                .clamp(1.0, 2.5);
-            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
-                (full.width() / native_ppp - 8.0).max(800.0)
-            } else {
-                full.width()
-            };
-            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
-                (full.height() / native_ppp - 16.0).max(520.0)
-            } else {
-                full.height()
-            };
+            // screen_rect is already logical points (Task D7)
+            let (vis_w, vis_h) = (full.width(), full.height());
             let modal_w = 500.0_f32.min(vis_w - 40.0);
             let modal_h = 440.0_f32.min(vis_h - 40.0);
             let modal_pos = Pos2::new(
@@ -1512,20 +1537,8 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         ActiveModalDialog::LineColor => {
             // KaLineColorDialog.cpp:25-75 — 선 색 및 선 굵기 다이얼로그
             let full = ctx.screen_rect();
-            let native_ppp = ctx
-                .input(|i| i.viewport().native_pixels_per_point)
-                .unwrap_or(1.5)
-                .clamp(1.0, 2.5);
-            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
-                (full.width() / native_ppp - 8.0).max(800.0)
-            } else {
-                full.width()
-            };
-            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
-                (full.height() / native_ppp - 16.0).max(520.0)
-            } else {
-                full.height()
-            };
+            // screen_rect is already logical points (Task D7)
+            let (vis_w, vis_h) = (full.width(), full.height());
             let modal_w = 430.0_f32.min(vis_w - 40.0);
             let modal_h = 310.0_f32.min(vis_h - 40.0);
             let modal_pos = Pos2::new(
@@ -1682,20 +1695,8 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         ActiveModalDialog::DemClass => {
             // KaDemClassDialog.cpp:91-170 — DEM 표현 다이얼로그
             let full = ctx.screen_rect();
-            let native_ppp = ctx
-                .input(|i| i.viewport().native_pixels_per_point)
-                .unwrap_or(1.5)
-                .clamp(1.0, 2.5);
-            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
-                (full.width() / native_ppp - 8.0).max(800.0)
-            } else {
-                full.width()
-            };
-            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
-                (full.height() / native_ppp - 16.0).max(520.0)
-            } else {
-                full.height()
-            };
+            // screen_rect is already logical points (Task D7)
+            let (vis_w, vis_h) = (full.width(), full.height());
             let modal_w = 500.0_f32.min(vis_w - 40.0);
             let modal_h = 430.0_f32.min(vis_h - 40.0);
             let modal_pos = Pos2::new(
@@ -1902,6 +1903,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                 app.modals.dem_exaggeration,
                                 app.modals.dem_relief_strength_pct
                             ));
+                            app.modals.dem_status_text = "적용했습니다. 색띠로 표고를 확인하세요. 음영은 지형 방향에 따라 밝기를 바꿉니다.".to_owned();
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("취소").clicked() {
@@ -1932,6 +1934,8 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                     app.modals.dem_exaggeration,
                                     app.modals.dem_relief_strength_pct
                                 ));
+                                  // KaDemClassDialog.cpp:104-106,131
+                                  app.modals.dem_status_text = "적용했습니다. 색띠로 표고를 확인하세요. 음영은 지형 방향에 따라 밝기를 바꿉니다.".to_owned();
                                 app.modals.active = None;
                             }
                         });
@@ -1941,20 +1945,8 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         ActiveModalDialog::ReferenceStatus => {
             // KaReferenceStatusDialog.cpp:31-112 & ReferenceInventory.cpp:140-189 — "자료 준비 상태"
             let full = ctx.screen_rect();
-            let native_ppp = ctx
-                .input(|i| i.viewport().native_pixels_per_point)
-                .unwrap_or(1.5)
-                .clamp(1.0, 2.5);
-            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
-                (full.width() / native_ppp - 8.0).max(800.0)
-            } else {
-                full.width()
-            };
-            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
-                (full.height() / native_ppp - 16.0).max(520.0)
-            } else {
-                full.height()
-            };
+            // screen_rect is already logical points (Task D7)
+            let (vis_w, vis_h) = (full.width(), full.height());
             let modal_w = 880.0_f32.min(vis_w - 40.0);
             let modal_h = 460.0_f32.min(vis_h - 40.0);
             let modal_pos = Pos2::new(
@@ -2261,6 +2253,48 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // D7 KaClosePrompt.cpp:12-46 — Korean object particle + close prompt text
+    #[test]
+    fn test_d7_close_prompt_korean_particle_and_control_point_layout() {
+        // open syllable (no batchim) -> 를
+        assert_eq!(
+            ModalDialogController::with_object_particle("경주시"),
+            "경주시를"
+        );
+        // closed syllable (batchim) -> 을
+        assert_eq!(
+            ModalDialogController::with_object_particle("월성"),
+            "월성을"
+        );
+        // digits: 0·1·3·6·7·8 take 을, the rest take 를
+        assert_eq!(
+            ModalDialogController::with_object_particle("조사1"),
+            "조사1을"
+        );
+        assert_eq!(
+            ModalDialogController::with_object_particle("조사2"),
+            "조사2를"
+        );
+        // fallback for non-Hangul, non-digit endings
+        assert_eq!(
+            ModalDialogController::with_object_particle("Site"),
+            "Site을(를)"
+        );
+
+        // close prompt heading + body
+        assert_eq!(
+            ModalDialogController::format_close_prompt("경주시", 3),
+            (
+                "경주시를 저장할까요?".to_owned(),
+                "저장하지 않은 작업이 3건 있습니다.".to_owned()
+            )
+        );
+        assert_eq!(
+            ModalDialogController::format_close_prompt("경주시", 0).1,
+            "저장하지 않은 작업이 있습니다."
+        );
+    }
 
     // D6 KaTrenchDialog / KaTrenchDialogPlan / KaSurveyContourDialog defaults
     #[test]
