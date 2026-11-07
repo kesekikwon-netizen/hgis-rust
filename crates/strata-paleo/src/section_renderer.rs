@@ -48,6 +48,67 @@ pub fn section_elevation_to_pixel_y(
     top_padding_px + norm * viewport_height_px.max(1.0)
 }
 
+pub const HGIS_CROSS_VIEW_THROTTLE_MS: u64 = 16;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MultiElevationProbeResult {
+    pub has_valid_sample: bool,
+    pub current_elevation_m: f64,
+    pub paleo_elevation_m: f64,
+    pub fill_depth_m: f64,
+    pub section_distance_d: f64,
+}
+
+/// C++ `KaCrossViewCursorSync` — 2D 월드 좌표 `world_xy`를 단면선 `[start, end]` 위로 내적 투영하여 거리 `d ∈ [0, L]` 산출 (`L <= 1e-6` 시 0.0 반환)
+#[must_use]
+pub fn project_world_coord_to_section_distance(
+    world_xy: [f64; 2],
+    section_start_xy: [f64; 2],
+    section_end_xy: [f64; 2],
+) -> f64 {
+    let vx = section_end_xy[0] - section_start_xy[0];
+    let vy = section_end_xy[1] - section_start_xy[1];
+    let len = vx.hypot(vy);
+    if len <= 1e-6 {
+        return 0.0;
+    }
+    let ux = world_xy[0] - section_start_xy[0];
+    let uy = world_xy[1] - section_start_xy[1];
+    let proj = (ux * vx + uy * vy) / len;
+    proj.clamp(0.0, len)
+}
+
+/// C++ `KaElevationTooltipProbe::probeAtWorldCoord` — 단면선 투영 거리 `d` 및 현 지표고·고지표고·성토심(`fillDepthM = Z_curr - Z_paleo`) 동시 산출
+#[must_use]
+pub fn probe_multi_elevation_at_world_coord(
+    world_xy: [f64; 2],
+    section_start_xy: [f64; 2],
+    section_end_xy: [f64; 2],
+    current_elevation_m: Option<f64>,
+    paleo_elevation_m: Option<f64>,
+) -> MultiElevationProbeResult {
+    let section_distance_d =
+        project_world_coord_to_section_distance(world_xy, section_start_xy, section_end_xy);
+    match (current_elevation_m, paleo_elevation_m) {
+        (Some(zc), Some(zp)) if zc.is_finite() && zp.is_finite() && zc > -9000.0 && zp > -9000.0 => {
+            MultiElevationProbeResult {
+                has_valid_sample: true,
+                current_elevation_m: zc,
+                paleo_elevation_m: zp,
+                fill_depth_m: zc - zp,
+                section_distance_d,
+            }
+        }
+        _ => MultiElevationProbeResult {
+            has_valid_sample: false,
+            current_elevation_m: f64::NAN,
+            paleo_elevation_m: f64::NAN,
+            fill_depth_m: 0.0,
+            section_distance_d,
+        },
+    }
+}
+
 #[must_use]
 pub fn render_cross_section_rgba(
     profile: &CrossSectionProfile,
@@ -146,5 +207,17 @@ mod tests {
         assert_eq!(HGIS_STRATUM_WEATHERED_COLOR, [168, 160, 144]);
         assert_eq!(HGIS_STRATUM_BEDROCK_COLOR, [120, 115, 108]);
         assert_eq!(HGIS_WATER_TABLE_COLOR, [41, 128, 185]);
+
+        // TestKaCrossViewCursorSync::testSectionProjectionDistance & TestKaElevationTooltipProbe::testFillDepthCalculation
+        let probe = probe_multi_elevation_at_world_coord(
+            [45.0, 20.0],
+            [0.0, 0.0],
+            [100.0, 0.0],
+            Some(32.50),
+            Some(29.30),
+        );
+        assert!(probe.has_valid_sample);
+        assert!((probe.section_distance_d - 45.0).abs() < 1e-6);
+        assert!((probe.fill_depth_m - 3.20).abs() < 1e-6);
     }
 }
