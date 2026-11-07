@@ -46,15 +46,19 @@ impl StrataAppState {
 
                 ui.add_space(22.0);
 
-                let recent_w = (inner_w * 0.77).max(520.0);
-                let guide_w = (inner_w - recent_w - 20.0).max(200.0);
+                // C++ KaStartPage.cpp: recent list takes ~77% and the guide column the rest.
+                // Leave room for the 18px gap so the pair never exceeds inner_w (otherwise
+                // the guide column is pushed off the right edge).
+                const GUIDE_GAP: f32 = 18.0;
+                let recent_w = (inner_w * 0.77).max(520.0).min((inner_w - GUIDE_GAP - 220.0).max(320.0));
+                let guide_w = (inner_w - recent_w - GUIDE_GAP).max(200.0);
                 ui.horizontal_top(|ui| {
                     ui.allocate_ui_with_layout(Vec2::new(recent_w, 250.0), egui::Layout::top_down(egui::Align::Min), |ui| {
                         ui.horizontal(|ui| {
                             ui.label(egui::RichText::new("최근 조사").size(15.0).strong());
                             ui.label(egui::RichText::new("4개").size(12.0).color(Color32::from_rgb(110, 108, 102)));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.add(egui::TextEdit::singleline(&mut self.home_map.recent_filter).hint_text("Q 이름·폴더로 찾기").desired_width(190.0));
+                                ui.add(egui::TextEdit::singleline(&mut self.home_map.recent_filter).hint_text("Q 이름·폴더로 찾기").desired_width(260.0));
                             });
                         });
                         ui.add_space(6.0);
@@ -71,14 +75,55 @@ impl StrataAppState {
                             });
                         });
                         ui.add_space(10.0);
-                        for (badge, title, next_tag, desc, step_id) in [
+                        // C++ KaHomeGuideCard.cpp: 18px circle nodes joined by a 1px vertical
+                        // connector. Step 1 is done (check), step 2 is current (orange dot),
+                        // step 3 is pending (number).
+                        let ring_rgb = Color32::from_rgb(45, 44, 40);
+                        let link_rgb = Color32::from_rgb(185, 182, 172);
+                        let node_size = 18.0;
+                        for (step_no, title, is_current, desc, step_id) in [
                             ("1", "새 조사", false, "조사 이름과 좌표계(5186·5187)를 정하면 조사 파일(GPKG)이 만들어집니다.", 1),
-                            ("●", "조사구역 그리기", true, "지도 탭에서 위성·지적을 보며 「그리기」로 구역과 유구를 그립니다.", 2),
+                            ("2", "조사구역 그리기", true, "지도 탭에서 위성·지적을 보며 「그리기」로 구역과 유구를 그립니다.", 2),
                             ("3", "도면 · 제출", false, "「도면」으로 종이에 옮기고, 「검수·제출」에서 검수한 뒤 제출 꾸러미(5179 SHP·조사도면.pdf·MANIFEST)를 만듭니다.\n아직 검수하지 않았습니다 — 지도 탭 「검수·제출」에서 확인합니다.", 3),
                         ] {
+                            let row_top = ui.cursor().top();
                             ui.horizontal_top(|ui| {
-                                let col = if next_tag { Color32::from_rgb(181, 87, 58) } else { Color32::from_rgb(75, 74, 70) };
-                                ui.colored_label(col, egui::RichText::new(badge).strong().size(13.0));
+                                let (node_r, _) = ui.allocate_exact_size(
+                                    Vec2::new(node_size, node_size),
+                                    egui::Sense::hover(),
+                                );
+                                let np = ui.painter();
+                                let c = node_r.center();
+                                // connector runs from this node's centre down past the row gap
+                                let connector_top = c.y + node_size * 0.5;
+                                let connector_bottom = row_top + 100.0;
+                                if step_no != "3" {
+                                    np.line_segment(
+                                        [
+                                            Pos2::new(c.x, connector_top),
+                                            Pos2::new(c.x, connector_bottom),
+                                        ],
+                                        Stroke::new(1.0, link_rgb),
+                                    );
+                                }
+                                np.circle_filled(c, node_size * 0.5, Color32::WHITE);
+                                if is_current {
+                                    np.circle_filled(c, 4.0, Color32::from_rgb(181, 87, 58));
+                                } else {
+                                    np.circle_stroke(
+                                        c,
+                                        node_size * 0.5,
+                                        Stroke::new(1.2, ring_rgb),
+                                    );
+                                    let glyph = if step_no == "1" { "✓" } else { step_no };
+                                    np.text(
+                                        c,
+                                        egui::Align2::CENTER_CENTER,
+                                        glyph,
+                                        egui::FontId::proportional(9.5),
+                                        ring_rgb,
+                                    );
+                                }
                                 ui.vertical(|ui| {
                                     ui.horizontal(|ui| {
                                         if ui.link(egui::RichText::new(title).strong().size(13.0)).clicked() {
@@ -88,7 +133,7 @@ impl StrataAppState {
                                                 _ => self.modals.active = Some(ActiveModalDialog::PaperSetup),
                                             }
                                         }
-                                        if next_tag {
+                                        if is_current {
                                             ui.colored_label(Color32::from_rgb(181, 87, 58), egui::RichText::new("• 다음").size(11.5).strong());
                                         }
                                     });
@@ -97,7 +142,9 @@ impl StrataAppState {
                             });
                             ui.add_space(8.0);
                         }
-                        let wf_states = strata_storage::project_actions::evaluate_workflow_guide(
+                        // Workflow state is still evaluated (callers rely on the side effects of
+                        // the counters below), but C++ shows no bottom progress sentence.
+                        let _wf_states = strata_storage::project_actions::evaluate_workflow_guide(
                             &strata_storage::project_actions::WorkflowProjectInput {
                                 survey_name: self.project_title.clone(),
                                 layer_count: self.left_layers.entries.len(),
@@ -113,18 +160,6 @@ impl StrataAppState {
                                 package_created: false,
                             },
                         );
-                        let done_cnt = wf_states.iter().filter(|s| s.completed).count();
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "진행률: {done_cnt}/{} 단계 완료 · {}",
-                                wf_states.len(),
-                                strata_storage::project_actions::forced_layer_order_note_ko(
-                                    "위성", true, false, false
-                                )
-                            ))
-                            .size(10.5)
-                            .color(Color32::from_rgb(115, 113, 106)),
-                        );
                     });
                 });
 
@@ -134,9 +169,19 @@ impl StrataAppState {
 
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("연결 상태").size(14.5).strong());
-                    ui.label(egui::RichText::new("비밀값은 표시되지 않습니다").size(12.0).color(Color32::from_rgb(105, 103, 96)));
+                    ui.label(
+                        egui::RichText::new("🔒 비밀값은 표시되지 않습니다")
+                            .size(12.0)
+                            .color(Color32::from_rgb(105, 103, 96)),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("인터넷 확인").clicked() {
+                        // C++ KaHomeConnectionCard.cpp: plain white button with a 1px rule.
+                        let net_btn = egui::Button::new(egui::RichText::new("인터넷 확인").size(12.0))
+                            .fill(Color32::WHITE)
+                            .stroke(Stroke::new(1.0, Color32::from_rgb(120, 118, 110)))
+                            .corner_radius(4.0)
+                            .min_size(Vec2::new(0.0, 26.0));
+                        if ui.add(net_btn).clicked() {
                             self.home_map.internet_checked = true;
                             self.home_map.draw_guide_message = Some("인터넷 연결 및 VWorld·국토정보플랫폼·국가유산청 계정 설정을 확인했습니다.".to_owned());
                         }
@@ -152,8 +197,24 @@ impl StrataAppState {
                     ("수치지형도 계정", self.accounts.ngii_configured),
                     ("문화재 인트라넷", self.accounts.heritage_configured),
                 ];
+                let sep_rgb = Color32::from_rgb(212, 209, 200);
+                let ink_rgb = Color32::from_rgb(55, 54, 50);
+                let cols_rect = ui.available_rect_before_wrap();
+                let col_w = cols_rect.width() / 5.0;
                 ui.columns(5, |cols| {
                     for (idx, (title, ready)) in statuses.into_iter().enumerate() {
+                        // 1px vertical rule between adjacent account columns (C++ draws it
+                        // before every column except the first).
+                        if idx > 0 {
+                            let x = cols[idx].cursor().left() - 6.0;
+                            let top = cols_rect.top();
+                            let bottom = top + 44.0;
+                            cols[idx].painter().line_segment(
+                                [Pos2::new(x, top), Pos2::new(x, bottom)],
+                                Stroke::new(1.0, sep_rgb),
+                            );
+                        }
+                        let _ = (col_w, ink_rgb);
                         cols[idx].horizontal(|ui| {
                             ui.vertical(|ui| {
                                 ui.label(egui::RichText::new(title).size(12.5).strong());
@@ -161,7 +222,17 @@ impl StrataAppState {
                                 ui.label(egui::RichText::new(st_txt).size(11.5).color(Color32::from_rgb(105, 103, 96)));
                             });
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.link(egui::RichText::new("설정").size(12.0)).clicked() {
+                                // C++ uses dark ink text, not a blue hyperlink.
+                                let resp = ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new("설정")
+                                            .size(12.0)
+                                            .color(ink_rgb)
+                                            .underline(),
+                                    )
+                                    .sense(egui::Sense::click()),
+                                );
+                                if resp.clicked() {
                                     self.modals.active = Some(ActiveModalDialog::AccountSettings);
                                 }
                             });
@@ -273,11 +344,11 @@ impl StrataAppState {
     fn render_recent_survey_box(&mut self, ui: &mut egui::Ui, width: f32) {
         let (box_r, _) = ui.allocate_exact_size(Vec2::new(width, 206.0), egui::Sense::hover());
         let p = ui.painter_at(box_r);
-        p.rect_filled(box_r, 2.0, Color32::WHITE);
+        p.rect_filled(box_r, 4.0, Color32::WHITE);
         p.rect_stroke(
             box_r,
-            2.0,
-            Stroke::new(1.0, Color32::from_rgb(185, 182, 172)),
+            4.0,
+            Stroke::new(1.0, Color32::from_rgb(45, 44, 40)),
             egui::StrokeKind::Middle,
         );
 
