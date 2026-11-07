@@ -1027,8 +1027,67 @@ impl StrataAppState {
         {
             let tl = w2s(rect, vp, [cx - 1050.0, cy + 720.0]);
             let br = w2s(rect, vp, [cx + 1050.0, cy - 720.0]);
-            let dsm_col = layer_color("지형 음영", Color32::from_rgb(154, 198, 120));
-            p.rect_filled(Rect::from_min_max(tl, br), 0.0, dsm_col);
+            let dsm_r = Rect::from_min_max(tl, br);
+            match self.modals.dem_applied_mode_idx {
+                0 => {
+                    // 등고 모드: 연한 지형 배경 + 등고선 밴드
+                    let base = layer_color("지형 음영", Color32::from_rgb(228, 224, 208));
+                    p.rect_filled(dsm_r, 0.0, base);
+                    let contour_col = layer_color("지형 음영", Color32::from_rgb(138, 102, 62));
+                    for idx in 1..=7 {
+                        let ratio = (idx as f32) / 8.0;
+                        let r_x = dsm_r.width() * 0.46 * ratio;
+                        let r_y = dsm_r.height() * 0.44 * ratio;
+                        let mut ring = Vec::with_capacity(25);
+                        for step in 0..=24 {
+                            let ang = (step as f32) / 24.0 * std::f32::consts::TAU;
+                            ring.push(Pos2::new(
+                                dsm_r.center().x + ang.cos() * r_x,
+                                dsm_r.center().y + ang.sin() * r_y,
+                            ));
+                        }
+                        p.add(egui::Shape::line(
+                            ring,
+                            Stroke::new(if idx % 2 == 0 { 1.4 } else { 0.8 }, contour_col),
+                        ));
+                    }
+                }
+                2 => {
+                    // 고도 모드: 선택된 색 표현 프리셋(0: 전국 표준, 1: 저지대 강조, 2: 현재 화면 맞춤)에 따른 단계별 색 띠
+                    let bands = 10usize;
+                    let bh = dsm_r.height() / (bands as f32);
+                    for bi in 0..bands {
+                        let t = (bi as f32) / ((bands - 1) as f32);
+                        let raw_col = match self.modals.dem_applied_preset_idx {
+                            0 => Color32::from_rgb(
+                                (90.0 + t * 110.0) as u8,
+                                (175.0 - t * 35.0) as u8,
+                                (95.0 + t * 60.0) as u8,
+                            ),
+                            1 => Color32::from_rgb(
+                                (58.0 + t * 145.0) as u8,
+                                (152.0 - t * 48.0) as u8,
+                                (118.0 - t * 55.0) as u8,
+                            ),
+                            _ => Color32::from_rgb(
+                                (68.0 + t * 165.0) as u8,
+                                (168.0 - (t - 0.4).abs() * 120.0).clamp(65.0, 210.0) as u8,
+                                (74.0 - t * 32.0) as u8,
+                            ),
+                        };
+                        let seg_r = Rect::from_min_size(
+                            Pos2::new(dsm_r.left(), dsm_r.top() + (bi as f32) * bh),
+                            Vec2::new(dsm_r.width(), bh + 1.0),
+                        );
+                        p.rect_filled(seg_r, 0.0, layer_color("지형 음영", raw_col));
+                    }
+                }
+                _ => {
+                    // 기본 음영 모드
+                    let dsm_col = layer_color("지형 음영", Color32::from_rgb(154, 198, 120));
+                    p.rect_filled(dsm_r, 0.0, dsm_col);
+                }
+            }
         }
 
         if rs.is_layer_visible("지적도 · 조사 주변 5km") {
@@ -1063,7 +1122,12 @@ impl StrataAppState {
         }
 
         if rs.is_layer_visible("조사구역") {
-            let sc = layer_color("조사구역", self.right_inspector.active_stroke_color());
+            let base_stroke = if let Some([r, g, b]) = self.modals.applied_line_color_rgb {
+                Color32::from_rgb(r, g, b)
+            } else {
+                self.right_inspector.active_stroke_color()
+            };
+            let sc = layer_color("조사구역", base_stroke);
             let fill_col = if self.right_inspector.no_fill {
                 Color32::TRANSPARENT
             } else {
@@ -1223,6 +1287,34 @@ impl StrataAppState {
                     }
                 }
                 gy += eff_step;
+            }
+        }
+
+        // T6 (1) KaControlPointDialog에서 추가한 GPS 기준점 심볼·라벨 렌더링
+        for (cp_id, cp_xy, cp_z) in &self.modals.control_points_world {
+            let sp = w2s(rect, vp, *cp_xy);
+            if rect.contains(sp) {
+                let tri = vec![
+                    Pos2::new(sp.x, sp.y - 7.0),
+                    Pos2::new(sp.x - 6.5, sp.y + 5.0),
+                    Pos2::new(sp.x + 6.5, sp.y + 5.0),
+                ];
+                p.add(egui::Shape::convex_polygon(
+                    tri,
+                    Color32::from_rgb(220, 38, 38),
+                    Stroke::new(1.5, Color32::WHITE),
+                ));
+                let lbl = match cp_z {
+                    Some(z) => format!("{cp_id} ({z:.2}m)"),
+                    None => cp_id.clone(),
+                };
+                p.text(
+                    Pos2::new(sp.x + 9.0, sp.y),
+                    egui::Align2::LEFT_CENTER,
+                    lbl,
+                    FontId::proportional(10.5),
+                    Color32::from_rgb(185, 28, 28),
+                );
             }
         }
 

@@ -24,6 +24,10 @@ pub enum ActiveModalDialog {
     PaleoSourceDownload,
     PdfPreparing,
     DrawingPrint,
+    ControlPoint,
+    SurveyArea,
+    LineColor,
+    DemClass,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +61,42 @@ pub struct ModalDialogController {
     pub print_single_sheet: bool,
     pub print_paper: SheetPaperSize,
     pub print_dpi: u32,
+    // T6 (1) KaControlPointDialog 상태
+    pub cp_id: String,
+    pub cp_x: String,
+    pub cp_y: String,
+    pub cp_z: String,
+    pub cp_swap_axes: bool,
+    pub cp_datum: String,
+    pub cp_ellipsoid: String,
+    pub cp_projection: String,
+    pub cp_origin: String,
+    pub cp_accuracy: String,
+    pub cp_pdop: String,
+    pub cp_fix: String,
+    pub control_points_world: Vec<(String, [f64; 2], Option<f64>)>,
+    // T6 (2) KaSurveyAreaDialog 상태
+    pub survey_area_layer_name: String,
+    pub survey_area_continue_idx: usize,
+    pub survey_area_color_idx: usize,
+    pub survey_area_width_mm: f32,
+    // T6 (3) KaLineColorDialog 상태
+    pub line_color_idx: usize,
+    pub line_color_rgb: [u8; 3],
+    pub line_width_mm: f32,
+    pub applied_line_color_rgb: Option<[u8; 3]>,
+    // T6 (4) KaDemClassDialog 상태
+    pub dem_mode_idx: usize,
+    pub dem_preset_idx: usize,
+    pub dem_relief_enabled: bool,
+    pub dem_exaggeration: f32,
+    pub dem_relief_strength_pct: u32,
+    pub dem_status_text: String,
+    pub dem_applied_mode_idx: usize,
+    pub dem_applied_preset_idx: usize,
+    pub dem_applied_relief_enabled: bool,
+    pub dem_applied_exaggeration: f32,
+    pub dem_applied_relief_strength_pct: u32,
 }
 
 impl Default for ModalDialogController {
@@ -91,6 +131,38 @@ impl Default for ModalDialogController {
             print_single_sheet: true,
             print_paper: SheetPaperSize::A3,
             print_dpi: 300,
+            cp_id: "GCP-01".to_owned(),
+            cp_x: "219748.608".to_owned(),
+            cp_y: "361019.219".to_owned(),
+            cp_z: "48.50".to_owned(),
+            cp_swap_axes: false,
+            cp_datum: "세계측지계".to_owned(),
+            cp_ellipsoid: "GRS80".to_owned(),
+            cp_projection: "TM/UTM-K".to_owned(),
+            cp_origin: "동부원점".to_owned(),
+            cp_accuracy: "1.0".to_owned(),
+            cp_pdop: "1.5".to_owned(),
+            cp_fix: "RTK".to_owned(),
+            control_points_world: Vec::new(),
+            survey_area_layer_name: "조사구역".to_owned(),
+            survey_area_continue_idx: 0,
+            survey_area_color_idx: 1,
+            survey_area_width_mm: 1.5,
+            line_color_idx: 1,
+            line_color_rgb: [0xEA, 0x58, 0x0C],
+            line_width_mm: 1.5,
+            applied_line_color_rgb: None,
+            dem_mode_idx: 2,
+            dem_preset_idx: 0,
+            dem_relief_enabled: true,
+            dem_exaggeration: 1.0,
+            dem_relief_strength_pct: 30,
+            dem_status_text: "지금 화면의 높이차는 약 42 m뿐이라 이 색 표현으로는 거의 한 색으로 보입니다. 「현재 화면에 색 맞추기」를 누르면 화면 안의 높이로 색을 나눕니다.".to_owned(),
+            dem_applied_mode_idx: 1,
+            dem_applied_preset_idx: 0,
+            dem_applied_relief_enabled: true,
+            dem_applied_exaggeration: 1.0,
+            dem_applied_relief_strength_pct: 30,
         }
     }
 }
@@ -812,6 +884,936 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                     }
                 });
         }
+        ActiveModalDialog::ControlPoint => {
+            // KaControlPointDialog.cpp:40-120 — GPS 기준점
+            let full = ctx.screen_rect();
+            let native_ppp = ctx
+                .input(|i| i.viewport().native_pixels_per_point)
+                .unwrap_or(1.5)
+                .clamp(1.0, 2.5);
+            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
+                (full.width() / native_ppp - 8.0).max(800.0)
+            } else {
+                full.width()
+            };
+            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
+                (full.height() / native_ppp - 16.0).max(520.0)
+            } else {
+                full.height()
+            };
+            let modal_w = 480.0_f32.min(vis_w - 40.0);
+            let modal_h = 560.0_f32.min(vis_h - 40.0);
+            let modal_pos = Pos2::new(
+                ((vis_w - modal_w) * 0.5).max(16.0),
+                ((vis_h - modal_h) * 0.5).max(16.0),
+            );
+            egui::Window::new("ka_modal_control_point")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(modal_pos)
+                .fixed_size([modal_w, modal_h])
+                .show(ctx, |ui| {
+                    ui.set_min_width(modal_w - 20.0);
+                    ui.set_max_width(modal_w - 20.0);
+                    render_strata_modal_header(ui, "GPS 기준점", &mut open);
+                    ui.label(
+                        egui::RichText::new(
+                            "아래 동쪽·북쪽 값은 현재 조사 좌표계 기준 미터(m)입니다. (세계측지계 · GRS80 · 동부원점 (EPSG:5187))",
+                        )
+                        .size(11.5)
+                        .color(Color32::from_rgb(0x47, 0x55, 0x69)),
+                    );
+                    ui.add_space(6.0);
+
+                    // 1) 위치 그룹 (KaControlPointDialog.cpp:50-71)
+                    egui::Frame::group(ui.style())
+                        .inner_margin(egui::Margin::symmetric(10, 8))
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("위치").size(12.5).strong());
+                            ui.add_space(4.0);
+                            egui::Grid::new("ka_cp_pos_grid")
+                                .num_columns(2)
+                                .spacing([12.0, 6.0])
+                                .show(ui, |ui| {
+                                    ui.label("점ID");
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut app.modals.cp_id)
+                                            .hint_text("예: GCP-01")
+                                            .desired_width(300.0),
+                                    );
+                                    ui.end_row();
+
+                                    let x_lbl = if app.modals.cp_swap_axes {
+                                        "X (북쪽·m)"
+                                    } else {
+                                        "X (동쪽)"
+                                    };
+                                    ui.label(x_lbl);
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut app.modals.cp_x)
+                                            .desired_width(300.0),
+                                    );
+                                    ui.end_row();
+
+                                    let y_lbl = if app.modals.cp_swap_axes {
+                                        "Y (동쪽·m)"
+                                    } else {
+                                        "Y (북쪽)"
+                                    };
+                                    ui.label(y_lbl);
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut app.modals.cp_y)
+                                            .desired_width(300.0),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label("");
+                                    ui.checkbox(
+                                        &mut app.modals.cp_swap_axes,
+                                        "X·Y 교환 (측량 X=북, Y=동)",
+                                    );
+                                    ui.end_row();
+
+                                    ui.label("Z (표고 m, 선택)");
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut app.modals.cp_z)
+                                            .hint_text("비워 두면 표고 없이 넣습니다")
+                                            .desired_width(300.0),
+                                    );
+                                    ui.end_row();
+                                });
+                        });
+
+                    ui.add_space(6.0);
+                    // 2) 측량 기준 그룹 (KaControlPointDialog.cpp:74-86)
+                    egui::Frame::group(ui.style())
+                        .inner_margin(egui::Margin::symmetric(10, 8))
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("측량 기준").size(12.5).strong());
+                            ui.add_space(4.0);
+                            egui::Grid::new("ka_cp_datum_grid")
+                                .num_columns(2)
+                                .spacing([12.0, 6.0])
+                                .show(ui, |ui| {
+                                    ui.label("측지기준계");
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut app.modals.cp_datum)
+                                            .desired_width(300.0),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label("타원체");
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut app.modals.cp_ellipsoid)
+                                            .desired_width(300.0),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label("투영");
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut app.modals.cp_projection)
+                                            .desired_width(300.0),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label("원점");
+                                    egui::ComboBox::from_id_salt("ka_cp_origin_combo")
+                                        .selected_text(&app.modals.cp_origin)
+                                        .width(300.0)
+                                        .show_ui(ui, |ui| {
+                                            for orig in [
+                                                "서부원점",
+                                                "중부원점",
+                                                "동부원점",
+                                                "동해원점",
+                                                "단일원점(UTM-K)",
+                                            ] {
+                                                ui.selectable_value(
+                                                    &mut app.modals.cp_origin,
+                                                    orig.to_owned(),
+                                                    orig,
+                                                );
+                                            }
+                                        });
+                                    ui.end_row();
+                                });
+                        });
+
+                    ui.add_space(6.0);
+                    // 3) 수신 그룹 (KaControlPointDialog.cpp:89-103)
+                    egui::Frame::group(ui.style())
+                        .inner_margin(egui::Margin::symmetric(10, 8))
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("수신").size(12.5).strong());
+                            ui.add_space(4.0);
+                            egui::Grid::new("ka_cp_rx_grid")
+                                .num_columns(2)
+                                .spacing([12.0, 6.0])
+                                .show(ui, |ui| {
+                                    ui.label("정확도(m)");
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut app.modals.cp_accuracy)
+                                            .desired_width(300.0),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label("PDOP");
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut app.modals.cp_pdop)
+                                            .desired_width(300.0),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label("수신 상태");
+                                    egui::ComboBox::from_id_salt("ka_cp_fix_combo")
+                                        .selected_text(&app.modals.cp_fix)
+                                        .width(300.0)
+                                        .show_ui(ui, |ui| {
+                                            for fix in ["RTK", "PPK", "DGPS", "단독측위"] {
+                                                ui.selectable_value(
+                                                    &mut app.modals.cp_fix,
+                                                    fix.to_owned(),
+                                                    fix,
+                                                );
+                                            }
+                                        });
+                                    ui.end_row();
+                                });
+                        });
+
+                    ui.add_space(8.0);
+                    // 하단 버튼 행 (KaControlPointDialog.cpp:106-119)
+                    ui.horizontal(|ui| {
+                        if ui.button("CSV 불러오기").clicked() {
+                            let [cx, cy] = app.home_map.real_survey.survey_center;
+                            app.modals.control_points_world.push((
+                                "GCP-01".to_owned(),
+                                [cx - 80.0, cy + 60.0],
+                                Some(48.5),
+                            ));
+                            app.modals.control_points_world.push((
+                                "GCP-02".to_owned(),
+                                [cx + 95.0, cy - 55.0],
+                                Some(46.2),
+                            ));
+                            app.home_map.draw_guide_message = Some(
+                                "CSV에서 GPS 기준점 2점(GCP-01, GCP-02)을 불러와 지도에 표시했습니다."
+                                    .to_owned(),
+                            );
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("취소").clicked() {
+                                app.modals.active = None;
+                            }
+                            let add_btn = egui::Button::new(
+                                egui::RichText::new("지도에 추가 (확인)")
+                                    .color(Color32::WHITE)
+                                    .strong(),
+                            )
+                            .fill(Color32::from_rgb(33, 33, 31));
+                            if ui.add(add_btn).clicked() {
+                                let raw_x = app
+                                    .modals
+                                    .cp_x
+                                    .trim()
+                                    .parse::<f64>()
+                                    .unwrap_or(app.home_map.real_survey.survey_center[0]);
+                                let raw_y = app
+                                    .modals
+                                    .cp_y
+                                    .trim()
+                                    .parse::<f64>()
+                                    .unwrap_or(app.home_map.real_survey.survey_center[1]);
+                                let (east_x, north_y) = if app.modals.cp_swap_axes {
+                                    (raw_y, raw_x)
+                                } else {
+                                    (raw_x, raw_y)
+                                };
+                                let z_opt = app.modals.cp_z.trim().parse::<f64>().ok();
+                                let id = if app.modals.cp_id.trim().is_empty() {
+                                    format!("GCP-{:02}", app.modals.control_points_world.len() + 1)
+                                } else {
+                                    app.modals.cp_id.trim().to_owned()
+                                };
+                                app.modals
+                                    .control_points_world
+                                    .push((id.clone(), [east_x, north_y], z_opt));
+                                app.home_map.draw_guide_message = Some(format!(
+                                    "GPS 기준점 「{id}」 (X={east_x:.3}, Y={north_y:.3}, {} · {}) 지도에 추가됨",
+                                    app.modals.cp_datum, app.modals.cp_fix
+                                ));
+                                app.modals.active = None;
+                            }
+                        });
+                    });
+                });
+        }
+        ActiveModalDialog::SurveyArea => {
+            // KaSurveyAreaDialog.cpp:45-160 — 조사구역 그리기 설정
+            let full = ctx.screen_rect();
+            let native_ppp = ctx
+                .input(|i| i.viewport().native_pixels_per_point)
+                .unwrap_or(1.5)
+                .clamp(1.0, 2.5);
+            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
+                (full.width() / native_ppp - 8.0).max(800.0)
+            } else {
+                full.width()
+            };
+            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
+                (full.height() / native_ppp - 16.0).max(520.0)
+            } else {
+                full.height()
+            };
+            let modal_w = 500.0_f32.min(vis_w - 40.0);
+            let modal_h = 440.0_f32.min(vis_h - 40.0);
+            let modal_pos = Pos2::new(
+                ((vis_w - modal_w) * 0.5).max(16.0),
+                ((vis_h - modal_h) * 0.5).max(16.0),
+            );
+            egui::Window::new("ka_modal_survey_area")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(modal_pos)
+                .fixed_size([modal_w, modal_h])
+                .show(ctx, |ui| {
+                    ui.set_min_width(modal_w - 20.0);
+                    ui.set_max_width(modal_w - 20.0);
+                    render_strata_modal_header(ui, "조사구역 그리기 설정", &mut open);
+
+                    // 1) 조사구역 레이어 이름 & 이어 그릴 레이어 선택 (KaSurveyAreaDialog.cpp:54-69)
+                    ui.label(
+                        egui::RichText::new("조사구역 레이어 이름")
+                            .size(13.0)
+                            .strong()
+                            .color(Color32::from_rgb(0x37, 0x41, 0x51)),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut app.modals.survey_area_layer_name)
+                                .desired_width(240.0),
+                        );
+                        for preset_name in ["조사구역", "시굴구역", "발굴구역"] {
+                            if ui
+                                .selectable_label(
+                                    app.modals.survey_area_layer_name == preset_name,
+                                    preset_name,
+                                )
+                                .clicked()
+                            {
+                                app.modals.survey_area_layer_name = preset_name.to_owned();
+                            }
+                        }
+                    });
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new("이어 그릴 레이어 선택")
+                            .size(13.0)
+                            .strong()
+                            .color(Color32::from_rgb(0x37, 0x41, 0x51)),
+                    );
+                    let ring_cnt = app.home_map.real_survey.survey_rings.len();
+                    let area_m2 = app.home_map.real_survey.survey_area_m2;
+                    let pyeong = area_m2 / 3.305_785;
+                    let continue_opts = [
+                        format!(
+                            "지금 선택한 레이어 ({} · {}개 도형)",
+                            app.modals.survey_area_layer_name, ring_cnt
+                        ),
+                        "+ 새 조사구역 레이어 만들기".to_owned(),
+                    ];
+                    let sel_continue = continue_opts
+                        .get(app.modals.survey_area_continue_idx)
+                        .cloned()
+                        .unwrap_or_else(|| continue_opts[0].clone());
+                    egui::ComboBox::from_id_salt("ka_survey_area_continue_combo")
+                        .selected_text(sel_continue)
+                        .width(modal_w - 32.0)
+                        .show_ui(ui, |ui| {
+                            for (idx, opt) in continue_opts.iter().enumerate() {
+                                ui.selectable_value(
+                                    &mut app.modals.survey_area_continue_idx,
+                                    idx,
+                                    opt,
+                                );
+                            }
+                        });
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "현재 조사구역 면적: {area_m2:.2} m² (약 {pyeong:.1} 평)"
+                        ))
+                        .size(12.0)
+                        .color(Color32::from_rgb(0x47, 0x55, 0x69)),
+                    );
+
+                    ui.add_space(8.0);
+                    // 2) 외곽선 색 — 8색 스와치 그리드 (KaSurveyAreaDialog.cpp:74-103)
+                    let (cr, cg, cb, cname) = crate::right_inspector::KA_STYLE_PALETTE
+                        [app.modals.survey_area_color_idx.min(7)];
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new("외곽선 색")
+                                .size(13.0)
+                                .strong()
+                                .color(Color32::from_rgb(0x37, 0x41, 0x51)),
+                        );
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "선택: {cname} (#{cr:02X}{cg:02X}{cb:02X})"
+                            ))
+                            .size(12.0)
+                            .color(Color32::from_rgb(cr, cg, cb))
+                            .strong(),
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        for (idx, &(r, g, b, name)) in
+                            crate::right_inspector::KA_STYLE_PALETTE.iter().enumerate()
+                        {
+                            let selected = app.modals.survey_area_color_idx == idx;
+                            let btn = egui::Button::new(
+                                egui::RichText::new(if selected { "✓" } else { "" })
+                                    .color(Color32::WHITE)
+                                    .strong(),
+                            )
+                            .fill(Color32::from_rgb(r, g, b))
+                            .stroke(if selected {
+                                Stroke::new(2.5, Color32::from_rgb(0x11, 0x18, 0x27))
+                            } else {
+                                Stroke::new(1.0, Color32::from_rgb(0x9C, 0xA3, 0xAF))
+                            })
+                            .corner_radius(6.0)
+                            .min_size(Vec2::new(48.0, 32.0));
+                            if ui
+                                .add(btn)
+                                .on_hover_text(format!("{name} (#{r:02X}{g:02X}{b:02X})"))
+                                .clicked()
+                            {
+                                app.modals.survey_area_color_idx = idx;
+                            }
+                        }
+                    });
+
+                    ui.add_space(8.0);
+                    // 3) 선 굵기 — 4종 프리셋 + 직접 스핀박스 (KaSurveyAreaDialog.cpp:105-143)
+                    ui.label(
+                        egui::RichText::new("선 굵기")
+                            .size(13.0)
+                            .strong()
+                            .color(Color32::from_rgb(0x37, 0x41, 0x51)),
+                    );
+                    ui.horizontal(|ui| {
+                        for (label, w_mm) in [
+                            ("보통 1.0", 1.0_f32),
+                            ("기본 1.5", 1.5_f32),
+                            ("굵게 2.0", 2.0_f32),
+                            ("강조 3.0", 3.0_f32),
+                        ] {
+                            let active = (app.modals.survey_area_width_mm - w_mm).abs() < 0.05;
+                            let btn = egui::Button::new(
+                                egui::RichText::new(label)
+                                    .size(12.5)
+                                    .strong()
+                                    .color(if active {
+                                        Color32::WHITE
+                                    } else {
+                                        Color32::from_rgb(0x37, 0x41, 0x51)
+                                    }),
+                            )
+                            .fill(if active {
+                                Color32::from_rgb(0x25, 0x63, 0xEB)
+                            } else {
+                                Color32::from_rgb(0xF3, 0xF4, 0xF6)
+                            })
+                            .corner_radius(6.0)
+                            .min_size(Vec2::new(72.0, 30.0));
+                            if ui.add(btn).clicked() {
+                                app.modals.survey_area_width_mm = w_mm;
+                            }
+                        }
+                        ui.label("직접");
+                        ui.add(
+                            egui::DragValue::new(&mut app.modals.survey_area_width_mm)
+                                .range(0.5..=10.0)
+                                .speed(0.1)
+                                .suffix(" mm"),
+                        );
+                    });
+
+                    ui.add_space(12.0);
+                    ui.separator();
+                    // 4) 하단 확인/취소 버튼 (KaSurveyAreaDialog.cpp:146-158)
+                    ui.horizontal(|ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("취소").clicked() {
+                                app.modals.active = None;
+                            }
+                            let ok_lbl = if app.modals.survey_area_continue_idx == 0 {
+                                "계속 그리기 (확인)"
+                            } else {
+                                "그리기 시작 (Enter)"
+                            };
+                            let ok_btn = egui::Button::new(
+                                egui::RichText::new(ok_lbl)
+                                    .color(Color32::WHITE)
+                                    .strong()
+                                    .size(13.5),
+                            )
+                            .fill(Color32::from_rgb(0x25, 0x63, 0xEB))
+                            .corner_radius(6.0)
+                            .min_size(Vec2::new(148.0, 34.0));
+                            if ui.add(ok_btn).clicked() {
+                                app.right_inspector.style_color_index =
+                                    app.modals.survey_area_color_idx.min(7);
+                                app.right_inspector.stroke_width_mm =
+                                    app.modals.survey_area_width_mm;
+                                app.right_inspector.selected_layer_key =
+                                    Some(app.modals.survey_area_layer_name.clone());
+                                app. modals.applied_line_color_rgb = Some([cr, cg, cb]);
+                                app.ribbon.sub_toolbar_visible = true;
+                                app.ribbon.sub_mode = crate::ribbon::SubToolsMode::Draw;
+                                app.active_tool =
+                                    strata_canvas2d::map_tools::MapToolKind::DrawPolygon;
+                                app.home_map.draw_guide_message = Some(format!(
+                                    "「{}」 그리기 시작 — 외곽선 색 {cname}(#{cr:02X}{cg:02X}{cb:02X}), 굵기 {:.1} mm",
+                                    app.modals.survey_area_layer_name,
+                                    app.modals.survey_area_width_mm
+                                ));
+                                app.modals.active = None;
+                            }
+                        });
+                    });
+                });
+        }
+        ActiveModalDialog::LineColor => {
+            // KaLineColorDialog.cpp:25-75 — 선 색 및 선 굵기 다이얼로그
+            let full = ctx.screen_rect();
+            let native_ppp = ctx
+                .input(|i| i.viewport().native_pixels_per_point)
+                .unwrap_or(1.5)
+                .clamp(1.0, 2.5);
+            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
+                (full.width() / native_ppp - 8.0).max(800.0)
+            } else {
+                full.width()
+            };
+            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
+                (full.height() / native_ppp - 16.0).max(520.0)
+            } else {
+                full.height()
+            };
+            let modal_w = 430.0_f32.min(vis_w - 40.0);
+            let modal_h = 310.0_f32.min(vis_h - 40.0);
+            let modal_pos = Pos2::new(
+                ((vis_w - modal_w) * 0.5).max(16.0),
+                ((vis_h - modal_h) * 0.5).max(16.0),
+            );
+            egui::Window::new("ka_modal_line_color")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(modal_pos)
+                .fixed_size([modal_w, modal_h])
+                .show(ctx, |ui| {
+                    ui.set_min_width(modal_w - 20.0);
+                    ui.set_max_width(modal_w - 20.0);
+                    let target_layer = app
+                        .right_inspector
+                        .selected_layer_key
+                        .clone()
+                        .unwrap_or_else(|| "조사구역".to_owned());
+                    render_strata_modal_header(ui, "선 색", &mut open);
+                    ui.label(
+                        egui::RichText::new(format!("대상 레이어: {target_layer}"))
+                            .size(12.0)
+                            .color(Color32::from_rgb(0x47, 0x55, 0x69)),
+                    );
+                    ui.add_space(6.0);
+
+                    let [r, g, b] = app.modals.line_color_rgb;
+                    let fg = if i32::from(r) + i32::from(g) + i32::from(b) > 380 {
+                        Color32::from_rgb(0x11, 0x18, 0x27)
+                    } else {
+                        Color32::WHITE
+                    };
+                    egui::Grid::new("ka_line_color_form")
+                        .num_columns(2)
+                        .spacing([14.0, 10.0])
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("선 색").size(13.0).strong());
+                            let hex_btn = egui::Button::new(
+                                egui::RichText::new(format!(
+                                    "#{r:02X}{g:02X}{b:02X} · 클릭해서 색 고르기"
+                                ))
+                                .color(fg)
+                                .strong(),
+                            )
+                            .fill(Color32::from_rgb(r, g, b))
+                            .stroke(Stroke::new(2.0, Color32::from_rgb(0x9C, 0xA3, 0xAF)))
+                            .corner_radius(6.0)
+                            .min_size(Vec2::new(290.0, 32.0));
+                            if ui.add(hex_btn).clicked() {
+                                let next_idx = (app.modals.line_color_idx + 1) % 8;
+                                app.modals.line_color_idx = next_idx;
+                                let (nr, ng, nb, _) = crate::right_inspector::KA_STYLE_PALETTE[next_idx];
+                                app.modals.line_color_rgb = [nr, ng, nb];
+                            }
+                            ui.end_row();
+
+                            ui.label(egui::RichText::new("색 팔레트").size(12.0));
+                            ui.horizontal(|ui| {
+                                for (idx, &(sr, sg, sb, sname)) in
+                                    crate::right_inspector::KA_STYLE_PALETTE.iter().enumerate()
+                                {
+                                    let active = app.modals.line_color_rgb == [sr, sg, sb];
+                                    let sw_btn = egui::Button::new(
+                                        egui::RichText::new(if active { "✓" } else { "" })
+                                            .color(Color32::WHITE)
+                                            .strong(),
+                                    )
+                                    .fill(Color32::from_rgb(sr, sg, sb))
+                                    .stroke(if active {
+                                        Stroke::new(2.0, Color32::from_rgb(0x11, 0x18, 0x27))
+                                    } else {
+                                        Stroke::new(1.0, Color32::from_rgb(0x9C, 0xA3, 0xAF))
+                                    })
+                                    .corner_radius(4.0)
+                                    .min_size(Vec2::new(30.0, 26.0));
+                                    if ui
+                                        .add(sw_btn)
+                                        .on_hover_text(format!("{sname} (#{sr:02X}{sg:02X}{sb:02X})"))
+                                        .clicked()
+                                    {
+                                        app.modals.line_color_idx = idx;
+                                        app.modals.line_color_rgb = [sr, sg, sb];
+                                    }
+                                }
+                            });
+                            ui.end_row();
+
+                            ui.label(egui::RichText::new("선 굵기").size(13.0).strong());
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut app.modals.line_width_mm)
+                                        .range(0.5..=5.0)
+                                        .speed(0.25)
+                                        .suffix(" mm"),
+                                );
+                                for w_mm in [0.5_f32, 1.0, 1.5, 2.0, 3.0] {
+                                    if ui
+                                        .selectable_label(
+                                            (app.modals.line_width_mm - w_mm).abs() < 0.05,
+                                            format!("{w_mm:.1}mm"),
+                                        )
+                                        .clicked()
+                                    {
+                                        app.modals.line_width_mm = w_mm;
+                                    }
+                                }
+                            });
+                            ui.end_row();
+                        });
+
+                    ui.add_space(12.0);
+                    ui.separator();
+                    // 하단 버튼 행: [원래 색으로] ··· [확인] [취소] (KaLineColorDialog.cpp:54-67)
+                    ui.horizontal(|ui| {
+                        if ui.button("원래 색으로").clicked() {
+                            app.modals.line_color_idx = 1;
+                            app.modals.line_color_rgb = [0xEA, 0x58, 0x0C];
+                            app.modals.line_width_mm = 1.5;
+                            app.modals.applied_line_color_rgb = None;
+                            app.right_inspector.style_color_index = 1;
+                            app.right_inspector.stroke_width_mm = 1.5;
+                            app.home_map.draw_guide_message =
+                                Some(format!("「{target_layer}」 선 색을 원래 색(#EA580C, 1.5 mm)으로 되돌렸습니다."));
+                            app.modals.active = None;
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("취소").clicked() {
+                                app.modals.active = None;
+                            }
+                            let ok_btn = egui::Button::new(
+                                egui::RichText::new("확인")
+                                    .color(Color32::WHITE)
+                                    .strong(),
+                            )
+                            .fill(Color32::from_rgb(33, 33, 31))
+                            .min_size(Vec2::new(72.0, 30.0));
+                            if ui.add(ok_btn).clicked() {
+                                app.right_inspector.style_color_index =
+                                    app.modals.line_color_idx.min(7);
+                                app.right_inspector.stroke_width_mm = app.modals.line_width_mm;
+                                app.modals.applied_line_color_rgb =
+                                    Some(app.modals.line_color_rgb);
+                                app.home_map.draw_guide_message = Some(format!(
+                                    "「{target_layer}」 선 색 #{r:02X}{g:02X}{b:02X} · 굵기 {:.2} mm 적용됨",
+                                    app.modals.line_width_mm
+                                ));
+                                app.modals.active = None;
+                            }
+                        });
+                    });
+                });
+        }
+        ActiveModalDialog::DemClass => {
+            // KaDemClassDialog.cpp:91-170 — DEM 표현 다이얼로그
+            let full = ctx.screen_rect();
+            let native_ppp = ctx
+                .input(|i| i.viewport().native_pixels_per_point)
+                .unwrap_or(1.5)
+                .clamp(1.0, 2.5);
+            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
+                (full.width() / native_ppp - 8.0).max(800.0)
+            } else {
+                full.width()
+            };
+            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
+                (full.height() / native_ppp - 16.0).max(520.0)
+            } else {
+                full.height()
+            };
+            let modal_w = 500.0_f32.min(vis_w - 40.0);
+            let modal_h = 430.0_f32.min(vis_h - 40.0);
+            let modal_pos = Pos2::new(
+                ((vis_w - modal_w) * 0.5).max(16.0),
+                ((vis_h - modal_h) * 0.5).max(16.0),
+            );
+            egui::Window::new("ka_modal_dem_class")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(modal_pos)
+                .fixed_size([modal_w, modal_h])
+                .show(ctx, |ui| {
+                    ui.set_min_width(modal_w - 20.0);
+                    ui.set_max_width(modal_w - 20.0);
+                    render_strata_modal_header(ui, "DEM 표현", &mut open);
+
+                    // KaDemClassDialog.cpp:95-100 — 안내 문구
+                    ui.label(
+                        egui::RichText::new(
+                            "표고에 따라 색이 부드럽게 이어집니다. 유적처럼 높이차가 작은 곳은 「현재 화면에 색 맞추기」로 화면 안의 높이만으로 색을 나누세요.",
+                        )
+                        .size(12.0)
+                        .color(Color32::from_rgb(0x47, 0x55, 0x69)),
+                    );
+                    ui.add_space(8.0);
+
+                    egui::Grid::new("ka_dem_class_form")
+                        .num_columns(2)
+                        .spacing([14.0, 8.0])
+                        .show(ui, |ui| {
+                            // 등고 / 음영 / 고도 모드 선택
+                            ui.label(egui::RichText::new("DEM 모드").size(12.5).strong());
+                            ui.horizontal(|ui| {
+                                for (idx, lbl) in ["등고", "음영", "고도"].into_iter().enumerate() {
+                                    if ui
+                                        .radio_value(&mut app.modals.dem_mode_idx, idx, lbl)
+                                        .clicked()
+                                    {
+                                        app.modals.dem_applied_mode_idx = idx;
+                                    }
+                                }
+                            });
+                            ui.end_row();
+
+                            // 색 표현 프리셋 콤보 + [현재 화면에 색 맞추기] 버튼 (KaDemClassDialog.cpp:104-121)
+                            ui.label(egui::RichText::new("색 표현").size(12.5).strong());
+                            ui.horizontal(|ui| {
+                                let presets =
+                                    ["전국 표준 (0–2000m)", "저지대 강조", "현재 화면 맞춤"];
+                                let cur_preset = presets
+                                    .get(app.modals.dem_preset_idx)
+                                    .copied()
+                                    .unwrap_or(presets[0]);
+                                egui::ComboBox::from_id_salt("ka_dem_preset_combo")
+                                    .selected_text(cur_preset)
+                                    .width(175.0)
+                                    .show_ui(ui, |ui| {
+                                        for (idx, p_lbl) in presets.into_iter().enumerate() {
+                                            ui.selectable_value(
+                                                &mut app.modals.dem_preset_idx,
+                                                idx,
+                                                p_lbl,
+                                            );
+                                        }
+                                    });
+                                if ui.button("현재 화면에 색 맞추기").clicked() {
+                                    app.modals.dem_preset_idx = 2;
+                                    app.modals.dem_mode_idx = 2;
+                                    app.modals.dem_status_text =
+                                        "현재 화면 범위(32.4 m ~ 74.8 m)에 맞춰 고도 색 띠를 재조정했습니다."
+                                            .to_owned();
+                                }
+                            });
+                            ui.end_row();
+
+                            // 색 띠 미리보기 (KaDemClassDialog.cpp:36-80, 123-131)
+                            ui.label(egui::RichText::new("색 띠 미리보기").size(12.5).strong());
+                            let (ramp_r, _) = ui.allocate_exact_size(
+                                Vec2::new(350.0, 38.0),
+                                egui::Sense::hover(),
+                            );
+                            let rp = ui.painter_at(ramp_r);
+                            let bar_h = 20.0;
+                            let bar_r = Rect::from_min_size(
+                                ramp_r.min,
+                                Vec2::new(ramp_r.width(), bar_h),
+                            );
+                            let steps = 24usize;
+                            let sw = bar_r.width() / (steps as f32);
+                            for si in 0..steps {
+                                let t = (si as f32) / ((steps - 1) as f32);
+                                let col = match app.modals.dem_preset_idx {
+                                    0 => {
+                                        // 전국 표준 (0-2000m)
+                                        let r = (74.0 + t * 145.0) as u8;
+                                        let g = (158.0 + (1.0 - (t - 0.4).abs()) * 45.0)
+                                            .clamp(95.0, 215.0) as u8;
+                                        let b = (82.0 + t * 110.0) as u8;
+                                        Color32::from_rgb(r, g, b)
+                                    }
+                                    1 => {
+                                        // 저지대 강조
+                                        let r = (46.0 + t * 165.0) as u8;
+                                        let g = (144.0 - t * 52.0) as u8;
+                                        let b = (114.0 - t * 68.0) as u8;
+                                        Color32::from_rgb(r, g, b)
+                                    }
+                                    _ => {
+                                        // 현재 화면 맞춤 (32.4m ~ 74.8m 고대비)
+                                        let r = (42.0 + t * 195.0) as u8;
+                                        let g = if t < 0.5 {
+                                            (135.0 + t * 120.0) as u8
+                                        } else {
+                                            (195.0 - (t - 0.5) * 240.0) as u8
+                                        };
+                                        let b = (68.0 - t * 38.0) as u8;
+                                        Color32::from_rgb(r, g, b)
+                                    }
+                                };
+                                let seg = Rect::from_min_size(
+                                    Pos2::new(bar_r.left() + (si as f32) * sw, bar_r.top()),
+                                    Vec2::new(sw + 1.0, bar_h),
+                                );
+                                rp.rect_filled(seg, 0.0, col);
+                            }
+                            rp.rect_stroke(
+                                bar_r,
+                                3.0,
+                                Stroke::new(1.0, Color32::from_rgb(0xCB, 0xD5, 0xE1)),
+                                egui::StrokeKind::Inside,
+                            );
+                            let (min_lbl, max_lbl) = match app.modals.dem_preset_idx {
+                                0 => ("0 m", "2000 m"),
+                                1 => ("0 m", "300 m"),
+                                _ => ("32.4 m", "74.8 m"),
+                            };
+                            rp.text(
+                                Pos2::new(ramp_r.left() + 2.0, ramp_r.bottom() - 2.0),
+                                egui::Align2::LEFT_BOTTOM,
+                                min_lbl,
+                                egui::FontId::proportional(11.0),
+                                Color32::from_rgb(0x47, 0x55, 0x69),
+                            );
+                            rp.text(
+                                Pos2::new(ramp_r.right() - 2.0, ramp_r.bottom() - 2.0),
+                                egui::Align2::RIGHT_BOTTOM,
+                                max_lbl,
+                                egui::FontId::proportional(11.0),
+                                Color32::from_rgb(0x47, 0x55, 0x69),
+                            );
+                            ui.end_row();
+
+                            // 지형 음영 합성 체크박스 (KaDemClassDialog.cpp:133-138)
+                            ui.label("");
+                            ui.checkbox(&mut app.modals.dem_relief_enabled, "지형 음영 합성");
+                            ui.end_row();
+
+                            // 수직과장 (KaDemClassDialog.cpp:140-145)
+                            ui.label(egui::RichText::new("수직과장").size(12.5).strong());
+                            ui.add(
+                                egui::DragValue::new(&mut app.modals.dem_exaggeration)
+                                    .range(0.1..=5.0)
+                                    .speed(0.1)
+                                    .suffix(" 배"),
+                            );
+                            ui.end_row();
+
+                            // 음영 세기 (KaDemClassDialog.cpp:147-152)
+                            ui.label(egui::RichText::new("음영 세기").size(12.5).strong());
+                            ui.add(
+                                egui::DragValue::new(&mut app.modals.dem_relief_strength_pct)
+                                    .range(0..=80)
+                                    .speed(5.0)
+                                    .suffix(" %"),
+                            );
+                            ui.end_row();
+                        });
+
+                    ui.add_space(6.0);
+                    // 상태 메시지 (KaDemClassDialog.cpp:154-158)
+                    ui.colored_label(
+                        Color32::from_rgb(0x7A, 0x5A, 0x00),
+                        egui::RichText::new(&app.modals.dem_status_text).size(11.5),
+                    );
+
+                    ui.add_space(8.0);
+                    ui.separator();
+                    // 하단 버튼 행: [적용] [확인] [취소] (KaDemClassDialog.cpp:160-165)
+                    ui.horizontal(|ui| {
+                        if ui.button("적용").clicked() {
+                            app.modals.dem_applied_mode_idx = app.modals.dem_mode_idx;
+                            app.modals.dem_applied_preset_idx = app.modals.dem_preset_idx;
+                            app.modals.dem_applied_relief_enabled = app.modals.dem_relief_enabled;
+                            app.modals.dem_applied_exaggeration = app.modals.dem_exaggeration;
+                            app.modals.dem_applied_relief_strength_pct =
+                                app.modals.dem_relief_strength_pct;
+                            app.home_map
+                                .real_survey
+                                .layer_visible
+                                .insert("지형 음영".to_owned(), true);
+                            app.home_map.draw_guide_message = Some(format!(
+                                "DEM 표현 적용됨 (모드: {}, 수직과장: {:.1}배, 음영 세기: {}%)",
+                                ["등고", "음영", "고도"][app.modals.dem_mode_idx.min(2)],
+                                app.modals.dem_exaggeration,
+                                app.modals.dem_relief_strength_pct
+                            ));
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("취소").clicked() {
+                                app.modals.active = None;
+                            }
+                            let ok_btn = egui::Button::new(
+                                egui::RichText::new("확인")
+                                    .color(Color32::WHITE)
+                                    .strong(),
+                            )
+                            .fill(Color32::from_rgb(33, 33, 31))
+                            .min_size(Vec2::new(72.0, 30.0));
+                            if ui.add(ok_btn).clicked() {
+                                app.modals.dem_applied_mode_idx = app.modals.dem_mode_idx;
+                                app.modals.dem_applied_preset_idx = app.modals.dem_preset_idx;
+                                app.modals.dem_applied_relief_enabled =
+                                    app.modals.dem_relief_enabled;
+                                app.modals.dem_applied_exaggeration = app.modals.dem_exaggeration;
+                                app.modals.dem_applied_relief_strength_pct =
+                                    app.modals.dem_relief_strength_pct;
+                                app.home_map
+                                    .real_survey
+                                    .layer_visible
+                                    .insert("지형 음영".to_owned(), true);
+                                app.home_map.draw_guide_message = Some(format!(
+                                    "DEM 표현 확인 완료 (모드: {}, 수직과장: {:.1}배, 음영 세기: {}%)",
+                                    ["등고", "음영", "고도"][app.modals.dem_mode_idx.min(2)],
+                                    app.modals.dem_exaggeration,
+                                    app.modals.dem_relief_strength_pct
+                                ));
+                                app.modals.active = None;
+                            }
+                        });
+                    });
+                });
+        }
         other => render_download_and_print_dialogs(app, ctx, other, &mut open),
     }
     if !open {
@@ -843,5 +1845,33 @@ mod tests {
         // 사용자가 닫기 확인 시 정상 종료
         assert!(ctrl.try_reject_active_modal(true, true, true).is_ok());
         assert_eq!(ctrl.active, None);
+    }
+
+    #[test]
+    fn test_t6_cpp_dialogs_4_variants_and_defaults() {
+        let mut ctrl = ModalDialogController::default();
+        assert_eq!(ctrl.cp_id, "GCP-01");
+        assert_eq!(ctrl.cp_datum, "세계측지계");
+        assert_eq!(ctrl.cp_ellipsoid, "GRS80");
+        assert_eq!(ctrl.cp_projection, "TM/UTM-K");
+        assert_eq!(ctrl.cp_origin, "동부원점");
+        assert_eq!(ctrl.cp_fix, "RTK");
+        assert_eq!(ctrl.survey_area_layer_name, "조사구역");
+        assert_eq!(ctrl.survey_area_color_idx, 1);
+        assert!((ctrl.survey_area_width_mm - 1.5).abs() < 1e-4);
+        assert_eq!(ctrl.line_color_rgb, [0xEA, 0x58, 0x0C]);
+        assert_eq!(ctrl.dem_mode_idx, 2);
+        assert_eq!(ctrl.dem_relief_strength_pct, 30);
+
+        for variant in [
+            ActiveModalDialog::ControlPoint,
+            ActiveModalDialog::SurveyArea,
+            ActiveModalDialog::LineColor,
+            ActiveModalDialog::DemClass,
+        ] {
+            ctrl.active = None;
+            assert!(ctrl.show_exclusive_modal(variant));
+            assert_eq!(ctrl.active, Some(variant));
+        }
     }
 }

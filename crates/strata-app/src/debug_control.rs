@@ -111,6 +111,26 @@ impl StrataAppState {
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
                 }
+                "modal:control_point" => {
+                    self.open_sample_survey_project(0);
+                    self.active_tab = MainTab::Map;
+                    self.modals.active = Some(ActiveModalDialog::ControlPoint);
+                }
+                "modal:survey_area" => {
+                    self.open_sample_survey_project(0);
+                    self.active_tab = MainTab::Map;
+                    self.modals.active = Some(ActiveModalDialog::SurveyArea);
+                }
+                "modal:line_color" => {
+                    self.open_sample_survey_project(0);
+                    self.active_tab = MainTab::Map;
+                    self.modals.active = Some(ActiveModalDialog::LineColor);
+                }
+                "modal:dem_class" => {
+                    self.open_sample_survey_project(0);
+                    self.active_tab = MainTab::Map;
+                    self.modals.active = Some(ActiveModalDialog::DemClass);
+                }
                 "modal:none" => {
                     self.modals.active = None;
                 }
