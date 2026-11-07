@@ -15,6 +15,38 @@ pub const KA_STYLE_PALETTE: [(u8, u8, u8, &str); 8] = [
     (0x92, 0x40, 0x0E, "갈색"),
 ];
 
+pub const HGIS_DEFAULT_ELEVATION_VAL: f64 = 0.0;
+pub const HGIS_MIN_ELEVATION_M: f64 = -500.0;
+pub const HGIS_MAX_ELEVATION_M: f64 = 9000.0;
+
+pub const HGIS_STANDARD_PERIOD_CODES: [&str; 11] = [
+    "구석기",
+    "신석기",
+    "청동기",
+    "초기철기",
+    "원삼국",
+    "삼국",
+    "통일신라",
+    "고려",
+    "조선",
+    "근현대",
+    "미상",
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttributeSaveResult {
+    Success,
+    MissingRequiredField,
+    InvalidNumericElevation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BatchUpdateResult {
+    pub updated_count: usize,
+    pub failed_count: usize,
+    pub failed_fids: Vec<i64>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InspectorCardTab {
     #[default]
@@ -95,6 +127,52 @@ impl RightInspectorState {
     #[must_use]
     pub fn save_current_attributes(&self) -> bool {
         !self.feature_no.trim().is_empty() && !self.feature_type.trim().is_empty()
+    }
+
+    /// C++ `KaAttributeInspector::saveAttributes` — 숫자형 표고/깊이 파싱 및 NaN/Infinity/범위(`[-500.0, 9000.0]`) 이탈 시 기존 유효값 복원
+    #[must_use]
+    pub fn validate_and_parse_elevation(raw: &str, previous_valid: f64) -> (f64, bool) {
+        if let Ok(val) = raw.trim().parse::<f64>() {
+            if val.is_finite() && (HGIS_MIN_ELEVATION_M..=HGIS_MAX_ELEVATION_M).contains(&val) {
+                return (val, true);
+            }
+        }
+        (previous_valid, false)
+    }
+
+    /// C++ `KaAttributeInspector::applyBatchAttributeUpdate` — 다중 선택 피처 속성 일괄 트랜잭션 수정
+    pub fn apply_batch_attribute_update(
+        fids: &[i64],
+        feature_table: &mut std::collections::BTreeMap<
+            i64,
+            std::collections::BTreeMap<String, String>,
+        >,
+        changes: &std::collections::BTreeMap<String, String>,
+    ) -> BatchUpdateResult {
+        if fids.is_empty() {
+            return BatchUpdateResult {
+                updated_count: 0,
+                failed_count: 0,
+                failed_fids: Vec::new(),
+            };
+        }
+        let mut updated_count = 0usize;
+        let mut failed_fids = Vec::new();
+        for &fid in fids {
+            if let Some(attrs) = feature_table.get_mut(&fid) {
+                for (k, v) in changes {
+                    attrs.insert(k.clone(), v.clone());
+                }
+                updated_count += 1;
+            } else {
+                failed_fids.push(fid);
+            }
+        }
+        BatchUpdateResult {
+            updated_count,
+            failed_count: failed_fids.len(),
+            failed_fids,
+        }
     }
 }
 
@@ -430,5 +508,38 @@ mod tests {
         assert!(card.save_current_attributes());
         card.feature_no.clear();
         assert!(!card.save_current_attributes());
+    }
+
+    #[test]
+    fn test_batch_period_update_5_features_and_elevation_nan_revert() {
+        let mut table = std::collections::BTreeMap::new();
+        for fid in 1..=5_i64 {
+            let mut attrs = std::collections::BTreeMap::new();
+            attrs.insert("FEAT_NO".to_owned(), format!("유구-{fid}"));
+            attrs.insert("PERIOD".to_owned(), "미상".to_owned());
+            table.insert(fid, attrs);
+        }
+        let mut changes = std::collections::BTreeMap::new();
+        changes.insert("PERIOD".to_owned(), "삼국".to_owned());
+
+        let res = RightInspectorState::apply_batch_attribute_update(
+            &[1, 2, 3, 4, 5],
+            &mut table,
+            &changes,
+        );
+        assert_eq!(res.updated_count, 5);
+        assert_eq!(res.failed_count, 0);
+        for fid in 1..=5_i64 {
+            assert_eq!(table[&fid]["PERIOD"], "삼국");
+        }
+
+        let (val_ok, ok) = RightInspectorState::validate_and_parse_elevation("48.25", 12.0);
+        assert!(ok);
+        assert!((val_ok - 48.25).abs() < 1e-9);
+
+        let (val_reverted, ok_nan) =
+            RightInspectorState::validate_and_parse_elevation("NaN", 48.25);
+        assert!(!ok_nan);
+        assert!((val_reverted - 48.25).abs() < 1e-9);
     }
 }

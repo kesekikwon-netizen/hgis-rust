@@ -3,8 +3,54 @@ use crate::cad_csv_io::{
 };
 use crate::gpkg::{GpkgRepository, SurveyWorkspace};
 use crate::session_save::persist_workspace;
-use std::path::Path;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use strata_types::error::StrataResult;
+
+pub const HGIS_MAX_RECENT_PROJECTS: usize = 10;
+pub const HGIS_SQLITE_MAGIC: &[u8; 16] = b"SQLite format 3\0";
+
+#[derive(Debug, Clone, Default)]
+pub struct RecentProjectManager {
+    pub recent_paths: Vec<PathBuf>,
+}
+
+impl RecentProjectManager {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            recent_paths: Vec::new(),
+        }
+    }
+
+    /// C++ `KaProjectManager::addRecentProject` — 중복 제거 후 최상단(0번 인덱스) 삽입 및 최대 10개 상한 유지
+    pub fn add_recent_project(&mut self, project_path: PathBuf) {
+        self.recent_paths.retain(|p| p != &project_path);
+        self.recent_paths.insert(0, project_path);
+        if self.recent_paths.len() > HGIS_MAX_RECENT_PROJECTS {
+            self.recent_paths.truncate(HGIS_MAX_RECENT_PROJECTS);
+        }
+    }
+
+    /// C++ `KaProjectManager::pruneMissingRecentProjects` — 삭제·이동된 경로 자동 제거
+    pub fn prune_missing_recent_projects(&mut self) -> Vec<PathBuf> {
+        self.recent_paths.retain(|p| p.exists());
+        self.recent_paths.clone()
+    }
+
+    /// C++ `KaProjectManager::verifyGpkgMagicBytes` — SQLite3 16바이트 헤더 매직(`"SQLite format 3\0"`) 사전 검사
+    #[must_use]
+    pub fn verify_gpkg_magic_bytes(file_path: &Path) -> bool {
+        let Ok(mut file) = std::fs::File::open(file_path) else {
+            return false;
+        };
+        let mut header = [0u8; 16];
+        if file.read_exact(&mut header).is_err() {
+            return false;
+        }
+        &header == HGIS_SQLITE_MAGIC
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct WorkspaceFileActions;
@@ -63,6 +109,31 @@ mod tests {
         let cps = WorkspaceFileActions::import_control_points_csv(&csv_path)?;
         assert_eq!(cps.len(), 1);
         assert_eq!(cps[0].point_id, "CP-01");
+        Ok(())
+    }
+
+    #[test]
+    fn test_mru_max_limit_12_to_10_prune_3_missing_to_7_and_verify_gpkg_magic_bytes() -> StrataResult<()> {
+        let dir = tempfile::tempdir()?;
+        let mut mgr = RecentProjectManager::new();
+        for i in 1..=12 {
+            let p = dir.path().join(format!("proj{i}.gpkg"));
+            GpkgRepository::create_new_survey(&p, WorkCrs::Epsg5186)?;
+            mgr.add_recent_project(p);
+        }
+        assert_eq!(mgr.recent_paths.len(), 10);
+        assert!(mgr.recent_paths[0].ends_with("proj12.gpkg"));
+
+        for del_idx in [11, 9, 7] {
+            std::fs::remove_file(dir.path().join(format!("proj{del_idx}.gpkg")))?;
+        }
+        let valid = mgr.prune_missing_recent_projects();
+        assert_eq!(valid.len(), 7);
+
+        let txt_path = dir.path().join("corrupt.gpkg");
+        std::fs::write(&txt_path, b"Hello World")?;
+        assert!(!RecentProjectManager::verify_gpkg_magic_bytes(&txt_path));
+        assert!(RecentProjectManager::verify_gpkg_magic_bytes(&valid[0]));
         Ok(())
     }
 }
