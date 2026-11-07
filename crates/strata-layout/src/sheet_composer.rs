@@ -246,24 +246,75 @@ impl DrawingSheet {
     /// C++ `PlateScaleBar::calculateDivisions(mapScale, targetWidthMm)` — 1-2-5 계열 정수 단위 축척막대 간격(m) 산출 1:1
     #[must_use]
     pub fn calculate_scale_bar_nice_interval_m(map_scale_denom: f64, target_width_mm: f64) -> f64 {
-        if map_scale_denom <= 0.0 || target_width_mm <= 0.0 || !map_scale_denom.is_finite() {
-            return 10.0;
+        Self::compute_nice_scale_bar_length(
+            map_scale_denom,
+            target_width_mm - 20.0,
+            target_width_mm + 20.0,
+        )
+    }
+
+    pub const HGIS_SCALEBAR_MIN_WIDTH_MM: f64 = 40.0;
+    pub const HGIS_SCALEBAR_MAX_WIDTH_MM: f64 = 80.0;
+    pub const HGIS_FALLBACK_SCALEBAR_LENGTH_M: f64 = 50.0;
+    pub const HGIS_MAX_SCALEBAR_LENGTH_M: f64 = 100_000.0;
+    pub const HGIS_NICE_MANTISSAS: [f64; 4] = [1.0, 2.0, 5.0, 10.0];
+
+    /// C++ `KaScaleBarItem::computeNiceScaleBarLength` — 목표 폭 `[40.0mm, 80.0mm]` 및 `1·2·5·10` 가수 배열 기반 축척 막대 길이(m) 산출, 비정상 축척 시 `50.0m` 폴백
+    #[must_use]
+    pub fn compute_nice_scale_bar_length(
+        map_scale_denom: f64,
+        target_width_min_mm: f64,
+        target_width_max_mm: f64,
+    ) -> f64 {
+        if map_scale_denom <= 1e-6 || !map_scale_denom.is_finite() {
+            return Self::HGIS_FALLBACK_SCALEBAR_LENGTH_M;
         }
-        let raw_meters = map_scale_denom * (target_width_mm / 1000.0);
+        let min_mm = target_width_min_mm.max(10.0);
+        let max_mm = target_width_max_mm.max(min_mm);
+        let mid_mm = 0.5 * (min_mm + max_mm);
+        let raw_meters = map_scale_denom * (mid_mm / 1000.0);
         if raw_meters <= 1.0 {
             return 1.0;
         }
         let exp = raw_meters.log10().floor();
         let base = 10.0_f64.powf(exp);
-        let frac = raw_meters / base;
-        let nice_mult = if frac >= 5.0 {
-            5.0
-        } else if frac >= 2.0 {
-            2.0
-        } else {
-            1.0
-        };
-        nice_mult * base
+        let mut best_len = Self::HGIS_FALLBACK_SCALEBAR_LENGTH_M;
+        let mut best_dist = f64::INFINITY;
+        for &m in &Self::HGIS_NICE_MANTISSAS {
+            let cand_m = m * base;
+            let bar_mm = (cand_m * 1000.0) / map_scale_denom;
+            let in_range = (min_mm..=max_mm).contains(&bar_mm);
+            let dist = if in_range {
+                // 목표 범위 내에서는 5·2·1 정수 단위 중 mid_mm 이하에서 가장 큰 깔끔한 단위 우선
+                if cand_m <= raw_meters {
+                    raw_meters - cand_m
+                } else {
+                    (cand_m - raw_meters) + 1e3
+                }
+            } else {
+                (bar_mm - mid_mm).abs() + 1e6
+            };
+            if dist < best_dist {
+                best_dist = dist;
+                best_len = cand_m;
+            }
+        }
+        best_len.min(Self::HGIS_MAX_SCALEBAR_LENGTH_M)
+    }
+
+    /// C++ `KaLayoutComposer::setPaperOrientation` — 용지 가로/세로 전환 시 폭·높이 스왑 및 지도 중심 좌표 `(cx, cy)` 보존
+    pub fn set_paper_orientation_preserving_center(
+        &mut self,
+        orientation: SheetOrientation,
+        current_extent: [f64; 4],
+    ) -> [f64; 4] {
+        let cx = 0.5 * (current_extent[0] + current_extent[2]);
+        let cy = 0.5 * (current_extent[1] + current_extent[3]);
+        self.change_paper(self.paper_size, orientation);
+        let scale = f64::from(self.scale_denominator.max(1));
+        let half_w_m = (self.map_frame.width_mm / 1000.0) * scale * 0.5;
+        let half_h_m = (self.map_frame.height_mm / 1000.0) * scale * 0.5;
+        [cx - half_w_m, cy - half_h_m, cx + half_w_m, cy + half_h_m]
     }
 }
 
@@ -432,5 +483,26 @@ mod tests {
         let elided = elide_title_block_text_right("경주 월성 발굴조사 지구 종합현황도", 10);
         assert_eq!(elided.chars().count(), 10);
         assert!(elided.ends_with('…'));
+    }
+
+    #[test]
+    fn test_scale_bar_nice_1000_yields_50m_and_a4_orientation_swap_preserves_center() {
+        let len_1000 = DrawingSheet::compute_nice_scale_bar_length(1_000.0, 40.0, 80.0);
+        assert!((len_1000 - 50.0).abs() < 1e-9);
+        assert!(
+            (DrawingSheet::compute_nice_scale_bar_length(-5.0, 40.0, 80.0) - 50.0).abs() < 1e-9
+        );
+
+        let mut sheet = DrawingSheet::new(SheetPaperSize::A4, SheetOrientation::Landscape);
+        assert_eq!((sheet.width_mm, sheet.height_mm), (297.0, 210.0));
+        let new_ext = sheet.set_paper_orientation_preserving_center(
+            SheetOrientation::Portrait,
+            [199_900.0, 499_900.0, 200_100.0, 500_100.0],
+        );
+        assert_eq!((sheet.width_mm, sheet.height_mm), (210.0, 297.0));
+        let cx = 0.5 * (new_ext[0] + new_ext[2]);
+        let cy = 0.5 * (new_ext[1] + new_ext[3]);
+        assert!((cx - 200_000.0).abs() < 1e-6);
+        assert!((cy - 500_000.0).abs() < 1e-6);
     }
 }

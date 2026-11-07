@@ -168,4 +168,75 @@ impl KaBeginnerRibbon {
             self.sub_mode = mode;
         }
     }
+
+    pub const HGIS_RIBBON_COMPACT_WIDTH_PX: f32 = 1100.0;
+
+    /// C++ `KaRibbonBar::isCompactMode` — 창 너비 1,100px 미만 시 24x24 컴팩트 아이콘 모드 전환
+    #[must_use]
+    pub fn is_compact_mode(window_width_px: f32) -> bool {
+        window_width_px < Self::HGIS_RIBBON_COMPACT_WIDTH_PX
+    }
+
+    /// C++ `KaRibbonBar::setActiveTool` — 도구 전환 시 미완성 러버밴드 버퍼 초기화 및 하단 상태바 안내 문구 매핑
+    pub fn switch_active_tool_clearing_rubberband(
+        active_tool: &mut MapToolKind,
+        sketch_buffer: &mut Vec<[f64; 2]>,
+        next_tool: MapToolKind,
+    ) -> &'static str {
+        if *active_tool != next_tool {
+            sketch_buffer.clear();
+            *active_tool = next_tool;
+        }
+        Self::status_bar_hint_for_tool(*active_tool)
+    }
+
+    /// C++ `KaStatusBar` 도구별 하단 상태바 작업 안내 문구 매핑 1:1
+    #[must_use]
+    pub const fn status_bar_hint_for_tool(tool: MapToolKind) -> &'static str {
+        match tool {
+            MapToolKind::Pan => "지도를 드래그하여 이동하거나 마우스 휠로 확대/축소하세요.",
+            MapToolKind::Select => "피처를 클릭하여 선택하거나 드래그하여 다중 선택하세요.",
+            MapToolKind::DrawPolygon => {
+                "시작점을 클릭하세요. [Shift]: 직교/45도 스냅, [우클릭]: 폐합 완료"
+            }
+            MapToolKind::DrawLine => "선 시작점을 클릭하세요. [우클릭]: 선 작도 완료",
+            MapToolKind::PlacePoint => "지도 위 원하는 위치를 클릭하여 유물·기준점을 배치하세요.",
+            MapToolKind::TrenchPlace => {
+                "조사구역 내부를 클릭하여 표준 시굴 트렌치(20m×2m / L자형)를 배치하세요."
+            }
+            MapToolKind::GeorefAlign => {
+                "정점을 클릭하여 드래그 이동하세요. [Delete]: 선택 정점 삭제"
+            }
+            MapToolKind::Measure => {
+                "클릭하여 측정을 시작하세요. [우클릭/더블클릭]: 측정 완료, [ESC]: 취소"
+            }
+            MapToolKind::FeatureCardNote => "유구를 클릭하여 조사카드 상세 기록 창을 여세요.",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ribbon_compact_mode_1024px_and_exclusive_tool_switch_clears_rubberband() {
+        assert!(KaBeginnerRibbon::is_compact_mode(1024.0));
+        assert!(!KaBeginnerRibbon::is_compact_mode(1100.0));
+        assert!(!KaBeginnerRibbon::is_compact_mode(1440.0));
+
+        let mut tool = MapToolKind::DrawPolygon;
+        let mut rubberband = vec![[100.0, 200.0], [110.0, 210.0]];
+        let hint = KaBeginnerRibbon::switch_active_tool_clearing_rubberband(
+            &mut tool,
+            &mut rubberband,
+            MapToolKind::Measure,
+        );
+        assert_eq!(tool, MapToolKind::Measure);
+        assert!(rubberband.is_empty());
+        assert_eq!(
+            hint,
+            "클릭하여 측정을 시작하세요. [우클릭/더블클릭]: 측정 완료, [ESC]: 취소"
+        );
+    }
 }
