@@ -15,6 +15,13 @@ pub const UX_RIBBON_BUTTON_SIZE: Vec2 = Vec2::new(69.0, 100.0);
 pub const UX_RIBBON_GROUP_XS: [f32; 7] = [9.0, 223.0, 474.0, 630.0, 1013.0, 1062.0, 1278.0];
 pub const UX_RIBBON_GROUP_WIDTHS: [f32; 7] = [214.0, 250.0, 156.0, 382.0, 49.0, 215.0, 50.0];
 
+/// `KaRegionLocator.cpp:156, 162-163, 192-194` — 동·읍·면·리 / 지번 칸 안내와 맨 아래 규칙 두 줄
+pub const REGION_LOT_PLACEHOLDER: &str = "산 12-3";
+pub const REGION_LOT_HINT: &str =
+    "번지 (예: 12, 12-3, 산 12-3). 산번지는 ‘산’을 함께 입력하세요.";
+pub const REGION_BOTTOM_HINT: &str =
+    "번지 입력 시 정확한 지번만 찾습니다. 읍·면은 리까지 입력하세요.\n예: 고아읍 봉한리 / 산 12-3";
+
 fn draw_buffer_pill(
     ui: &mut egui::Ui,
     icon_key: &str,
@@ -904,11 +911,14 @@ impl StrataAppState {
         }
     }
 
+    /// `KaRegionLocator.cpp:124-286` — 17개 광역 시·도 타일 밑에 붙는 주소 팝업
+    /// (시·도 제목 · ✕ · 시·군·구 · 동·읍·면 · 지번 · 찾기/취소 · 아래 힌트 2줄)
     fn render_region_locator_popup(&mut self, ctx: &egui::Context) {
         if !self.ribbon.app_bar.region_popup_open {
             return;
         }
         let mut open = self.ribbon.app_bar.region_popup_open;
+        let mut run_search = false;
         egui::Window::new("한반도 17개 광역 시·도 선택")
             .open(&mut open)
             .collapsible(false)
@@ -956,6 +966,25 @@ impl StrataAppState {
                 ui.add_space(6.0);
                 ui.separator();
                 ui.add_space(4.0);
+                // KaRegionLocator.cpp:180-190 — 고른 시·도 이름(왼쪽)과 ✕ 닫기(오른쪽)
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(&self.ribbon.app_bar.selected_sido)
+                            .size(13.0)
+                            .strong(),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .small_button("✕")
+                            .on_hover_text("닫기 (Esc)")
+                            .clicked()
+                        {
+                            self.ribbon.app_bar.region_popup_open = false;
+                        }
+                    });
+                });
+                ui.add_space(4.0);
+                // KaRegionLocator.cpp:143-195 — 시·군·구 · 동·읍·면 · 지번(산 12-3) · 찾기 · 취소
                 egui::Grid::new("ka_region_detail_inputs")
                     .num_columns(2)
                     .spacing([8.0, 6.0])
@@ -963,29 +992,38 @@ impl StrataAppState {
                         ui.label(egui::RichText::new("시·군·구").size(12.0));
                         ui.add(
                             egui::TextEdit::singleline(&mut self.ribbon.app_bar.city_input)
-                                .hint_text("예: 경주시")
+                                .hint_text("시·군·구")
                                 .desired_width(210.0),
                         );
                         ui.end_row();
-                        ui.label(egui::RichText::new("읍·면·동").size(12.0));
-                        ui.add(
+                        ui.label(egui::RichText::new("동·읍·면").size(12.0));
+                        let dong = ui.add(
                             egui::TextEdit::singleline(&mut self.ribbon.app_bar.dong_input)
-                                .hint_text("예: 인왕동")
+                                .hint_text("법정동·읍·면·리")
                                 .desired_width(210.0),
                         );
+                        if dong.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                            run_search = true;
+                        }
                         ui.end_row();
-                        ui.label(egui::RichText::new("지번").size(12.0));
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.ribbon.app_bar.lot_input)
-                                .hint_text("예: 76 또는 산 12-1")
-                                .desired_width(210.0),
-                        );
+                        let lot_lbl = ui.label(egui::RichText::new("지번").size(12.0));
+                        lot_lbl.on_hover_text(REGION_LOT_HINT);
+                        let lot = ui
+                            .add(
+                                egui::TextEdit::singleline(&mut self.ribbon.app_bar.lot_input)
+                                    .hint_text(REGION_LOT_PLACEHOLDER)
+                                    .desired_width(210.0),
+                            )
+                            .on_hover_text(REGION_LOT_HINT);
+                        if lot.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                            run_search = true;
+                        }
                         ui.end_row();
                     });
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    let move_btn = egui::Button::new(
-                        egui::RichText::new("이동")
+                    let find_btn = egui::Button::new(
+                        egui::RichText::new("찾기")
                             .color(Color32::WHITE)
                             .strong()
                             .size(13.0),
@@ -993,45 +1031,70 @@ impl StrataAppState {
                     .fill(Color32::from_rgb(181, 87, 58))
                     .corner_radius(5.0)
                     .min_size(Vec2::new(140.0, 30.0));
-                    if ui.add(move_btn).clicked() {
-                        let full_addr = format!(
-                            "{} {} {} {}",
-                            self.ribbon.app_bar.selected_sido,
-                            self.ribbon.app_bar.city_input.trim(),
-                            self.ribbon.app_bar.dong_input.trim(),
-                            self.ribbon.app_bar.lot_input.trim()
-                        );
-                        self.ribbon.app_bar.query = full_addr.trim().to_owned();
-                        if let Some(parcel) = self
-                            .home_map
-                            .real_survey
-                            .cadastral_parcels
-                            .iter()
-                            .find(|p| {
-                                !self.ribbon.app_bar.lot_input.trim().is_empty()
-                                    && p.jibun.contains(self.ribbon.app_bar.lot_input.trim())
-                            })
-                        {
-                            self.home_map.viewport.center_xy = parcel.center;
-                            self.home_map.viewport.meters_per_pixel = 1.25;
-                        } else if let Some(tile) = PENINSULA_REGION_TILES
-                            .iter()
-                            .find(|t| t.name == self.ribbon.app_bar.selected_sido)
-                        {
-                            self.home_map.viewport.center_xy = tile.center_5187;
-                        }
-                        self.active_tab = MainTab::Map;
-                        self.home_map.draw_guide_message = Some(format!(
-                            "지역·지번 「{}」 위치로 이동했습니다.",
-                            self.ribbon.app_bar.query
-                        ));
-                        self.ribbon.app_bar.region_popup_open = false;
+                    if ui.add(find_btn).clicked() {
+                        run_search = true;
                     }
-                    if ui.button("닫기").clicked() {
+                    if ui
+                        .add(
+                            egui::Button::new(egui::RichText::new("취소").size(12.5))
+                                .min_size(Vec2::new(80.0, 30.0)),
+                        )
+                        .clicked()
+                    {
                         self.ribbon.app_bar.region_popup_open = false;
                     }
                 });
+                // KaRegionLocator.cpp:192-194 — 번지 입력 규칙 안내
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(REGION_BOTTOM_HINT)
+                        .size(11.0)
+                        .color(Color32::from_rgb(110, 108, 102)),
+                );
             });
+        if run_search {
+            self.search_region_locator_address();
+        }
+        if !self.ribbon.app_bar.region_popup_open {
+            open = false;
+        }
         self.ribbon.app_bar.region_popup_open = open;
+    }
+
+    /// `KaRegionLocator::emitSearch` (`KaRegionLocator.cpp:143-195, 265-276`) — 지번까지 적었으면
+    /// 그 지번의 필지만 찾아 그 자리로 옮기고, 아니면 시·도(시·군·구·동) 중심으로 옮긴다.
+    pub(crate) fn search_region_locator_address(&mut self) {
+        let full_addr = format!(
+            "{} {} {} {}",
+            self.ribbon.app_bar.selected_sido,
+            self.ribbon.app_bar.city_input.trim(),
+            self.ribbon.app_bar.dong_input.trim(),
+            self.ribbon.app_bar.lot_input.trim()
+        );
+        self.ribbon.app_bar.query = full_addr.trim().to_owned();
+        if let Some(parcel) = self
+            .home_map
+            .real_survey
+            .cadastral_parcels
+            .iter()
+            .find(|p| {
+                !self.ribbon.app_bar.lot_input.trim().is_empty()
+                    && p.jibun.contains(self.ribbon.app_bar.lot_input.trim())
+            })
+        {
+            self.home_map.viewport.center_xy = parcel.center;
+            self.home_map.viewport.meters_per_pixel = 1.25;
+        } else if let Some(tile) = PENINSULA_REGION_TILES
+            .iter()
+            .find(|t| t.name == self.ribbon.app_bar.selected_sido)
+        {
+            self.home_map.viewport.center_xy = tile.center_5187;
+        }
+        self.active_tab = MainTab::Map;
+        self.home_map.draw_guide_message = Some(format!(
+            "지역·지번 「{}」 위치로 이동했습니다.",
+            self.ribbon.app_bar.query
+        ));
+        self.ribbon.app_bar.region_popup_open = false;
     }
 }

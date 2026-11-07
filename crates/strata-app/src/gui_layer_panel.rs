@@ -8,6 +8,16 @@ pub const UX_LEFT_PANEL_WIDTH: f32 = 351.0;
 pub const UX_LAYER_CARD_HEIGHT: f32 = 507.0;
 pub const UX_FILE_DRAWER_HEIGHT: f32 = 168.0;
 
+/// `KaFileBrowserPanel.cpp:92-136` — 폴더 단추 여섯 개와 목록 칸의 안내말
+pub const FILE_BTN_PC_TIP: &str = "컴퓨터 드라이브 목록으로 이동합니다";
+pub const FILE_BTN_DESK_TIP: &str = "바탕화면 폴더로 이동합니다";
+pub const FILE_BTN_DOCS_TIP: &str = "문서 폴더로 이동합니다";
+pub const FILE_BTN_DOWN_TIP: &str = "내려받기 폴더로 이동합니다";
+pub const FILE_BTN_PICK_TIP: &str =
+    "조사 자료 폴더를 직접 찾아 엽니다. 카메라·GPS 메모리카드(SD)도 여기서 엽니다";
+pub const FILE_BTN_UP_TIP: &str = "상위 폴더로 한 단계 이동합니다";
+pub const FILE_LIST_TIP: &str = "파일을 지도에 끌어 넣으면 레이어가 됩니다.";
+
 /// KaLayerInformationPanel.cpp:26-33 `kLabelInks` — 6 label ink presets.
 pub const KA_LABEL_INKS: [(&str, (u8, u8, u8)); 6] = [
     ("기본 (먹색)", (31, 35, 40)),
@@ -751,16 +761,18 @@ impl StrataAppState {
                     ui.label(egui::RichText::new("파일함").size(13.0).strong());
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 14.0;
-                        for (t, sub) in [
-                            ("내 PC", r"C:\Users\권을"),
-                            ("바탕화면", r"C:\Users\권을\Desktop"),
-                            ("문서", r"C:\Users\권을\Documents"),
+                        // KaFileBrowserPanel.cpp:92-111 — 여섯 폴더 단추의 안내말
+                        for (t, sub, tip) in [
+                            ("내 PC", r"C:\Users\권을", FILE_BTN_PC_TIP),
+                            ("바탕화면", r"C:\Users\권을\Desktop", FILE_BTN_DESK_TIP),
+                            ("문서", r"C:\Users\권을\Documents", FILE_BTN_DOCS_TIP),
                         ] {
                             if ui
                                 .add(
                                     egui::Button::new(egui::RichText::new(t).size(11.5))
                                         .frame(false),
                                 )
+                                .on_hover_text(tip)
                                 .clicked()
                             {
                                 self.home_map.real_survey.file_browser_dir = PathBuf::from(sub);
@@ -770,15 +782,20 @@ impl StrataAppState {
                     });
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 14.0;
-                        for (t, sub) in [
-                            ("내려받기", r"C:\Users\권을\Downloads"),
-                            ("폴더 직접 찾기", r"C:\Users\권을\Documents\경주시"),
+                        for (t, sub, tip) in [
+                            ("내려받기", r"C:\Users\권을\Downloads", FILE_BTN_DOWN_TIP),
+                            (
+                                "폴더 직접 찾기",
+                                r"C:\Users\권을\Documents\경주시",
+                                FILE_BTN_PICK_TIP,
+                            ),
                         ] {
                             if ui
                                 .add(
                                     egui::Button::new(egui::RichText::new(t).size(11.5))
                                         .frame(false),
                                 )
+                                .on_hover_text(tip)
                                 .clicked()
                             {
                                 self.home_map.real_survey.file_browser_dir = PathBuf::from(sub);
@@ -791,7 +808,7 @@ impl StrataAppState {
                                 .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
                                 .corner_radius(5.0)
                                 .min_size(Vec2::new(42.0, 22.0));
-                            if ui.add(up_b).clicked() {
+                            if ui.add(up_b).on_hover_text(FILE_BTN_UP_TIP).clicked() {
                                 if let Some(parent) = self
                                     .home_map
                                     .real_survey
@@ -807,8 +824,10 @@ impl StrataAppState {
                     });
                     let box_w = ui.available_width();
                     let box_h = (file_card_rect.bottom() - ui.cursor().top() - 2.0).max(86.0);
-                    let (box_r, _) =
+                    let (box_r, box_resp) =
                         ui.allocate_exact_size(Vec2::new(box_w, box_h), egui::Sense::hover());
+                    // KaFileBrowserPanel.cpp:136 — 목록 칸에 끌어 넣으면 레이어가 된다
+                    box_resp.on_hover_text(FILE_LIST_TIP);
                     let bp = ui.painter_at(box_r);
                     bp.rect_filled(box_r, 4.0, Color32::WHITE);
                     bp.rect_stroke(

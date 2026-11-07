@@ -67,6 +67,353 @@ fn s2w(rect: Rect, vp: &ViewportTransform, pos: Pos2) -> [f64; 2] {
     ])
 }
 
+/// `KaMapControls.cpp:148-168` `KaMapScaleBar::refresh` — 화면 폭 120 px에 맞는 1·2·5·10 decade 미터값.
+/// 지도 축척(`meters_per_pixel`)이 없거나 0이면 막대를 그리지 않도록 `None`.
+#[must_use]
+pub fn scale_bar_metres(meters_per_pixel: f64) -> Option<f64> {
+    if !meters_per_pixel.is_finite() || meters_per_pixel <= 0.0 {
+        return None;
+    }
+    let per_pixel = meters_per_pixel.max(1e-6);
+    let wanted = per_pixel * 120.0;
+    let decade = 10.0_f64.powf(wanted.log10().floor());
+    let mut round_m = decade;
+    for step in [2.0, 5.0, 10.0] {
+        if step * decade <= wanted {
+            round_m = step * decade;
+        }
+    }
+    Some(round_m)
+}
+
+/// `KaMapControls.cpp:165-172` `ticks()` / `unit()` — `0` · 중앙 · 끝 세 숫자와 단위(`m` / `km`).
+/// 1 m 미만 간격은 `labelDecimals`처럼 필요한 소수 자리까지만 적는다.
+#[must_use]
+pub fn scale_bar_tick_text(round_m: f64) -> (String, String, String) {
+    let (end_val, unit_str) = if round_m >= 1000.0 {
+        (round_m / 1000.0, "km")
+    } else {
+        (round_m, "m")
+    };
+    let mid_val = end_val * 0.5;
+    let decimals: usize = if round_m >= 1.0 {
+        0
+    } else {
+        (0..3u32)
+            .find(|d| {
+                let scale = 10.0_f64.powi(*d as i32);
+                (round_m * scale - (round_m * scale).round()).abs() < 1e-4
+            })
+            .unwrap_or(3) as usize
+    };
+    (
+        "0".to_owned(),
+        format!("{mid_val:.decimals$}"),
+        format!("{end_val:.decimals$} {unit_str}"),
+    )
+}
+
+/// `KaLayerOpacityRail.cpp:156-173` `setBrightness` — 밝기는 위성·항공사진 같은 그림(래스터) 레이어에만
+/// 있다. 벡터 레이어(`조사구역`·`시굴격자`·`지적도 · 조사 주변 5km`·`지정유산`·`주변 500m`)는 `false`.
+#[must_use]
+pub fn is_raster_image_layer(title: &str) -> bool {
+    title.contains("지형 음영")
+        || title.contains("DSM")
+        || title.contains("위성")
+        || title.contains("항공")
+        || title.contains("고지형")
+}
+
+/// `KaLayerOpacityRail.cpp:167-169` — 그림 레이어는 `-255..=255`, 벡터는 `"그림만"`과 안내말.
+#[must_use]
+pub fn brightness_row_text(bright_int: i32, is_raster: bool) -> (String, &'static str) {
+    if is_raster {
+        let txt = if bright_int == 0 {
+            "0".to_owned()
+        } else {
+            format!("{bright_int:+}")
+        };
+        (txt, "고른 그림의 밝기. 가운데가 원본입니다. 원본 파일은 바뀌지 않습니다.")
+    } else {
+        (
+            "그림만".to_owned(),
+            "밝기는 위성·항공사진 같은 그림 레이어에만 있습니다.",
+        )
+    }
+}
+
+/// `CanvasGridMath::niceStepMeters` (`CanvasGridMath.h:9-21`) — `120 mpp`에 맞춘 격자 간격
+#[must_use]
+pub fn nice_grid_step_meters(target_meters: f64) -> f64 {
+    if target_meters.is_nan() || target_meters <= 0.0 || !target_meters.is_finite() {
+        return 10.0;
+    }
+    let mag = 10.0_f64.powf(target_meters.log10().floor());
+    let n = target_meters / mag;
+    if n < 1.5 {
+        mag
+    } else if n < 3.5 {
+        2.0 * mag
+    } else if n < 7.5 {
+        5.0 * mag
+    } else {
+        10.0 * mag
+    }
+}
+
+/// `CanvasGridMath::labelDecimals` (`CanvasGridMath.h:112-122`) — 간격·원점을 정확히 적는 최소 소수 자리
+#[must_use]
+pub fn grid_label_decimals(step: f64, origin: f64) -> usize {
+    for decimals in 0..3 {
+        let scale = 10.0_f64.powi(decimals);
+        let step_exact = (step * scale - (step * scale).round()).abs() < 1e-4;
+        let origin_exact = (origin * scale - (origin * scale).round()).abs() < 1e-4;
+        if step_exact && origin_exact {
+            return decimals as usize;
+        }
+    }
+    3
+}
+
+/// `KaCanvasGridOverlay.cpp:166-180` — 회전한 격자는 동쪽 좌표 하나로 줄을 부를 수 없어
+/// 격자 원점에서 잰 거리(`원점` / `+20 m` / `−20 m`)로 적는다.
+#[must_use]
+pub fn grid_label_text(
+    grid_value: f64,
+    origin_value: f64,
+    draw_step: f64,
+    turned: bool,
+) -> String {
+    if turned {
+        if grid_value.abs() < draw_step * 1e-6 {
+            return "원점".to_owned();
+        }
+        let decimals = grid_label_decimals(draw_step, 0.0);
+        return format!(
+            "{}{:.*} m",
+            if grid_value > 0.0 { "+" } else { "−" },
+            decimals,
+            grid_value.abs()
+        );
+    }
+    let value = grid_value + origin_value;
+    if draw_step >= 1000.0 && grid_label_decimals(origin_value, 0.0) == 0 {
+        format!(
+            "{:.*} km",
+            grid_label_decimals(draw_step / 1000.0, origin_value / 1000.0),
+            value / 1000.0
+        )
+    } else {
+        format!(
+            "{:.*} m",
+            grid_label_decimals(draw_step, origin_value),
+            value
+        )
+    }
+}
+
+/// `CanvasGridMath::lineStride` (`CanvasGridMath.h:83-88`) — 선이 `kMaxLines`보다 많으면 n번째마다
+#[must_use]
+pub fn grid_line_stride(span: f64, step: f64, max_lines: usize) -> usize {
+    if step.is_nan() || step <= 0.0 || span.is_nan() || span < 0.0 || max_lines < 1 {
+        return 1;
+    }
+    if !(span / step).is_finite() {
+        return 1;
+    }
+    let lines = (span / step).floor() + 1.0;
+    if lines <= max_lines as f64 {
+        1
+    } else {
+        (lines / max_lines as f64).ceil() as usize
+    }
+}
+
+/// `KaCanvasGridOverlay.cpp:107-110` — `QPen(m_cfg.color, std::max(0.5, m_cfg.lineWidth))`.
+/// egui는 점선·점 선을 낱개로 이어 그리므로 `0` 실선·`1` 점선·`2` 점의 길이를 여기서 정한다.
+#[must_use]
+pub fn grid_stroke_for(cfg: &ShellGridConfig, ink: Color32) -> Stroke {
+    let width = f64::from(cfg.line_width).clamp(0.5, 5.0) as f32;
+    Stroke::new(
+        width,
+        Color32::from_rgba_unmultiplied(ink.r(), ink.g(), ink.b(), 150),
+    )
+}
+
+/// 격자 선 한 조각(`a`→`b`)을 `dash_idx` 모양대로 서브 세그먼트로 나눈다
+#[must_use]
+pub fn grid_dash_segments(a: Pos2, b: Pos2, dash_idx: usize, width: f32) -> Vec<[Pos2; 2]> {
+    let (on, off) = match dash_idx {
+        1 => ((6.0 * width).max(3.0), (3.0 * width).max(2.0)),
+        2 => (width.max(1.0), (3.0 * width).max(3.0)),
+        _ => return vec![[a, b]],
+    };
+    let d = b - a;
+    let len = d.length();
+    if !len.is_finite() || len <= 0.0 {
+        return Vec::new();
+    }
+    let dir = d / len;
+    let mut out = Vec::new();
+    let mut t = 0.0;
+    while t < len {
+        let t1 = (t + on).min(len);
+        out.push([a + dir * t, a + dir * t1]);
+        t = t1 + off;
+    }
+    out
+}
+
+/// `KaCanvasGridOverlay.cpp:19-28` `paintBand` — 도곽 좌표 띠(위 18 px 가로, 왼쪽 18 px 세로)
+pub const GRID_BAND_PX: f32 = 18.0;
+pub const GRID_BAND_FILL: Color32 = Color32::from_rgb(0xF5, 0xF4, 0xED);
+pub const GRID_BAND_BORDER: Color32 = Color32::from_rgb(0xDE, 0xDC, 0xD1);
+pub const GRID_BAND_INK: Color32 = Color32::from_rgb(0x5E, 0x5D, 0x59);
+
+/// 위·왼쪽 띠 사각형 두 개와 그 안쪽 경계선 좌표 (`KaCanvasGridOverlay.cpp:20-27`)
+#[must_use]
+pub fn grid_band_rects(rect: Rect) -> (Rect, Rect) {
+    (
+        Rect::from_min_size(rect.min, Vec2::new(rect.width(), GRID_BAND_PX)),
+        Rect::from_min_size(
+            Pos2::new(rect.left(), rect.top() + GRID_BAND_PX),
+            Vec2::new(GRID_BAND_PX, rect.height() - GRID_BAND_PX),
+        ),
+    )
+}
+
+/// `KaCanvasGridOverlay.cpp:107-194` — 지도 위 격자선과 도곽 띠 좌표 글씨를 페인터에 그린다.
+pub fn paint_projected_grid(
+    p: &egui::Painter,
+    rect: Rect,
+    vp: &ViewportTransform,
+    cfg: &ShellGridConfig,
+    survey_center: [f64; 2],
+    is_geo: bool,
+    labels: bool,
+) {
+    let ink = SHELL_GRID_SWATCHES[cfg.color_idx.min(2)].0;
+    let stroke = grid_stroke_for(cfg, ink);
+    let world_tl = s2w(rect, vp, rect.left_top());
+    let world_br = s2w(rect, vp, rect.right_bottom());
+    let min_wx = world_tl[0].min(world_br[0]);
+    let max_wx = world_tl[0].max(world_br[0]);
+    let min_wy = world_tl[1].min(world_br[1]);
+    let max_wy = world_tl[1].max(world_br[1]);
+    let turned = cfg.rotation_deg.abs() > 1e-3;
+    let step = if cfg.step_m > 0.0 {
+        cfg.step_m
+    } else {
+        nice_grid_step_meters(120.0 * vp.meters_per_pixel.max(1e-9))
+    };
+    if step.is_nan() || step <= 0.0 {
+        return;
+    }
+    let span = (max_wx - min_wx).max(max_wy - min_wy);
+    let stride = grid_line_stride(span, step, 80);
+    let draw_step = step * stride as f64;
+    let start_x = (min_wx / draw_step).floor() * draw_step;
+    let start_y = (min_wy / draw_step).floor() * draw_step;
+    let [origin_x, origin_y] = survey_center;
+
+    let mut gx = start_x;
+    while gx <= max_wx + draw_step * 0.5 {
+        let sx = w2s(rect, vp, [gx, min_wy]).x;
+        if sx >= rect.left() && sx <= rect.right() {
+            for seg in grid_dash_segments(
+                Pos2::new(sx, rect.top() + GRID_BAND_PX),
+                Pos2::new(sx, rect.bottom()),
+                cfg.dash_idx,
+                stroke.width,
+            ) {
+                p.line_segment(seg, stroke);
+            }
+        }
+        gx += draw_step;
+    }
+    let mut gy = start_y;
+    while gy <= max_wy + draw_step * 0.5 {
+        let sy = w2s(rect, vp, [min_wx, gy]).y;
+        if sy >= rect.top() && sy <= rect.bottom() {
+            for seg in grid_dash_segments(
+                Pos2::new(rect.left() + GRID_BAND_PX, sy),
+                Pos2::new(rect.right(), sy),
+                cfg.dash_idx,
+                stroke.width,
+            ) {
+                p.line_segment(seg, stroke);
+            }
+        }
+        gy += draw_step;
+    }
+    if !labels {
+        return;
+    }
+    if is_geo {
+        return;
+    }
+
+    let (top_band, left_band) = grid_band_rects(rect);
+    p.rect_filled(top_band, 0.0, GRID_BAND_FILL);
+    p.rect_filled(left_band, 0.0, GRID_BAND_FILL);
+    p.line_segment(
+        [
+            Pos2::new(rect.left() + GRID_BAND_PX, rect.top() + GRID_BAND_PX),
+            Pos2::new(rect.right(), rect.top() + GRID_BAND_PX),
+        ],
+        Stroke::new(1.0, GRID_BAND_BORDER),
+    );
+    p.line_segment(
+        [
+            Pos2::new(rect.left() + GRID_BAND_PX, rect.top() + GRID_BAND_PX),
+            Pos2::new(rect.left() + GRID_BAND_PX, rect.bottom()),
+        ],
+        Stroke::new(1.0, GRID_BAND_BORDER),
+    );
+
+    let band_font = FontId::monospace(10.0);
+    let mut last_x = f32::NEG_INFINITY;
+    let mut gx = start_x;
+    while gx <= max_wx + draw_step * 0.5 {
+        let sx = w2s(rect, vp, [gx, max_wy]).x;
+        let lbl = grid_label_text(gx - origin_x, origin_x, draw_step, turned);
+        if sx >= rect.left() + GRID_BAND_PX && sx <= rect.right() {
+            let need = lbl.chars().count() as f32 * 6.0 + 8.0;
+            if sx - last_x >= need {
+                p.text(
+                    Pos2::new(sx + 2.0, rect.top() + 9.0),
+                    egui::Align2::LEFT_CENTER,
+                    lbl,
+                    band_font.clone(),
+                    GRID_BAND_INK,
+                );
+                last_x = sx;
+            }
+        }
+        gx += draw_step;
+    }
+    let mut last_y = f32::NEG_INFINITY;
+    let mut gy = start_y;
+    while gy <= max_wy + draw_step * 0.5 {
+        let sy = w2s(rect, vp, [min_wx, gy]).y;
+        let lbl = grid_label_text(gy - origin_y, origin_y, draw_step, turned);
+        if sy >= rect.top() + GRID_BAND_PX && sy <= rect.bottom() {
+            let need = lbl.chars().count() as f32 * 6.0 + 8.0;
+            if sy - last_y >= need {
+                p.text(
+                    Pos2::new(rect.left() + GRID_BAND_PX / 2.0, sy),
+                    egui::Align2::CENTER_CENTER,
+                    lbl,
+                    band_font.clone(),
+                    GRID_BAND_INK,
+                );
+                last_y = sy;
+            }
+        }
+        gy += draw_step;
+    }
+}
+
 /// 레이어별 투명도(`0.0..=1.0`)와 밝기(`0.0..=1.0`, `0.5`가 원본 `0`)를 실제 렌더링 색상에 반영
 fn modulate_color_with_opacity_brightness(base: Color32, opacity: f32, brightness: f32) -> Color32 {
     let op = opacity.clamp(0.0, 1.0);
@@ -76,6 +423,14 @@ fn modulate_color_with_opacity_brightness(base: Color32, opacity: f32, brightnes
     let b = (i32::from(base.b()) + br_shift).clamp(0, 255) as u8;
     let a = (f32::from(base.a()) * op).round().clamp(0.0, 255.0) as u8;
     Color32::from_rgba_unmultiplied(r, g, b, a)
+}
+
+/// `KaLayerOpacityRail` 밝기 줄의 세 가지 모양 — 투명도 / 그림 레이어 밝기 / 벡터 「그림만」
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrightRow {
+    Opacity,
+    Raster,
+    Vector,
 }
 
 impl StrataAppState {
@@ -704,7 +1059,7 @@ impl StrataAppState {
                 }
             }
 
-            // KaMapScaleBar (KaMapControls.cpp:111-260) — 좌하단 도북 화살표 · 축척 막대
+            // KaMapScaleBar (KaMapControls.cpp:138-260) — 좌하단 도북 화살표 · 1·2·5 decade 축척 막대
             let bl = Pos2::new(rect.left() + 18.0, rect.bottom() - 20.0);
             p.text(
                 bl,
@@ -713,25 +1068,51 @@ impl StrataAppState {
                 FontId::proportional(11.0),
                 Color32::from_rgb(45, 44, 40),
             );
-            let sb = Rect::from_min_size(Pos2::new(bl.x + 48.0, bl.y - 4.0), Vec2::new(90.0, 6.0));
-            p.rect_filled(
-                Rect::from_min_size(sb.min, Vec2::new(45.0, 6.0)),
-                0.0,
-                Color32::from_rgb(35, 35, 32),
-            );
-            p.rect_stroke(
-                sb,
-                0.0,
-                Stroke::new(1.0, Color32::from_rgb(35, 35, 32)),
-                egui::StrokeKind::Middle,
-            );
-            p.text(
-                Pos2::new(sb.left(), sb.top() - 7.0),
-                egui::Align2::LEFT_CENTER,
-                "0          100         200 m",
-                FontId::proportional(10.0),
-                Color32::from_rgb(45, 44, 40),
-            );
+            if let Some(round_m) = scale_bar_metres(self.home_map.viewport.meters_per_pixel) {
+                let per_pixel = self.home_map.viewport.meters_per_pixel.max(1e-6);
+                let pixels = (round_m / per_pixel).clamp(40.0, 220.0) as f32;
+                let sb = Rect::from_min_size(
+                    Pos2::new(bl.x + 48.0, bl.y - 4.0),
+                    Vec2::new(pixels, 6.0),
+                );
+                // 인쇄 축척 막대처럼 진한 칸·흰 칸을 번갈아 네 칸
+                let ink = Color32::from_rgb(35, 35, 32);
+                let quarter = sb.width() / 4.0;
+                for i in 0..4 {
+                    p.rect_filled(
+                        Rect::from_min_size(
+                            Pos2::new(sb.left() + quarter * i as f32, sb.top()),
+                            Vec2::new(quarter, sb.height()),
+                        ),
+                        0.0,
+                        if i % 2 == 0 { ink } else { Color32::WHITE },
+                    );
+                }
+                p.rect_stroke(sb, 0.0, Stroke::new(1.0, ink), egui::StrokeKind::Middle);
+                let (start_txt, mid_txt, end_txt) = scale_bar_tick_text(round_m);
+                let tick_font = FontId::monospace(10.0);
+                p.text(
+                    Pos2::new(sb.left(), sb.top() - 7.0),
+                    egui::Align2::LEFT_CENTER,
+                    start_txt,
+                    tick_font.clone(),
+                    Color32::from_rgb(45, 44, 40),
+                );
+                p.text(
+                    Pos2::new(sb.center().x, sb.top() - 7.0),
+                    egui::Align2::CENTER_CENTER,
+                    mid_txt,
+                    tick_font.clone(),
+                    Color32::from_rgb(45, 44, 40),
+                );
+                p.text(
+                    Pos2::new(sb.right(), sb.top() - 7.0),
+                    egui::Align2::RIGHT_CENTER,
+                    end_txt,
+                    tick_font,
+                    Color32::from_rgb(45, 44, 40),
+                );
+            }
 
             // 3. KaShellGridControls (KaShellGridControls.cpp:41-193) — 우하단 좌표격자 토글 · 격자 종류 · 간격 선택 · 라벨 표시 · 선 색상
             self.paint_shell_grid_controls(ctx, ui, &p, rect);
@@ -845,11 +1226,9 @@ impl StrataAppState {
         let opacity_pct = (opacity_val * 100.0).round() as i32;
         let bright_int = ((bright_val - 0.5) * 2.0 * 255.0).round() as i32;
         let opacity_txt = format!("{opacity_pct}%");
-        let bright_txt = if bright_int == 0 {
-            "0".to_owned()
-        } else {
-            format!("{bright_int:+}")
-        };
+        // KaLayerOpacityRail.cpp:156-173 — 벡터(지적도·유적 경계)에는 밝기가 없다
+        let is_raster = is_raster_image_layer(title);
+        let (bright_txt, bright_tip) = brightness_row_text(bright_int, is_raster);
 
         for (row_i, (lbl, pct_txt, knob_t, col, tip)) in [
             (
@@ -864,12 +1243,22 @@ impl StrataAppState {
                 bright_txt,
                 bright_val,
                 Color32::from_rgb(92, 90, 84),
-                "고른 그림의 밝기. 가운데가 원본입니다. 원본 파일은 바뀌지 않습니다.",
+                bright_tip,
             ),
         ]
         .into_iter()
         .enumerate()
         {
+            let is_bright_row = row_i == 1;
+            let row_kind = if is_bright_row {
+                if is_raster {
+                    BrightRow::Raster
+                } else {
+                    BrightRow::Vector
+                }
+            } else {
+                BrightRow::Opacity
+            };
             let y = card_r.top() + 40.0 + (row_i as f32) * 24.0;
             p.text(
                 Pos2::new(card_r.left() + 12.0, y),
@@ -880,13 +1269,21 @@ impl StrataAppState {
             );
             let (sx0, sx1) = (card_r.left() + 58.0, card_r.right() - 48.0);
             let kx = sx0 + (sx1 - sx0) * knob_t;
-            p.line_segment([Pos2::new(sx0, y), Pos2::new(kx, y)], Stroke::new(3.5, col));
-            p.line_segment(
-                [Pos2::new(kx, y), Pos2::new(sx1, y)],
-                Stroke::new(3.5, Color32::from_rgb(208, 205, 196)),
-            );
-            p.circle_filled(Pos2::new(kx, y), 6.0, Color32::WHITE);
-            p.circle_stroke(Pos2::new(kx, y), 6.0, Stroke::new(2.0, col));
+            // 벡터 레이어의 밝기 줄은 값 자리에 「그림만」만 두고 손잡이를 없앤다
+            if !matches!(row_kind, BrightRow::Vector) {
+                p.line_segment([Pos2::new(sx0, y), Pos2::new(kx, y)], Stroke::new(3.5, col));
+                p.line_segment(
+                    [Pos2::new(kx, y), Pos2::new(sx1, y)],
+                    Stroke::new(3.5, Color32::from_rgb(208, 205, 196)),
+                );
+                p.circle_filled(Pos2::new(kx, y), 6.0, Color32::WHITE);
+                p.circle_stroke(Pos2::new(kx, y), 6.0, Stroke::new(2.0, col));
+            } else {
+                p.line_segment(
+                    [Pos2::new(sx0, y), Pos2::new(sx1, y)],
+                    Stroke::new(3.5, Color32::from_rgb(208, 205, 196)),
+                );
+            }
             p.text(
                 Pos2::new(card_r.right() - 10.0, y),
                 egui::Align2::RIGHT_CENTER,
@@ -897,14 +1294,22 @@ impl StrataAppState {
 
             let track_r =
                 Rect::from_min_max(Pos2::new(sx0 - 6.0, y - 10.0), Pos2::new(sx1 + 6.0, y + 10.0));
-            let resp = ui
-                .interact(
+            let resp = if matches!(row_kind, BrightRow::Vector) {
+                // 벡터 밝기는 끌 수 없다 (KaLayerOpacityRail.cpp:158-166). 안내말만 남긴다.
+                ui.interact(
+                    track_r,
+                    ui.id().with(("ka_opacity_slider", row_i)),
+                    egui::Sense::hover(),
+                )
+            } else {
+                ui.interact(
                     track_r,
                     ui.id().with(("ka_opacity_slider", row_i)),
                     egui::Sense::click_and_drag(),
                 )
-                .on_hover_text(tip);
-            if resp.clicked() || resp.dragged() {
+            }
+            .on_hover_text(tip);
+            if !matches!(row_kind, BrightRow::Vector) && (resp.clicked() || resp.dragged()) {
                 if let Some(pos) = resp.interact_pointer_pos() {
                     let t = ((pos.x - sx0) / (sx1 - sx0).max(1.0)).clamp(0.0, 1.0);
                     if row_i == 0 {
@@ -1288,76 +1693,14 @@ impl StrataAppState {
             }
         }
 
-        // KaShellGridControls 활성 시 지도 위 좌표격자 및 라벨 렌더링
+        // KaCanvasGridOverlay.cpp:101-194 — 좌표격자가 켜져 있으면 지도 위에 격자와 도곽 좌표 띠를 그린다
         if self.home_map.grid_enabled {
             let cfg = ctx.data_mut(|d| {
                 d.get_temp::<ShellGridConfig>(egui::Id::new("ka_shell_grid_cfg"))
                     .unwrap_or_default()
             });
-            let (step_m, show_labels, is_geo) = (cfg.step_m, cfg.show_labels, cfg.is_geo);
-            let (scol, _) = SHELL_GRID_SWATCHES[cfg.color_idx.min(2)];
-            let grid_col = Color32::from_rgba_unmultiplied(scol.r(), scol.g(), scol.b(), 150);
-            let world_tl = s2w(rect, vp, rect.left_top());
-            let world_br = s2w(rect, vp, rect.right_bottom());
-            let min_wx = world_tl[0].min(world_br[0]);
-            let max_wx = world_tl[0].max(world_br[0]);
-            let min_wy = world_tl[1].min(world_br[1]);
-            let max_wy = world_tl[1].max(world_br[1]);
-            let eff_step = (step_m.max(20.0)).max((max_wx - min_wx) / 18.0);
-            let start_x = (min_wx / eff_step).floor() * eff_step;
-            let start_y = (min_wy / eff_step).floor() * eff_step;
-
-            let mut gx = start_x;
-            while gx <= max_wx {
-                let sp = w2s(rect, vp, [gx, min_wy]);
-                if sp.x >= rect.left() && sp.x <= rect.right() {
-                    p.line_segment(
-                        [Pos2::new(sp.x, rect.top()), Pos2::new(sp.x, rect.bottom())],
-                        Stroke::new(1.0, grid_col),
-                    );
-                    if show_labels {
-                        let lbl = if is_geo {
-                            format!("129°{:02}'E", ((gx / 100.0) as i32).rem_euclid(60))
-                        } else {
-                            format!("X {gx:.0}")
-                        };
-                        p.text(
-                            Pos2::new(sp.x + 3.0, rect.bottom() - 48.0),
-                            egui::Align2::LEFT_BOTTOM,
-                            lbl,
-                            FontId::proportional(10.0),
-                            grid_col,
-                        );
-                    }
-                }
-                gx += eff_step;
-            }
-
-            let mut gy = start_y;
-            while gy <= max_wy {
-                let sp = w2s(rect, vp, [min_wx, gy]);
-                if sp.y >= rect.top() && sp.y <= rect.bottom() {
-                    p.line_segment(
-                        [Pos2::new(rect.left(), sp.y), Pos2::new(rect.right(), sp.y)],
-                        Stroke::new(1.0, grid_col),
-                    );
-                    if show_labels {
-                        let lbl = if is_geo {
-                            format!("35°{:02}'N", ((gy / 100.0) as i32).rem_euclid(60))
-                        } else {
-                            format!("Y {gy:.0}")
-                        };
-                        p.text(
-                            Pos2::new(rect.left() + 8.0, sp.y - 3.0),
-                            egui::Align2::LEFT_BOTTOM,
-                            lbl,
-                            FontId::proportional(10.0),
-                            grid_col,
-                        );
-                    }
-                }
-                gy += eff_step;
-            }
+            let labels = cfg.show_labels;
+            paint_projected_grid(p, rect, vp, &cfg, rs.survey_center, cfg.is_geo, labels);
         }
 
         // T9 KaTopographicImportDialog에서 지도에 추가한 수치지형도 레이어 렌더링 (styleTopographic: 회색 0.2mm 선)

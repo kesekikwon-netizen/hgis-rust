@@ -54,7 +54,7 @@ fn main() {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Strata")
             .with_position([16.0, 16.0])
-            .with_inner_size([1500.0, 900.0])
+            .with_inner_size([1600.0, 900.0])
             .with_min_inner_size([480.0, 320.0])
             .with_active(true)
             .with_visible(true),
