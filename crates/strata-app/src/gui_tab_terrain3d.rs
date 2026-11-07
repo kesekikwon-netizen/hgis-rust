@@ -45,8 +45,29 @@ impl StrataAppState {
                     )
                     .clicked()
                 {
-                    self.active_tab = MainTab::Drawing;
+                    self.open_studio_tab(MainTab::Drawing);
+                    self.home_map.draw_guide_message =
+                        Some("입체지형 렌더링 뷰를 도면(조판) 시트로 보냈습니다.".to_owned());
                 }
+                ui.separator();
+                ui.label("시점 프리셋 (KaTerrain3dView)");
+                ui.horizontal(|ui| {
+                    if ui.small_button("사선 조감").clicked() {
+                        self.paleo_3d.camera_3d.yaw_deg = 38.0;
+                        self.paleo_3d.camera_3d.pitch_deg = 32.0;
+                        self.paleo_3d.rebuild_3d_preview();
+                    }
+                    if ui.small_button("수직 조감").clicked() {
+                        self.paleo_3d.camera_3d.yaw_deg = 0.0;
+                        self.paleo_3d.camera_3d.pitch_deg = 80.0;
+                        self.paleo_3d.rebuild_3d_preview();
+                    }
+                    if ui.small_button("현장 시점").clicked() {
+                        self.paleo_3d.camera_3d.yaw_deg = 125.0;
+                        self.paleo_3d.camera_3d.pitch_deg = 16.0;
+                        self.paleo_3d.rebuild_3d_preview();
+                    }
+                });
                 ui.separator();
                 ui.label("높이 과장 (0.2 ~ 12.0 배)");
                 if ui
@@ -61,10 +82,13 @@ impl StrataAppState {
                 ui.separator();
                 ui.label(
                     egui::RichText::new(format!(
-                        "DEM 160×160 · 높이 18.5–142.0 m · 끌어서 돌리기\n방위각 {:.1}° · 경사 {:.1}°",
-                        self.paleo_3d.camera_3d.yaw_deg, self.paleo_3d.camera_3d.pitch_deg
+                        "DEM 160×160 · 높이 18.5–142.0 m · 끌어서 돌리기\n방위각 {:.1}° · 경사 {:.1}°\n드레이핑: 조사구역 {}건 · 시굴 트렌치 {}공 (+0.25m 오프셋)",
+                        self.paleo_3d.camera_3d.yaw_deg,
+                        self.paleo_3d.camera_3d.pitch_deg,
+                        self.home_map.real_survey.survey_rings.len(),
+                        self.home_map.real_survey.trenches.len()
                     ))
-                    .size(12.0)
+                    .size(11.5)
                     .color(egui::Color32::from_rgb(94, 93, 89)),
                 );
             });

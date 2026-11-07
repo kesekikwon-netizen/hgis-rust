@@ -261,6 +261,38 @@ impl StrataAppState {
                 Color32::from_rgba_unmultiplied(214, 92, 32, 95),
                 Stroke::new(2.2, Color32::from_rgb(214, 78, 22)),
             ));
+            let [scx, scy] = self.home_map.real_survey.survey_center;
+            if self.home_map.real_survey.is_layer_visible("시굴격자") {
+                let tr_s = Stroke::new(1.0, Color32::from_rgb(156, 62, 32));
+                for tr in self.home_map.real_survey.trenches.iter().take(48) {
+                    let pts: Vec<Pos2> = tr
+                        .ring
+                        .iter()
+                        .map(|&pt| {
+                            Pos2::new(
+                                mc.x + ((pt[0] - scx) as f32) * 0.14,
+                                mc.y - ((pt[1] - scy) as f32) * 0.14,
+                            )
+                        })
+                        .collect();
+                    p.add(egui::Shape::line(pts, tr_s));
+                }
+            }
+            if self.home_map.real_survey.is_layer_visible("주변 500m") && !self.home_map.real_survey.buffer_500m.is_empty() {
+                let buf_pts: Vec<Pos2> = self
+                    .home_map
+                    .real_survey
+                    .buffer_500m
+                    .iter()
+                    .map(|&pt| {
+                        Pos2::new(
+                            mc.x + ((pt[0] - scx) as f32) * 0.14,
+                            mc.y - ((pt[1] - scy) as f32) * 0.14,
+                        )
+                    })
+                    .collect();
+                p.add(egui::Shape::line(buf_pts, Stroke::new(1.6, Color32::from_rgb(184, 58, 24))));
+            }
             for c_pt in [map_rect.left_top() + Vec2::new(12.0, 12.0), map_rect.right_top() + Vec2::new(-12.0, 12.0), map_rect.left_bottom() + Vec2::new(12.0, -12.0), map_rect.right_bottom() + Vec2::new(-12.0, -12.0)] {
                 p.circle_filled(c_pt, 7.0, Color32::from_rgba_unmultiplied(255, 255, 255, 210));
                 p.text(c_pt, egui::Align2::CENTER_CENTER, "↻", egui::FontId::proportional(9.5), Color32::from_rgb(55, 54, 50));
@@ -286,8 +318,35 @@ impl StrataAppState {
                 let cell_r = Rect::from_min_size(Pos2::new(x0, bar_r.top()), Vec2::new(bw, 42.0));
                 p.text(Pos2::new(cell_r.center().x, cell_r.top() + 13.0), egui::Align2::CENTER_CENTER, *ico, egui::FontId::proportional(11.0), Color32::from_rgb(55, 54, 50));
                 p.text(Pos2::new(cell_r.center().x, cell_r.bottom() - 10.0), egui::Align2::CENTER_CENTER, *lbl, egui::FontId::proportional(10.0), Color32::from_rgb(55, 54, 50));
-                if *lbl == "용지/방향" && ui.interact(cell_r, ui.id().with("drawing_paper_btn"), egui::Sense::click()).clicked() {
-                    self.modals.active = Some(ActiveModalDialog::PaperSetup);
+                if ui.interact(cell_r, ui.id().with(("drawing_toolbar_btn", i)), egui::Sense::click()).clicked() {
+                    match i {
+                        0 => {
+                            self.drawing.sheet.grid_enabled = !self.drawing.sheet.grid_enabled;
+                            self.home_map.draw_guide_message = Some("도면 외곽 좌표점·좌표격자 표시를 전환했습니다.".to_owned());
+                        }
+                        1 => {
+                            self.home_map.fit_to_survey();
+                            self.home_map.draw_guide_message = Some("조사구역 레이어를 도면 칸 한가운데로 맞췄습니다.".to_owned());
+                        }
+                        2 => {
+                            self.drawing.sheet.scale_denominator = 5_000;
+                            self.home_map.draw_guide_message = Some("도면 지도 칸의 축척과 위치를 조정했습니다 (1:5,000).".to_owned());
+                        }
+                        3 => {
+                            self.drawing.sheet.replace_sheet_chrome();
+                            self.drawing.sheet.recover_orphaned_items();
+                            self.home_map.draw_guide_message = Some("용지 화면 맞춤 및 하단 장식 띠(축척자·좌표계·방위) 정렬을 완료했습니다.".to_owned());
+                        }
+                        4 => {
+                            self.home_map.draw_guide_message = Some("항목 이동 모드 — 범례·표제란·방위표를 끌어 자리를 옮기세요.".to_owned());
+                        }
+                        5 => {
+                            self.modals.active = Some(ActiveModalDialog::PaperSetup);
+                        }
+                        _ => {
+                            self.home_map.draw_guide_message = Some(format!("현재 도면 목록: 「{}」 (1/1쪽)", self.drawing.title_ko));
+                        }
+                    }
                 }
             }
         });

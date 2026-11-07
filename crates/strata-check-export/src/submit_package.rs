@@ -79,8 +79,11 @@ mod tests {
         let dir = tempfile::tempdir()?;
         let findings = vec![ChecklistFinding {
             rule_id: "R-NORTH-ARROW".to_owned(),
+            category_ko: "조판·좌표계".to_owned(),
             message_ko: "방위표 위치 재확인 권장".to_owned(),
+            severity: crate::checklist_engine::ChecklistSeverity::Warning,
             passed: false,
+            target_world_xy: None,
         }];
         let manifest = export_submission_package(dir.path(), &findings)?;
         assert_eq!(manifest.crs, SubmitCrs::Epsg5179);

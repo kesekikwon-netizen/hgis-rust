@@ -323,22 +323,97 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                 });
         }
         ActiveModalDialog::ExportSubmitPackage => {
-            egui::Window::new("ka_modal_submit").title_bar(false).resizable(false).show(ctx, |ui| {
-                render_strata_modal_header(ui, "국가유산청 제출 꾸러미 내보내기 - Strata", &mut open);
-                let findings = ChecklistEngine::evaluate_sheet(&app.drawing.sheet, SubmitCrs::Epsg5179, true);
-                for f in &findings {
-                    let badge = if f.passed { "[통과]" } else { "[안내]" };
-                    ui.label(format!("{badge} {} — {}", f.rule_id, f.message_ko));
-                }
-                ui.separator();
-                if ui.button("EPSG:5179 제출 패키지 생성").clicked() {
-                    let out_dir = app.home_map.real_survey.survey_dir.join("제출꾸러미_5179");
-                    if let Ok(m) = export_submission_package(&out_dir, &findings) {
-                        app.modals.last_export_status = format!("내보내기 완료: {} (파일 {}종, SHA-256 검증됨)", out_dir.display(), m.files_sha256.len());
+            egui::Window::new("ka_modal_submit")
+                .title_bar(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .default_width(640.0)
+                .show(ctx, |ui| {
+                    render_strata_modal_header(ui, "국가유산청 검수 · 제출 꾸러미 내보내기 (26개 규칙) - Strata", &mut open);
+                    let has_boundary = !app.home_map.real_survey.survey_rings.is_empty();
+                    let findings = ChecklistEngine::evaluate_sheet(&app.drawing.sheet, SubmitCrs::Epsg5179, has_boundary);
+                    let (err_cnt, warn_cnt, pass_cnt) = ChecklistEngine::count_by_severity(&findings);
+
+                    ui.columns(3, |cols| {
+                        for (ci, (lbl, cnt, bg, fg)) in [
+                            ("오류 (제출 차단)", err_cnt, Color32::from_rgb(254, 242, 242), Color32::from_rgb(185, 28, 28)),
+                            ("주의 (권장 확인)", warn_cnt, Color32::from_rgb(255, 251, 235), Color32::from_rgb(180, 83, 9)),
+                            ("통과 (무결성 검증)", pass_cnt, Color32::from_rgb(240, 253, 244), Color32::from_rgb(21, 128, 61)),
+                        ]
+                        .into_iter()
+                        .enumerate()
+                        {
+                            egui::Frame::NONE
+                                .fill(bg)
+                                .stroke(Stroke::new(1.0, fg))
+                                .corner_radius(6.0)
+                                .inner_margin(egui::Margin::symmetric(10, 8))
+                                .show(&mut cols[ci], |ui| {
+                                    ui.label(egui::RichText::new(lbl).size(11.5).color(fg));
+                                    ui.label(egui::RichText::new(format!("{cnt}건")).size(18.0).strong().color(fg));
+                                });
+                        }
+                    });
+                    ui.add_space(8.0);
+                    egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
+                        for f in &findings {
+                            ui.horizontal(|ui| {
+                                let (badge, col) = if f.passed {
+                                    ("[통과]", Color32::from_rgb(21, 128, 61))
+                                } else {
+                                    ("[주의]", Color32::from_rgb(180, 83, 9))
+                                };
+                                ui.colored_label(col, egui::RichText::new(badge).strong().size(11.5));
+                                ui.label(egui::RichText::new(format!("[{}] {}", f.category_ko, f.message_ko)).size(12.0));
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if ui.small_button("위치 보기").clicked() {
+                                        if let Some(xy) = f.target_world_xy {
+                                            app.home_map.viewport.center_xy = xy;
+                                            app.home_map.viewport.meters_per_pixel = 1.8;
+                                        }
+                                        app.active_tab = MainTab::Map;
+                                        app.home_map.draw_guide_message = Some(format!(
+                                            "검수 항목 「{}」 해당 피처 위치로 이동했습니다.",
+                                            f.rule_id
+                                        ));
+                                        app.modals.active = None;
+                                    }
+                                });
+                            });
+                        }
+                    });
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        let export_btn = egui::Button::new(
+                            egui::RichText::new("EPSG:5179 제출 패키지 생성 (SHP + PDF + MANIFEST.sha256)")
+                                .color(Color32::WHITE)
+                                .strong()
+                                .size(13.0),
+                        )
+                        .fill(Color32::from_rgb(181, 87, 58))
+                        .corner_radius(6.0)
+                        .min_size(Vec2::new(360.0, 34.0));
+                        if ui.add(export_btn).clicked() {
+                            let out_dir = app.home_map.real_survey.survey_dir.join("제출꾸러미_5179");
+                            if let Ok(m) = export_submission_package(&out_dir, &findings) {
+                                app.modals.last_export_status = format!(
+                                    "내보내기 완료: {} (파일 {}종, 26개 검수 통과 {pass_cnt}/26, SHA-256 검증됨)",
+                                    out_dir.display(),
+                                    m.files_sha256.len()
+                                );
+                            }
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("닫기").clicked() {
+                                app.modals.active = None;
+                            }
+                        });
+                    });
+                    if !app.modals.last_export_status.is_empty() {
+                        ui.add_space(4.0);
+                        ui.colored_label(Color32::from_rgb(21, 128, 61), &app.modals.last_export_status);
                     }
-                }
-                if !app.modals.last_export_status.is_empty() { ui.label(&app.modals.last_export_status); }
-            });
+                });
         }
         other => render_download_and_print_dialogs(app, ctx, other, &mut open),
     }
