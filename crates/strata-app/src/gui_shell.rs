@@ -6,6 +6,12 @@ use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::{render_active_modal_dialogs, ActiveModalDialog};
 use crate::ribbon::SubToolsMode;
 
+/// UX_LAYOUT_SPEC.md 1절: 세로 5단 골격 (창 1600×900 기준, 상태줄 y=839, h=32)
+pub const UX_STATUS_BAR_Y: f32 = 839.0;
+pub const UX_STATUS_BAR_HEIGHT: f32 = 32.0;
+pub const UX_TAB_BODY_Y: f32 = 158.0;
+pub const UX_TAB_BODY_HEIGHT: f32 = 681.0;
+
 impl StrataAppState {
     /// C++ `MainWindow.cpp` + `MainWindowRibbon.cpp` + `KaShellFocus.h` 단축키 1:1 처리
     fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
@@ -161,13 +167,16 @@ impl StrataAppState {
         self.handle_cpp_keyboard_shortcuts(ctx);
 
         if !self.right_inspector.map_focused {
-            egui::TopBottomPanel::top("ka_cpp_top_chrome").show(ctx, |ui| {
-                self.render_cpp_top_bars(ctx, ui);
-            });
+            egui::TopBottomPanel::top("ka_cpp_top_chrome")
+                .frame(egui::Frame::NONE)
+                .show_separator_line(false)
+                .show(ctx, |ui| {
+                    self.render_cpp_top_bars(ctx, ui);
+                });
         }
 
         egui::TopBottomPanel::bottom("ka_status_bar")
-            .exact_height(26.0)
+            .exact_height(UX_STATUS_BAR_HEIGHT)
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
                     if self.active_tab == MainTab::Home {
@@ -334,5 +343,73 @@ impl StrataAppState {
 impl eframe::App for StrataAppState {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let _ = self.render_workspace_egui(ctx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gui_layer_panel::{
+        UX_FILE_DRAWER_HEIGHT, UX_LAYER_CARD_HEIGHT, UX_LEFT_PANEL_WIDTH,
+    };
+    use crate::gui_ribbon_bar::{
+        UX_RIBBON_BUTTON_SIZE, UX_RIBBON_GROUP_WIDTHS, UX_RIBBON_HEIGHT, UX_VIEW_TAB_BAR_HEIGHT,
+    };
+    use crate::gui_tab_map::{UX_MAP_CANVAS_WIDTH, UX_MAP_LEFT_WIDTH, UX_MAP_RIGHT_WIDTH};
+
+    #[test]
+    fn test_u1_ux_layout_spec_1600x900_skeleton_ribbon_and_3_column_split() {
+        assert_eq!(UX_RIBBON_BUTTON_SIZE, egui::Vec2::new(69.0, 100.0));
+        assert_eq!(UX_RIBBON_HEIGHT, 91.0);
+        assert_eq!(UX_VIEW_TAB_BAR_HEIGHT, 51.0);
+        assert_eq!(
+            UX_RIBBON_GROUP_WIDTHS,
+            [214.0, 250.0, 156.0, 382.0, 49.0, 215.0, 50.0]
+        );
+        assert_eq!(UX_STATUS_BAR_Y, 839.0);
+        assert_eq!(UX_STATUS_BAR_HEIGHT, 32.0);
+        assert_eq!(UX_LEFT_PANEL_WIDTH, 351.0);
+        assert_eq!(UX_MAP_LEFT_WIDTH, 351.0);
+        assert_eq!(UX_MAP_CANVAS_WIDTH, 954.0);
+        assert_eq!(UX_MAP_RIGHT_WIDTH, 236.0);
+        assert_eq!(UX_LAYER_CARD_HEIGHT, 507.0);
+        assert_eq!(UX_FILE_DRAWER_HEIGHT, 168.0);
+
+        let ctx = egui::Context::default();
+        let mut app = StrataAppState::new_startup();
+        app.active_tab = MainTab::Map;
+        app.ribbon.sub_toolbar_visible = false;
+
+        let raw_1600 = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1600.0, 900.0),
+            )),
+            ..Default::default()
+        };
+        let _ = ctx.run(raw_1600, |ctx| {
+            let _ = app.render_workspace_egui(ctx);
+        });
+        let map_w_1600 = app.home_map.viewport.screen_size_px[0];
+        assert!(
+            (map_w_1600 - f64::from(UX_MAP_CANVAS_WIDTH)).abs() <= 4.0,
+            "expected map canvas width ~954 at 1600x900, got {map_w_1600}"
+        );
+
+        let raw_1920 = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1920.0, 900.0),
+            )),
+            ..Default::default()
+        };
+        let _ = ctx.run(raw_1920, |ctx| {
+            let _ = app.render_workspace_egui(ctx);
+        });
+        let map_w_1920 = app.home_map.viewport.screen_size_px[0];
+        assert!(
+            map_w_1920 > map_w_1600 + 250.0,
+            "center map must expand when window widens: 1600->{map_w_1600}, 1920->{map_w_1920}"
+        );
     }
 }

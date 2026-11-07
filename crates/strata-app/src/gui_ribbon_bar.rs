@@ -8,6 +8,13 @@ use crate::dialogs_modal::ActiveModalDialog;
 use crate::ribbon::{SubToolsMode, PENINSULA_REGION_TILES};
 use crate::ribbon_icons::{cpp_ribbon_tooltip, paint_ribbon_icon};
 
+/// UX_LAYOUT_SPEC.md 1·2절: C++ 실측 상수 (창 1600×900 기준)
+pub const UX_RIBBON_HEIGHT: f32 = 91.0;
+pub const UX_VIEW_TAB_BAR_HEIGHT: f32 = 51.0;
+pub const UX_RIBBON_BUTTON_SIZE: Vec2 = Vec2::new(69.0, 100.0);
+pub const UX_RIBBON_GROUP_XS: [f32; 7] = [9.0, 223.0, 474.0, 630.0, 1013.0, 1062.0, 1278.0];
+pub const UX_RIBBON_GROUP_WIDTHS: [f32; 7] = [214.0, 250.0, 156.0, 382.0, 49.0, 215.0, 50.0];
+
 fn draw_buffer_pill(
     ui: &mut egui::Ui,
     icon_key: &str,
@@ -58,111 +65,132 @@ impl StrataAppState {
         let is_home = self.active_tab == MainTab::Home;
         let dirty_save = !is_home && self.is_dirty;
         let [pr, pg, pb, _] = self.theme.chrome;
+        ui.spacing_mut().item_spacing.y = 0.0;
 
-        egui::Frame::NONE
-            .fill(Color32::from_rgb(pr, pg, pb))
-            .inner_margin(egui::Margin::symmetric(8, 5))
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 4.0;
-                    let groups: &[(&str, &[&str])] = &[
-                        ("조사", &["새 조사", "열기", "저장", "다른 이름"]),
-                        ("기록", &["선택", "측거", "그리기", "시굴격자", "버퍼"]),
-                        ("자료 받기", &["지적", "수치지형", "유산"]),
-                        (
-                            "배경 지도",
-                            &[
-                                "지형",
-                                "DEM",
-                                "등고선",
-                                "토양",
-                                "고지형",
-                                "지질",
-                                "수계",
-                                "옛 지도",
-                            ],
-                        ),
-                        ("정합", &["정합"]),
-                        ("내보내기", &["도면", "인쇄", "GeoTIFF", "검수·제출"]),
-                        ("기타", &["더보기"]),
-                    ];
+        let (ribbon_rect, _) = ui.allocate_exact_size(
+            Vec2::new(ui.available_width(), UX_RIBBON_HEIGHT),
+            egui::Sense::hover(),
+        );
+        {
+            let rp = ui.painter_at(ribbon_rect);
+            rp.rect_filled(ribbon_rect, 0.0, Color32::from_rgb(pr, pg, pb));
+            rp.line_segment(
+                [
+                    Pos2::new(ribbon_rect.left(), ribbon_rect.bottom() - 1.0),
+                    Pos2::new(ribbon_rect.right(), ribbon_rect.bottom() - 1.0),
+                ],
+                Stroke::new(1.0, Color32::from_rgb(218, 215, 205)),
+            );
+        }
 
-                    for (g_idx, (g_title, items)) in groups.iter().enumerate() {
-                        if g_idx > 0 {
-                            let (_, sep_r) = ui.allocate_space(Vec2::new(2.0, 66.0));
-                            ui.painter().line_segment(
-                                [
-                                    Pos2::new(sep_r.center().x, sep_r.top() + 2.0),
-                                    Pos2::new(sep_r.center().x, sep_r.bottom() - 2.0),
-                                ],
-                                Stroke::new(1.0, Color32::from_rgb(214, 211, 200)),
-                            );
-                        }
-                        ui.vertical(|ui| {
-                            ui.spacing_mut().item_spacing.y = 2.0;
-                            ui.label(
-                                egui::RichText::new(*g_title)
-                                    .size(10.5)
-                                    .strong()
-                                    .color(Color32::from_rgb(65, 64, 60)),
-                            );
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 3.0;
-                                for &label in *items {
-                                    let muted = is_home && *g_title == "기록";
-                                    let highlight_save = label == "저장" && dirty_save;
-                                    let dark_active = (label == "측거"
-                                        && self.active_tool == MapToolKind::Measure)
-                                        || (label == "그리기"
-                                            && (self.active_tool == MapToolKind::Measure
-                                                || (self.ribbon.sub_toolbar_visible
-                                                    && self.ribbon.sub_mode
-                                                        == SubToolsMode::Draw)))
-                                        || (label == "버퍼"
-                                            && self.ribbon.sub_toolbar_visible
-                                            && self.ribbon.sub_mode == SubToolsMode::Buffer);
-                                    let warm_active = label == "DEM" && !is_home;
-                                    if self.draw_ribbon_chip(
-                                        ui,
-                                        label,
-                                        muted,
-                                        highlight_save,
-                                        dark_active,
-                                        warm_active,
-                                    ) {
-                                        self.handle_ribbon_click(label);
-                                    }
-                                }
-                            });
-                        });
-                    }
+        let groups: &[(&str, &[&str])] = &[
+            ("조사", &["새 조사", "열기", "저장", "다른 이름"]),
+            ("기록", &["선택", "측거", "그리기", "시굴격자", "버퍼"]),
+            ("자료 받기", &["지적", "수치지형", "유산"]),
+            (
+                "배경 지도",
+                &[
+                    "지형",
+                    "DEM",
+                    "등고선",
+                    "토양",
+                    "고지형",
+                    "지질",
+                    "수계",
+                    "옛 지도",
+                ],
+            ),
+            ("정합", &["정합"]),
+            ("내보내기", &["도면", "인쇄", "GeoTIFF", "검수·제출"]),
+            ("기타", &["더보기"]),
+        ];
 
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let resp = ui.add(
-                            egui::TextEdit::singleline(&mut self.ribbon.app_bar.query)
-                                .hint_text("Q 주소·지번 찾기")
-                                .desired_width(142.0),
-                        );
-                        if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                            self.active_tab = MainTab::Map;
-                            self.home_map.draw_guide_message = Some(format!(
-                                "주소·지번 「{}」 위치로 이동했습니다.",
-                                self.ribbon.app_bar.query
-                            ));
-                        }
-                        let reg_btn =
-                            egui::Button::new(egui::RichText::new("● 지역").size(12.0).strong())
-                                .fill(Color32::WHITE)
-                                .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
-                                .corner_radius(6.0)
-                                .min_size(Vec2::new(60.0, 30.0));
-                        if ui.add(reg_btn).clicked() {
-                            self.ribbon.app_bar.region_popup_open =
-                                !self.ribbon.app_bar.region_popup_open;
-                        }
-                    });
-                });
-            });
+        for (g_idx, (g_title, items)) in groups.iter().enumerate() {
+            let gx = ribbon_rect.left() + UX_RIBBON_GROUP_XS[g_idx];
+            let gw = UX_RIBBON_GROUP_WIDTHS[g_idx];
+            let g_rect =
+                Rect::from_min_size(Pos2::new(gx, ribbon_rect.top() + 1.0), Vec2::new(gw, 89.0));
+            let gp = ui.painter_at(ribbon_rect);
+            if g_idx > 0 {
+                gp.line_segment(
+                    [
+                        Pos2::new(gx, g_rect.top() + 4.0),
+                        Pos2::new(gx, g_rect.bottom() - 4.0),
+                    ],
+                    Stroke::new(1.0, Color32::from_rgb(214, 211, 200)),
+                );
+            }
+            gp.text(
+                Pos2::new(g_rect.left() + 4.0, g_rect.top() + 9.0),
+                egui::Align2::LEFT_CENTER,
+                *g_title,
+                egui::FontId::proportional(11.5),
+                Color32::from_rgb(65, 64, 60),
+            );
+            let n = items.len() as f32;
+            let gap = if items.len() > 1 { 2.0 } else { 0.0 };
+            let pad_x = 2.0;
+            let item_w = ((gw - pad_x * 2.0 - gap * (n - 1.0)) / n).max(38.0);
+            let item_h = 69.0;
+            for (i, &label) in items.iter().enumerate() {
+                let bx = g_rect.left() + pad_x + (i as f32) * (item_w + gap);
+                let btn_rect = Rect::from_min_size(
+                    Pos2::new(bx, g_rect.top() + 18.0),
+                    Vec2::new(item_w, item_h),
+                );
+                let muted = is_home && *g_title == "기록";
+                let highlight_save = label == "저장" && dirty_save;
+                let dark_active = (label == "측거" && self.active_tool == MapToolKind::Measure)
+                    || (label == "그리기"
+                        && (self.active_tool == MapToolKind::Measure
+                            || (self.ribbon.sub_toolbar_visible
+                                && self.ribbon.sub_mode == SubToolsMode::Draw)))
+                    || (label == "버퍼"
+                        && self.ribbon.sub_toolbar_visible
+                        && self.ribbon.sub_mode == SubToolsMode::Buffer);
+                let warm_active = label == "DEM" && !is_home;
+                let mut chip_ui = ui.new_child(egui::UiBuilder::new().max_rect(btn_rect));
+                if self.draw_ribbon_chip(
+                    &mut chip_ui,
+                    label,
+                    muted,
+                    highlight_save,
+                    dark_active,
+                    warm_active,
+                ) {
+                    self.handle_ribbon_click(label);
+                }
+            }
+        }
+
+        let right_left = (ribbon_rect.left() + 1334.0).min(ribbon_rect.right() - 220.0);
+        let right_rect = Rect::from_min_max(
+            Pos2::new(right_left, ribbon_rect.top() + 1.0),
+            Pos2::new(ribbon_rect.right() - 8.0, ribbon_rect.bottom() - 1.0),
+        );
+        let mut right_ui = ui.new_child(egui::UiBuilder::new().max_rect(right_rect));
+        right_ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let resp = ui.add(
+                egui::TextEdit::singleline(&mut self.ribbon.app_bar.query)
+                    .hint_text("Q 주소·지번 찾기")
+                    .desired_width(142.0),
+            );
+            if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                self.active_tab = MainTab::Map;
+                self.home_map.draw_guide_message = Some(format!(
+                    "주소·지번 「{}」 위치로 이동했습니다.",
+                    self.ribbon.app_bar.query
+                ));
+            }
+            let reg_btn = egui::Button::new(egui::RichText::new("● 지역").size(12.5).strong())
+                .fill(Color32::WHITE)
+                .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                .corner_radius(6.0)
+                .min_size(Vec2::new(68.0, 36.0));
+            if ui.add(reg_btn).clicked() {
+                self.ribbon.app_bar.region_popup_open = !self.ribbon.app_bar.region_popup_open;
+            }
+        });
 
         if self.ribbon.sub_toolbar_visible && self.ribbon.sub_mode != SubToolsMode::None {
             egui::Frame::NONE
@@ -369,148 +397,217 @@ impl StrataAppState {
                 });
         }
 
-        egui::Frame::NONE
-            .fill(Color32::from_rgb(239, 237, 228))
-            .inner_margin(egui::Margin::symmetric(12, 3))
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 16.0;
-                    for (tab, ico, txt) in [(MainTab::Home, "유산", "홈"), (MainTab::Map, "옛 지도", "지도")] {
-                        let sel = self.active_tab == tab;
-                        let (tr, resp) = ui.allocate_exact_size(Vec2::new(56.0, 24.0), egui::Sense::click());
-                        let tp = ui.painter_at(tr);
-                        paint_ribbon_icon(&tp, Rect::from_center_size(Pos2::new(tr.left() + 10.0, tr.center().y), Vec2::new(20.0, 20.0)), ico, Color32::from_rgb(45, 44, 40));
-                        tp.text(Pos2::new(tr.left() + 24.0, tr.center().y), egui::Align2::LEFT_CENTER, txt, egui::FontId::proportional(12.5), Color32::from_rgb(30, 30, 28));
-                        if sel {
-                            tp.line_segment([Pos2::new(tr.left(), tr.bottom()), Pos2::new(tr.right(), tr.bottom())], Stroke::new(2.0, Color32::from_rgb(35, 35, 32)));
-                        }
-                        if resp.clicked() { self.active_tab = tab; }
+        let (tabbar_rect, _) = ui.allocate_exact_size(
+            Vec2::new(ui.available_width(), UX_VIEW_TAB_BAR_HEIGHT),
+            egui::Sense::hover(),
+        );
+        {
+            let tbp = ui.painter_at(tabbar_rect);
+            tbp.rect_filled(tabbar_rect, 0.0, Color32::from_rgb(239, 237, 228));
+            tbp.line_segment(
+                [
+                    Pos2::new(tabbar_rect.left(), tabbar_rect.bottom() - 1.0),
+                    Pos2::new(tabbar_rect.right(), tabbar_rect.bottom() - 1.0),
+                ],
+                Stroke::new(1.0, Color32::from_rgb(214, 211, 200)),
+            );
+        }
+        let tabbar_inner = tabbar_rect.shrink2(Vec2::new(12.0, 7.0));
+        let mut tabbar_ui = ui.new_child(egui::UiBuilder::new().max_rect(tabbar_inner));
+        tabbar_ui.horizontal_centered(|ui| {
+            ui.spacing_mut().item_spacing.x = 16.0;
+            for (tab, ico, txt) in [
+                (MainTab::Home, "유산", "홈"),
+                (MainTab::Map, "옛 지도", "지도"),
+            ] {
+                let sel = self.active_tab == tab;
+                let (tr, resp) = ui.allocate_exact_size(Vec2::new(64.0, 36.0), egui::Sense::click());
+                let tp = ui.painter_at(tr);
+                paint_ribbon_icon(
+                    &tp,
+                    Rect::from_center_size(
+                        Pos2::new(tr.left() + 12.0, tr.center().y),
+                        Vec2::new(22.0, 22.0),
+                    ),
+                    ico,
+                    Color32::from_rgb(45, 44, 40),
+                );
+                tp.text(
+                    Pos2::new(tr.left() + 28.0, tr.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    txt,
+                    egui::FontId::proportional(13.0),
+                    Color32::from_rgb(30, 30, 28),
+                );
+                if sel {
+                    tp.line_segment(
+                        [
+                            Pos2::new(tr.left(), tr.bottom()),
+                            Pos2::new(tr.right(), tr.bottom()),
+                        ],
+                        Stroke::new(2.5, Color32::from_rgb(35, 35, 32)),
+                    );
+                }
+                if resp.clicked() {
+                    self.active_tab = tab;
+                }
+            }
+            let open_tabs = self.open_studio_tabs.clone();
+            for (extra, ico, lbl) in [
+                (MainTab::Drawing, "도면", "도면"),
+                (MainTab::Paleo, "고지형", "고지형"),
+                (MainTab::Terrain3d, "검수·제출", "입체지형"),
+            ] {
+                if open_tabs.contains(&extra) || self.active_tab == extra {
+                    let sel = self.active_tab == extra;
+                    let (tr, resp) =
+                        ui.allocate_exact_size(Vec2::new(92.0, 36.0), egui::Sense::click());
+                    let tp = ui.painter_at(tr);
+                    paint_ribbon_icon(
+                        &tp,
+                        Rect::from_center_size(
+                            Pos2::new(tr.left() + 12.0, tr.center().y),
+                            Vec2::new(22.0, 22.0),
+                        ),
+                        ico,
+                        Color32::from_rgb(35, 35, 32),
+                    );
+                    tp.text(
+                        Pos2::new(tr.left() + 28.0, tr.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        lbl,
+                        egui::FontId::proportional(13.0),
+                        Color32::from_rgb(30, 30, 28),
+                    );
+                    let close_rect =
+                        Rect::from_min_max(Pos2::new(tr.right() - 18.0, tr.top()), tr.max);
+                    tp.text(
+                        close_rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "×",
+                        egui::FontId::proportional(13.5),
+                        Color32::from_rgb(90, 89, 84),
+                    );
+                    if sel {
+                        tp.line_segment(
+                            [
+                                Pos2::new(tr.left(), tr.bottom()),
+                                Pos2::new(tr.right(), tr.bottom()),
+                            ],
+                            Stroke::new(2.5, Color32::from_rgb(35, 35, 32)),
+                        );
                     }
-                    let open_tabs = self.open_studio_tabs.clone();
-                    for (extra, ico, lbl) in [
-                        (MainTab::Drawing, "도면", "도면"),
-                        (MainTab::Paleo, "고지형", "고지형"),
-                        (MainTab::Terrain3d, "검수·제출", "입체지형"),
-                    ] {
-                        if open_tabs.contains(&extra) || self.active_tab == extra {
-                            let sel = self.active_tab == extra;
-                            let (tr, resp) = ui.allocate_exact_size(Vec2::new(86.0, 24.0), egui::Sense::click());
-                            let tp = ui.painter_at(tr);
-                            paint_ribbon_icon(
-                                &tp,
-                                Rect::from_center_size(Pos2::new(tr.left() + 10.0, tr.center().y), Vec2::new(20.0, 20.0)),
-                                ico,
-                                Color32::from_rgb(35, 35, 32),
-                            );
-                            tp.text(
-                                Pos2::new(tr.left() + 24.0, tr.center().y),
-                                egui::Align2::LEFT_CENTER,
-                                lbl,
-                                egui::FontId::proportional(12.5),
-                                Color32::from_rgb(30, 30, 28),
-                            );
-                            let close_rect = Rect::from_min_max(Pos2::new(tr.right() - 18.0, tr.top()), tr.max);
-                            tp.text(
-                                close_rect.center(),
-                                egui::Align2::CENTER_CENTER,
-                                "×",
-                                egui::FontId::proportional(13.0),
-                                Color32::from_rgb(90, 89, 84),
-                            );
-                            if sel {
-                                tp.line_segment(
-                                    [Pos2::new(tr.left(), tr.bottom()), Pos2::new(tr.right(), tr.bottom())],
-                                    Stroke::new(2.0, Color32::from_rgb(35, 35, 32)),
-                                );
-                            }
-                            if resp.clicked() {
-                                if resp.interact_pointer_pos().is_some_and(|p| close_rect.contains(p)) {
-                                    self.close_studio_tab(extra);
-                                } else {
-                                    self.active_tab = extra;
-                                }
-                            }
+                    if resp.clicked() {
+                        if resp.interact_pointer_pos().is_some_and(|p| close_rect.contains(p)) {
+                            self.close_studio_tab(extra);
+                        } else {
+                            self.active_tab = extra;
                         }
                     }
+                }
+            }
 
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let theme_resp = ui.button(egui::RichText::new("테마 ▼").size(11.5));
-                        if theme_resp.clicked() {
-                            self.theme_menu_open = !self.theme_menu_open;
-                        }
-                        if self.theme_menu_open {
-                            let popup_pos = Pos2::new((theme_resp.rect.right() - 210.0).max(16.0), theme_resp.rect.bottom() + 4.0);
-                            egui::Area::new(ui.id().with("ka_theme_menu_popup"))
-                                .fixed_pos(popup_pos)
-                                .order(egui::Order::Foreground)
-                                .show(ctx, |ui| {
-                                    egui::Frame::popup(ui.style())
-                                        .fill(Color32::from_rgb(252, 251, 247))
-                                        .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
-                                        .inner_margin(egui::Margin::symmetric(8, 6))
-                                        .show(ui, |ui| {
-                                            ui.set_min_width(198.0);
-                                            for ct in strata_types::theme_tokens::ColorTheme::ALL {
-                                                let changed = ui
-                                                    .radio_value(
-                                                        &mut self.display_options.color_theme,
-                                                        ct,
-                                                        ct.label_ko(),
-                                                    )
-                                                    .on_hover_text(ct.tooltip_ko())
-                                                    .changed();
-                                                if changed {
-                                                    self.theme = strata_types::theme_tokens::ThemeTokens::for_options(&self.display_options);
-                                                }
-                                            }
-                                            ui.separator();
-                                            if ui
-                                                .checkbox(
-                                                    &mut self.display_options.paper_look,
-                                                    "새 모양 (종이·흙색)",
-                                                )
-                                                .changed()
-                                            {
-                                                self.paper_look = self.display_options.paper_look;
-                                                self.theme = strata_types::theme_tokens::ThemeTokens::for_options(&self.display_options);
-                                            }
-                                            if ui
-                                                .checkbox(
-                                                    &mut self.display_options.high_contrast,
-                                                    "고대비 화면 (햇빛 아래)",
-                                                )
-                                                .changed()
-                                            {
-                                                self.theme = strata_types::theme_tokens::ThemeTokens::for_options(&self.display_options);
-                                            }
-                                            if ui
-                                                .checkbox(
-                                                    &mut self.display_options.large_text,
-                                                    "큰 글씨",
-                                                )
-                                                .changed()
-                                            {
-                                                self.large_font_mode = self.display_options.large_text;
-                                                ctx.set_pixels_per_point(if self.large_font_mode {
-                                                    1.15
-                                                } else {
-                                                    1.0
-                                                });
-                                            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let theme_resp = ui.button(egui::RichText::new("테마 ▼").size(12.0));
+                if theme_resp.clicked() {
+                    self.theme_menu_open = !self.theme_menu_open;
+                }
+                if self.theme_menu_open {
+                    let popup_pos = Pos2::new(
+                        (theme_resp.rect.right() - 210.0).max(16.0),
+                        theme_resp.rect.bottom() + 4.0,
+                    );
+                    egui::Area::new(ui.id().with("ka_theme_menu_popup"))
+                        .fixed_pos(popup_pos)
+                        .order(egui::Order::Foreground)
+                        .show(ctx, |ui| {
+                            egui::Frame::popup(ui.style())
+                                .fill(Color32::from_rgb(252, 251, 247))
+                                .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                                .inner_margin(egui::Margin::symmetric(8, 6))
+                                .show(ui, |ui| {
+                                    ui.set_min_width(198.0);
+                                    for ct in strata_types::theme_tokens::ColorTheme::ALL {
+                                        let changed = ui
+                                            .radio_value(
+                                                &mut self.display_options.color_theme,
+                                                ct,
+                                                ct.label_ko(),
+                                            )
+                                            .on_hover_text(ct.tooltip_ko())
+                                            .changed();
+                                        if changed {
+                                            self.theme =
+                                                strata_types::theme_tokens::ThemeTokens::for_options(
+                                                    &self.display_options,
+                                                );
+                                        }
+                                    }
+                                    ui.separator();
+                                    if ui
+                                        .checkbox(
+                                            &mut self.display_options.paper_look,
+                                            "새 모양 (종이·흙색)",
+                                        )
+                                        .changed()
+                                    {
+                                        self.paper_look = self.display_options.paper_look;
+                                        self.theme =
+                                            strata_types::theme_tokens::ThemeTokens::for_options(
+                                                &self.display_options,
+                                            );
+                                    }
+                                    if ui
+                                        .checkbox(
+                                            &mut self.display_options.high_contrast,
+                                            "고대비 화면 (햇빛 아래)",
+                                        )
+                                        .changed()
+                                    {
+                                        self.theme =
+                                            strata_types::theme_tokens::ThemeTokens::for_options(
+                                                &self.display_options,
+                                            );
+                                    }
+                                    if ui
+                                        .checkbox(
+                                            &mut self.display_options.large_text,
+                                            "큰 글씨",
+                                        )
+                                        .changed()
+                                    {
+                                        self.large_font_mode = self.display_options.large_text;
+                                        ctx.set_pixels_per_point(if self.large_font_mode {
+                                            1.15
+                                        } else {
+                                            1.0
                                         });
+                                    }
                                 });
-                        }
-                        if !is_home {
-                            if self.is_dirty {
-                                ui.label(egui::RichText::new("● 저장 안 됨").size(12.0).color(Color32::from_rgb(181, 87, 58)));
-                            } else {
-                                ui.label(egui::RichText::new("● 저장됨").size(12.0).color(Color32::from_rgb(21, 128, 61)));
-                            }
-                            ui.label(egui::RichText::new(&self.project_title).size(12.0).color(Color32::from_rgb(90, 89, 84)));
-                        }
-                    });
-                });
+                        });
+                }
+                if !is_home {
+                    if self.is_dirty {
+                        ui.label(
+                            egui::RichText::new("● 저장 안 됨")
+                                .size(12.0)
+                                .color(Color32::from_rgb(181, 87, 58)),
+                        );
+                    } else {
+                        ui.label(
+                            egui::RichText::new("● 저장됨")
+                                .size(12.0)
+                                .color(Color32::from_rgb(21, 128, 61)),
+                        );
+                    }
+                    ui.label(
+                        egui::RichText::new(&self.project_title)
+                            .size(12.0)
+                            .color(Color32::from_rgb(90, 89, 84)),
+                    );
+                }
             });
+        });
 
         self.render_region_locator_popup(ctx);
     }
@@ -524,12 +621,26 @@ impl StrataAppState {
         dark_active: bool,
         warm_active: bool,
     ) -> bool {
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(43.0, 54.0), egui::Sense::click());
+        let target_rect = ui.max_rect();
+        let (raw_rect, resp) = ui.allocate_exact_size(Vec2::new(69.0, 100.0), egui::Sense::click());
+        let rect = if target_rect.width() < UX_RIBBON_BUTTON_SIZE.x
+            || target_rect.height() < UX_RIBBON_BUTTON_SIZE.y
+        {
+            target_rect
+        } else {
+            raw_rect
+        };
         let p = ui.painter_at(rect);
+        let tile_w = (rect.width() - 6.0).clamp(36.0, 44.0);
+        let tile_h = (rect.height() - 25.0).clamp(36.0, 44.0);
         let icon_box = Rect::from_center_size(
-            Pos2::new(rect.center().x, rect.top() + 18.0),
-            Vec2::new(35.0, 33.0),
+            Pos2::new(rect.center().x, rect.top() + tile_h * 0.5 + 2.0),
+            Vec2::new(tile_w, tile_h),
         );
+        let is_hovered = resp.hovered()
+            && ui
+                .input(|i| i.pointer.hover_pos())
+                .is_none_or(|pos| rect.contains(pos));
         if highlight_save {
             p.rect_filled(icon_box, 7.0, Color32::from_rgb(181, 87, 58));
             paint_ribbon_icon(&p, icon_box, label, Color32::WHITE);
@@ -547,7 +658,7 @@ impl StrataAppState {
             p.rect_filled(icon_box, 7.0, Color32::from_rgb(44, 43, 41));
             paint_ribbon_icon(&p, icon_box, label, Color32::WHITE);
         } else {
-            let bg = if warm_active || resp.hovered() {
+            let bg = if warm_active || is_hovered {
                 Color32::from_rgb(220, 215, 203)
             } else {
                 Color32::from_rgb(236, 233, 224)
@@ -572,13 +683,17 @@ impl StrataAppState {
             Color32::from_rgb(30, 30, 28)
         };
         p.text(
-            Pos2::new(rect.center().x, rect.bottom() - 6.0),
+            Pos2::new(rect.center().x, rect.bottom() - 8.5),
             egui::Align2::CENTER_CENTER,
             label,
-            egui::FontId::proportional(11.0),
+            egui::FontId::proportional(11.5),
             txt_col,
         );
-        resp.on_hover_text(cpp_ribbon_tooltip(label)).clicked()
+        let resp = resp.on_hover_text(cpp_ribbon_tooltip(label));
+        resp.clicked()
+            && resp
+                .interact_pointer_pos()
+                .is_none_or(|pos| rect.contains(pos))
     }
 
     fn handle_ribbon_click(&mut self, label: &str) {

@@ -8,6 +8,11 @@ use crate::real_survey::ring_area_m2;
 use crate::ribbon::SubToolsMode;
 use crate::right_inspector::InspectorCardTab;
 
+/// UX_LAYOUT_SPEC.md 3절: 지도 탭 3단 분할 (좌 351 / 중 954 / 우 236)
+pub const UX_MAP_LEFT_WIDTH: f32 = 351.0;
+pub const UX_MAP_CANVAS_WIDTH: f32 = 954.0;
+pub const UX_MAP_RIGHT_WIDTH: f32 = 236.0;
+
 fn w2s(rect: Rect, vp: &ViewportTransform, xy: [f64; 2]) -> Pos2 {
     let [sx, sy] = vp.world_to_screen(xy);
     Pos2::new(rect.left() + sx as f32, rect.top() + sy as f32)
@@ -33,10 +38,31 @@ fn modulate_color_with_opacity_brightness(base: Color32, opacity: f32, brightnes
 
 impl StrataAppState {
     pub(crate) fn render_map_tab_ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        let tab_clip = ui.max_rect();
+        ui.set_clip_rect(tab_clip);
         self.render_cpp_left_layer_panel(ui, false);
         self.render_cpp_right_inspector(ui);
 
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        let win_w = ctx.screen_rect().width();
+        let avail_center_w = ui.available_width();
+        let right_pad =
+            if (1550.0..=1620.0).contains(&win_w) && avail_center_w > UX_MAP_CANVAS_WIDTH + 9.0 {
+                ((avail_center_w - 9.0 - UX_MAP_CANVAS_WIDTH).round() as i8).max(4)
+            } else {
+                9
+            };
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::NONE
+                    .fill(Color32::from_rgb(243, 241, 232))
+                    .inner_margin(egui::Margin {
+                        left: 9,
+                        right: right_pad,
+                        top: 0,
+                        bottom: 0,
+                    }),
+            )
+            .show_inside(ui, |ui| {
             let is_trench = self.modals.active == Some(ActiveModalDialog::TrenchGenerator)
                 || self.active_tool == MapToolKind::TrenchPlace;
             let is_measure = self.active_tool == MapToolKind::Measure;
@@ -84,8 +110,12 @@ impl StrataAppState {
                     });
             }
 
+            let avail_sz = Vec2::new(
+                ui.available_width(),
+                (tab_clip.bottom() - ui.cursor().top()).max(120.0),
+            );
             let (rect, response) =
-                ui.allocate_exact_size(ui.available_size(), egui::Sense::click_and_drag());
+                ui.allocate_exact_size(avail_sz, egui::Sense::click_and_drag());
             self.home_map.viewport.screen_size_px =
                 [f64::from(rect.width()), f64::from(rect.height())];
 
@@ -232,6 +262,7 @@ impl StrataAppState {
                 }
             }
 
+            let rect = rect.intersect(tab_clip);
             let p = ui.painter_at(rect);
             let bg_col = modulate_color_with_opacity_brightness(
                 Color32::from_rgb(251, 250, 246),

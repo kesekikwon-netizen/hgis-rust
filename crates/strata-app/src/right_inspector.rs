@@ -183,11 +183,15 @@ impl StrataAppState {
             return;
         }
         egui::SidePanel::right("ka_map_right_inspector")
-            .resizable(true)
-            .default_width(242.0)
-            .width_range(220.0..=300.0)
+            .resizable(false)
+            .exact_width(crate::gui_tab_map::UX_MAP_RIGHT_WIDTH)
+            .frame(
+                egui::Frame::NONE
+                    .fill(Color32::from_rgb(244, 246, 248))
+                    .inner_margin(egui::Margin::symmetric(8, 2)),
+            )
             .show_inside(ui, |ui| {
-                ui.add_space(4.0);
+                ui.add_space(2.0);
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("선택한 유구").size(13.5).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -246,7 +250,7 @@ impl StrataAppState {
                         }
                     }
                 });
-                ui.add_space(8.0);
+                ui.add_space(4.0);
 
                 if is_attr {
                     let active_ring = self
@@ -398,19 +402,19 @@ impl StrataAppState {
                                 )
                                 .on_hover_text(pit_caption);
                             });
-                        ui.add_space(4.0);
+                        ui.add_space(2.0);
                         ui.label(egui::RichText::new("메모").size(11.5));
                         if ui
                             .add(
                                 egui::TextEdit::multiline(&mut self.right_inspector.feature_memo)
-                                    .desired_rows(3)
+                                    .desired_rows(2)
                                     .desired_width(f32::INFINITY),
                             )
                             .changed()
                         {
                             self.is_dirty = true;
                         }
-                        ui.add_space(6.0);
+                        ui.add_space(4.0);
                         let card_btn = egui::Button::new(
                             egui::RichText::new("조사카드 열기")
                                 .size(12.0)
