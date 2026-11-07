@@ -289,6 +289,85 @@ pub fn scale_dash_pattern_px(pattern: &[f64], line_width_mm: f64, target_dpi: f6
     pattern.iter().map(|&u| u * line_w_px).collect()
 }
 
+pub const HGIS_DEFAULT_MARKER_SIZE_MM: f64 = 4.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SizingMode {
+    ScreenFixedMm,
+    WorldProportionalM,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarkerRenderContext {
+    pub world_coord: [f64; 2],
+    pub size_value: f64,
+    pub sizing_mode: SizingMode,
+    pub rotation_angle_deg: f64,
+    pub magnetic_declination_deg: f64,
+    pub override_fill_rgba: Option<[u8; 4]>,
+}
+
+/// C++ `KaSymbolLibraryManager` — 6대 유물 재질별 표준 SVG 리소스 식별자 매핑 (`HGIS_ARTIFACT_SVG_PATHS`)
+#[must_use]
+pub fn resolve_artifact_svg_resource_path(symbol_key: &str) -> Option<&'static str> {
+    match symbol_key.trim().to_ascii_lowercase().as_str() {
+        "pottery" | "pottery_comb" | "pottery_vessel" => {
+            Some(":/symbols/artifacts/pottery_vessel.svg")
+        }
+        "stone" | "stone_axe" => Some(":/symbols/artifacts/stone_axe.svg"),
+        "bronze" | "bronze_dagger" => Some(":/symbols/artifacts/bronze_dagger.svg"),
+        "iron" | "iron_sickle" => Some(":/symbols/artifacts/iron_sickle.svg"),
+        "tile" | "roof_tile" => Some(":/symbols/artifacts/roof_tile.svg"),
+        "wood" | "wooden_craft" => Some(":/symbols/artifacts/wooden_craft.svg"),
+        _ => None,
+    }
+}
+
+/// C++ `KaArchaeologicalMarkerRenderer::renderArtifactMarker` — `ScreenFixedMm` (`sizeMm * dpi / 25.4`) 또는 `WorldProportionalM` (`sizeM / metersPerPixel`) 픽셀 크기 산출
+#[must_use]
+pub fn compute_marker_size_px(
+    size_value: f64,
+    sizing_mode: SizingMode,
+    target_dpi: f64,
+    meters_per_pixel: f64,
+) -> f64 {
+    let val = if size_value > 0.0 && size_value.is_finite() {
+        size_value
+    } else {
+        HGIS_DEFAULT_MARKER_SIZE_MM
+    };
+    match sizing_mode {
+        SizingMode::ScreenFixedMm => {
+            let dpi = if target_dpi > 0.0 && target_dpi.is_finite() {
+                target_dpi
+            } else {
+                96.0
+            };
+            val * (dpi * HGIS_MM_TO_INCH)
+        }
+        SizingMode::WorldProportionalM => {
+            let mpp = if meters_per_pixel > 1e-9 && meters_per_pixel.is_finite() {
+                meters_per_pixel
+            } else {
+                1.0
+            };
+            val / mpp
+        }
+    }
+}
+
+/// C++ `KaArchaeologicalMarkerRenderer::renderNorthArrowWithDeclination` — 지도 회전각(`map_rotation_deg`), 도북 편각(`grid_convergence_deg`), 자북 편차각(`magnetic_declination_deg`)으로부터 `(도북 화살표 각도, 자북 침 각도)` 산출
+#[must_use]
+pub fn compute_north_arrow_declination_angles_deg(
+    map_rotation_deg: f64,
+    grid_convergence_deg: f64,
+    magnetic_declination_deg: f64,
+) -> (f64, f64) {
+    let theta_grid = map_rotation_deg + grid_convergence_deg;
+    let theta_mag = theta_grid + magnetic_declination_deg;
+    (theta_grid, theta_mag)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,5 +433,23 @@ mod tests {
         // 4. TestKaHatchPatternRenderer::testSpacingPixelScaling: 2.54mm at 300 DPI -> 30.0px
         assert!((compute_hatch_spacing_px(2.54, 300.0) - 30.0).abs() < 1e-9);
         assert!((compute_hatch_spacing_px(0.01, 254.0) - 5.0).abs() < 1e-9);
+
+        // 5. TestKaArchaeologicalMarkerRenderer::testDeclinationRotationAngle:
+        // mapRotation = 15.0°, gridConvergence = 1.5°, magneticDeclination = -7.0° -> (16.5°, 9.5°)
+        let (theta_grid, theta_mag) = compute_north_arrow_declination_angles_deg(15.0, 1.5, -7.0);
+        assert!((theta_grid - 16.5).abs() < 1e-9);
+        assert!((theta_mag - 9.5).abs() < 1e-9);
+        assert_eq!(
+            resolve_artifact_svg_resource_path("pottery"),
+            Some(":/symbols/artifacts/pottery_vessel.svg")
+        );
+        assert!(
+            (compute_marker_size_px(4.0, SizingMode::ScreenFixedMm, 254.0, 1.0) - 40.0).abs()
+                < 1e-9
+        );
+        assert!(
+            (compute_marker_size_px(10.0, SizingMode::WorldProportionalM, 96.0, 0.5) - 20.0).abs()
+                < 1e-9
+        );
     }
 }
