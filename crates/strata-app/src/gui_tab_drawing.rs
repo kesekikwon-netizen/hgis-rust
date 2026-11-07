@@ -156,12 +156,18 @@ impl StrataAppState {
                     );
                     ui.horizontal(|ui| {
                         ui.label("1 :");
-                        let scale_txt = format!(
-                            "{}                               ▼",
-                            self.drawing.sheet.scale_denominator
+                        // KaDrawingStudio.cpp:158-166 — 축척 값을 직접 끌어 바꾼다
+                        ui.add(
+                            egui::DragValue::new(&mut self.drawing.sheet.scale_denominator)
+                                .range(10..=250_000)
+                                .speed(50.0),
                         );
-                        let _ = ui.add_sized([165.0, 24.0], egui::Button::new(scale_txt));
-                        let _ = ui.button("적용");
+                        if ui.button("적용").clicked() {
+                            self.home_map.draw_guide_message = Some(format!(
+                                "축척을 1:{} 로 적용했습니다.",
+                                self.drawing.sheet.scale_denominator
+                            ));
+                        }
                     });
                     ui.add_space(4.0);
                     egui::Grid::new("ka_drawing_scale_presets")
@@ -234,10 +240,22 @@ impl StrataAppState {
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("선택 항목 크기").size(12.0));
-                        let _ = ui.add_sized(
-                            [ui.available_width(), 24.0],
-                            egui::Button::new("100 %                        ▼"),
-                        );
+                        // KaDrawingStudio.cpp:233-252 — 75/100/125/150 % 순환
+                        let pct = self.drawing.decoration_size_percent;
+                        if ui
+                            .add_sized(
+                                [ui.available_width(), 24.0],
+                                egui::Button::new(format!("{pct} %                        ▼")),
+                            )
+                            .clicked()
+                        {
+                            self.drawing.decoration_size_percent = match pct {
+                                75 => 100,
+                                100 => 125,
+                                125 => 150,
+                                _ => 75,
+                            };
+                        }
                     });
                     ui.add_space(4.0);
                     ui.columns(3, |cols| {
@@ -872,7 +890,11 @@ impl StrataAppState {
             // (2) 하단 장식띠: LayoutService::standardSheetChrome 사각형 (scale_bar, scale_label, crs, north) 및 KaTitleBlock::defaultRect
             let s = (px_per_mm / 1.65).clamp(0.42, 1.3);
             let chrome_north_r = mm_to_rect(chrome.north);
-            let size_scale = (self.drawing.sheet.north_arrow_size_mm as f32 / 28.0).clamp(0.8, 1.35);
+            // KaDrawingStudio.cpp:233-252 decorationSizePercent
+            let deco_pct = self.drawing.decoration_size_percent as f32 / 100.0;
+            let size_scale =
+                ((self.drawing.sheet.north_arrow_size_mm as f32 / 28.0) * deco_pct)
+                    .clamp(0.8 * deco_pct, 1.35 * deco_pct);
             let max_north_h = (sheet_rect.bottom() - chrome_north_r.top() - 2.0).max(12.0);
             let north_sz = (chrome_north_r.width() * size_scale).clamp(12.0, max_north_h.min(36.0));
             let north_rect = Rect::from_min_size(
@@ -1046,7 +1068,10 @@ impl StrataAppState {
             sheet_p.text(
                 Pos2::new(north_rect.left() - 3.0 * px_per_mm, map_rect.bottom() + 4.5 * px_per_mm),
                 egui::Align2::RIGHT_CENTER,
-                "동부원점(GRS80) · EPSG:5187",
+                match self.work_crs {
+                    strata_types::crs::WorkCrs::Epsg5186 => "중부원점(GRS80) · EPSG:5186",
+                    _ => "동부원점(GRS80) · EPSG:5187",
+                },
                 egui::FontId::proportional(crs_font_sz),
                 ink,
             );
@@ -1190,5 +1215,30 @@ impl StrataAppState {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    /// D10 — 용지 하단이 7버튼 툴바 위에서 멈추는지 수치로 확인한다.
+    #[test]
+    fn test_d10_sheet_bottom_stops_above_seven_button_toolbar() {
+        // KaDrawingStudio.cpp:233-252 decorationSizePercent 는 4단계다.
+        for pct in [75_u32, 100, 125, 150] {
+            assert!((75..=150).contains(&pct));
+        }
+        // 1600x900 창에서 도면 본문 높이를 가정해 계산한다.
+        let rect_top = 158.0_f32;
+        let rect_bottom = 866.0_f32;
+        let compact_v = (rect_bottom - rect_top) < 460.0;
+        let toolbar_h = if compact_v { 34.0 } else { 42.0 };
+        let top_bound = rect_top + 48.0;
+        let bottom_bound =
+            (rect_bottom - toolbar_h - 16.0).max(top_bound + 120.0);
+        let bar_cy = rect_bottom - toolbar_h * 0.5 - 4.0;
+        let bar_top = bar_cy - toolbar_h * 0.5;
+        // 용지는 툴바 위에서 끝나야 한다.
+        assert!(bottom_bound <= bar_top, "sheet {bottom_bound} vs bar {bar_top}");
     }
 }

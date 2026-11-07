@@ -9,6 +9,8 @@ pub struct DrawingTabState {
     pub title_ko: String,
     pub sheet: DrawingSheet,
     pub last_findings: Vec<ChecklistFinding>,
+    /// KaDrawingStudio.cpp:233-252 decorationSizePercent (75/100/125/150)
+    pub decoration_size_percent: u32,
 }
 
 impl Default for DrawingTabState {
@@ -19,6 +21,7 @@ impl Default for DrawingTabState {
             title_ko: "조사도면".to_owned(),
             sheet,
             last_findings,
+            decoration_size_percent: 100,
         }
     }
 }
