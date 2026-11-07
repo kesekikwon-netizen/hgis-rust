@@ -53,7 +53,7 @@ impl StrataAppState {
                         )
                         .clicked()
                     {
-                        self.active_tab = MainTab::Drawing;
+                        self.open_studio_tab(MainTab::Drawing);
                         self.home_map.draw_guide_message =
                             Some("도면(조판) 시트에 고지형 판독 근거 및 단면도를 반영했습니다.".to_owned());
                     }

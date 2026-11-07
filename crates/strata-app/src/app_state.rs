@@ -48,6 +48,10 @@ impl MainTab {
 #[derive(Debug, Clone)]
 pub struct StrataAppState {
     pub active_tab: MainTab,
+    pub open_studio_tabs: Vec<MainTab>,
+    pub scale_menu_open: bool,
+    pub theme_menu_open: bool,
+    pub large_font_mode: bool,
     pub work_crs: WorkCrs,
     pub theme: ThemeTokens,
     pub paper_look: bool,
@@ -70,6 +74,10 @@ impl StrataAppState {
         let accounts = AccountDialogState::probe_user_accounts();
         Self {
             active_tab: MainTab::Home,
+            open_studio_tabs: Vec::new(),
+            scale_menu_open: false,
+            theme_menu_open: false,
+            large_font_mode: false,
             work_crs: WorkCrs::Epsg5187,
             theme: ThemeTokens::paper_tokens(false),
             paper_look: true,
@@ -84,6 +92,24 @@ impl StrataAppState {
             drawing: DrawingTabState::default(),
             accounts,
             modals: ModalDialogController::default(),
+        }
+    }
+
+    /// C++ `MainWindowChrome::openDrawingStudio` 등 스튜디오 탭 열기 생명주기 1:1
+    pub fn open_studio_tab(&mut self, tab: MainTab) {
+        if matches!(tab, MainTab::Drawing | MainTab::Paleo | MainTab::Terrain3d)
+            && !self.open_studio_tabs.contains(&tab)
+        {
+            self.open_studio_tabs.push(tab);
+        }
+        self.active_tab = tab;
+    }
+
+    /// C++ `MainWindowChrome::closeViewTab` 스튜디오 탭 `×` 닫기 및 메인 지도 복귀 1:1
+    pub fn close_studio_tab(&mut self, tab: MainTab) {
+        self.open_studio_tabs.retain(|&t| t != tab);
+        if self.active_tab == tab {
+            self.active_tab = MainTab::Map;
         }
     }
 
@@ -152,5 +178,17 @@ mod tests {
         app.is_dirty = true;
         assert!(app.window_title().ends_with("[EPSG:5187]"));
         assert!(app.window_title().contains(" * "));
+
+        app.open_studio_tab(MainTab::Drawing);
+        assert_eq!(app.active_tab, MainTab::Drawing);
+        assert!(app.open_studio_tabs.contains(&MainTab::Drawing));
+
+        app.active_tab = MainTab::Map;
+        assert!(app.open_studio_tabs.contains(&MainTab::Drawing));
+
+        app.open_studio_tab(MainTab::Drawing);
+        app.close_studio_tab(MainTab::Drawing);
+        assert_eq!(app.active_tab, MainTab::Map);
+        assert!(!app.open_studio_tabs.contains(&MainTab::Drawing));
     }
 }

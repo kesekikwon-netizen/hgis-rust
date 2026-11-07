@@ -13,6 +13,20 @@ pub enum MapToolKind {
 }
 
 impl MapToolKind {
+    pub const fn label_ko(self) -> &'static str {
+        match self {
+            Self::Pan => "이동",
+            Self::Select => "도형선택",
+            Self::DrawPolygon => "다각형 그리기",
+            Self::DrawLine => "유구 선",
+            Self::PlacePoint => "유물위치표시",
+            Self::Measure => "측거",
+            Self::GeorefAlign => "도면정합",
+            Self::TrenchPlace => "시굴격자",
+            Self::FeatureCardNote => "조사카드",
+        }
+    }
+
     pub const fn guide_hint_ko(self) -> &'static str {
         match self {
             Self::Pan => "",

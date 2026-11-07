@@ -30,7 +30,7 @@ impl StrataAppState {
     /// C++ `MainWindowRibbon.cpp` + `KaBeginnerRibbon.cpp` 1:1 (Images 1, 2, 4, 9, 10, 11, 12, 15)
     pub(crate) fn render_cpp_top_bars(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let is_home = self.active_tab == MainTab::Home;
-        let dirty_save = !is_home;
+        let dirty_save = !is_home && self.is_dirty;
 
         egui::Frame::NONE
             .fill(Color32::from_rgb(245, 243, 236))
@@ -272,20 +272,85 @@ impl StrataAppState {
                         }
                         if resp.clicked() { self.active_tab = tab; }
                     }
-                    for (extra, ico, lbl) in [(MainTab::Drawing, "도면", "도면     ×"), (MainTab::Paleo, "고지형", "고지형   ×"), (MainTab::Terrain3d, "검수·제출", "입체지형 ×")] {
-                        if self.active_tab == extra {
-                            let (tr, _) = ui.allocate_exact_size(Vec2::new(82.0, 24.0), egui::Sense::click());
+                    let open_tabs = self.open_studio_tabs.clone();
+                    for (extra, ico, lbl) in [
+                        (MainTab::Drawing, "도면", "도면"),
+                        (MainTab::Paleo, "고지형", "고지형"),
+                        (MainTab::Terrain3d, "검수·제출", "입체지형"),
+                    ] {
+                        if open_tabs.contains(&extra) || self.active_tab == extra {
+                            let sel = self.active_tab == extra;
+                            let (tr, resp) = ui.allocate_exact_size(Vec2::new(86.0, 24.0), egui::Sense::click());
                             let tp = ui.painter_at(tr);
-                            paint_ribbon_icon(&tp, Rect::from_center_size(Pos2::new(tr.left() + 10.0, tr.center().y), Vec2::new(20.0, 20.0)), ico, Color32::from_rgb(35, 35, 32));
-                            tp.text(Pos2::new(tr.left() + 24.0, tr.center().y), egui::Align2::LEFT_CENTER, lbl, egui::FontId::proportional(12.5), Color32::from_rgb(30, 30, 28));
-                            tp.line_segment([Pos2::new(tr.left(), tr.bottom()), Pos2::new(tr.right(), tr.bottom())], Stroke::new(2.0, Color32::from_rgb(35, 35, 32)));
+                            paint_ribbon_icon(
+                                &tp,
+                                Rect::from_center_size(Pos2::new(tr.left() + 10.0, tr.center().y), Vec2::new(20.0, 20.0)),
+                                ico,
+                                Color32::from_rgb(35, 35, 32),
+                            );
+                            tp.text(
+                                Pos2::new(tr.left() + 24.0, tr.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                lbl,
+                                egui::FontId::proportional(12.5),
+                                Color32::from_rgb(30, 30, 28),
+                            );
+                            let close_rect = Rect::from_min_max(Pos2::new(tr.right() - 18.0, tr.top()), tr.max);
+                            tp.text(
+                                close_rect.center(),
+                                egui::Align2::CENTER_CENTER,
+                                "×",
+                                egui::FontId::proportional(13.0),
+                                Color32::from_rgb(90, 89, 84),
+                            );
+                            if sel {
+                                tp.line_segment(
+                                    [Pos2::new(tr.left(), tr.bottom()), Pos2::new(tr.right(), tr.bottom())],
+                                    Stroke::new(2.0, Color32::from_rgb(35, 35, 32)),
+                                );
+                            }
+                            if resp.clicked() {
+                                if resp.interact_pointer_pos().is_some_and(|p| close_rect.contains(p)) {
+                                    self.close_studio_tab(extra);
+                                } else {
+                                    self.active_tab = extra;
+                                }
+                            }
                         }
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let _ = ui.button(egui::RichText::new("테마 ▼").size(11.5));
+                        let theme_resp = ui.button(egui::RichText::new("테마 ▼").size(11.5));
+                        if theme_resp.clicked() {
+                            self.theme_menu_open = !self.theme_menu_open;
+                        }
+                        if self.theme_menu_open {
+                            let popup_pos = Pos2::new((theme_resp.rect.right() - 180.0).max(16.0), theme_resp.rect.bottom() + 4.0);
+                            egui::Area::new(ui.id().with("ka_theme_menu_popup"))
+                                .fixed_pos(popup_pos)
+                                .order(egui::Order::Foreground)
+                                .show(ctx, |ui| {
+                                    egui::Frame::popup(ui.style())
+                                        .fill(Color32::from_rgb(252, 251, 247))
+                                        .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                                        .inner_margin(egui::Margin::symmetric(8, 6))
+                                        .show(ui, |ui| {
+                                            ui.set_min_width(172.0);
+                                            if ui.checkbox(&mut self.paper_look, "새 모양 (조용한 도판)").changed() {
+                                                self.theme = strata_types::theme_tokens::ThemeTokens::paper_tokens(!self.paper_look);
+                                            }
+                                            if ui.checkbox(&mut self.large_font_mode, "큰 글씨 모드").changed() {
+                                                ctx.set_pixels_per_point(if self.large_font_mode { 1.15 } else { 1.0 });
+                                            }
+                                        });
+                                });
+                        }
                         if !is_home {
-                            ui.label(egui::RichText::new("● 저장 안 됨").size(12.0).color(Color32::from_rgb(181, 87, 58)));
+                            if self.is_dirty {
+                                ui.label(egui::RichText::new("● 저장 안 됨").size(12.0).color(Color32::from_rgb(181, 87, 58)));
+                            } else {
+                                ui.label(egui::RichText::new("● 저장됨").size(12.0).color(Color32::from_rgb(21, 128, 61)));
+                            }
                             ui.label(egui::RichText::new(&self.project_title).size(12.0).color(Color32::from_rgb(90, 89, 84)));
                         }
                     });
@@ -324,7 +389,10 @@ impl StrataAppState {
         match label {
             "새 조사" => self.start_new_survey_project("경주시"),
             "열기" => self.open_sample_survey_project(0),
-            "저장" | "다른 이름" => self.home_map.draw_guide_message = Some(format!("「{}」 조사를 안전하게 저장했습니다.", self.project_title)),
+            "저장" | "다른 이름" => {
+                self.is_dirty = false;
+                self.home_map.draw_guide_message = Some(format!("「{}」 조사를 안전하게 저장했습니다.", self.project_title));
+            }
             "선택" => { self.active_tab = MainTab::Map; self.active_tool = MapToolKind::Select; }
             "측거" => self.trigger_map_ribbon_tool(MapToolKind::Measure),
             "그리기" => { self.active_tab = MainTab::Map; self.ribbon.toggle_sub_mode(SubToolsMode::Draw); self.active_tool = MapToolKind::DrawPolygon; }
@@ -336,10 +404,10 @@ impl StrataAppState {
             "유산" => { self.active_tab = MainTab::Map; self.modals.active = Some(ActiveModalDialog::HeritageRegionSelect); }
             "지형" => { self.active_tab = MainTab::Map; self.home_map.active_basemap = BasemapSource::VworldBase; }
             "등고선" => { self.active_tab = MainTab::Map; self.left_layers.ensure_domain_layer(DomainLayerKey::SectionLine); }
-            "고지형" => self.active_tab = MainTab::Paleo,
+            "고지형" => self.open_studio_tab(MainTab::Paleo),
             "도면" => self.modals.active = Some(ActiveModalDialog::PaperSetup),
-            "인쇄" => { self.active_tab = MainTab::Drawing; self.modals.active = Some(ActiveModalDialog::DrawingPrint); }
-            "GeoTIFF" => self.active_tab = MainTab::Drawing,
+            "인쇄" => { self.open_studio_tab(MainTab::Drawing); self.modals.active = Some(ActiveModalDialog::DrawingPrint); }
+            "GeoTIFF" => self.open_studio_tab(MainTab::Drawing),
             "검수·제출" => self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage),
             "더보기" => self.modals.active = Some(ActiveModalDialog::AccountSettings),
             _ => self.active_tab = MainTab::Map,

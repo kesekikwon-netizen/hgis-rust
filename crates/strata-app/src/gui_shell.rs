@@ -63,6 +63,7 @@ impl StrataAppState {
                 } else if i.key_pressed(egui::Key::O) {
                     self.open_sample_survey_project(0);
                 } else if i.key_pressed(egui::Key::S) {
+                    self.is_dirty = false;
                     self.home_map.draw_guide_message = Some(format!("「{}」 조사를 저장했습니다.", self.project_title));
                 } else if i.key_pressed(egui::Key::Num1) {
                     self.active_tab = MainTab::Map;
@@ -74,7 +75,7 @@ impl StrataAppState {
                 } else if i.key_pressed(egui::Key::L) {
                     self.modals.active = Some(ActiveModalDialog::PaperSetup);
                 } else if i.key_pressed(egui::Key::P) {
-                    self.active_tab = MainTab::Drawing;
+                    self.open_studio_tab(MainTab::Drawing);
                     self.modals.active = Some(ActiveModalDialog::DrawingPrint);
                 } else if i.key_pressed(egui::Key::E) {
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
@@ -135,24 +136,69 @@ impl StrataAppState {
                                     WorkCrs::Epsg5186 => WorkCrs::Epsg5187,
                                 };
                             }
-                            let scale_str = if self.active_tab == MainTab::Drawing {
-                                "1:6532 ▼"
+                            let live_scale = if self.active_tab == MainTab::Drawing {
+                                self.drawing.sheet.scale_denominator.max(100)
                             } else {
-                                "1:10117 ▼"
+                                ((self.home_map.viewport.meters_per_pixel * 3780.0).round() as u32).max(100)
                             };
-                            let _ = ui.small_button(scale_str);
+                            let scale_btn = ui.small_button(format!("1:{live_scale} ▼"));
+                            if scale_btn.clicked() {
+                                self.scale_menu_open = !self.scale_menu_open;
+                            }
+                            if self.scale_menu_open {
+                                let popup_pos = egui::Pos2::new(scale_btn.rect.left(), (scale_btn.rect.top() - 165.0).max(40.0));
+                                egui::Area::new(ui.id().with("ka_status_scale_popup"))
+                                    .fixed_pos(popup_pos)
+                                    .order(egui::Order::Foreground)
+                                    .show(ctx, |ui| {
+                                        egui::Frame::popup(ui.style())
+                                            .fill(Color32::from_rgb(252, 251, 247))
+                                            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                                            .inner_margin(egui::Margin::symmetric(8, 6))
+                                            .show(ui, |ui| {
+                                                for (preset_lbl, denom) in [
+                                                    ("1:500", 500u32),
+                                                    ("1:1,000", 1_000),
+                                                    ("1:2,500", 2_500),
+                                                    ("1:5,000", 5_000),
+                                                    ("1:10,000", 10_000),
+                                                    ("1:25,000", 25_000),
+                                                ] {
+                                                    if ui.selectable_label(live_scale == denom, preset_lbl).clicked() {
+                                                        if self.active_tab == MainTab::Drawing {
+                                                            self.drawing.sheet.scale_denominator = denom;
+                                                        } else {
+                                                            self.home_map.viewport.meters_per_pixel = f64::from(denom) / 3780.0;
+                                                        }
+                                                        self.scale_menu_open = false;
+                                                    }
+                                                }
+                                            });
+                                    });
+                            }
                             ui.label(egui::RichText::new("축척").size(11.0));
                             if self.active_tab == MainTab::Map {
                                 ui.separator();
-                                ui.label(egui::RichText::new("X 219,897.093    Y 361,622.354").size(11.0));
+                                let [cx, cy] = self.home_map.cursor_world_xy;
+                                ui.label(egui::RichText::new(format!("X {cx:11.3}    Y {cy:11.3}")).size(11.0));
                             }
-                            ui.colored_label(
-                                Color32::from_rgb(181, 87, 58),
-                                egui::RichText::new("● 저장 안 됨").size(11.0),
-                            );
+                            if self.is_dirty {
+                                ui.colored_label(
+                                    Color32::from_rgb(181, 87, 58),
+                                    egui::RichText::new("● 저장 안 됨").size(11.0),
+                                );
+                            } else {
+                                ui.colored_label(
+                                    Color32::from_rgb(21, 128, 61),
+                                    egui::RichText::new("● 저장됨").size(11.0),
+                                );
+                            }
                             if self.active_tab == MainTab::Map {
-                                ui.label(egui::RichText::new("자석 켬").size(11.0));
-                                ui.label(egui::RichText::new("이동").size(11.0).strong());
+                                let snap_lbl = if self.home_map.cad.snap_enabled { "자석 켬" } else { "자석 끔" };
+                                if ui.small_button(snap_lbl).clicked() {
+                                    self.home_map.cad.snap_enabled = !self.home_map.cad.snap_enabled;
+                                }
+                                ui.label(egui::RichText::new(self.active_tool.label_ko()).size(11.0).strong());
                             }
                         });
                     }

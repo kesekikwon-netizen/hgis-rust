@@ -150,7 +150,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                         if ui.add(cancel_btn).clicked() { app.modals.active = None; }
                         let ok_btn = egui::Button::new(egui::RichText::new("용지 만들기").color(Color32::WHITE).strong().size(14.5)).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(134.0, 38.0));
                         if ui.add(ok_btn).clicked() {
-                            app.active_tab = MainTab::Drawing;
+                            app.open_studio_tab(MainTab::Drawing);
                             app.modals.active = None;
                             app.home_map.draw_guide_message = Some("지도 칸을 만들었습니다. 나침반·좌표계·축척자·축척이 들어갔습니다.".to_owned());
                         }
