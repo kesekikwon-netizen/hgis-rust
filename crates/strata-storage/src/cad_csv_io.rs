@@ -1,6 +1,8 @@
 use std::path::Path;
 use strata_types::error::{StrataError, StrataResult};
 
+pub const UTF8_BOM_BYTES: [u8; 3] = [0xEF, 0xBB, 0xBF];
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ControlPointRow {
     pub point_id: String,
@@ -9,12 +11,70 @@ pub struct ControlPointRow {
     pub z: f64,
 }
 
+/// C++ `CsvBenchmarkImporter::CsvImportResult` — 파싱된 기준점 목록, 경고 메시지 리스트, 스킵된 행 수
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct CsvImportResult {
+    pub points: Vec<ControlPointRow>,
+    pub warnings: Vec<String>,
+    pub skipped_rows: usize,
+}
+
 pub fn decode_korean_text(bytes: &[u8]) -> String {
-    if let Ok(s) = std::str::from_utf8(bytes) {
+    let stripped = bytes.strip_prefix(&UTF8_BOM_BYTES).unwrap_or(bytes);
+    if let Ok(s) = std::str::from_utf8(stripped) {
         return s.trim_start_matches('\u{feff}').to_string();
     }
-    let (cow, _, _) = encoding_rs::EUC_KR.decode(bytes);
+    let (cow, _, _) = encoding_rs::EUC_KR.decode(stripped);
     cow.into_owned()
+}
+
+/// C++ `CsvBenchmarkImporter::importControlPoints` — UTF-8 BOM 제거, 헤더 행 자동 감지, 비정상 숫자 행 건너뛰기 및 경고 기록
+#[must_use]
+pub fn import_control_points_csv_checked(bytes: &[u8]) -> CsvImportResult {
+    let text = decode_korean_text(bytes);
+    let mut res = CsvImportResult::default();
+    for (idx, raw_line) in text.lines().enumerate() {
+        let line_no = idx + 1;
+        let trimmed = raw_line.trim().trim_start_matches('\u{feff}');
+        if trimmed.is_empty() {
+            continue;
+        }
+        let cols: Vec<&str> = trimmed.split([',', '\t']).map(str::trim).collect();
+        if idx == 0 {
+            let c0_upper = cols[0].to_ascii_uppercase();
+            let c1_upper = cols.get(1).copied().unwrap_or("").to_ascii_uppercase();
+            if c0_upper == "ID" || c1_upper == "X" || c0_upper.contains("NAME") {
+                continue;
+            }
+        }
+        if cols.len() < 3 {
+            res.skipped_rows += 1;
+            res.warnings.push(format!(
+                "[Line {line_no}] 열 개수 미달로 행을 건너뜁니다: {trimmed}"
+            ));
+            continue;
+        }
+        let clean_x = cols[1].replace(',', "");
+        let clean_y = cols[2].replace(',', "");
+        let (Ok(x), Ok(y)) = (clean_x.parse::<f64>(), clean_y.parse::<f64>()) else {
+            res.skipped_rows += 1;
+            res.warnings.push(format!(
+                "[Line {line_no}] 숫자 파싱 실패로 행을 건너뜁니다: {trimmed}"
+            ));
+            continue;
+        };
+        let z = cols
+            .get(3)
+            .and_then(|s| s.replace(',', "").parse::<f64>().ok())
+            .unwrap_or(0.0);
+        res.points.push(ControlPointRow {
+            point_id: cols[0].to_owned(),
+            x,
+            y,
+            z,
+        });
+    }
+    res
 }
 
 pub fn parse_control_points_csv(bytes: &[u8]) -> StrataResult<Vec<ControlPointRow>> {
@@ -176,5 +236,22 @@ mod tests {
         assert_eq!(parsed[0].block_name, "POINT_BENCHMARK");
         assert!((parsed[4].x - 200_040.0).abs() < 1e-6);
         assert!((parsed[4].rotation_deg - 60.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_csv_benchmark_importer_bom_and_skip_malformed_row_extracts_2_valid_points_and_1_warning(
+    ) {
+        let mut csv_bytes = UTF8_BOM_BYTES.to_vec();
+        csv_bytes.extend_from_slice(
+            "ID,X,Y,Name\nCP01,200123.45,543210.12,기준점A\nCP02,BAD_NUMBER,543215.00,불량행\nCP03,200150.00,543220.00,기준점B\n".as_bytes(),
+        );
+        let result = import_control_points_csv_checked(&csv_bytes);
+        assert_eq!(result.points.len(), 2);
+        assert_eq!(result.skipped_rows, 1);
+        assert_eq!(result.warnings.len(), 1);
+        assert!(result.warnings[0].contains("[Line 3]"));
+        assert_eq!(result.points[0].point_id, "CP01");
+        assert!((result.points[0].x - 200_123.45).abs() < 1e-6);
+        assert_eq!(result.points[1].point_id, "CP03");
     }
 }

@@ -88,6 +88,41 @@ impl HeritageIntranetFlow {
             format!("{method} {path}")
         }
     }
+
+    pub const ALLOWED_EHERITAGE_HOSTS: [&'static str; 6] = [
+        "heritage.go.kr",
+        "gis.heritage.go.kr",
+        "gis-heritage.go.kr",
+        "e-heritage.go.kr",
+        "db.history.go.kr",
+        "koreanhistory.or.kr",
+    ];
+
+    /// C++ `EHeritageIntranetClient::isAllowedFrameUrl` — 허용 도메인 화이트리스트 대조 및 외부 리다이렉트 차단
+    pub fn is_allowed_frame_url(url_str: &str) -> Result<(), String> {
+        let trimmed = url_str.trim();
+        let after_scheme = trimmed
+            .strip_prefix("https://")
+            .or_else(|| trimmed.strip_prefix("http://"))
+            .ok_or_else(|| format!("허용되지 않은 외부 도메인 접근 차단: [{trimmed}]"))?;
+        let authority = after_scheme.split(['/', '?', '#']).next().unwrap_or("");
+        let host = authority
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if host.is_empty() {
+            return Err("허용되지 않은 외부 도메인 접근 차단: []".to_owned());
+        }
+        let allowed = Self::ALLOWED_EHERITAGE_HOSTS.iter().any(|&allowed_host| {
+            host == allowed_host || host.ends_with(&format!(".{allowed_host}"))
+        });
+        if allowed {
+            Ok(())
+        } else {
+            Err(format!("허용되지 않은 외부 도메인 접근 차단: [{host}]"))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -104,5 +139,23 @@ mod tests {
             "https://intranet.gis-heritage.go.kr/j_spring_security_check?pwd=secret",
         );
         assert_eq!(redacted, "POST <로그인 요청 — 내용을 남기지 않음>");
+    }
+
+    #[test]
+    fn test_eheritage_intranet_whitelist_rejection_blocks_external_hosts() {
+        assert!(
+            HeritageIntranetFlow::is_allowed_frame_url("https://e-heritage.go.kr/main.do").is_ok()
+        );
+        assert!(HeritageIntranetFlow::is_allowed_frame_url(
+            "https://intranet.gis-heritage.go.kr/user/checkNet.do"
+        )
+        .is_ok());
+
+        let blocked = HeritageIntranetFlow::is_allowed_frame_url("https://malicious.example.com/phish");
+        assert!(blocked.is_err());
+        assert_eq!(
+            blocked.expect_err("external host must be blocked"),
+            "허용되지 않은 외부 도메인 접근 차단: [malicious.example.com]"
+        );
     }
 }

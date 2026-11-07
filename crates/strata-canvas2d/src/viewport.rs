@@ -52,6 +52,25 @@ impl ViewportTransform {
         self.center_xy[0] += before[0] - after[0];
         self.center_xy[1] += before[1] - after[1];
     }
+
+    pub const HGIS_ZOOM_MIN_SCALE: f64 = 50.0;
+    pub const HGIS_ZOOM_MAX_SCALE: f64 = 1_000_000.0;
+
+    /// C++ `ViewportTransform::zoomAtScreenPos` — 줌 전후 마우스 커서 화면 좌표 아래의 월드 좌표 불변 조건 유지 및 축척 클램핑(`1:50` ~ `1:1,000,000`)
+    pub fn zoom_at_screen_pos(&mut self, screen_cursor_pos: [f64; 2], zoom_factor: f64) {
+        if zoom_factor <= 0.0 || !zoom_factor.is_finite() {
+            return;
+        }
+        let world_before = self.screen_to_world(screen_cursor_pos);
+        // 96 DPI 기준 1px = 0.0254 / 96.0 m
+        let px_size_m = 0.0254 / 96.0;
+        let min_mpp = Self::HGIS_ZOOM_MIN_SCALE * px_size_m;
+        let max_mpp = Self::HGIS_ZOOM_MAX_SCALE * px_size_m;
+        self.meters_per_pixel = (self.meters_per_pixel / zoom_factor).clamp(min_mpp, max_mpp);
+        let world_after = self.screen_to_world(screen_cursor_pos);
+        self.center_xy[0] += world_before[0] - world_after[0];
+        self.center_xy[1] += world_before[1] - world_after[1];
+    }
 }
 
 #[cfg(test)]
@@ -65,5 +84,27 @@ mod tests {
         let world = vp.screen_to_world(screen);
         assert!((world[0] - 200_123.456).abs() < 1e-6);
         assert!((world[1] - 500_654.321).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_viewport_zoom_cursor_invariance_at_400_300_2x_zoom_preserves_exact_world_coord() {
+        let mut vp = ViewportTransform::new([400.0, 300.0], 1.0, [800.0, 600.0]);
+        let cursor = [400.0, 300.0];
+        let before = vp.screen_to_world(cursor);
+        assert!((before[0] - 400.0).abs() < 1e-6);
+        assert!((before[1] - 300.0).abs() < 1e-6);
+
+        vp.zoom_at_screen_pos(cursor, 2.0);
+        let after = vp.screen_to_world(cursor);
+        assert!((after[0] - 400.0).abs() < 1e-6);
+        assert!((after[1] - 300.0).abs() < 1e-6);
+
+        // 비중앙 커서 (250, 180)에서도 2배 줌인 전후 월드 좌표 불변 검증
+        let off_cursor = [250.0, 180.0];
+        let off_before = vp.screen_to_world(off_cursor);
+        vp.zoom_at_screen_pos(off_cursor, 2.0);
+        let off_after = vp.screen_to_world(off_cursor);
+        assert!((off_after[0] - off_before[0]).abs() < 1e-6);
+        assert!((off_after[1] - off_before[1]).abs() < 1e-6);
     }
 }
