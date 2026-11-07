@@ -38,6 +38,9 @@ pub struct ModalDialogController {
     pub trench_coverage_pct: f32,
     pub last_export_status: String,
     pub custom_paper_mode: bool,
+    pub print_single_sheet: bool,
+    pub print_paper: SheetPaperSize,
+    pub print_dpi: u32,
 }
 
 impl Default for ModalDialogController {
@@ -55,6 +58,9 @@ impl Default for ModalDialogController {
             trench_coverage_pct: 10.0,
             last_export_status: String::new(),
             custom_paper_mode: false,
+            print_single_sheet: true,
+            print_paper: SheetPaperSize::A3,
+            print_dpi: 300,
         }
     }
 }

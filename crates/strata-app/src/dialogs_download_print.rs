@@ -1,5 +1,9 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use strata_geo::trench_grid::{TrenchShapeKind, TrenchStandardLength};
+use strata_layout::sheet_composer::SheetPaperSize;
+use strata_layout::tile_print::{
+    compute_tile_print_plan, format_print_dispatched_message, verify_requested_device_paper,
+};
 
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::{render_strata_modal_header, ActiveModalDialog};
@@ -263,30 +267,51 @@ pub fn render_download_and_print_dialogs(
                         let _ = ui.add(egui::Button::new("프린터 속성...").fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(165, 162, 152))).corner_radius(5.0).min_size(Vec2::new(84.0, 24.0)));
                     });
                     cols[0].add_space(8.0);
-                    let mut single_sheet = true;
                     cols[0].horizontal_top(|ui| {
                         ui.add_sized([68.0, 24.0], egui::Label::new("방법"));
                         ui.vertical(|ui| {
-                            ui.radio_value(&mut single_sheet, false, "여러 장으로 나눠 크게 인쇄 (붙여서 큰 도면)");
-                            ui.radio_value(&mut single_sheet, true, "한 장에 인쇄 (용지에 들어가면 실제 크기로)");
+                            ui.radio_value(&mut app.modals.print_single_sheet, false, "여러 장으로 나눠 크게 인쇄 (붙여서 큰 도면)");
+                            ui.radio_value(&mut app.modals.print_single_sheet, true, "한 장에 인쇄 (용지에 들어가면 실제 크기로)");
                         });
                     });
                     cols[0].add_space(8.0);
                     cols[0].horizontal(|ui| {
                         ui.add_sized([68.0, 28.0], egui::Label::new("용지"));
-                        ui.spacing_mut().item_spacing.x = 0.0;
-                        let _ = ui.add(egui::Button::new("A4").fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(155, 152, 142))).corner_radius(4.0).min_size(Vec2::new(38.0, 28.0)));
-                        let _ = ui.add(egui::Button::new("A3").fill(Color32::from_rgb(214, 208, 194)).stroke(Stroke::new(1.0, Color32::from_rgb(125, 122, 114))).corner_radius(4.0).min_size(Vec2::new(38.0, 28.0)));
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        for (lbl, sz) in [("A4", SheetPaperSize::A4), ("A3", SheetPaperSize::A3)] {
+                            let sel = app.modals.print_paper == sz;
+                            let fill = if sel { Color32::from_rgb(214, 208, 194) } else { Color32::WHITE };
+                            let stroke = if sel { Stroke::new(1.2, Color32::from_rgb(125, 122, 114)) } else { Stroke::new(1.0, Color32::from_rgb(155, 152, 142)) };
+                            if ui.add(egui::Button::new(lbl).fill(fill).stroke(stroke).corner_radius(4.0).min_size(Vec2::new(42.0, 28.0))).clicked() {
+                                app.modals.print_paper = sz;
+                            }
+                        }
                     });
                     cols[0].add_space(8.0);
                     cols[0].horizontal(|ui| {
                         ui.add_sized([68.0, 30.0], egui::Label::new("해상도"));
-                        let _ = ui.add(egui::Button::new("300 DPI (보통)                                      ▼").fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(165, 162, 152))).corner_radius(5.0).min_size(Vec2::new(258.0, 30.0)));
+                        let dpi_lbl = if app.modals.print_dpi == 600 {
+                            "600 DPI (고정밀 제출용)                              ▼"
+                        } else {
+                            "300 DPI (보통)                                      ▼"
+                        };
+                        if ui.add(egui::Button::new(dpi_lbl).fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(165, 162, 152))).corner_radius(5.0).min_size(Vec2::new(258.0, 30.0))).clicked() {
+                            app.modals.print_dpi = if app.modals.print_dpi == 300 { 600 } else { 300 };
+                        }
                     });
                     cols[0].add_space(126.0);
+                    let tile_plan = compute_tile_print_plan(&app.drawing.sheet, app.modals.print_paper);
+                    let page_cnt = if app.modals.print_single_sheet { 1 } else { (tile_plan.rows * tile_plan.cols).max(2) };
+                    let paper_summary = format!(
+                        "{} {} · {}장",
+                        app.modals.print_paper.label_ko(),
+                        app.drawing.sheet.orientation.label_ko(),
+                        page_cnt
+                    );
+                    let scale_summary = format!("1:{}", app.drawing.sheet.scale_denominator);
                     let (top_rule, _) = cols[0].allocate_exact_size(Vec2::new(cols[0].available_width(), 2.0), egui::Sense::hover());
                     cols[0].painter().line_segment([top_rule.left_center(), top_rule.right_center()], Stroke::new(1.2, Color32::from_rgb(45, 44, 40)));
-                    for (k, v) in [("용지", "A3 세로 · 한 장"), ("인쇄 크기", "실제 크기 100%"), ("축척", "1:6,532")] {
+                    for (k, v) in [("용지", paper_summary.as_str()), ("인쇄 크기", "실제 크기 100%"), ("축척", scale_summary.as_str())] {
                         cols[0].horizontal(|ui| {
                             ui.label(k);
                             ui.label(egui::RichText::new("....................................................").color(Color32::from_rgb(165, 162, 152)));
@@ -297,7 +322,7 @@ pub fn render_download_and_print_dialogs(
                     cols[1].horizontal(|ui| {
                         ui.label("미리보기");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(egui::RichText::new("도면 · A3 세로 · 한 장 · 1:6,532").size(12.0).color(Color32::from_rgb(95, 94, 88)));
+                            ui.label(egui::RichText::new(format!("도면 · {} · {}", paper_summary, scale_summary)).size(12.0).color(Color32::from_rgb(95, 94, 88)));
                         });
                     });
                     let (pr, _) = cols[1].allocate_exact_size(Vec2::new(350.0, 370.0), egui::Sense::hover());
@@ -330,11 +355,23 @@ pub fn render_download_and_print_dialogs(
                     p.text(Pos2::new(map_r.right() - 18.0, map_r.bottom() + 10.0), egui::Align2::RIGHT_CENTER, "동부원점(GRS80) · EPSG:5187", egui::FontId::proportional(7.0), Color32::BLACK);
                     p.text(Pos2::new(map_r.right() - 5.0, map_r.bottom() + 12.0), egui::Align2::CENTER_CENTER, "N\n▲", egui::FontId::proportional(8.5), Color32::BLACK);
                 });
+                let tile_plan = compute_tile_print_plan(&app.drawing.sheet, app.modals.print_paper);
+                let page_cnt = if app.modals.print_single_sheet { 1 } else { (tile_plan.rows * tile_plan.cols).max(2) };
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let close_b = egui::Button::new("닫기").fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(155, 152, 142))).corner_radius(6.0).min_size(Vec2::new(58.0, 34.0));
                     if ui.add(close_b).clicked() { app.modals.active = None; }
-                    let prt = egui::Button::new(egui::RichText::new("인쇄 · 1장").color(Color32::WHITE).strong()).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(88.0, 34.0));
-                    if ui.add(prt).clicked() { app.modals.active = None; }
+                    let prt = egui::Button::new(egui::RichText::new(format!("인쇄 · {page_cnt}장")).color(Color32::WHITE).strong()).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(96.0, 34.0));
+                    if ui.add(prt).clicked() {
+                        let ori = app.drawing.sheet.orientation;
+                        if verify_requested_device_paper(app.modals.print_paper, ori, app.modals.print_paper, ori).is_ok() {
+                            app.home_map.draw_guide_message = Some(format_print_dispatched_message(
+                                app.modals.print_paper,
+                                ori,
+                                page_cnt,
+                            ));
+                        }
+                        app.modals.active = None;
+                    }
                 });
             });
         }
