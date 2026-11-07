@@ -1,0 +1,174 @@
+# Build
+build/
+build-linux/
+build-clangd/
+target/
+.superpowers/
+.omc/
+rag_reports_pdf
+rag_reports_txt
+out/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+*.dir/
+*.vcxproj
+*.vcxproj.filters
+*.sln
+*.user
+*.autosave
+
+# IDE / OS
+.vs/
+.vscode/*
+!.vscode/settings.json
+.idea/
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Local agent / tooling caches (not product source)
+.codegraph/
+.omo/
+.opencode/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/ka-hgis-gis/
+!.agents/skills/heritage-intranet/
+!.agents/skills/ka-hgis-sheet/
+!.agents/skills/ka-hgis-verify/
+# Claude Code: share project config, keep per-PC state local
+.claude/*
+!.claude/settings.json
+!.claude/claude-security-guidance.md
+!.claude/rules/
+!.claude/skills/
+!.claude/agents/
+!.claude/hooks/
+.claude/hooks/state/
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+.repowise/
+.mcp.json
+# Per-checkout Codex config with this PC's paths. Not committed.
+.codex/config.toml
+.grok/.state/
+.cursor/.state/
+.cursor/hooks/state/
+.unlazy/
+.unlazy-hook-state.json
+unlazy-status.log
+/GATES.md
+
+# Logs & local DBs
+*.log
+setup.log
+setup.log.full
+symbology-style.db
+*.db-journal
+
+# Runtime / packages (build tree binaries stay ignored)
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.obj
+*.lib
+*.exp
+*.aps
+*.pch
+*.idb
+*.ipdb
+*.iobj
+# DWG 변환기 LibreDWG(GPLv3 이상)는 링크하지 않고 별도 프로그램으로 앱과 함께 둔다. 받은 그대로 저장소에 넣는다(third_party/libredwg/0.14/SOURCE.txt).
+!third_party/libredwg/**
+
+# Generated portable output stays local; maintain sources in scripts/data/docs.
+/dist/
+
+# Local field/reference datasets are not application source.
+/안동시/
+*.mbtiles
+*.tif
+*.tiff
+*.hgt
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.qix
+# Deliberate, small fixtures may still be versioned with their source/license.
+!samples/**/*.tif
+!samples/**/*.tiff
+!samples/**/*.hgt
+!samples/**/*.shp
+!samples/**/*.shx
+!samples/**/*.dbf
+!samples/**/*.prj
+!samples/**/*.cpg
+!samples/**/*.qix
+!tests/fixtures/**/*.tif
+!tests/fixtures/**/*.tiff
+!tests/fixtures/**/*.hgt
+!tests/fixtures/**/*.shp
+!tests/fixtures/**/*.shx
+!tests/fixtures/**/*.dbf
+!tests/fixtures/**/*.prj
+!tests/fixtures/**/*.cpg
+!tests/fixtures/**/*.qix
+
+# Python / misc
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+
+# Local survey / QGIS project files (do not commit field data)
+*.gpkg
+*.qgz
+!samples/**/*.gpkg
+!samples/**/*.qgz
+# Old-version compatibility samples are synthetic surveys saved by that version's
+# app code (no real site data). They must travel with the repo, or a fresh clone/CI
+# cannot run save_open_portable::oldVersionSurveysStillOpen (tests/data/compat/README.md).
+!tests/data/compat/**
+
+# Account/key files: never commit, wherever a checkout, build or portable puts them.
+config/secrets.ini
+config/ngii-local.ini
+config/*-local.ini
+config/*-account.ini
+**/config/*-local.ini
+**/config/*-account.ini
+**/secrets.ini
+ka-hgis-vworld.ini
+
+# CTest writes cost data next to the build; not source.
+Testing/
+
+
+# QGIS offline manuals: large Desktop User Guide PDFs stay local (see docs/vendor/qgis-manual-3.44/README.md)
+docs/vendor/qgis-manual-3.44/QGIS-*-DesktopUserGuide-*.pdf
+
+# 내부 개발 계획·실행 로그는 공개 저장소에 올리지 않는다.
+plans/
+logs/
+
+# 토큰 등 로컬 환경 파일. 예시 템플릿만 추적한다.
+.env
+*.env
+!.env.example

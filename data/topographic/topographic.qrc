@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/topographic">
+    <file alias="layer-codes.json">layer-codes.json</file>
+  </qresource>
+</RCC>

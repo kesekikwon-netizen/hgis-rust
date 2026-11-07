@@ -1,0 +1,1588 @@
+/* ka-hgis chrome — Strata: flat surfaces, a navy frame and one blue accent.
+   Color and size SSOT: KaTheme tokens; resolve before applying this raw sheet.
+   Placeholders use the semantic token names (accent, hover < selected < pressed,
+   borderStrong, altRow ...). @uiFontSize@ is 13 px, 15 px with 큰 글씨.
+   The build compiles this file in; the app reads the disk copy only when
+   KA_HGIS_QSS_FROM_DISK=1 (live QSS editing), so a stale copy cannot win.
+   Keep GIS surfaces excluded; no bare QWidget/QGraphicsView/QFrame fills. */
+
+/* ---- GIS exclude (contract 1). No fill/border color here. ---- */
+QgsMapCanvas, QWidget#mapCanvas, QgsLayoutView, QWidget#layoutView {
+  background: none;
+  border: none;
+}
+
+/* ---- Window face ---- */
+QMainWindow, QDialog, QMessageBox, QInputDialog, QColorDialog, QDialogButtonBox {
+  background: @surface@;
+  color: @ink@;
+  font-family: "Malgun Gothic", "Segoe UI";
+  font-size: @uiFontSize@px;
+}
+QMainWindow { background: @chrome@; }
+QWidget#startPage {
+  font-family: "Malgun Gothic", "Segoe UI";
+  font-size: @uiFontSize@px;
+  color: @ink@;
+}
+QLabel#recentEmptyHint {
+  color: @inkMuted@;
+  font-size: @uiFontSize@px;
+  font-family: "Malgun Gothic", "Segoe UI";
+}
+/* ---- Home: navy hero, continue card, recent list ---- */
+QWidget#startHero QLabel { background: transparent; }
+QLabel#startHeroName {
+  color: @railText@;
+  font-family: "Segoe UI", "Malgun Gothic";
+  font-size: 40px;
+  /* Segoe UI has a real Semibold face; the Malgun Gothic rules use 400/700 only. */
+  font-weight: 600;
+}
+QLabel#startHeroProduct { color: @railMuted@; font-size: 18px; }
+QLabel#startHeroLead { color: @railMuted@; font-size: 14px; }
+QFrame#startHeroDivider { background: @railMuted@; border: none; }
+QPushButton#startNewBtn, QPushButton#startOpenBtn {
+  font-family: "Malgun Gothic", "Segoe UI";
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 36px;
+  padding: 0 18px;
+  border-radius: 8px;
+}
+QPushButton#startNewBtn { background: @heroButton@; color: @heroButtonText@; border: 1px solid @heroButton@; }
+QPushButton#startNewBtn:enabled:hover { background: @heroButtonHover@; border-color: @heroButtonHover@; }
+QPushButton#startNewBtn:enabled:pressed { background: @heroButtonPressed@; border-color: @heroButtonPressed@; }
+QPushButton#startOpenBtn { background: transparent; color: @railText@; border: 1px solid @railMuted@; }
+QPushButton#startOpenBtn:enabled:hover { background: @heroGhostHover@; }
+QPushButton#startOpenBtn:enabled:pressed { background: @heroGhostPressed@; }
+QFrame#startContinueCard { background: @surface@; border: none; border-radius: 12px; }
+QLabel#startContinueTag { color: @inkMuted@; font-size: 11px; }
+QLabel#startContinueName { color: @ink@; font-size: 20px; font-weight: 700; }
+QLabel#startContinuePath { color: @inkMuted@; font-size: 12px; }
+/* A @desk@ pill on the white card was invisible (1.08:1) and only pushed the
+   text 9px right of the path above. Plain text keeps the card's left edge. */
+QLabel#startContinueMeta { color: @inkMuted@; background: transparent; padding: 0; font-size: 11px; }
+QPushButton#startContinueBtn {
+  background: @accent@;
+  color: @surface@;
+  border: 1px solid @accent@;
+  border-radius: 7px;
+  min-height: 34px;
+  padding: 0 16px;
+  font-weight: 700;
+}
+QPushButton#startContinueBtn:enabled:hover { background: @accentHover@; border-color: @accentHover@; }
+QPushButton#startContinueBtn:enabled:pressed { background: @accentDeep@; border-color: @accentDeep@; }
+QFrame#startRecentCard, QFrame#startGuideCard { background: @surface@; border: 1px solid @border@; border-radius: 10px; }
+QLabel#startStepNumber {
+  color: @surface@;
+  background: @accent@;
+  border-radius: 13px;
+  font-size: 13px;
+  font-weight: 700;
+}
+QLabel#startStepTitle { color: @ink@; font-size: 14px; font-weight: 700; }
+QLabel#startStepBody { color: @inkMuted@; font-size: 12px; }
+QLabel#startRecentTitle { color: @ink@; font-size: 15px; font-weight: 700; }
+QLabel#startRecentCount { color: @inkMuted@; font-size: 12px; }
+QLineEdit#startRecentFilter {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid @border@;
+  border-radius: 7px;
+  background: @surface@;
+}
+QTableWidget#recentSurveyList { border: none; background: @surface@; }
+/* 18px matches the 「최근 조사」 header margin, so names sit under the title. */
+QTableWidget#recentSurveyList::item { padding: 0 18px; border-bottom: 1px solid @desk@; }
+QTableWidget#recentSurveyList::item:hover { background: @hover@; }
+QTableWidget#recentSurveyList::item:selected { background: @selected@; color: @ink@; }
+QLabel#startRecoveryNote { color: @ink@; font-size: 12px; }
+/* ---- Place search: 「지역」 and the address field at the right end of the ribbon row ---- */
+QWidget#appBar { background: transparent; }
+/* min-width and min-height are 「지역」's own floor, just above its 30 px of padding and border;
+   the general toolbar button rule sets no minimum. */
+QToolBar#mainToolbar QToolButton#appBarRegion {
+  color: @ink@;
+  background: @surface@;
+  border: 1px solid @border@;
+  border-radius: 8px;
+  padding: 4px 10px;
+  min-width: 36px;
+  min-height: 30px;
+  font-size: 12px;
+  font-weight: 700;
+}
+QToolBar#mainToolbar QToolButton#appBarRegion:enabled:hover { background: @hover@; border-color: @accent@; }
+QToolBar#mainToolbar QLineEdit#appBarSearch {
+  background: @surface@;
+  color: @ink@;
+  border: 1px solid @border@;
+  border-radius: 8px;
+  padding: 0 12px;
+  min-height: 30px;
+  font-size: @uiFontSize@px;
+}
+QToolBar#mainToolbar QLineEdit#appBarSearch:focus { border-color: @tabMark@; }
+QDialogButtonBox QPushButton {
+  font-size: @uiFontSize@px;
+  min-height: @btnMinHeight@px;
+  font-family: "Malgun Gothic", "Segoe UI";
+}
+QMessageBox QLabel, QInputDialog QLabel {
+  font-size: @uiFontSize@px;
+  color: @ink@;
+  font-family: "Malgun Gothic", "Segoe UI";
+}
+
+/* ---- Push buttons ---- */
+/* Malgun Gothic has Regular and Bold only, so weights are 400 or 700. Controls
+   stay Regular and only headings and primary buttons are Bold. */
+QPushButton {
+  color: @ink@;
+  font-weight: 400;
+  min-height: @btnMinHeight@px;
+  padding: @btnPadding@;
+  border: 1px solid @border@;
+  border-bottom: @buttonEdge@px solid @borderStrong@;
+  border-radius: 8px;
+  background: @surface@;
+}
+QPushButton:enabled:hover { background: @hover@; border-color: @borderStrong@; border-bottom: @buttonEdge@px solid @borderStrong@; }
+QPushButton:enabled:pressed { background: @pressed@; border-bottom: 1px solid @borderStrong@; }
+QPushButton:enabled:checked {
+  background: @selected@;
+  color: @tabInk@;
+  border-color: @tabMark@;
+  border-bottom: @buttonEdge@px solid @tabInk@;
+}
+/* The main button has its own tokens: the accent steps in the stock look, slate in 새 모양. */
+QPushButton:default, QPushButton#btnAdjustDone, QPushButton.primary, QPushButton#btnPrimary {
+  background: @primary@;
+  color: @primaryText@;
+  font-weight: 700;
+  border: 1px solid @primary@;
+  border-bottom: @buttonEdge@px solid @primaryPressed@;
+}
+QPushButton:default:enabled:hover, QPushButton#btnAdjustDone:enabled:hover, QPushButton.primary:enabled:hover, QPushButton#btnPrimary:enabled:hover {
+  background: @primaryHover@;
+  border-bottom: @buttonEdge@px solid @primaryPressed@;
+}
+QPushButton:default:enabled:checked, QPushButton#btnAdjustDone:enabled:checked,
+QPushButton.primary:enabled:checked, QPushButton#btnPrimary:enabled:checked {
+  background: @primaryPressed@;
+  color: @primaryText@;
+}
+QPushButton:default:enabled:pressed, QPushButton#btnAdjustDone:enabled:pressed,
+QPushButton.primary:enabled:pressed, QPushButton#btnPrimary:enabled:pressed {
+  background: @primaryPressed@;
+  color: @primaryText@;
+}
+QPushButton:disabled {
+  background: @disabledSurface@;
+  color: @inkDisabled@;
+  border-color: @border@;
+}
+
+/* ---- Tool buttons ---- */
+QToolButton {
+  color: @inkMuted@;
+  font-weight: 400;
+  font-size: 12px;
+  border: 2px solid transparent;
+  border-radius: 0;
+  background: @surface@;
+  padding: 6px 10px;
+}
+QToolButton:enabled:hover { background: @hover@; color: @ink@; }
+QToolButton:enabled:pressed { background: @pressed@; }
+QToolButton:enabled:checked {
+  background: @selected@;
+  color: @tabInk@;
+  border: 2px solid transparent;
+  border-bottom: 2px solid @tabMark@;
+}
+QToolButton:enabled:checked:hover {
+  background: @selected@;
+  color: @tabInk@;
+  border: 2px solid transparent;
+  border-bottom: 2px solid @accentHover@;
+}
+QToolButton:disabled { color: @inkDisabled@; }
+QToolButton#btnPrimary {
+  background: @surface@;
+  color: @accentDeep@;
+  border: 2px solid transparent;
+}
+QToolButton#btnPrimary:enabled:hover {
+  background: @hover@;
+  color: @ink@;
+  border: 2px solid transparent;
+}
+QToolButton#btnPrimary:enabled:pressed { background: @pressed@; }
+QToolButton#btnPrimary:enabled:checked {
+  background: @selected@;
+  color: @accentDeep@;
+  border: 2px solid transparent;
+  border-bottom: 2px solid @accent@;
+}
+
+QToolBar {
+  background: @chrome@;
+  border: none;
+  spacing: 1px;
+  padding: 4px 8px;
+}
+QToolBar::separator {
+  background: @border@;
+  width: 1px;
+  margin: 8px 4px;
+}
+QToolBar#mainToolbar::separator {
+  background: @borderStrong@;
+  width: 1px;
+  margin: 10px 8px;
+}
+QToolBar#mainToolbar, QToolBar#studioToolbar {
+  background: @chrome@;
+  border-bottom: 1px solid @border@;
+}
+QToolBar#studioToolbar QToolButton {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: @inkMuted@;
+}
+QToolBar#subToolbar {
+  background: @chrome@;
+  border-top: 1px solid @border@;
+  border-bottom: 1px solid @border@;
+}
+/* Same label size and ink as the ribbon chips. The 13 px labels are wider than the old 12 px ones,
+   so the side padding is 7 px (was 10) to keep the whole drawing row on screen at 1920. */
+/* 새 모양 makes each tool a button (face, thin rounded edge, clay wash when chosen); the @sub…@ values
+   of the stock look resolve to the flat row it always had (KaThemeSheet.cpp). Edge, gap and side
+   padding together are no wider than the stock row's, and a chosen tool is as wide as an unchosen one. */
+QToolBar#subToolbar QToolButton {
+  color: @ribbonLabelInk@;
+  font-size: @ribbonFontSize@px;
+  padding: 6px @subPadSide@px;
+  margin: 0 @subGap@px;
+  background: @subFace@;
+  border: @subEdgeWidth@px solid @subEdge@;
+  border-radius: @subRadius@px;
+}
+QToolBar#subToolbar QToolButton:enabled:hover { background: @hover@; }
+QToolBar#subToolbar QToolButton:enabled:checked {
+  background: @subCheckedFace@;
+  color: @subCheckedInk@;
+  font-weight: 700;
+  border: @subCheckedEdgeWidth@px solid @subCheckedEdge@;
+  border-bottom: @subUnderline@;
+}
+/* 켜짐 토글(「연속 그리기」, kaToggle): oat with a grey ring, not the slate of a tool in hand (보완 M3). */
+QToolBar#subToolbar QToolButton[kaToggle="true"]:enabled:checked {
+  background: @subToggleFace@;
+  color: @subToggleInk@;
+  border: @subCheckedEdgeWidth@px solid @subToggleEdge@;
+  border-bottom: @subToggleUnderline@;
+}
+QToolBar#mainToolbar {
+  spacing: @buttonSpacing@px;
+  padding: 4px 8px;
+}
+/* No min-width or min-height here: the sheet turns them into the widget's minimum size at every repolish,
+   and that undoes the exact size KaBeginnerRibbon gives each chip in code. */
+QToolBar#mainToolbar QToolButton {
+  padding: @buttonPadding@px;
+  font-size: @ribbonFontSize@px;
+  background: @chrome@;
+  border: 2px solid transparent;
+  border-radius: 0;
+}
+QToolBar#mainToolbar QToolButton:enabled:hover {
+  background: @hover@;
+  border: 2px solid transparent;
+}
+QToolBar#mainToolbar QToolButton:enabled:pressed { background: @pressed@; }
+QToolBar#mainToolbar QToolButton::menu-indicator {
+  image: none;
+  width: 0px;
+}
+QToolBar#mainToolbar QToolButton:enabled:checked {
+  background: @selected@;
+  color: @accentDeep@;
+  border: 2px solid transparent;
+  border-bottom: 2px solid @accent@;
+}
+QToolBar#mainToolbar QToolButton:enabled:checked:hover {
+  background: @selected@;
+  color: @accentDeep@;
+  border: 2px solid transparent;
+  border-bottom: 2px solid @accentHover@;
+}
+QWidget#beginnerRibbon {
+  background: transparent;
+}
+QFrame#ribbonGroup {
+  background: transparent;
+  border: none;
+  border-right: 1px solid @border@;
+}
+QFrame#ribbonGroup[offContext="true"] QLabel#ribbonGroupCaption { color: @borderStrong@; }
+QLabel#ribbonGroupCaption {
+  color: @ribbonGroupInk@;
+  font-size: 11px;
+  font-weight: 700;
+  min-height: 18px;
+  padding: 0 2px;
+  background: transparent;
+}
+/* The chip's size is set in code (KaBeginnerRibbon): tile + 12 px, plus the label line while the
+   labels show, so the icon tile sits at the top and the label hangs about 6 px under it. The
+   sheet only draws the face: a 1 px edge and 1 px padding keep Qt's own icon box inside the chip. */
+QWidget#beginnerRibbon QToolButton {
+  margin: 0;
+  padding: @buttonPadding@px;
+  background: @chrome@;
+  color: @ribbonLabelInk@;
+  font-size: @ribbonFontSize@px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  text-align: center;
+}
+QWidget#beginnerRibbon QToolButton:enabled:hover {
+  background: transparent;
+  border: 1px solid transparent;
+}
+QWidget#beginnerRibbon QToolButton:enabled:pressed {
+  background: @pressed@;
+  border-color: @border@;
+}
+/* A chosen chip paints no face and no border of its own: the icon tile (blue border, light
+   blue fill) and a bold label in the active ink are the whole mark. The hover line repeats the
+   rule because QToolBar#mainToolbar QToolButton:checked:hover is just as specific. */
+QWidget#beginnerRibbon QToolButton:enabled:checked,
+QWidget#beginnerRibbon QToolButton:enabled:checked:hover {
+  background: transparent;
+  color: @ribbonActiveInk@;
+  font-weight: 700;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+/* 「저장」 while the survey has unsaved changes: MainWindow::syncShellChips sets this property (the
+   blue tile and the orange dot come from the icon) and the label turns bold. */
+QWidget#beginnerRibbon QToolButton[unsaved="true"] {
+  font-weight: 700;
+}
+QWidget#beginnerRibbon QToolButton::menu-button {
+  border: none;
+  background: transparent;
+  width: 0px;
+}
+QWidget#beginnerRibbon QToolButton::menu-arrow {
+  image: none;
+  width: 0px;
+  height: 0px;
+}
+QWidget#beginnerRibbon QToolButton::menu-indicator {
+  image: none;
+  width: 0px;
+  height: 0px;
+}
+QWidget#regionLocator {
+  min-height: 196px;
+  min-width: 204px;
+  background: transparent;
+  border: none;
+}
+/* Region chips sit on a small map of the peninsula. 28 x 46 px outside
+   (content + 1 px border + 1 px margin) is the largest the find menu allows. */
+QWidget#regionLocator QToolButton#regionChip {
+  min-width: 36px;
+  max-width: 38px;
+  min-height: 24px;
+  max-height: 24px;
+  margin: 1px;
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: @accentDeep@;
+  background: @surface@;
+  border: 1px solid @border@;
+  border-radius: 7px;
+}
+QWidget#regionLocator QToolButton#regionChip:enabled:hover {
+  background: @hover@;
+  border-color: @accent@;
+}
+QWidget#regionLocator QToolButton#regionChip:enabled:checked {
+  background: @selected@;
+  color: @accentDeep@;
+  border: 1px solid @accent@;
+  border-radius: 8px;
+}
+QToolBar#studioToolRail {
+  background: @surface@;
+  spacing: 1px;
+  padding: 2px 4px;
+  border: none;
+  border-left: 1px solid @border@;
+}
+QToolBar#studioToolRail QToolButton {
+  min-width: 60px;
+  min-height: 40px;
+  padding: 1px 2px;
+  font-size: 12px;
+  color: @inkMuted@;
+}
+QToolButton#layerCheckAllBtn, QToolButton#layoutLayerCheckAllBtn {
+  background: @surface@;
+  border: 1px solid @border@;
+  border-radius: 8px;
+  padding: 2px 10px;
+  color: @inkMuted@;
+  font-size: 12px;
+}
+QToolButton#layerCheckAllBtn:enabled:hover, QToolButton#layoutLayerCheckAllBtn:enabled:hover {
+  border-color: @accent@;
+  color: @accentDeep@;
+}
+QToolButton#layerCheckAllBtn:enabled:pressed, QToolButton#layoutLayerCheckAllBtn:enabled:pressed { background: @pressed@; }
+QToolButton#layerCheckAllBtn:disabled, QToolButton#layoutLayerCheckAllBtn:disabled { color: @inkDisabled@; border-color: @border@; }
+QToolButton#layoutLayerSetBtn { background: @surface@; border: 1px solid @border@; border-radius: 8px; padding: 2px 10px; color: @inkMuted@; font-size: 12px; }
+QToolButton#layoutLayerSetBtn:hover { border-color: @accent@; color: @accentDeep@; }
+QToolButton#layoutLayerSetBtn::menu-indicator { image: none; width: 0px; }
+QLabel#subToolbarCaption { color: @inkMuted@; font-weight: 700; padding: 0 8px; background: transparent; }
+
+/* ---- Fields ---- */
+QLineEdit, QTextEdit, QPlainTextEdit {
+  background: @surface@;
+  color: @ink@;
+  border: 1px solid @border@;
+  border-radius: 8px;
+  min-height: @fieldMinHeight@px;
+  padding: 4px 10px;
+  selection-background-color: @accent@;
+  selection-color: @surface@;
+}
+/* Combo and spin boxes carry no QSS border: KaTheme::ChromeStyle paints the same
+   rounded face, the focus edge and the chevrons. A QSS border hands them to
+   QWindowsStyle, which draws no arrow beside a styled drop-down and a Win95 bevel
+   around spin buttons. The feature line lets the style paint this background. */
+QComboBox, QAbstractSpinBox {
+  background: @surface@;
+  color: @ink@;
+  min-height: @fieldMinHeight@px;
+  padding: 4px 10px;
+  selection-background-color: @accent@;
+  selection-color: @surface@;
+  -qt-style-features: background-color;
+}
+/* The editor inside a combo or spin box lives on that face. */
+QAbstractSpinBox QLineEdit, QComboBox QLineEdit {
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+QLineEdit:focus {
+  border-color: @tabMark@;
+}
+QLineEdit:disabled, QComboBox:disabled, QAbstractSpinBox:disabled {
+  background: @desk@;
+  color: @inkDisabled@;
+}
+QToolBar#mainToolbar QToolButton#regionChip {
+  min-width: 32px;
+  max-width: 38px;
+  min-height: 22px;
+  max-height: 22px;
+  margin: 1px;
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: @accentDeep@;
+  background: @surface@;
+  border: 1px solid @border@;
+  border-radius: 6px;
+}
+QToolBar#mainToolbar QToolButton#regionChip:enabled:hover { background: @hover@; border-color: @accent@; }
+QToolBar#mainToolbar QToolButton#regionChip:enabled:checked {
+  background: @selected@;
+  color: @accentDeep@;
+  border: 1px solid @border@;
+  border-bottom: 2px solid @accent@;
+}
+QFrame#regionAddressPopup {
+  background: @surface@;
+  border: 1px solid @border@;
+  border-radius: 10px;
+}
+QLabel#regionSidoTitle { color: @accentDeep@; font-weight: 700; }
+
+/* The color dialog's spin boxes use the shared field face above; a border here
+   would hand them back to the Win95 bevel. */
+QColorDialog QAbstractSpinBox { min-height: 26px; }
+QComboBox QAbstractItemView {
+  background: @surface@;
+  color: @ink@;
+  selection-background-color: @selected@;
+  selection-color: @ink@;
+  min-height: 26px;
+  border: 1px solid @border@;
+}
+
+/* ---- Trees / layer list ---- */
+QTreeView, QgsLayerTreeView, QListWidget, QTableWidget, QTableView {
+  background: @surface@;
+  color: @ink@;
+  border: 1px solid @border@;
+  border-radius: 8px;
+  outline: none;
+  font-size: @uiFontSize@px;
+  font-family: "Malgun Gothic", "Segoe UI";
+}
+QTreeView::item, QgsLayerTreeView::item, QListWidget::item, QTableWidget::item, QTableView::item {
+  /* Inherit the view text color; allow the layer model's group/hidden colors. */
+  padding: 5px 6px;
+  min-height: 24px;
+}
+QTreeView[kaLayerInformation="true"] {
+  font-size: 10px;
+  background: @surface@;
+  alternate-background-color: @stripe@;
+}
+QTreeView[kaLayerInformation="true"]::item {
+  padding: 1px 4px;
+  min-height: 18px;
+}
+QTreeView[kaLayerInformation="true"] QHeaderView::section {
+  font-size: 10px;
+  padding: 4px 6px;
+  border: @layerHeadEdge@;
+  border-bottom: 1px solid @border@;
+  background: @layerHeadFace@;
+}
+QTreeView::item:selected, QgsLayerTreeView::item:selected, QListWidget::item:selected,
+QTableWidget::item:selected, QTableView::item:selected {
+  background: @selected@;
+  color: @ink@;
+}
+/* Hover is the lightest wash (hover < selected < pressed): a selected row keeps
+   its colour under the pointer instead of turning darker. */
+QTreeView::item:hover, QgsLayerTreeView::item:hover, QListWidget::item:hover,
+QTableWidget::item:hover, QTableView::item:hover {
+  background: @hover@;
+}
+QTreeView::item:selected:hover, QgsLayerTreeView::item:selected:hover, QListWidget::item:selected:hover,
+QTableWidget::item:selected:hover, QTableView::item:selected:hover {
+  background: @selected@;
+}
+/* A 2 px accent bar marks the selected row in trees and lists: first column
+   only, and the left padding gives up the same 2 px so the text stays put. */
+QTreeView::item:selected:first, QTreeView::item:selected:only-one, QListWidget::item:selected {
+  border-left: 2px solid @accent@;
+  padding-left: 4px;
+}
+QTreeView[kaLayerInformation="true"]::item:selected:first,
+QTreeView[kaLayerInformation="true"]::item:selected:only-one {
+  padding-left: 2px;
+}
+QHeaderView::section {
+  background: @surface@;
+  color: @inkMuted@;
+  border: 1px solid @border@;
+  padding: 6px 8px;
+}
+
+/* ---- Cards / docks / splitter ---- */
+QFrame#mapCard, QFrame#layersCard, QFrame#filesCard, QFrame#studioFilesPanel,
+QFrame#itemInspector, QFrame#sampleStrip, QFrame#mapAdjustBar, QFrame#drawerCard,
+QFrame#studioLeftCol, QFrame#studioBottomBar,
+QFrame#terrainLayersCard, QFrame#terrainFilesCard {
+  background: @desk@;
+  border: 1px solid @border@;
+  border-bottom: 1px solid @borderStrong@;
+  border-right: 1px solid @border@;
+  border-radius: @mapRadius@px;
+  color: @ink@;
+}
+QFrame#filesInner, QFrame#layersInner {
+  background: @altRow@;
+  border: 1px solid @border@;
+  border-radius: 8px;
+  color: @ink@;
+}
+QFrame#studioLeftCol {
+  border-radius: 0px;
+  border: none;
+  border-right: 1px solid @border@;
+  background: @desk@;
+}
+QWidget#terrain3dPanel {
+  background: @desk@;
+  border-right: 1px solid @border@;
+}
+QFrame#studioBottomBar {
+  border-radius: 0px;
+  border: none;
+  border-top: 1px solid @border@;
+  background: @surface@;
+}
+QFrame#mapCard { background: @surface@; border-radius: @mapRadius@px; border: 1px solid @mapEdge@;
+  border-bottom: 1px solid @mapEdgeStrong@; border-right: 1px solid @mapEdge@; }
+/* ---- Studio inspector: 도면 cards and a pinned output bar ---- */
+/* 도면 오른쪽 판 (보완 L1): in 새 모양 the cards are captions with a hairline, no box. */
+QFrame#itemInspector[kaPlate="true"] { background: transparent; border: none; border-radius: 0; }
+QFrame#itemInspector[kaPlate="true"] QLabel#cardCaption { font-size: 11px; font-weight: 400; padding: 0; }
+QFrame#studioCaptionRule { background: @border@; border: none; }
+QWidget#drawingInspectorColumn {
+  background: @desk@;
+}
+QFrame#studioOutputBar {
+  background: @surface@;
+  border: none;
+  border-top: 1px solid @border@;
+}
+/* One output-button face for the 도면 output bar and the item inspector. */
+QFrame#studioOutputBar QToolButton,
+QFrame#itemInspector QToolButton#btnPrint,
+QFrame#itemInspector QToolButton#btnPrimary,
+QWidget#studioOutputFoot QToolButton#btnPrint,
+QWidget#studioOutputFoot QToolButton#btnPrimary {
+  min-height: 34px;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: @ink@;
+  background: @surface@;
+  border: 1px solid @border@;
+  border-bottom: 2px solid @borderStrong@;
+  border-radius: 8px;
+}
+QFrame#itemInspector QToolButton#btnPrint,
+QFrame#itemInspector QToolButton#btnPrimary,
+QWidget#studioOutputFoot QToolButton#btnPrint,
+QWidget#studioOutputFoot QToolButton#btnPrimary { padding: 4px 10px; }
+QFrame#studioOutputBar QToolButton:enabled:hover,
+QFrame#itemInspector QToolButton#btnPrint:enabled:hover,
+QWidget#studioOutputFoot QToolButton#btnPrint:enabled:hover { background: @hover@; }
+QFrame#studioOutputBar QToolButton#btnPrimary,
+QFrame#itemInspector QToolButton#btnPrimary,
+QWidget#studioOutputFoot QToolButton#btnPrimary {
+  color: @primaryText@;
+  background: @primary@;
+  border: 1px solid @primary@;
+  border-bottom: @buttonEdge@px solid @primaryPressed@;
+  font-weight: 700;
+}
+QFrame#studioOutputBar QToolButton#btnPrimary:enabled:hover,
+QFrame#itemInspector QToolButton#btnPrimary:enabled:hover,
+QWidget#studioOutputFoot QToolButton#btnPrimary:enabled:hover { background: @primaryHover@; }
+QFrame#studioOutputBar QToolButton#btnPrimary:enabled:pressed,
+QFrame#itemInspector QToolButton#btnPrimary:enabled:pressed,
+QWidget#studioOutputFoot QToolButton#btnPrimary:enabled:pressed { background: @primaryPressed@; }
+QToolButton.sampleTile {
+  /* Width comes from QWidget::setMinimumWidth. min-width:0 overrode it. */
+  min-height: 0;
+  padding: @buttonPadding@px;
+  font-size: @scaleFontSize@px;
+  color: @ink@;
+  background: @surface@;
+  border: 1px solid @border@;
+  border-radius: 8px;
+}
+QToolButton.sampleTile:enabled:hover {
+  background: @hover@;
+  border-color: @borderStrong@;
+  color: @ink@;
+}
+QToolButton.sampleTile:enabled:checked {
+  background: @selected@;
+  color: @accentDeep@;
+  border: 1px solid @accent@;
+}
+QToolButton.sampleTile:enabled:checked:hover {
+  background: @selected@;
+  color: @accentDeep@;
+  border-color: @accentHover@;
+}
+QToolButton#scaleChip {
+  /* C++ uses scaleButtonHeight and scaleButtonMinWidth for outer size. */
+  min-width: 0;
+  min-height: 0;
+  padding: @buttonPadding@px;
+  font-size: @scaleFontSize@px;
+  font-weight: 700;
+  color: @ink@;
+  background: @surface@;
+  border: 1px solid @border@;
+  border-radius: 8px;
+}
+QToolButton#scaleChip:enabled:checked {
+  background: @selected@;
+  color: @accentDeep@;
+  border: 1px solid @accent@;
+}
+QPushButton#scaleApply, QSpinBox#drawingScale {
+  min-height: 0;
+  padding: @buttonPadding@px 6px;
+  font-size: @scaleFontSize@px;
+}
+QPushButton#scaleApply:enabled:pressed { border-bottom-width: 2px; }
+QSpinBox#drawingScale { padding-right: 20px; }
+QLabel#emptyState {
+  color: @inkMuted@;
+  font-size: @uiFontSize@px;
+  font-weight: 400;
+  padding: 24px 16px;
+  min-height: 88px;
+  background: @emptyFace@;
+  border: 1px dashed @emptyEdge@;
+  border-radius: 8px;
+}
+/* The same card for a failed or offline state: setProperty("tone", ...). */
+QLabel#emptyState[tone="error"] { color: @danger@; background: @dangerSurface@; border: 1px solid @danger@; }
+QLabel#emptyState[tone="offline"] { color: @inkMuted@; background: @desk@; border: 1px dashed @borderStrong@; }
+/* ---- View tabs (홈/지도) ---- */
+QTabWidget::pane { border: none; }
+/* ---- 바깥 라운드 ----
+   탭 안쪽 면을 조금 들여 놓아 창의 회색 바탕이 테두리처럼 보이게 하고,
+   그 위에 얹히는 본문 판을 둥글게 깎는다. 배경만 바뀌며 배치는 그대로다. */
+QTabWidget#viewTabs::pane { border: none; margin: 0 8px 8px 8px; }
+QWidget#centralRoot, QWidget#startPage {
+  background: @desk@;
+  border: 1px solid @pageEdge@;
+  border-radius: @pageRadius@px;
+}
+QWidget#startMain {
+  background: @desk@;
+  border: none;
+}
+QTabBar { background: transparent; font-weight: 400; }
+QTabBar::tab {
+  background: transparent;
+  color: @inkMuted@;
+  padding: 7px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin: 0 2px;
+}
+QTabBar::tab:selected { color: @tabInk@; border-bottom: 2px solid @tabMark@; }
+/* 홈·지도 탭 줄(목업): 바탕은 작업대 색, 고른 탭은 흰 판에 위·좌·우 1px 테두리와 위 모서리 8, 밑줄 없음. */
+QTabWidget#viewTabs > QTabBar { background: @desk@; }
+QTabWidget#viewTabs > QTabBar::tab {
+  border: 1px solid transparent;
+  border-bottom: @viewTabBase@;
+  border-top-left-radius: @viewTabRadius@px;
+  border-top-right-radius: @viewTabRadius@px;
+}
+QTabWidget#viewTabs > QTabBar::tab:selected { background: @viewTabFace@; border: 1px solid @viewTabEdge@; border-bottom: @viewTabMark@; }
+/* ---- Left Dock (레이어 위 / 파일함 아래 동시 노출) ---- */
+QSplitter#leftSplit,
+QSplitter#studioLeftSplit,
+QSplitter#studioMainSplit {
+  background: transparent;
+}
+QSplitter#leftSplit::handle,
+QSplitter#studioLeftSplit::handle {
+  background: @border@;
+  height: @splitCore@px;
+  margin: @splitMarginH@;
+  border-radius: @splitRound@px;
+  border-top: @splitPad@px solid transparent;
+  border-bottom: @splitPad@px solid transparent;
+  background-clip: content;
+}
+QSplitter#studioMainSplit::handle {
+  background: @border@;
+  width: @splitCore@px;
+  margin: @splitMarginV@;
+  border-radius: @splitRound@px;
+  border-left: @splitPad@px solid transparent;
+  border-right: @splitPad@px solid transparent;
+  background-clip: content;
+}
+QSplitter#leftSplit::handle:hover,
+QSplitter#studioLeftSplit::handle:hover,
+QSplitter#studioMainSplit::handle:hover {
+  background: @accent@;
+}
+QFrame#layerOpacityRail {
+  background: @surface@;
+  border: 1px solid @border@;
+  border-radius: 10px;
+}
+QFrame#layerOpacityRail QLabel {
+  color: @inkMuted@;
+  font-size: 12px;
+}
+QFrame#layerOpacityRail QLabel#layerOpacityTarget {
+  color: @ink@;
+  font-weight: 700;
+}
+QFrame#layerOpacityRail QLabel#layerOpacityTarget[idle="true"] {
+  color: @inkMuted@;
+  font-weight: 400;
+}
+QFrame#layerOpacityRail QSlider::groove:horizontal {
+  background: @border@;
+  height: 4px;
+  border-radius: 2px;
+}
+QFrame#layerOpacityRail QSlider::sub-page:horizontal { background: @accent@; border-radius: 2px; }
+QFrame#layerOpacityRail QSlider::sub-page:horizontal:disabled { background: @border@; }
+QFrame#layerOpacityRail QSlider::handle:horizontal {
+  background: @surface@;
+  border: 2px solid @accent@;
+  width: 12px;
+  margin: -6px 0;
+  border-radius: 8px;
+}
+QFrame#layerOpacityRail QSlider::handle:horizontal:disabled { border-color: @inkDisabled@; }
+/* ---- Map controls: zoom buttons floating on the map ---- */
+QFrame#mapControls { background: @surface@; border: 1px solid @border@; border-radius: 9px; }
+QFrame#mapControls QToolButton {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid @desk@;
+  border-radius: 0;
+  padding: 0;
+}
+QFrame#mapControls QToolButton:enabled:hover { background: @hover@; }
+/* Coordinate grid toggle floating in the map's bottom-right corner. */
+QFrame#mapCornerBar { background: @surface@; border: 1px solid @border@; border-radius: 9px; }
+QFrame#mapCornerBar QLabel { color: @inkMuted@; font-size: 12px; }
+QFrame#mapCornerBar QAbstractSpinBox, QFrame#mapCornerBar QComboBox {
+  min-height: 22px;
+  padding: 1px 6px;
+  font-size: 12px;
+}
+QFrame#mapControls QToolButton:enabled:pressed { background: @pressed@; }
+QFrame#layersCard,
+QFrame#filesCard,
+QFrame#studioFilesPanel {
+  background: @panelFace@;
+  border: 1px solid @panelEdge@;
+  border-bottom: 1px solid @panelEdgeStrong@;
+  border-right: 1px solid @panelEdge@;
+  border-radius: @panelRadius@px;
+}
+QFrame#layersInner,
+QFrame#filesInner {
+  background: @innerFace@;
+  border: 1px solid @panelEdge@;
+  border-radius: @innerRadius@px;
+}
+
+/* ---- Side panel buttons (레이어·파일함) ---- */
+QFrame#layersCard QToolButton {
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid @panelEdge@;
+  border-bottom: 2px solid @panelEdgeStrong@;
+  background: @panelFace@;
+  border-radius: 6px;
+  color: @inkMuted@;
+}
+QFrame#filesCard QToolButton,
+QFrame#studioFilesPanel QToolButton {
+  padding: 4px 6px;
+  border: 1px solid @border@;
+  border-bottom: 2px solid @borderStrong@;
+  background: @surface@;
+  border-radius: 6px;
+  color: @inkMuted@;
+}
+QFrame#layersCard QToolButton:enabled:hover,
+QFrame#filesCard QToolButton:enabled:hover,
+QFrame#studioFilesPanel QToolButton:enabled:hover {
+  background: @hover@;
+  border-color: @borderStrong@;
+  border-bottom: 2px solid @borderStrong@;
+  color: @ink@;
+}
+QFrame#layersCard QToolButton:enabled:pressed,
+QFrame#filesCard QToolButton:enabled:pressed,
+QFrame#studioFilesPanel QToolButton:enabled:pressed {
+  background: @pressed@;
+  border-bottom: 1px solid @borderStrong@;
+}
+
+QDockWidget { border: 1px solid @border@; color: @ink@; titlebar-close-icon: none; }
+QDockWidget::title {
+  background: @desk@;
+  color: @ink@;
+  padding: 8px;
+  border-bottom: 1px solid @border@;
+}
+QSplitter::handle {
+  background: @border@;
+  width: 1px;
+  height: 1px;
+}
+/* 왼쪽 패널 ↔ 지도 경계는 손으로 끌어야 한다. 1px 손잡이는 잡히지 않는다. */
+QSplitter#mainSplit::handle:horizontal {
+  background: @mainHandleFace@;
+  width: @mainHandleCore@px;
+  border-left: @mainHandleBorder@;
+  border-right: @mainHandleBorder@;
+  background-clip: content;
+}
+QSplitter#mainSplit::handle:horizontal:hover { background: @borderStrong@; }
+
+QLabel { color: @ink@; background: transparent; }
+QLabel#cardCaption { color: @inkMuted@; font-weight: 700; font-size: 12px; padding: 2px 2px 0 2px; }
+QLabel#dialogHint { color: @inkMuted@; font-size: 12px; }
+/* A calculation result reads as a small card, green when the plan meets its target. */
+QLabel#trenchSummary {
+  color: @ink@;
+  background: @desk@;
+  border: 1px solid @border@;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+QLabel#trenchSummary[tone="ok"] { color: @ok@; background: @successSurface@; font-weight: 700; }
+QLabel#trenchSummary[tone="warn"] { color: @danger@; background: @dangerSurface@; font-weight: 700; }
+QCheckBox, QRadioButton { color: @ink@; spacing: 8px; font-weight: 400; background: transparent; }
+QCheckBox:disabled, QRadioButton:disabled { color: @inkDisabled@; }
+/* Group boxes keep Fusion's frame, which already paints with the token palette. */
+QGroupBox { color: @ink@; }
+QGroupBox::title { color: @inkMuted@; }
+/* Check boxes are drawn by KaTheme::ChromeStyle, which paints the tick; a QSS
+   indicator fill has no tick, and image files are not allowed here. */
+/* Only the empty state is styled here, so an unchecked box stays visible on
+   white rows; a checked box keeps the style's tick. */
+QTreeView::indicator:unchecked, QgsLayerTreeView::indicator:unchecked {
+  border: 1.2px solid @inkDisabled@;
+  border-radius: 3px;
+  background: @surface@;
+}
+QTreeView[kaLayerInformation="true"]::indicator {
+  width: 14px;
+  height: 14px;
+  margin: 1px;
+}
+
+QMenu {
+  background: @surface@;
+  color: @ink@;
+  border: 1px solid @border@;
+  padding: @menuPad@px;
+  font-family: "Malgun Gothic", "Segoe UI";
+  font-size: @uiFontSize@px;
+}
+QMenu::item { color: @ink@; padding: @menuItemPad@; min-height: @menuItemMin@px; border-radius: 6px; }
+QMenu::item:selected { background: @menuHover@; color: @ink@; }
+QMenu::item:disabled { color: @inkDisabled@; }
+
+QStatusBar {
+  background: @chrome@;
+  color: @inkMuted@;
+  font-weight: 400;
+  border-top: 1px solid @border@;
+}
+QStatusBar QLabel { color: @inkMuted@; }
+
+/* ---- Status bar instrument panel ---- */
+QStatusBar#kaStatusBar {
+  background: @chrome@;
+  color: @inkMuted@;
+  min-height: @statusHeight@px;
+  padding: 0 6px;
+}
+QStatusBar::item { border: none; }
+QFrame#statusSep { background: @border@; border: none; margin: 7px 3px; }
+QLabel#xyReadout {
+  color: @ink@;
+  font-family: "Consolas", "D2Coding", "Malgun Gothic";
+  font-size: 12px;
+  padding: 0 8px;
+}
+QLabel#scaleLabel { color: @inkMuted@; padding-left: 4px; }
+QStatusBar#kaStatusBar QComboBox#scaleCombo {
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+/* Status pills share one shape. Colour appears only when it means something:
+   the work CRS is a button, the upload CRS is a fact, and the render switch
+   speaks up only while drawing is paused. */
+QToolButton#crsButton, QLabel#uploadCrsChip, QToolButton#renderToggle {
+  background: @surface@;
+  border: 1px solid @border@;
+  border-radius: 11px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+QToolButton#crsButton { color: @accentDeep@; font-weight: 700; }
+QToolButton#crsButton:enabled:hover { background: @hover@; border-color: @accent@; }
+QLabel#uploadCrsChip { color: @inkMuted@; }
+/* 「→ 제출 5179」 (보완 M7): in 새 모양 quiet mono words that open 검수·제출, underlined under the mouse (code). */
+QLabel#uploadCrsChip[kaPlate="true"] { background: transparent; border: 1px solid transparent; border-radius: 0; padding: 3px 4px;
+  font-family: @monoFont@; }
+QToolButton#renderToggle:enabled:checked {
+  background: transparent;
+  color: @inkMuted@;
+  border-color: transparent;
+}
+QToolButton#renderToggle:enabled:!checked {
+  color: @danger@;
+  background: @dangerSurface@;
+  border-color: @danger@;
+  font-weight: 700;
+}
+QToolButton#renderToggle:enabled:hover { background: @hover@; color: @accentDeep@; border-color: @border@; }
+
+QMenuBar { height: 0px; max-height: 0px; border: none; }
+
+QToolTip {
+  color: @tipInk@;
+  background: @tipFace@;
+  border: 1px solid @tipEdge@;
+  border-radius: @tipRadius@px;
+  padding: @tipPad@;
+  font-family: "Malgun Gothic", "Segoe UI";
+  font-size: @tipSize@px;
+}
+
+/* A flat scroll bar: the Fusion track width (14 px), an 8 px thumb and no arrow
+   buttons. Clicking the track still pages, and the wheel still scrolls. */
+QScrollBar:vertical { background: @desk@; border: none; width: 14px; margin: 0; }
+QScrollBar:horizontal { background: @desk@; border: none; height: 14px; margin: 0; }
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+  background: @borderStrong@;
+  border: none;
+  border-radius: 4px;
+  margin: 3px;
+}
+QScrollBar::handle:vertical { min-height: 24px; }
+QScrollBar::handle:horizontal { min-width: 24px; }
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover { background: @inkMuted@; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0px; height: 0px; border: none; background: none; }
+QScrollBar::add-page, QScrollBar::sub-page { background: none; }
+
+
+/* Local layout chrome belongs here, never on QgsLayoutView or layout items. */
+QWidget#layoutBottomTools {
+  background: @surface@;
+  color: @ink@;
+  border: 1px solid @border@;
+  border-top-color: @edgeLight@;
+  border-radius: 10px;
+}
+
+/* Keep ID-scoped buttons readable when disabled. These explicit selectors
+   outrank the normal scoped faces without changing their size or spacing. */
+QPushButton:disabled, QPushButton:default:disabled,
+QPushButton#btnPrimary:disabled, QPushButton#btnAdjustDone:disabled,
+QPushButton.primary:disabled, QPushButton#startNewBtn:disabled,
+QPushButton#startOpenBtn:disabled, QPushButton#scaleApply:disabled,
+QToolButton:disabled, QToolButton#btnPrimary:disabled,
+QToolButton.sampleTile:disabled, QToolButton#scaleChip:disabled,
+QToolButton#layerCheckAllBtn:disabled, QToolButton#layoutLayerCheckAllBtn:disabled, QToolButton#crsButton:disabled,
+QToolButton#renderToggle:disabled,
+QWidget#regionLocator QToolButton#regionChip:disabled,
+QToolBar#mainToolbar QToolButton#regionChip:disabled,
+QFrame#layersCard QToolButton:disabled,
+QFrame#filesCard QToolButton:disabled,
+QFrame#studioFilesPanel QToolButton:disabled {
+  background: @disabledSurface@;
+  color: @inkDisabled@;
+  border-color: @border@;
+}
+/* Ribbon and toolbar commands that cannot run yet keep a plain face: a grey
+   slab read as a pressed button. The grey icon and label carry the state. */
+QWidget#beginnerRibbon QToolButton:disabled,
+QToolBar#mainToolbar QToolButton:disabled,
+QToolBar#studioToolbar QToolButton:disabled,
+QToolBar#subToolbar QToolButton:disabled,
+QToolBar#studioToolRail QToolButton:disabled,
+QWidget#layoutBottomTools QToolButton:disabled {
+  background: transparent;
+  color: @inkDisabled@;
+  border-color: transparent;
+}
+
+/* PDF is a sample tile too: its primary ID must not erase the shared face. */
+QToolButton.sampleTile#btnPrimary:enabled {
+  background: @surface@;
+  color: @accentDeep@;
+  border: 1px solid @border@;
+  border-radius: 8px;
+}
+QToolButton.sampleTile#btnPrimary:enabled:hover { background: @hover@; }
+QToolButton.sampleTile#btnPrimary:enabled:pressed { background: @pressed@; }
+QToolButton.sampleTile#btnPrimary:disabled {
+  background: @disabledSurface@;
+  color: @inkDisabled@;
+  border: 1px solid @border@;
+}
+
+/* Pressed takes precedence over checked/hover, including scoped button faces. */
+QToolButton#scaleChip:enabled:hover {
+  background: @hover@;
+}
+QToolButton#scaleChip:enabled:checked:hover {
+  background: @selected@;
+}
+QPushButton:enabled:checked:pressed,
+QToolButton:enabled:checked:pressed,
+QToolButton#btnPrimary:enabled:checked:pressed,
+QToolButton.sampleTile:enabled:pressed,
+QToolButton.sampleTile:enabled:checked:pressed,
+QToolButton#scaleChip:enabled:pressed,
+QToolButton#scaleChip:enabled:checked:pressed,
+QToolButton#layerCheckAllBtn:enabled:pressed,
+QToolButton#layoutLayerCheckAllBtn:enabled:pressed,
+QToolButton#crsButton:enabled:pressed,
+QToolButton#renderToggle:enabled:pressed,
+QToolButton#renderToggle:enabled:checked:pressed,
+QWidget#beginnerRibbon QToolButton:enabled:checked:pressed,
+QToolBar#mainToolbar QToolButton:enabled:checked:pressed,
+QToolBar#subToolbar QToolButton:enabled:checked:pressed,
+QWidget#regionLocator QToolButton#regionChip:enabled:pressed,
+QWidget#regionLocator QToolButton#regionChip:enabled:checked:pressed,
+QToolBar#mainToolbar QToolButton#regionChip:enabled:pressed,
+QToolBar#mainToolbar QToolButton#regionChip:enabled:checked:pressed,
+QFrame#layersCard QToolButton:enabled:checked:pressed,
+QFrame#filesCard QToolButton:enabled:checked:pressed,
+QFrame#studioFilesPanel QToolButton:enabled:checked:pressed {
+  background: @pressed@;
+  color: @ink@;
+}
+QPushButton:default:enabled:checked:pressed,
+QPushButton#btnAdjustDone:enabled:checked:pressed,
+QPushButton.primary:enabled:checked:pressed,
+QPushButton#btnPrimary:enabled:checked:pressed {
+  background: @primaryPressed@;
+  color: @primaryText@;
+}
+
+/* ---- 파일함 「상위」: an accent-tinted chip. Font size stays per-widget (fitShortcutFonts). ---- */
+QFrame#filesCard QToolButton#btnBrowseUp {
+  background: @selected@;
+  color: @accentDeep@;
+  border: 1px solid @selected@;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-weight: 700;
+}
+QFrame#filesCard QToolButton#btnBrowseUp:enabled:hover { background: @pressed@; border-color: @accent@; }
+QFrame#filesCard QToolButton#btnBrowseUp:enabled:pressed { background: @pressed@; }
+QFrame#filesCard QToolButton#btnBrowseUp:disabled {
+  background: @disabledSurface@;
+  color: @inkDisabled@;
+  border-color: @border@;
+}
+
+/* ---- 파일함 바로가기 (보완 M8): in 새 모양 quiet 24 px words; 「상위」 alone is oat. ---- */
+QFrame#filesCard QToolButton[kaPlate="true"], QFrame#studioFilesPanel QToolButton[kaPlate="true"] {
+  background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 0 8px;
+  min-height: 22px; max-height: 22px; font-weight: 400; color: @ink@; }
+QFrame#filesCard QToolButton[kaPlate="true"]:enabled:hover, QFrame#studioFilesPanel QToolButton[kaPlate="true"]:enabled:hover {
+  background: @hover@; border: 1px solid transparent; }
+QFrame#filesCard QToolButton[kaPlate="true"]:enabled:pressed, QFrame#studioFilesPanel QToolButton[kaPlate="true"]:enabled:pressed {
+  background: @pressed@; border: 1px solid transparent; }
+QFrame#filesCard QToolButton[kaPlate="true"]:enabled:focus, QFrame#studioFilesPanel QToolButton[kaPlate="true"]:enabled:focus {
+  border: 1px solid @focusRing@; }
+QFrame#filesCard QToolButton#btnBrowseUp[kaPlate="true"], QFrame#studioFilesPanel QToolButton#btnBrowseUp[kaPlate="true"] {
+  background: @sheetOnFace@; border: 1px solid @sheetOnEdge@; color: @sheetOnInk@;
+  padding: 0 8px; min-height: 22px; max-height: 22px; font-weight: 400; border-radius: 8px; }
+/* ---- Download windows (수치지형·주변유적·지적도): KaDownloadUi sets the
+   kaDownloadWindow property and these object names. Flat header in the
+   startup-notice blue; the compact size and 상세 보기 fold are set in C++. ---- */
+QDialog { background: @dialogGround@; }
+QDialog[kaDownloadWindow="true"] { background: @dialogGround@; }
+QDialog[kaDownloadWindow="true"] QFrame#downloadHeader {
+  background: @band@;
+  border: none;
+  border-radius: 12px;
+}
+QFrame#downloadHeader QLabel#downloadTitle {
+  background: transparent;
+  color: @railText@;
+  font-size: 20px;
+  font-weight: 700;
+}
+QFrame#downloadHeader QLabel#downloadSubtitle { background: transparent; color: @railMuted@; }
+QDialog[kaDownloadWindow="true"] QFrame#downloadStatusCard {
+  background: @surface@;
+  border: 1px solid @border@;
+  border-radius: 12px;
+}
+QFrame#downloadStatusCard QLabel { background: transparent; color: @ink@; }
+QDialog[kaDownloadWindow="true"] QPushButton { min-height: 30px; padding: 2px 14px; }
+
+/* ---- Progress: one bar for progress dialogs, downloads and busy states ---- */
+QProgressBar {
+  background: @surface@;
+  color: @ink@;
+  border: 1px solid @border@;
+  border-radius: 6px;
+  min-height: 18px;
+  text-align: center;
+}
+QProgressBar::chunk { background: @progressFill@; border-radius: 5px; }
+QProgressBar:disabled { color: @inkDisabled@; }
+QProgressBar[downloadProgress="true"] { min-height: 22px; }
+QProgressDialog QLabel { color: @ink@; }
+
+/* ---- Keyboard focus: a thin ring in the accent. Sizes never change: a ring
+   only recolours an existing edge, or trades 1 px of padding for 1 px of edge.
+   Check boxes, radio buttons and tabs get the ring from ChromeStyle after
+   keyboard navigation. Last in the file so it wins ties with hover and checked. ---- */
+QPushButton:enabled:focus:!default { border-color: @focusRing@; }
+QPushButton#btnPrimary:enabled:focus:!default, QPushButton.primary:enabled:focus:!default,
+QPushButton#btnAdjustDone:enabled:focus:!default { border-color: @primaryFocus@; }
+/* Home hero buttons: a 2 px ring on the navy band, 1 px taken from the padding. */
+QPushButton#startNewBtn:enabled:focus { border: 2px solid @focusRing@; padding: 0 17px; min-height: 34px; }
+QPushButton#startOpenBtn:enabled:focus { border: 2px solid @railText@; padding: 0 17px; min-height: 34px; }
+QPushButton#startContinueBtn:enabled:focus { border-color: @ink@; }
+QToolButton:enabled:focus,
+QToolButton#btnPrimary:enabled:focus,
+QToolBar#mainToolbar QToolButton#appBarRegion:enabled:focus,
+QWidget#regionLocator QToolButton#regionChip:enabled:focus,
+QToolBar#mainToolbar QToolButton#regionChip:enabled:focus,
+QFrame#layersCard QToolButton:enabled:focus,
+QFrame#filesCard QToolButton:enabled:focus,
+QFrame#filesCard QToolButton#btnBrowseUp:enabled:focus,
+QFrame#studioFilesPanel QToolButton:enabled:focus,
+QFrame#studioOutputBar QToolButton:enabled:focus,
+QFrame#itemInspector QToolButton:enabled:focus,
+QToolButton.sampleTile:enabled:focus,
+QToolButton.sampleTile#btnPrimary:enabled:focus,
+QToolButton#scaleChip:enabled:focus,
+QToolButton#layerCheckAllBtn:enabled:focus,
+QToolButton#layoutLayerCheckAllBtn:enabled:focus,
+QToolButton#crsButton:enabled:focus,
+QToolButton#renderToggle:enabled:focus {
+  border-color: @focusRing@;
+}
+QFrame#studioOutputBar QToolButton#btnPrimary:enabled:focus,
+QFrame#itemInspector QToolButton#btnPrimary:enabled:focus,
+QWidget#studioOutputFoot QToolButton#btnPrimary:enabled:focus { border-color: @ink@; }
+/* Ribbon chips keep their size when focused: the 2 px ring takes the 1 px of padding. */
+QWidget#beginnerRibbon QToolButton:enabled:focus {
+  border: 2px solid @focusRing@;
+  padding: 0px;
+}
+QTableWidget:focus, QTableView:focus { border-color: @focusRing@; }
+
+/* ---- [P1 design-system] chips: one shape (colour is painted by KaChip::paintChip) ---- */
+QLabel[kaChip="true"] {
+  min-height: @chipHeight@px;
+  max-height: @chipHeight@px;
+  padding: 0 8px 0 24px;
+  border-radius: @chipRadius@px;
+  font-size: 12px;
+  font-weight: 700;
+  background: transparent;
+  border: none;
+}
+QLabel[kaChip="true"][kaGlyph="false"] { padding-left: 8px; }
+/* ---- [P1 design-system] font tokens: append-only override (later rule wins; the
+   literal rules above stay as written). @uiFont@ leads with the bundled IBM Plex
+   Sans KR when data/fonts is registered and the option is on, else it is the same
+   Malgun Gothic list; Malgun Gothic always follows Plex. ---- */
+QMainWindow, QDialog, QMessageBox, QInputDialog, QColorDialog, QDialogButtonBox, QWidget#startPage,
+QLabel#recentEmptyHint { font-family: @uiFont@; }
+QPushButton#startNewBtn, QPushButton#startOpenBtn, QDialogButtonBox QPushButton, QMessageBox QLabel,
+QInputDialog QLabel, QTreeView, QgsLayerTreeView, QListWidget, QTableWidget, QTableView, QMenu,
+QToolTip { font-family: @uiFont@; }
+QLabel#xyReadout, QLabel#kaMeasureValue { font-family: @monoFont@; }
+
+/* ---- [P3 home] recent-survey table header, home cards, connection rows (append-only) ---- */
+QTableWidget#recentSurveyList QHeaderView::section { background: @surface@; color: @inkMuted@; font-size: 12px;
+  font-weight: 400; border: none; border-bottom: 1px solid @border@; padding: 6px 12px; }
+QTableWidget#recentSurveyList { border-top: 1px solid @plateRule@; border-bottom: 1px solid @plateRule@; }
+/* 홈 상자 바깥 모서리 (사용자 요청 2026-10-05): an edge all round and round corners in 새 모양 (stock: white, r0). */
+QTableWidget#recentSurveyList { border-left: 1px solid @plateRule@; border-right: 1px solid @plateRule@;
+  border-radius: @homeRadius@px; }
+QTableWidget#recentSurveyList::item:selected { border-left: 2px solid @selectedBar@; }
+QPushButton#startContinueBtn { min-height: 40px; }
+QFrame#startGuideCard2, QFrame#startConnectionCard { background: @surface@; border: 1px solid @border@; border-radius: 10px; }
+QLabel#startStepDone { color: @ok@; }
+QLabel#startStepTodo { color: @inkMuted@; }
+QFrame#startSubmitReady { background: @altRow@; border: 1px solid @border@; border-radius: 8px; padding: 6px 12px; }
+QLabel#startConnName { color: @ink@; font-size: 13px; }
+QLabel#startConnState { font-size: 12px; }
+QLabel#startConnState[ready="true"] { color: @ok@; font-weight: 700; }
+QLabel#startConnState[ready="false"] { color: @inkMuted@; }
+QPushButton#startEnvInternet { min-height: 32px; padding: 0 12px; }
+QFrame#startConnRow { background: @altRow@; border-radius: 8px; }
+QPushButton#startConnectionSetup { min-height: 32px; min-width: 56px; padding: 0 12px; font-weight: 700;
+  border: 1px solid @border@; border-radius: 6px; background: @surface@; }
+QPushButton#startConnectionSetup:enabled:hover { background: @hover@; border-color: @borderStrong@; }
+QPushButton#startConnectionSetup:enabled:focus { border-color: @focusRing@; }
+QLabel#startConnProblem { color: @warn@; background: @warnSurface@; border-radius: 8px; padding: 6px 10px; }
+QLabel#startPrivacyNote { color: @inkMuted@; font-size: 12px; }
+QScrollArea#startRightColumn { border: none; background: transparent; }
+QScrollArea#startRightColumn > QWidget > QWidget#startRightColumnInner { background: transparent; }
+QLabel#startSubmitUnchecked { color: @inkMuted@; font-size: 12px; }
+
+/* ---- [P4 map-panels] layer find field, section bands (painted by KaLayerSectionDelegate),
+   inspector panel, feature card header / measure boxes / note, basemap card (append-only) ---- */
+QLineEdit#layerFilterEdit { min-height: 30px; padding: 0 8px 0 4px; border: 1px solid @border@; border-radius: 6px;
+  background: @surface@; font-size: 12px; }
+QLineEdit#layerFilterEdit:focus { border-color: @focusRing@; }
+QLabel#layerFilterEmpty { color: @inkMuted@; font-size: 12px; padding: 4px 6px; }
+QFrame#inspectorPanel { background: @panelFace@; border: 1px solid @panelEdge@; border-radius: @panelRadius@px; }
+QFrame#inspectorPanel QTabBar#inspectorTabs::tab { min-width: 72px; padding: 6px 0; font-size: 12px; }
+QFrame#inspectorPanel QScrollArea#inspectorAttributeScroll, QWidget#inspectorAttributePage { background: transparent; }
+QFrame#inspectorPanel QScrollArea#inspectorStyleScroll, QScrollArea#inspectorStyleScroll > QWidget, QWidget#inspectorStyle { background: transparent; }
+QLabel#inspectorTitle { font-size: 14px; font-weight: 700; color: @ink@; }
+QLabel#inspectorSentence { color: @inkMuted@; font-size: 12px; padding: @emptyPad@; border: 1px dashed @emptyEdge@; border-radius: 8px; }
+QToolButton#inspectorCollapse { border: none; background: transparent; padding: 4px; }
+QToolButton#inspectorCollapse:enabled:hover { background: @hover@; border-radius: 6px; }
+QToolButton#inspectorCollapse:enabled:focus { border: 1px solid @focusRing@; border-radius: 6px; }
+QLabel#kaFeatureCardName { font-size: 15px; font-weight: 700; color: @ink@; }
+QLabel#kaFeatureCardKind { font-size: 12px; color: @inkMuted@; }
+QFrame#kaMeasureField { background: @altRow@; border: 1px solid @border@; border-radius: 6px; min-height: 32px; }
+QFrame#kaMeasureField QLabel#kaMeasureAuto { color: @inkMuted@; font-size: 12px; }
+QFrame#kaMeasureField QLabel#kaMeasureValue { color: @ink@; font-size: @figureSize@px; }
+QFrame#kaMeasureField { border-top: 1px solid @plateRule@; }
+QPlainTextEdit#kaFeatureCardNote { min-height: 56px; max-height: 72px; }
+QPushButton#kaFeatureCardOpenForm { min-height: 36px; font-weight: 700; }
+QPushButton#kaFeatureCardOpenForm:enabled:focus { border-color: @focusRing@; }
+QFrame#basemapQuickCard { background: @altRow@; border: 1px solid @border@; border-radius: 8px; }
+QFrame#basemapQuickCard QToolButton { min-width: 72px; min-height: 34px; padding: 0 10px; border: 1px solid @border@;
+  border-radius: 6px; background: @surface@; font-size: 12px; }
+QFrame#basemapQuickCard QToolButton:checked { background: @chosenFill@; color: @tabInk@; border-color: @tabMark@; }
+QFrame#basemapQuickCard QToolButton:enabled:focus { border-color: @focusRing@; }
+QLabel#basemapQuickTitle { font-size: 14px; font-weight: 700; color: @ink@; }
+QLabel#basemapQuickNote { color: @inkMuted@; font-size: 12px; }
+
+/* ---- [P5 shell-chrome] survey badge (tab corner), drawing guide band over the map,
+   status-bar snap/unsaved chips (append-only; chip colours come from KaChip::paintChip) ---- */
+QLabel#surveyBadge { margin: 0; }
+QWidget#drawGuideBand { background: transparent; }
+QFrame#drawGuidePill { background: @surface@; border: 1px solid @border@; border-radius: 8px; }
+QLabel#drawGuideGlyph { background: transparent; }
+QLabel#drawGuideTitle { font-size: 13px; font-weight: 700; color: @tabInk@; padding: 0 2px; background: transparent; }
+QLabel#drawGuideMeasure { font-family: @monoFont@; font-size: 12px; color: @ink@; padding: 0 6px 0 4px; background: transparent; }
+QLabel#drawGuideHint { font-size: 12px; color: @inkMuted@; padding-right: 4px; background: transparent; }
+QWidget#drawGuideBand QToolButton { border: 1px solid @border@; border-radius: 18px; background: @surface@; padding: 0; }
+QWidget#drawGuideBand QToolButton:enabled:hover { background: @hover@; border-color: @borderStrong@; }
+QWidget#drawGuideBand QToolButton:enabled:pressed { background: @pressed@; }
+QWidget#drawGuideBand QToolButton:enabled:focus { border-color: @focusRing@; }
+QWidget#drawGuideBand QToolButton:disabled { background: @disabledSurface@; border-color: @border@; }
+/* 되돌리기 · 다시 실행 (보완 M6): in 새 모양 one 8 px cover with a rule between the two glyphs. */
+QFrame#drawGuideUndoPair[kaPlate="true"] { background: @surface@; border: 1px solid @borderStrong@; border-radius: 8px; }
+QFrame#drawGuideDivider { background: @border@; border: none; }
+QWidget#drawGuideBand QFrame#drawGuideUndoPair[kaPlate="true"] QToolButton { border: 1px solid transparent; border-radius: 0; background: transparent; }
+QWidget#drawGuideBand QFrame#drawGuideUndoPair[kaPlate="true"] QToolButton:enabled:hover { background: @hover@; border-color: transparent; }
+QWidget#drawGuideBand QFrame#drawGuideUndoPair[kaPlate="true"] QToolButton:enabled:pressed { background: @pressed@; }
+QWidget#drawGuideBand QFrame#drawGuideUndoPair[kaPlate="true"] QToolButton:enabled:focus { border-color: @focusRing@; }
+QWidget#drawGuideBand QFrame#drawGuideUndoPair[kaPlate="true"] QToolButton:disabled { background: transparent; border-color: transparent; }
+QWidget#drawGuideBand QFrame#drawGuideUndoPair[kaPlate="true"] QToolButton#drawGuideUndo { border-top-left-radius: 7px; border-bottom-left-radius: 7px; }
+QWidget#drawGuideBand QFrame#drawGuideUndoPair[kaPlate="true"] QToolButton#drawGuideRedo { border-top-right-radius: 7px; border-bottom-right-radius: 7px; }
+QStatusBar#kaStatusBar QLabel[kaChip="true"] { margin: 0 4px; }
+/* ---- [새 모양] names and headings (append-only). The stock look resolves these to what the rules above
+   already say (body stack at 700, the Segoe UI wordmark at 600, 15 and 20 px), so nothing moves there;
+   새 모양 leads with Noto Serif KR at 500 and sets names a step larger. ---- */
+QLabel#startHeroName { font-family: @wordmarkFont@; font-weight: @wordmarkWeight@; }
+QLabel#startContinueName { font-family: @titleFont@; font-weight: @titleWeight@; font-size: @bigNameSize@px; }
+QLabel#startRecentTitle { font-family: @sectionFont@; font-weight: @sectionWeight@; font-size: 15px; }
+QLabel#kaFeatureCardName { font-family: @titleFont@; font-weight: @titleWeight@; font-size: @nameSize@px; }
+/* 「조용한 도판」: the drawing's scale presets read as mono figures (the UI face in stock). */
+QToolButton#scaleChip { font-family: @figureFont@; }
+/* 범례·표제란이 용지에 있으면 귀리색에 회색 고리. 고른 방위 칸은 귀리색에 먹 테두리.
+   예전 모양은 견본 타일과 같은 강조색 테두리다. */
+QToolButton#legendTile:enabled:checked,
+QToolButton#btnTitleBlock:enabled:checked {
+  background: @sheetOnFace@;
+  color: @sheetOnInk@;
+  border: 1px solid @sheetOnEdge@;
+}
+QToolButton#northSwatch:enabled:checked {
+  background: @northOnFace@;
+  color: @northOnInk@;
+  border: 1px solid @northOnEdge@;
+}
+/* 「조용한 도판」 기준점 on the card: the geodetic line muted, X / Y / Z mono on dotted leaders. */
+QLabel#kaControlMeta { color: @inkMuted@; font-size: 12px; }
+QLabel#kaControlX, QLabel#kaControlY, QLabel#kaControlZ { font-family: @monoFont@; font-size: 13px; color: @ink@; }
+QFrame#kaLeader { border: none; border-bottom: 1px dotted @borderStrong@; background: transparent; }
+/* 용지 설정 (보완 L5): a size that follows from the paper is read, not typed: mono ink, unit grey. */
+QLabel#paperSpecValue { font-family: @monoFont@; font-size: 13px; color: @ink@; }
+QLabel#paperSpecUnit { color: @inkMuted@; font-size: 12px; }
+/* 「조용한 도판」 홈 (2차 보드 판 2): 「이어서 작업」 is a title block in an ink frame; 「새 조사」 is quiet
+   while there is a survey to continue (one main button per view). These objects exist only in 새 모양. */
+QFrame#startTitleBlock { background: @surface@; border: 1px solid @ink@; border-radius: @homeRadius@px; }
+QFrame#startTitleRule { background: @border@; border: none; }
+QLabel#startTitleTag, QLabel#startCellCaption { color: @inkMuted@; font-size: 11px; }
+QLabel#startTitleState { color: @inkMuted@; font-size: 12px; }
+QLabel#startTitleState[kaTone="needsYou"] { color: @ink@; }
+QLabel#startTitleName { color: @ink@; font-family: @titleFont@; font-weight: @titleWeight@; font-size: 40px; }
+QLabel#startCellFolder, QLabel#startCellWhen, QLabel#startCellCrs, QLabel#startCellAreas, QLabel#startCellFeatures,
+QLabel#startCellCheck { color: @ink@; font-size: 14px; }
+QLabel#startCellCheck[kaTone="block"] { color: @danger@; }
+QPushButton#startNewBtn[kaQuiet="true"] { background: transparent; color: @ink@; border: 1px solid @borderStrong@; font-weight: 400; }
+QPushButton#startNewBtn[kaQuiet="true"]:enabled:hover { background: @hover@; border-color: @borderStrong@; }
+QLabel#startRecentNote { color: @inkMuted@; font-size: 12px; }
+QFrame#startStepLine { background: @borderStrong@; border: none; }
+/* 「조용한 도판」 연결 상태: plain words, no box per item; 설정됨 muted, ● 설정 필요 in ink. */
+QFrame#startSubmitReady[kaPlate="true"] { background: transparent; border: none; border-radius: 0; padding: 0; }
+QFrame#startConnRow[kaPlate="true"] { background: transparent; border-radius: 0; }
+QLabel#startConnState[kaPlate="true"] { color: @inkMuted@; font-weight: 400; }
+QLabel#startConnState[kaPlate="true"][ready="false"] { color: @ink@; }
+QFrame#startConnRow[kaPlate="true"] QPushButton#startConnectionSetup { min-height: 22px; max-height: 22px; font-weight: 400; padding: 0 10px;
+  border: 1px solid transparent; background: transparent; }  /* the edge stays so the focus ring (border-color) still shows */
+QFrame#startConnRow[kaPlate="true"] QPushButton#startConnectionSetup:enabled:hover { background: @hover@; border-color: transparent; }
+QFrame#startConnRow[kaPlate="true"] QPushButton#startConnectionSetup:enabled:focus { border-color: @focusRing@; }
+QFrame#startConnRule { background: @border@; border: none; }
+QPushButton#startEnvInternet[kaPlate="true"] { min-height: 22px; max-height: 22px; padding: 0 8px; font-size: 12px; font-weight: 400; }
+/* 홈 판 (2차 보드 판 2): the cards have no box in 새 모양 (stock: white, 1 px edge, 10 px corners). */
+QFrame#startRecentCard, QFrame#startGuideCard, QFrame#startGuideCard2, QFrame#startConnectionCard {
+  background: @cardFace@; border: 1px solid @cardEdge@; border-radius: @mapRadius@px; }
+QFrame#startConnectionCard { border-top: 1px solid @border@; }
+QLabel#startHeroName { font-size: @heroNameSize@px; }
+/* 레이어 머리 (2차 보드 판 1): 「파일함」「전체 끄기」 are words in 새 모양 (kaPlate); the open 파일함 is oat with a
+   warm grey edge. The focus ring of the panel buttons still shows. */
+QFrame#layersCard QToolButton[kaPlate="true"] {
+  background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 0 8px; min-height: 22px;
+  color: @ink@; font-size: 12px; }
+QFrame#layersCard QToolButton[kaPlate="true"]:checked { background: @sheetOnFace@; border-color: @sheetOnEdge@; color: @sheetOnInk@; }
+QFrame#layersCard QToolButton[kaPlate="true"]:enabled:hover { background: @hover@; border: 1px solid transparent; }
+QFrame#layersCard QToolButton[kaPlate="true"]:enabled:checked:hover { background: @sheetOnFace@; border: 1px solid @sheetOnEdge@; }
+QFrame#layersCard QToolButton[kaPlate="true"]:enabled:focus { border-color: @focusRing@; }
+QFrame#layersCard QToolButton[kaPlate="true"]:enabled:pressed { background: @pressed@; border: 1px solid transparent; }
+QFrame#layersCard QToolButton[kaPlate="true"]:disabled { background: transparent; border-color: transparent; color: @inkDisabled@; }
+/* 배경 지도 (2차 보드 판 1): no box in 새 모양 — a hairline above, a small muted caption with a rule, three plain
+   13 px buttons 4 px apart; the chosen one is oat with a warm grey edge. */
+QFrame#basemapQuickCard[kaPlate="true"] { background: transparent; border: none; border-top: 1px solid @border@; border-radius: 0; }
+QLabel#basemapQuickTitle[kaPlate="true"] { font-size: 11px; font-weight: 400; color: @inkMuted@; }
+QFrame#basemapQuickRule { background: @border@; border: none; }
+QFrame#basemapQuickCard[kaPlate="true"] QToolButton { min-width: 0; min-height: 30px; padding: 0 6px; border: 1px solid @borderStrong@;
+  border-radius: 8px; background: @surface@; color: @ink@; font-size: 13px; }
+QFrame#basemapQuickCard[kaPlate="true"] QToolButton:checked { background: @sheetOnFace@; color: @sheetOnInk@; border-color: @sheetOnEdge@; }
+QFrame#basemapQuickCard[kaPlate="true"] QToolButton:enabled:focus { border-color: @focusRing@; }
+/* 검수·제출 (2차 보드 판 3, 새 모양 only): the result as a serif headline, the rules' name under it, and the
+   오류 · 주의 · 통과 counts at the top right between hairlines; the error count reads in the blocking red. */
+QLabel#submitHeadline { font-family: @titleFont@; font-weight: @titleWeight@; font-size: @bigNameSize@px; color: @ink@; }
+QLabel#submitSubline { color: @inkMuted@; font-size: 12px; }
+QFrame#submitCounts { border: none; border-top: 1px solid @plateRule@; border-bottom: 1px solid @border@; }
+QFrame#submitCountRule { background: @border@; border: none; }
+QLabel#submitCountCaption { color: @inkMuted@; font-size: 11px; }
+QLabel#submitCountError, QLabel#submitCountWarn, QLabel#submitCountPass { color: @ink@; font-family: @monoFont@; font-size: 20px; }
+QLabel#submitCountError { color: @danger@; }
+QLabel#submitCountError[zero="true"] { color: @ink@; }
+QLabel#submitCountUnit { color: @inkMuted@; font-size: 12px; }
+QLabel#submitPackageLine { color: @inkMuted@; font-family: @monoFont@; font-size: 11px; }
+/* 검수 항목 (보완 D2): a three-rule table — an ink rule above and below, a hairline under the heads, no box and no side lines. */
+QTreeWidget#submitReviewTree[kaPlate="true"] { border: none; border-top: 1px solid @ink@; border-bottom: 1px solid @ink@; border-radius: 0; }
+QTreeWidget#submitReviewTree[kaPlate="true"] QHeaderView::section { background: transparent; border: none;
+  border-bottom: 1px solid @border@; color: @inkMuted@; font-size: 11px; font-weight: 400; padding: 4px 8px; min-height: 20px; }
+/* The row buttons are 24 px; 「위치 보기」 is a word button beside the fix button. */
+QTreeWidget#submitReviewTree[kaPlate="true"] QPushButton { min-height: 22px; max-height: 24px; padding: 0 8px; font-size: 12px; }
+QTreeWidget#submitReviewTree[kaPlate="true"] QPushButton:flat { border: 1px solid transparent; background: transparent; }
+QTreeWidget#submitReviewTree[kaPlate="true"] QPushButton:flat:hover { text-decoration: underline; }
+/* 기록 카드 (2차 보드 판 3 B1, 새 모양): no box on the panel, the record line under the name muted, one 「자동 계산」
+   head over an ink rule, and the 면적·둘레 figures on hairlines instead of boxes. */
+QFrame#kaFeatureCard[kaPlate="true"] { border: none; background: transparent; }
+QLabel#kaFeatureCardSub { color: @inkMuted@; font-size: 12px; }
+QFrame#kaMeasureHead { border: none; border-bottom: 1px solid @plateRule@; }
+QFrame#kaMeasureHead QLabel#kaMeasureAuto { color: @inkMuted@; font-size: 11px; }
+QFrame#kaMeasureField[kaPlate="true"] { background: transparent; border: none; border-bottom: 1px solid @border@; border-radius: 0; }
+/* 알림 창 (2차 보드 판 5, 설계 2.4 Dialog, 새 모양): the question or outcome in the 20 px serif Heading, the one
+   sentence under it 12 px muted; no icon disc (set in code). */
+QMessageBox[kaPlate="true"] QLabel#qt_msgbox_label { font-family: @titleFont@; font-weight: @titleWeight@; font-size: 20px; color: @ink@; min-width: 397px; }
+QMessageBox[kaPlate="true"] QLabel#qt_msgbox_informativelabel { font-size: 12px; color: @inkMuted@; }
+/* The question's 397 px plus the box's 43 px of margins make the S 440 window. 「저장 안 함」 throws the unsaved
+   work away: danger text (2차 보드 판 5 조사 닫기). */
+QMessageBox[kaPlate="true"] QPushButton#closePromptDiscard { color: @danger@; }
+/* 새 조사 (2차 보드 판 5): the caption over the ruler, the origins set left with 「추천」 in clay inside, and the
+   three sentences at 12 px: the zone in ink, the boundary rule and the later change muted. */
+QDialog[kaPlate="true"] QLabel#newSurveyCrsCaption { font-size: 12px; color: @inkMuted@; }
+QDialog[kaPlate="true"] QLabel#newSurveyCrsBoundary { font-size: 11px; color: @inkMuted@; }
+QPushButton#newSurveyCrs5186[kaPlate="true"], QPushButton#newSurveyCrs5187[kaPlate="true"] { text-align: left; padding: 0 14px; }
+QLabel#newSurveyCrsRecommend { font-size: 12px; color: @accentDeep@; background: transparent; }
+QDialog[kaPlate="true"] QLabel#newSurveyCrsSuggestion { font-size: 12px; color: @ink@; }
+QDialog[kaPlate="true"] QLabel#newSurveyCrsHint, QDialog[kaPlate="true"] QLabel#newSurveyTip { font-size: 12px; color: @inkMuted@; }
+/* 도면 인쇄 (2차 보드 판 5): 12 px muted words, the dotted ledger between an ink rule and a hairline, the preview
+   heading and hint at 11 px, 「A4 | A3」 joined, the small 24 px words 「프린터 속성…」 「모두 다시 넣기」. */
+QDialog#printDialog[kaPlate="true"] QLabel[kaFormWord="true"] { font-size: 12px; color: @inkMuted@; }
+QFrame#printLedger { border: none; border-top: 1px solid @ink@; border-bottom: 1px solid @border@; }
+QFrame#printLedgerLeader { border: none; border-bottom: 1px dotted @borderStrong@; }
+QFrame#printLedger QLabel { font-size: 12px; color: @ink@; }
+QLabel#printPreviewHead, QLabel#printPickHint { font-size: 11px; color: @inkMuted@; }
+QLabel#printSkipNote { font-size: 12px; color: @ink@; }
+QPushButton#printProperties[kaPlate="true"], QPushButton#printPickAll[kaPlate="true"] { min-height: 22px; padding: 0 8px; font-size: 12px; }
+QPushButton#printSheetA4 { min-height: 30px; padding: 0 12px; border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; }
+QPushButton#printSheetA3 { min-height: 30px; padding: 0 12px; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; }
+/* the shared edge belongs to the chosen word, so it keeps a whole ink outline */
+QPushButton#printSheetA4:checked { border-right: 1px solid @tabMark@; }
+QPushButton#printSheetA3:checked { border-left: 1px solid @tabMark@; }
+/* API 키 입력 (2차 보드 판 5): the key names and the sentences under the boxes, 12 px muted. */
+QDialog#apiKeyDialog[kaPlate="true"] QLabel { font-size: 12px; color: @inkMuted@; }
+/* 격자 원점 (2차 보드 판 5): the note and the X·Y words 12 px muted, 「지도 가운데」「좌표계 원점 (0, 0)」 as small words. */
+QDialog#gridOriginDialog[kaPlate="true"] QLabel { font-size: 12px; color: @inkMuted@; }
+QPushButton#gridOriginCentre[kaPlate="true"], QPushButton#gridOriginZero[kaPlate="true"] { min-height: 22px; padding: 0 8px; font-size: 12px; }
+/* 이름·번호 (2차 보드 판 5): the two plain lines, the 96 px words and 「다음 번호를 미리 넣었습니다」, 12 px muted. */
+QDialog#kaFeatureForm[kaPlate="true"] QLabel#kaFeatureFormTip, QDialog#kaFeatureForm[kaPlate="true"] QLabel[kaFormWord="true"],
+QLabel#kaFeatureFormNumberFilled { font-size: 12px; color: @inkMuted@; }
+/* 자료 준비 상태 (2차 보드 판 5): the counts as the 28 px serif Title, the note 12 px muted, a table ruled in ink above
+   and below with a hairline under its 11 px head, 32 px rows and a hairline over the buttons. */
+QDialog#referenceStatusDialog[kaPlate="true"] QLabel#referenceStatusSummary { font-family: @titleFont@; font-weight: @titleWeight@; font-size: 28px; color: @ink@; }
+QDialog#referenceStatusDialog[kaPlate="true"] QLabel#referenceStatusHint { font-size: 12px; color: @inkMuted@; }
+QDialog#referenceStatusDialog[kaPlate="true"] QTreeWidget#referenceStatusTable { border: none; border-top: 1px solid @ink@; border-bottom: 1px solid @ink@; background: transparent; font-size: 12px; }
+QDialog#referenceStatusDialog[kaPlate="true"] QTreeWidget#referenceStatusTable::item { height: 32px; border: none; }
+QDialog#referenceStatusDialog[kaPlate="true"] QTreeWidget#referenceStatusTable QHeaderView::section { background: transparent; border: none; border-bottom: 1px solid @border@; font-size: 11px; color: @inkMuted@; min-height: 28px; padding: 0 4px; }
+QFrame#referenceStatusFoot { border: none; border-top: 1px solid @border@; }
+/* 더보기 group captions (2차 보드 판 5), shown only in 새 모양: 11 px muted rows 24 px high. */
+QLabel#kaMenuCaption { font-size: 11px; color: @inkMuted@; background: transparent; padding: 0 12px; min-height: 24px; }
+/* 조사구역 그리기 설정 (2차 보드 판 5): 96 px words 12 px muted, the chosen colour's name in ink, the four widths
+   joined (square inner edges; the chosen one keeps its whole ink outline). */
+QDialog#surveyAreaDialog[kaPlate="true"] QLabel[kaFormWord="true"] { font-size: 12px; color: @inkMuted@; }
+QLabel#surveyAreaColorName { font-size: 12px; font-weight: 400; color: @ink@; }
+QPushButton#surveyAreaWidth { min-height: 30px; padding: 0 8px; }
+QPushButton#surveyAreaWidth[kaJoin="first"] { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; }
+QPushButton#surveyAreaWidth[kaJoin="middle"] { border-radius: 0; border-right: none; }
+QPushButton#surveyAreaWidth[kaJoin="last"] { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+QPushButton#surveyAreaWidth:checked { border-right: 1px solid @tabMark@; }
+QPushButton#surveyAreaWidth[kaAfterChecked="true"] { border-left: none; }
+/* A plain form window in the board's frame (KaFormPlate, 2차 보드 판 5 「VWorld 지적도 계정」): words and notes 12 px muted. */
+QDialog[kaPlate="true"] QLabel[kaFormWord="true"], QDialog[kaPlate="true"] QLabel[kaFormNote="true"] { font-size: 12px; color: @inkMuted@; }
+/* GPS 기준점 (2차 보드 판 5): the axis note 12 px muted, 「위치」「측량 기준」「수신」 section words and the small captions
+   11 px muted, each section word followed by a hairline. */
+QDialog#controlPointDialog[kaPlate="true"] QLabel#controlPointHint { font-size: 12px; color: @inkMuted@; }
+QLabel#controlPointSection, QLabel#controlPointCaption { font-size: 11px; color: @inkMuted@; }
+QFrame#controlPointRule { background: @border@; border: none; }
+/* 「도형 속성」 (조사카드, 2차 보드 판 5): section words with a hairline, 표고 boxes in mono with 「m」 inside. */
+QLabel#recordSection, QLabel#recordUnit { font-size: 11px; color: @inkMuted@; background: transparent; }
+QLabel#recordUnit { font-size: 12px; }
+QFrame#recordRule { background: @border@; border: none; }
+QScrollArea#recordScroll, QWidget#recordSheet { background: transparent; border: none; }
+QDialog[kaPlate="true"] QLineEdit[kaRecordMetres="true"] { font-family: @monoFont@; }
+/* 주변유적 받을 시·군 선택 (2차 보드 판 5): 96 px words, the recent-data time, the nearby hint and the pledge 12 px muted,
+   the nearby section word 11 px muted over a hairline, no frame round the nearby 시·군. */
+QDialog#heritageRegionDialog[kaPlate="true"] QLabel[kaFormWord="true"], QLabel#heritageReuseWhen, QLabel#heritageNearbyHint,
+QDialog#heritageRegionDialog[kaPlate="true"] QLabel#heritagePledgeNote { font-size: 12px; color: @inkMuted@; }
+QLabel#heritageNearbyHead { font-size: 11px; color: @inkMuted@; }
+QFrame#heritageNearbyRule { background: @border@; border: none; }
+QDialog#heritageRegionDialog[kaPlate="true"] QGroupBox#heritageNearbyGroup { border: none; margin: 0; padding: 0; }
+/* PDF 내보내기 · 제출 꾸러미 만드는 중 (2차 보드 판 5): a 4 px ink bar on a light track, square ends, no figure. */
+QProgressDialog[kaPlate="true"] QProgressBar { min-height: 4px; max-height: 4px; border: none; border-radius: 0; background: @border@; }
+QProgressDialog[kaPlate="true"] QProgressBar::chunk { background: @ink@; border-radius: 0; }
+/* 도면 (2차 보드 판 4): 「PDF 내보내기 | 인쇄」 at the foot of the right panel under a hairline. */
+QWidget#studioOutputFoot { border: none; border-top: 1px solid @border@; }
+/* 새 모양 view tab ✕ (2차 보드 판 4): a bare 16 px mark, without the tool-button padding and edge. */
+QTabBar QToolButton#viewTabClose { padding: 0; border: none; border-radius: 3px; background: transparent; min-width: 0; min-height: 0; }
+QTabBar QToolButton#viewTabClose:enabled:hover { background: @hover@; }
+QTabBar QToolButton#viewTabClose:enabled:pressed { background: @pressed@; }
+/* 도면 아래 도구 줄 (2차 보드 판 4): one white strip, joined 96 × 52 cells with a hairline between them, 11 px words. */
+QWidget#layoutBottomTools[kaPlate="true"] { background: @surface@; border: 1px solid @borderStrong@; border-radius: 8px; }
+QWidget#layoutBottomTools[kaPlate="true"] QToolButton { border: none; border-radius: 0; background: transparent; padding: 6px 0 0 0; font-size: 11px; color: @ink@; }
+QWidget#layoutBottomTools[kaPlate="true"] QToolButton[kaCell="rest"] { border-left: 1px solid @border@; }
+QWidget#layoutBottomTools[kaPlate="true"] QToolButton:enabled:hover { background: @hover@; }
+QWidget#layoutBottomTools[kaPlate="true"] QToolButton::menu-indicator { width: 0; }
+/* 도면 축척 단추 (2차 보드 판 4): one joined table, seven a row, shared inner edges, regular figures; the chosen cell
+   is oat with an ink edge. */
+QToolButton#scaleChip[kaRow] { border-radius: 0; font-weight: 400; }
+QToolButton#scaleChip[kaCol="rest"] { border-left: none; }
+QToolButton#scaleChip[kaRow="rest"] { border-top: none; }
+QToolButton#scaleChip[kaRow]:enabled:checked { color: @ink@; border-color: @tabMark@; }
+/* 시굴격자 속성 (2차 보드 판 5): the sentence beside the direction dial, 12 px muted. */
+QLabel#trenchDialNote { font-size: 12px; color: @inkMuted@; }

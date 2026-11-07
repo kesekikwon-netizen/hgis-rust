@@ -1,0 +1,87 @@
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use strata_types::schema::DomainLayerKey;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FeatureRecord {
+    pub fid: i64,
+    pub wkt_geom: String,
+    pub attributes: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LayerEditBuffer {
+    pub key: Option<DomainLayerKey>,
+    pub visible: bool,
+    pub features: Vec<FeatureRecord>,
+    next_temp_id: i64,
+    undo_stack: Vec<Vec<FeatureRecord>>,
+    redo_stack: Vec<Vec<FeatureRecord>>,
+}
+
+impl LayerEditBuffer {
+    pub fn new(key: DomainLayerKey) -> Self {
+        Self {
+            key: Some(key),
+            visible: true,
+            features: Vec::new(),
+            next_temp_id: -1,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+        }
+    }
+
+    pub fn add_unsaved_feature(
+        &mut self,
+        wkt_geom: String,
+        attributes: BTreeMap<String, String>,
+    ) -> i64 {
+        self.undo_stack.push(self.features.clone());
+        self.redo_stack.clear();
+        let fid = self.next_temp_id;
+        self.next_temp_id -= 1;
+        self.features.push(FeatureRecord {
+            fid,
+            wkt_geom,
+            attributes,
+        });
+        fid
+    }
+
+    pub fn undo(&mut self) -> bool {
+        if let Some(prev) = self.undo_stack.pop() {
+            let current = std::mem::replace(&mut self.features, prev);
+            self.redo_stack.push(current);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn redo(&mut self) -> bool {
+        if let Some(next) = self.redo_stack.pop() {
+            let current = std::mem::replace(&mut self.features, next);
+            self.undo_stack.push(current);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn assign_positive_ids_on_commit(&mut self) {
+        let mut next_pos = self
+            .features
+            .iter()
+            .map(|f| f.fid)
+            .filter(|&id| id > 0)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        for f in &mut self.features {
+            if f.fid < 0 {
+                f.fid = next_pos;
+                next_pos += 1;
+            }
+        }
+    }
+}

@@ -1,0 +1,172 @@
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
+use strata_types::error::{StrataError, StrataResult};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StratumLayer {
+    pub from_m: f64,
+    pub to_m: f64,
+    pub name: String,
+    pub uscs: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BoreholeRecord {
+    pub hole_code: String,
+    pub tm_x: f64,
+    pub tm_y: f64,
+    pub altitude_m: f64,
+    pub fill_depth_m: f64,
+    pub alluvial_from_m: f64,
+    pub alluvial_to_m: f64,
+    pub alluvial_thickness_m: f64,
+    pub weathered_depth_m: f64,
+    pub dominant_uscs: String,
+    pub paleo_hint: String,
+    pub layers: Vec<StratumLayer>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HoleCandidate {
+    pub code: String,
+    pub pt_5186: [f64; 2],
+}
+
+#[derive(Debug, Deserialize)]
+struct OuterWrapper {
+    #[serde(rename = "jsonView")]
+    json_view: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawLayerItem {
+    #[serde(rename = "FROM_DEPTH", default)]
+    from_depth: f64,
+    #[serde(rename = "TO_DEPTH", default)]
+    to_depth: f64,
+    #[serde(rename = "LAYER_NAME", default)]
+    layer_name: String,
+    #[serde(rename = "USCS", default)]
+    uscs: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct GeoInfoBoreholeService;
+
+impl GeoInfoBoreholeService {
+    pub fn parse_sichudan_json(raw_bytes: &[u8]) -> StrataResult<BoreholeRecord> {
+        let text = std::str::from_utf8(raw_bytes)
+            .map_err(|e| StrataError::Network(format!("시추주상도 UTF-8 오류: {e}")))?;
+        let inner_json = if let Ok(wrapper) = serde_json::from_str::<OuterWrapper>(text) {
+            wrapper.json_view
+        } else {
+            text.to_string()
+        };
+        let items: Vec<RawLayerItem> = serde_json::from_str(&inner_json)
+            .map_err(|e| StrataError::Network(format!("시추주상도 JSON 파싱 오류: {e}")))?;
+
+        let mut fill_depth_m = 0.0_f64;
+        let mut alluvial_from_m: Option<f64> = None;
+        let mut alluvial_to_m = 0.0_f64;
+        let mut weathered_depth_m = -1.0_f64;
+        let mut dominant_uscs = String::new();
+        let mut layers = Vec::with_capacity(items.len());
+
+        for item in items {
+            let name = item.layer_name.trim();
+            if name.contains("매립") || name.contains("성토") || name.contains("표토") {
+                fill_depth_m = fill_depth_m.max(item.to_depth);
+            } else if name.contains("충적") || name.contains("퇴적") || name.contains("붕적")
+            {
+                let start = alluvial_from_m.unwrap_or(item.from_depth);
+                alluvial_from_m = Some(start.min(item.from_depth));
+                alluvial_to_m = alluvial_to_m.max(item.to_depth);
+                if dominant_uscs.is_empty() && !item.uscs.trim().is_empty() {
+                    dominant_uscs = item.uscs.trim().to_string();
+                }
+            } else if weathered_depth_m < 0.0
+                && (name.contains("풍화")
+                    || name.contains("연암")
+                    || name.contains("경암")
+                    || name.contains("기반암"))
+            {
+                weathered_depth_m = item.from_depth;
+            }
+            layers.push(StratumLayer {
+                from_m: item.from_depth,
+                to_m: item.to_depth,
+                name: name.to_string(),
+                uscs: item.uscs.trim().to_string(),
+            });
+        }
+        let alluv_from = alluvial_from_m.unwrap_or(fill_depth_m);
+        let alluv_thick = (alluvial_to_m - alluv_from).max(0.0);
+        let paleo_hint = if alluv_thick > 0.0 {
+            format!("충적층 두께 {alluv_thick:.1}m ({dominant_uscs})")
+        } else {
+            String::from("충적층 미확인")
+        };
+
+        Ok(BoreholeRecord {
+            hole_code: String::new(),
+            tm_x: 0.0,
+            tm_y: 0.0,
+            altitude_m: 0.0,
+            fill_depth_m,
+            alluvial_from_m: alluv_from,
+            alluvial_to_m,
+            alluvial_thickness_m: alluv_thick,
+            weathered_depth_m,
+            dominant_uscs,
+            paleo_hint,
+            layers,
+        })
+    }
+
+    pub fn select_spatially_balanced_candidates(
+        raw: &[HoleCandidate],
+        center_5186: [f64; 2],
+        max_count: usize,
+        cell_meters: f64,
+    ) -> Vec<HoleCandidate> {
+        let step = cell_meters.max(10.0);
+        let mut sorted = raw.to_vec();
+        sorted.sort_by(|a, b| {
+            let da = (a.pt_5186[0] - center_5186[0]).powi(2)
+                + (a.pt_5186[1] - center_5186[1]).powi(2);
+            let db = (b.pt_5186[0] - center_5186[0]).powi(2)
+                + (b.pt_5186[1] - center_5186[1]).powi(2);
+            da.total_cmp(&db)
+        });
+        let mut occupied: BTreeSet<(i64, i64)> = BTreeSet::new();
+        let mut out = Vec::new();
+        for cand in sorted {
+            if out.len() >= max_count {
+                break;
+            }
+            let gx = (cand.pt_5186[0] / step).floor() as i64;
+            let gy = (cand.pt_5186[1] / step).floor() as i64;
+            if occupied.insert((gx, gy)) {
+                out.push(cand);
+            }
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn geoinfo_sichudan_json_parser_extracts_fill_alluvial_and_weathered_depths(
+    ) -> StrataResult<()> {
+        let sample = r#"{"jsonView":"[{\"FROM_DEPTH\":0.0,\"TO_DEPTH\":1.5,\"LAYER_NAME\":\"매립층\",\"USCS\":\"SM\"},{\"FROM_DEPTH\":1.5,\"TO_DEPTH\":6.0,\"LAYER_NAME\":\"충적층\",\"USCS\":\"CL\"},{\"FROM_DEPTH\":6.0,\"TO_DEPTH\":10.0,\"LAYER_NAME\":\"풍화암\",\"USCS\":\"WR\"}]"}"#.as_bytes();
+        let rec = GeoInfoBoreholeService::parse_sichudan_json(sample)?;
+        assert!((rec.fill_depth_m - 1.5).abs() < 1e-6);
+        assert!((rec.alluvial_thickness_m - 4.5).abs() < 1e-6);
+        assert!((rec.weathered_depth_m - 6.0).abs() < 1e-6);
+        assert_eq!(rec.dominant_uscs, "CL");
+        Ok(())
+    }
+}

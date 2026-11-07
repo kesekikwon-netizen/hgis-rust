@@ -1,0 +1,21 @@
+[package]
+name = "strata-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+strata-types.workspace = true
+geo.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+encoding_rs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

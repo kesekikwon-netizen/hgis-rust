@@ -1,0 +1,15 @@
+[package]
+name = "strata-canvas2d"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+strata-types.workspace = true
+strata-geo.workspace = true
+strata-storage.workspace = true
+serde.workspace = true

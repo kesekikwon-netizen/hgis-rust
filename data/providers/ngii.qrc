@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/providers">
+    <file alias="ngii-topographic.js">ngii-topographic.js</file>
+  </qresource>
+</RCC>

@@ -1,0 +1,16 @@
+[package]
+name = "strata-net"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+strata-types.workspace = true
+strata-secrets.workspace = true
+strata-geo.workspace = true
+serde.workspace = true
+serde_json.workspace = true
