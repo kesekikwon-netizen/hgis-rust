@@ -117,6 +117,56 @@ pub fn format_future_schema_version_error(file_version: i32, app_version: i32) -
     )
 }
 
+pub const HGIS_MAX_RECENT_PROJECTS: usize = 10;
+pub const HGIS_AUTOSAVE_INTERVAL_SEC: u64 = 300;
+pub const HGIS_LOCK_FILE_EXT: &str = ".hgis.lock";
+pub const HGIS_AUTOSAVE_FILE_EXT: &str = ".hgis.autosave";
+
+/// C++ `KaProjectManager::ProjectOpenResult` 1:1 열거형
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProjectOpenResult {
+    Success,
+    FileNotFound,
+    LockedByAnotherProcess,
+    CrashDetectedNeedsRecovery,
+    InvalidMagicBytes,
+    FutureVersionBlocked,
+}
+
+/// C++ `KaProjectManager::openProject` 사전 검사(`.hgis.lock`, `.hgis.autosave`, SQLite 16바이트 매직 헤더)
+#[must_use]
+pub fn check_project_open_preflight(project_path: &Path, force_unlock: bool) -> ProjectOpenResult {
+    if !project_path.exists() {
+        return ProjectOpenResult::FileNotFound;
+    }
+    let lock_path = std::path::PathBuf::from(format!("{}{HGIS_LOCK_FILE_EXT}", project_path.display()));
+    if lock_path.exists() && !force_unlock {
+        return ProjectOpenResult::LockedByAnotherProcess;
+    }
+    let autosave_path =
+        std::path::PathBuf::from(format!("{}{HGIS_AUTOSAVE_FILE_EXT}", project_path.display()));
+    let wal_path = std::path::PathBuf::from(format!("{}.wal", project_path.display()));
+    if autosave_path.exists() || wal_path.exists() {
+        return ProjectOpenResult::CrashDetectedNeedsRecovery;
+    }
+    let Ok(bytes) = std::fs::read(project_path) else {
+        return ProjectOpenResult::FileNotFound;
+    };
+    if bytes.len() < GPKG_MAGIC_HEADER.len() || &bytes[..16] != GPKG_MAGIC_HEADER {
+        return ProjectOpenResult::InvalidMagicBytes;
+    }
+    ProjectOpenResult::Success
+}
+
+/// C++ `KaProjectManager` 최근 프로젝트 MRU 목록 갱신 (중복 제거 후 최상단 배치, 최대 `HGIS_MAX_RECENT_PROJECTS = 10`개 유지)
+pub fn push_recent_project_mru(recent_list: &mut Vec<String>, new_path: &str) {
+    recent_list.retain(|p| p != new_path);
+    recent_list.insert(0, new_path.to_owned());
+    if recent_list.len() > HGIS_MAX_RECENT_PROJECTS {
+        recent_list.truncate(HGIS_MAX_RECENT_PROJECTS);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SurveyWorkspace {
     pub schema_version: u32,
@@ -496,6 +546,50 @@ mod tests {
         );
         let msg = format_future_schema_version_error(999, HGIS_SCHEMA_VERSION);
         assert!(msg.contains("스키마 v999") && msg.contains("스키마 v5"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_crash_autosave_recovery_trigger_and_lock_file_exclusion_and_mru_limit_10(
+    ) -> StrataResult<()> {
+        let dir = tempfile::tempdir()?;
+        let proj_path = dir.path().join("site_a.gpkg");
+        GpkgRepository::create_new_survey(&proj_path, WorkCrs::Epsg5187)?;
+        assert_eq!(
+            check_project_open_preflight(&proj_path, false),
+            ProjectOpenResult::Success
+        );
+
+        // 1. Lock file exclusion (.hgis.lock)
+        let lock_path =
+            std::path::PathBuf::from(format!("{}{HGIS_LOCK_FILE_EXT}", proj_path.display()));
+        std::fs::write(&lock_path, "1234:1700000000:workstation")?;
+        assert_eq!(
+            check_project_open_preflight(&proj_path, false),
+            ProjectOpenResult::LockedByAnotherProcess
+        );
+        std::fs::remove_file(&lock_path)?;
+
+        // 2. Crash autosave recovery trigger (.hgis.autosave)
+        let autosave_path =
+            std::path::PathBuf::from(format!("{}{HGIS_AUTOSAVE_FILE_EXT}", proj_path.display()));
+        std::fs::write(&autosave_path, b"snapshot")?;
+        assert_eq!(
+            check_project_open_preflight(&proj_path, false),
+            ProjectOpenResult::CrashDetectedNeedsRecovery
+        );
+        std::fs::remove_file(&autosave_path)?;
+
+        // 3. Recent projects MRU capped at 10
+        let mut mru = Vec::new();
+        for i in 1..=12 {
+            push_recent_project_mru(&mut mru, &format!("/projects/p{i}.gpkg"));
+        }
+        assert_eq!(mru.len(), HGIS_MAX_RECENT_PROJECTS);
+        assert_eq!(mru[0], "/projects/p12.gpkg");
+        push_recent_project_mru(&mut mru, "/projects/p5.gpkg");
+        assert_eq!(mru.len(), HGIS_MAX_RECENT_PROJECTS);
+        assert_eq!(mru[0], "/projects/p5.gpkg");
         Ok(())
     }
 }

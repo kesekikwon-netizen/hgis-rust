@@ -425,6 +425,79 @@ impl ChecklistEngine {
     }
 }
 
+/// C++ `HGIS_VALID_PERIOD_DOMAINS` — 국가유산청 고고학 11대 표준 시대 코드 도메인
+pub const HGIS_VALID_PERIOD_DOMAINS: [&str; 11] = [
+    "구석기",
+    "신석기",
+    "청동기",
+    "초기철기",
+    "원삼국",
+    "삼국",
+    "통일신라",
+    "고려",
+    "조선",
+    "근현대",
+    "미상",
+];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttributeValidationIssue {
+    pub fid: i64,
+    pub field_name: String,
+    pub severity: ChecklistSeverity,
+    pub message_ko: String,
+}
+
+/// C++ `KaAttributeValidator::validateUniqueIds` — 동일 레이어 내 유구번호/조사구역번호 중복 검출
+#[must_use]
+pub fn validate_unique_feature_ids(features: &[(i64, &str)]) -> Vec<AttributeValidationIssue> {
+    let mut seen: std::collections::BTreeMap<String, i64> = std::collections::BTreeMap::new();
+    let mut issues = Vec::new();
+    for &(fid, raw_id) in features {
+        let trimmed = raw_id.trim();
+        if trimmed.is_empty() {
+            issues.push(AttributeValidationIssue {
+                fid,
+                field_name: "FEAT_NO".to_owned(),
+                severity: ChecklistSeverity::Error,
+                message_ko: "필수 속성 'FEAT_NO'이(가) 누락되었습니다.".to_owned(),
+            });
+            continue;
+        }
+        if let Some(&first_fid) = seen.get(trimmed) {
+            issues.push(AttributeValidationIssue {
+                fid,
+                field_name: "FEAT_NO".to_owned(),
+                severity: ChecklistSeverity::Error,
+                message_ko: format!(
+                    "동일한 유구번호 '{trimmed}'이(가) 이미 존재합니다 (FID: {first_fid}와 중복)."
+                ),
+            });
+        } else {
+            seen.insert(trimmed.to_owned(), fid);
+        }
+    }
+    issues
+}
+
+/// C++ `KaAttributeValidator` — `PERIOD`(시대) 필드가 11대 표준 코드 도메인(`HGIS_VALID_PERIOD_DOMAINS`)에 속하는지 검증
+#[must_use]
+pub fn validate_period_domain(fid: i64, period_value: &str) -> Option<AttributeValidationIssue> {
+    let trimmed = period_value.trim();
+    if HGIS_VALID_PERIOD_DOMAINS.contains(&trimmed) {
+        None
+    } else {
+        Some(AttributeValidationIssue {
+            fid,
+            field_name: "PERIOD".to_owned(),
+            severity: ChecklistSeverity::Warning,
+            message_ko: format!(
+                "시대 속성 '{trimmed}'은(는) 국가유산청 표준 11대 시대 도메인에 속하지 않습니다."
+            ),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -557,5 +630,22 @@ mod tests {
         assert_eq!(r21_sev, ChecklistSeverity::Error);
         assert_eq!(r21_pt, Some([200_010.0, 500_020.0]));
         assert!(r21_msg.contains("현재: 1개"));
+    }
+
+    #[test]
+    fn test_duplicate_feat_no_detection_and_period_domain_validation() {
+        let features = [(10_i64, "1호 주거지"), (25_i64, "1호 주거지")];
+        let issues = validate_unique_feature_ids(&features);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].fid, 25);
+        assert_eq!(
+            issues[0].message_ko,
+            "동일한 유구번호 '1호 주거지'이(가) 이미 존재합니다 (FID: 10와 중복)."
+        );
+
+        assert!(validate_period_domain(10, "삼국").is_none());
+        let typo_issue = validate_period_domain(10, "삼국시디").expect("invalid period domain");
+        assert_eq!(typo_issue.severity, ChecklistSeverity::Warning);
+        assert!(typo_issue.message_ko.contains("삼국시디"));
     }
 }
