@@ -125,63 +125,6 @@ impl LeftLayerPanel {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_filter_layers_by_keyword_trench_auto_expands_group_and_escapes_regex_meta() {
-        let mut panel = LeftLayerPanel::new_empty();
-        panel.ensure_domain_layer(DomainLayerKey::SurveyArea);
-        panel.ensure_domain_layer(DomainLayerKey::FeaturePoly);
-        panel.ensure_domain_layer(DomainLayerKey::TrialTrench);
-        panel.ensure_domain_layer(DomainLayerKey::ArtifactPoint);
-        assert!(panel.update_feature_count_badge(DomainLayerKey::TrialTrench.id(), 15));
-
-        let (matched, expanded) = panel.filter_layers_by_keyword("시굴");
-        assert_eq!(matched.len(), 1);
-        assert_eq!(matched[0].label_ko, "시굴격자");
-        assert_eq!(matched[0].display_label_with_badge(), "시굴격자 [15]");
-        assert_eq!(expanded, vec![LegendGroup::SurveyData]);
-
-        // 영문 키("trench") 대소문자 무시 필터링
-        let (key_matched, _) = panel.filter_layers_by_keyword("TRENCH");
-        assert_eq!(key_matched.len(), 1);
-
-        // 정규식 메타문자('[', ']', '*', '+')가 포함되어도 패닉 없이 리터럴 비교
-        let (meta_matched, _) = panel.filter_layers_by_keyword("[15]");
-        assert_eq!(meta_matched.len(), 1);
-        let (none_matched, none_expanded) = panel.filter_layers_by_keyword(".*[+(?");
-        assert!(none_matched.is_empty());
-        assert!(none_expanded.is_empty());
-    }
-
-    #[test]
-    fn test_dxf_and_gpkg_auto_detection_and_layer_preset_switching() {
-        // TestKaFileDrawerLoader::testDxfAndGpkgAutoDetection
-        assert_eq!(
-            detect_file_drawer_driver(std::path::Path::new("site_survey.gpkg")),
-            Ok(FileLoadDriver::GeoPackageVector)
-        );
-        assert_eq!(
-            detect_file_drawer_driver(std::path::Path::new("cad_drawing.dxf")),
-            Ok(FileLoadDriver::AutoCadDxfCp949)
-        );
-        assert_eq!(
-            detect_file_drawer_driver(std::path::Path::new("points.csv")),
-            Ok(FileLoadDriver::DelimitedTextCsv)
-        );
-        assert_eq!(
-            detect_file_drawer_driver(std::path::Path::new("ortho.tif")),
-            Ok(FileLoadDriver::GdalGeoTiff)
-        );
-        assert_eq!(
-            detect_file_drawer_driver(std::path::Path::new("broken.xyz_corrupted")),
-            Err(FileLoadError::UnsupportedExtension)
-        );
-    }
-}
-
 /// C++ `LayerPresetType` 레이어 세트 프리셋 4종 1:1 대응
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayerPresetType {
@@ -240,5 +183,62 @@ pub fn detect_file_drawer_driver(path: &std::path::Path) -> Result<FileLoadDrive
         "csv" => Ok(FileLoadDriver::DelimitedTextCsv),
         "tif" | "tiff" => Ok(FileLoadDriver::GdalGeoTiff),
         _ => Err(FileLoadError::UnsupportedExtension),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_filter_layers_by_keyword_trench_auto_expands_group_and_escapes_regex_meta() {
+        let mut panel = LeftLayerPanel::new_empty();
+        panel.ensure_domain_layer(DomainLayerKey::SurveyArea);
+        panel.ensure_domain_layer(DomainLayerKey::FeaturePoly);
+        panel.ensure_domain_layer(DomainLayerKey::TrialTrench);
+        panel.ensure_domain_layer(DomainLayerKey::ArtifactPoint);
+        assert!(panel.update_feature_count_badge(DomainLayerKey::TrialTrench.id(), 15));
+
+        let (matched, expanded) = panel.filter_layers_by_keyword("시굴");
+        assert_eq!(matched.len(), 1);
+        assert_eq!(matched[0].label_ko, "시굴격자");
+        assert_eq!(matched[0].display_label_with_badge(), "시굴격자 [15]");
+        assert_eq!(expanded, vec![LegendGroup::SurveyData]);
+
+        // 영문 키("trench") 대소문자 무시 필터링
+        let (key_matched, _) = panel.filter_layers_by_keyword("TRENCH");
+        assert_eq!(key_matched.len(), 1);
+
+        // 정규식 메타문자('[', ']', '*', '+')가 포함되어도 패닉 없이 리터럴 비교
+        let (meta_matched, _) = panel.filter_layers_by_keyword("[15]");
+        assert_eq!(meta_matched.len(), 1);
+        let (none_matched, none_expanded) = panel.filter_layers_by_keyword(".*[+(?");
+        assert!(none_matched.is_empty());
+        assert!(none_expanded.is_empty());
+    }
+
+    #[test]
+    fn test_dxf_and_gpkg_auto_detection_and_layer_preset_switching() {
+        // TestKaFileDrawerLoader::testDxfAndGpkgAutoDetection
+        assert_eq!(
+            detect_file_drawer_driver(std::path::Path::new("site_survey.gpkg")),
+            Ok(FileLoadDriver::GeoPackageVector)
+        );
+        assert_eq!(
+            detect_file_drawer_driver(std::path::Path::new("cad_drawing.dxf")),
+            Ok(FileLoadDriver::AutoCadDxfCp949)
+        );
+        assert_eq!(
+            detect_file_drawer_driver(std::path::Path::new("points.csv")),
+            Ok(FileLoadDriver::DelimitedTextCsv)
+        );
+        assert_eq!(
+            detect_file_drawer_driver(std::path::Path::new("ortho.tif")),
+            Ok(FileLoadDriver::GdalGeoTiff)
+        );
+        assert_eq!(
+            detect_file_drawer_driver(std::path::Path::new("broken.xyz_corrupted")),
+            Err(FileLoadError::UnsupportedExtension)
+        );
     }
 }

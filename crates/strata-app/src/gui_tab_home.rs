@@ -97,6 +97,34 @@ impl StrataAppState {
                             });
                             ui.add_space(8.0);
                         }
+                        let wf_states = strata_storage::project_actions::evaluate_workflow_guide(
+                            &strata_storage::project_actions::WorkflowProjectInput {
+                                survey_name: self.project_title.clone(),
+                                layer_count: self.left_layers.entries.len(),
+                                survey_area_count: self.home_map.real_survey.survey_rings.len(),
+                                feature_poly_count: self.home_map.real_survey.trenches.len(),
+                                feature_line_count: 0,
+                                control_points_count: 2,
+                                has_datum: true,
+                                has_ellipsoid: true,
+                                has_projection: true,
+                                has_visible_reference_layer: true,
+                                checklist_error_count: 0,
+                                package_created: false,
+                            },
+                        );
+                        let done_cnt = wf_states.iter().filter(|s| s.completed).count();
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "진행률: {done_cnt}/{} 단계 완료 · {}",
+                                wf_states.len(),
+                                strata_storage::project_actions::forced_layer_order_note_ko(
+                                    "위성", true, false, false
+                                )
+                            ))
+                            .size(10.5)
+                            .color(Color32::from_rgb(115, 113, 106)),
+                        );
                     });
                 });
 

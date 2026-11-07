@@ -228,6 +228,74 @@ pub fn infer_topographic_source_crs_epsg(min_x: f64, max_x: f64) -> u32 {
     }
 }
 
+/// 수치지형도 아카이브 압축 해제 및 경로 무결성 에러 (C++ `ArchiveError` in `TopographicArchive.cpp`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TopographicArchiveError {
+    CorruptedZipStream,
+    UnsafeRelativePath,
+    DuplicateEntryPath,
+}
+
+/// ZIP 내부 상대 경로가 디렉터리 트래버설(`..`), 절대 경로, Windows 예약 장치명(`CON`, `NUL` 등), 특수문자를 포함하지 않는지 검증
+/// (C++ `safeRelative(const QString&)` in `TopographicArchive.cpp` 1:1 대응)
+#[must_use]
+pub fn is_safe_archive_relative_path(name: &str) -> bool {
+    if name.is_empty()
+        || name.len() > 2048
+        || name.contains('\u{FFFD}')
+        || name.contains('\\')
+        || name.starts_with('/')
+    {
+        return false;
+    }
+    let parts: Vec<&str> = name.split('/').collect();
+    if parts.len() > 64 {
+        return false;
+    }
+    const RESERVED_DEVICES: [&str; 22] = [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    for part in parts {
+        if part.is_empty()
+            || part == "."
+            || part == ".."
+            || part.ends_with('.')
+            || part.ends_with(' ')
+        {
+            return false;
+        }
+        let stem_upper = part.split('.').next().unwrap_or("").to_ascii_uppercase();
+        if RESERVED_DEVICES.contains(&stem_upper.as_str()) {
+            return false;
+        }
+        if part
+            .chars()
+            .any(|ch| (ch as u32) < 32 || ":*?\"<>|".contains(ch))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+/// 국토지리정보원 수치지형도 ZIP 바이트 스트림의 Local File Header(`PK\x03\x04`) 및 End of Central Directory(`PK\x05\x06`) 무결성 검증
+/// (C++ `TopographicArchive::unpackAndValidate` 1:1 대응)
+pub fn validate_topographic_zip_bytes(zip_bytes: &[u8]) -> Result<(), TopographicArchiveError> {
+    // Minimum valid ZIP with EOCD is 22 bytes and must start with PK\x03\x04
+    if zip_bytes.len() < 22 || &zip_bytes[0..4] != b"PK\x03\x04" {
+        return Err(TopographicArchiveError::CorruptedZipStream);
+    }
+    // Search for End of Central Directory signature PK\x05\x06 in the tail (up to 65557 bytes)
+    let search_start = zip_bytes.len().saturating_sub(65_557);
+    let tail = &zip_bytes[search_start..];
+    let has_eocd = tail.windows(4).rev().any(|w| w == b"PK\x05\x06");
+    if !has_eocd {
+        return Err(TopographicArchiveError::CorruptedZipStream);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,5 +336,15 @@ mod tests {
             infer_topographic_source_crs_epsg(198_000.0, 205_000.0),
             5186
         );
+
+        // TestTopographicArchive::testCorruptedZipDetection
+        let truncated_zip = b"PK\x03\x04\x14\x00\x00\x00truncated_stream_without_eocd";
+        assert_eq!(
+            validate_topographic_zip_bytes(truncated_zip),
+            Err(TopographicArchiveError::CorruptedZipStream)
+        );
+        assert!(is_safe_archive_relative_path("35809094/contour_5k.shp"));
+        assert!(!is_safe_archive_relative_path("../evil.shp"));
+        assert!(!is_safe_archive_relative_path("CON.shp"));
     }
 }

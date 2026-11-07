@@ -89,13 +89,14 @@ impl StrataAppState {
                     );
                 ui.label(
                     egui::RichText::new(format!(
-                        "DEM 160×160 · 높이 18.5–142.0 m · 끌어서 돌리기\n방위각 {:.1}° · 경사 {:.1}°\n드레이핑: 조사구역 {}건 · 시굴 트렌치 {}공 (+0.25m 오프셋)\n굴착 토량(TrenchTerrain): {:.1} ㎥ (최대 심도 {:.1} m)",
+                        "DEM 160×160 · 높이 18.5–142.0 m · 끌어서 돌리기\n방위각 {:.1}° · 경사 {:.1}°\n드레이핑: 조사구역 {}건 · 시굴 트렌치 {}공 (+0.25m 오프셋)\n굴착 토량(TrenchTerrain): {:.1} ㎥ (최대 심도 {:.1} m)\n배경 표고: {}",
                         self.paleo_3d.camera_3d.yaw_deg,
                         self.paleo_3d.camera_3d.pitch_deg,
                         self.home_map.real_survey.survey_rings.len(),
                         self.home_map.real_survey.trenches.len(),
                         cut_vol.excavated_volume_m3,
-                        cut_vol.max_excavation_depth_m
+                        cut_vol.max_excavation_depth_m,
+                        strata_terrain3d::trench_profile3d::copernicus_dsm_title_ko()
                     ))
                     .size(11.5)
                     .color(egui::Color32::from_rgb(94, 93, 89)),
