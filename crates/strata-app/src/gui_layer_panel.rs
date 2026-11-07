@@ -271,16 +271,34 @@ impl StrataAppState {
                             let (full_r, resp) = ui.allocate_exact_size(Vec2::new(avail_w, band_h + row_h), egui::Sense::click());
                             let right_col_x = full_r.right() - 52.0;
                             if resp.clicked() {
+                                let mut newly_selected: Option<String> = None;
                                 if let Some(pos) = resp.interact_pointer_pos() {
                                     if pos.x < full_r.left() + 42.0 + *indent {
                                         self.home_map.real_survey.toggle_layer_visible(name);
+                                        newly_selected = Some((*name).to_owned());
                                     } else if pos.x >= right_col_x && right_lbl.is_some() {
                                         self.home_map.real_survey.toggle_label_visible(name);
+                                    } else if self.right_inspector.selected_layer_key.as_deref()
+                                        == Some(*name)
+                                    {
+                                        self.right_inspector.selected_layer_key = None;
                                     } else {
-                                        self.right_inspector.selected_layer_key = Some((*name).to_owned());
+                                        newly_selected = Some((*name).to_owned());
                                     }
                                 } else {
-                                    self.right_inspector.selected_layer_key = Some((*name).to_owned());
+                                    newly_selected = Some((*name).to_owned());
+                                }
+                                if let Some(sel_name) = newly_selected {
+                                    let (op, br) = ui.ctx().data_mut(|d| {
+                                        d.get_temp::<(f32, f32)>(egui::Id::new((
+                                            "ka_layer_op_br",
+                                            sel_name.as_str(),
+                                        )))
+                                        .unwrap_or((1.0, 0.5))
+                                    });
+                                    self.home_map.real_survey.layer_opacity = op;
+                                    self.home_map.real_survey.layer_brightness = br;
+                                    self.right_inspector.selected_layer_key = Some(sel_name);
                                 }
                             }
                             let is_sel = self.right_inspector.selected_layer_key.as_deref() == Some(*name);
