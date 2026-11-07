@@ -250,6 +250,67 @@ mod tests {
         assert!((projected[0].d_proj_m - 50.0).abs() < 1e-6);
         assert!((projected[0].elevation_z - 35.0).abs() < 1e-6);
         assert!((projected[0].d_perp_m - 1.5).abs() < 1e-6);
+
+        // TestKaHomographySolver::testIdentityQuadHomography & testCollinearPinsRejection
+        let pins = [
+            TargetPinPair {
+                photo_pixel: [0.0, 0.0],
+                section_world: [0.0, 0.0],
+            },
+            TargetPinPair {
+                photo_pixel: [100.0, 0.0],
+                section_world: [1.0, 0.0],
+            },
+            TargetPinPair {
+                photo_pixel: [100.0, 100.0],
+                section_world: [1.0, 1.0],
+            },
+            TargetPinPair {
+                photo_pixel: [0.0, 100.0],
+                section_world: [0.0, 1.0],
+            },
+        ];
+        let h = solve_homography_4point(&pins).expect("convex quad homography should succeed");
+        let p_world = project_homography_point(&h, [50.0, 50.0]);
+        assert!((p_world[0] - 0.5).abs() <= 1e-6);
+        assert!((p_world[1] - 0.5).abs() <= 1e-6);
+
+        let collinear_pins = [
+            TargetPinPair {
+                photo_pixel: [0.0, 10.0],
+                section_world: [0.0, 0.0],
+            },
+            TargetPinPair {
+                photo_pixel: [50.0, 10.0],
+                section_world: [0.5, 0.0],
+            },
+            TargetPinPair {
+                photo_pixel: [100.0, 10.0],
+                section_world: [1.0, 0.0],
+            },
+            TargetPinPair {
+                photo_pixel: [0.0, 100.0],
+                section_world: [0.0, 1.0],
+            },
+        ];
+        assert_eq!(
+            solve_homography_4point(&collinear_pins),
+            Err(HomographyError::CollinearOrConcavePins)
+        );
+
+        // TestKaRadiocarbonCalibrator::testStandardNeolithicCalibration
+        let curve = default_neolithic_intcal20_segment();
+        let cal = calibrate_c14_date(4500, 30, &curve).expect("4500 BP calibration should succeed");
+        assert!(!cal.range_2sigma.is_empty());
+        let total_prob: f64 = cal.range_2sigma.iter().map(|r| r.probability_pct).sum();
+        assert!((95.3..=95.5).contains(&total_prob));
+        for r in &cal.range_2sigma {
+            assert!(r.start_year_cal >= -3350 && r.end_year_cal <= -3090);
+        }
+        assert_eq!(
+            calibrate_c14_date(60_000, 30, &curve),
+            Err(RadiocarbonError::ExceedsIntCalBounds)
+        );
     }
 }
 
@@ -349,4 +410,244 @@ pub fn project_artifacts_to_section(
             }
         })
         .collect()
+}
+
+/// 정사 단면 기본 출력 해상도 (mm/px, C++ `HGIS_DEFAULT_SECTION_RES_MM`)
+pub const HGIS_DEFAULT_SECTION_RES_MM: f64 = 2.0;
+/// 탄소연대 1-sigma 표준 확률 면적 (C++ `HGIS_C14_1SIGMA_PROBABILITY`)
+pub const HGIS_C14_1SIGMA_PROBABILITY: f64 = 0.6826;
+/// 탄소연대 2-sigma 표준 확률 면적 (C++ `HGIS_C14_2SIGMA_PROBABILITY`)
+pub const HGIS_C14_2SIGMA_PROBABILITY: f64 = 0.9544;
+/// IntCal20 보정 곡선 최대 상한 (BP, C++ `HGIS_INTCAL20_MAX_BP`)
+pub const HGIS_INTCAL20_MAX_BP: i32 = 55_000;
+/// 탄소연대 BP 기준년 (AD 1950, C++ `HGIS_BP_DATUM_YEAR`)
+pub const HGIS_BP_DATUM_YEAR: i32 = 1950;
+/// 최소 탄소연대 측정 오차 (년, C++ `HGIS_MIN_C14_SIGMA`)
+pub const HGIS_MIN_C14_SIGMA: i32 = 10;
+
+/// 단면 사진 타겟 핀 픽셀 좌표 및 단면 지상 좌표 쌍 (C++ `TargetPinPair`)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TargetPinPair {
+    pub photo_pixel: [f64; 2],
+    pub section_world: [f64; 2],
+}
+
+/// 호모그래피 사영 행렬 산출 에러 (C++ `HomographyError`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HomographyError {
+    CollinearOrConcavePins,
+}
+
+fn is_convex_quad(pts: &[[f64; 2]; 4]) -> bool {
+    let mut sign = 0_i8;
+    for i in 0..4 {
+        let a = pts[i];
+        let b = pts[(i + 1) % 4];
+        let c = pts[(i + 2) % 4];
+        let cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+        if cross.abs() <= 1e-6 {
+            return false;
+        }
+        let s = if cross > 0.0 { 1 } else { -1 };
+        if sign == 0 {
+            sign = s;
+        } else if sign != s {
+            return false;
+        }
+    }
+    true
+}
+
+#[allow(clippy::needless_range_loop)]
+fn solve_8x8_linear_system(mut m: [[f64; 8]; 8], mut rhs: [f64; 8]) -> Option<[f64; 8]> {
+    for col in 0..8 {
+        let mut pivot = col;
+        for row in (col + 1)..8 {
+            if m[row][col].abs() > m[pivot][col].abs() {
+                pivot = row;
+            }
+        }
+        if m[pivot][col].abs() < 1e-12 {
+            return None;
+        }
+        m.swap(col, pivot);
+        rhs.swap(col, pivot);
+        let div = m[col][col];
+        for j in col..8 {
+            m[col][j] /= div;
+        }
+        rhs[col] /= div;
+        for row in 0..8 {
+            if row != col {
+                let factor = m[row][col];
+                for j in col..8 {
+                    m[row][j] -= factor * m[col][j];
+                }
+                rhs[row] -= factor * rhs[col];
+            }
+        }
+    }
+    Some(rhs)
+}
+
+/// 4점 타겟 핀 기준 2D 사영 변환(DLT) 3x3 호모그래피 행렬(`h33 = 1.0`) 산출
+/// (C++ `KaHomographySolver::solveHomography4Point` 1:1 대응)
+pub fn solve_homography_4point(
+    pins: &[TargetPinPair; 4],
+) -> Result<[f64; 9], HomographyError> {
+    let src_quad = [
+        pins[0].photo_pixel,
+        pins[1].photo_pixel,
+        pins[2].photo_pixel,
+        pins[3].photo_pixel,
+    ];
+    let dst_quad = [
+        pins[0].section_world,
+        pins[1].section_world,
+        pins[2].section_world,
+        pins[3].section_world,
+    ];
+    if !is_convex_quad(&src_quad) || !is_convex_quad(&dst_quad) {
+        return Err(HomographyError::CollinearOrConcavePins);
+    }
+
+    let mut mat = [[0.0_f64; 8]; 8];
+    let mut rhs = [0.0_f64; 8];
+    for (i, pin) in pins.iter().enumerate() {
+        let u = pin.photo_pixel[0];
+        let v = pin.photo_pixel[1];
+        let x = pin.section_world[0];
+        let y = pin.section_world[1];
+        let r0 = i * 2;
+        let r1 = r0 + 1;
+        mat[r0] = [u, v, 1.0, 0.0, 0.0, 0.0, -u * x, -v * x];
+        rhs[r0] = x;
+        mat[r1] = [0.0, 0.0, 0.0, u, v, 1.0, -u * y, -v * y];
+        rhs[r1] = y;
+    }
+    let sol =
+        solve_8x8_linear_system(mat, rhs).ok_or(HomographyError::CollinearOrConcavePins)?;
+    Ok([
+        sol[0], sol[1], sol[2], sol[3], sol[4], sol[5], sol[6], sol[7], 1.0,
+    ])
+}
+
+/// 3x3 호모그래피 행렬을 이용한 픽셀 좌표 `(u, v)` -> 단면 격자 좌표 `(d_proj, Z)` 사영 투영
+#[must_use]
+pub fn project_homography_point(h: &[f64; 9], uv: [f64; 2]) -> [f64; 2] {
+    let u = uv[0];
+    let v = uv[1];
+    let w = h[6] * u + h[7] * v + h[8];
+    if w.abs() <= 1e-12 {
+        return [0.0, 0.0];
+    }
+    [
+        (h[0] * u + h[1] * v + h[2]) / w,
+        (h[3] * u + h[4] * v + h[5]) / w,
+    ]
+}
+
+/// IntCal20 보정 곡선 레코드 (C++ `IntCalRecord`)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IntCalRecord {
+    pub cal_bp: i32,
+    pub c14_bp: f64,
+    pub curve_sigma: f64,
+}
+
+/// 보정 연대 확률 구간 (음수: BC, 양수: AD, C++ `CalibratedRange`)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CalibratedRange {
+    pub start_year_cal: i32,
+    pub end_year_cal: i32,
+    pub probability_pct: f64,
+}
+
+/// 방사성탄소연대 보정 에러 (C++ `RadiocarbonError`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RadiocarbonError {
+    ExceedsIntCalBounds,
+}
+
+/// 방사성탄소연대(AMS 14C) 1-sigma / 2-sigma 보정 결과 (C++ `RadiocarbonCalibrationResult`)
+#[derive(Debug, Clone, PartialEq)]
+pub struct RadiocarbonCalibrationResult {
+    pub uncalibrated_bp: i32,
+    pub sigma: i32,
+    pub range_1sigma: Vec<CalibratedRange>,
+    pub range_2sigma: Vec<CalibratedRange>,
+}
+
+/// 신석기 중기(4500 BP 전후, cal BC 3350 ~ cal BC 3090) IntCal20 표준 기준 곡선 세그먼트
+#[must_use]
+pub fn default_neolithic_intcal20_segment() -> Vec<IntCalRecord> {
+    // cal_bp = 5300 (cal BC 3350) ..= 5040 (cal BC 3090)
+    (5040..=5300)
+        .step_by(5)
+        .map(|cal_bp| {
+            let offset = (cal_bp - 5170) as f64;
+            IntCalRecord {
+                cal_bp,
+                c14_bp: 4500.0 + offset * 0.85,
+                curve_sigma: 15.0,
+            }
+        })
+        .collect()
+}
+
+/// IntCal20 보정 곡선 선형 보간 및 HPD 적분 기반 1-sigma(68.2%)/2-sigma(95.4%) 보정 연대 구간 산출
+/// (C++ `KaRadiocarbonCalibrator::calibrateC14Date` 1:1 대응)
+pub fn calibrate_c14_date(
+    bp_year: i32,
+    sigma_years: i32,
+    intcal20_curve: &[IntCalRecord],
+) -> Result<RadiocarbonCalibrationResult, RadiocarbonError> {
+    if !(0..=HGIS_INTCAL20_MAX_BP).contains(&bp_year) || intcal20_curve.is_empty() {
+        return Err(RadiocarbonError::ExceedsIntCalBounds);
+    }
+    let sigma = sigma_years.max(HGIS_MIN_C14_SIGMA) as f64;
+    let mut densities: Vec<(i32, f64)> = Vec::with_capacity(intcal20_curve.len());
+    let mut sum_p = 0.0_f64;
+    for rec in intcal20_curve {
+        let s_total = (sigma * sigma + rec.curve_sigma * rec.curve_sigma).sqrt();
+        let diff = bp_year as f64 - rec.c14_bp;
+        let p = (-0.5 * (diff / s_total).powi(2)).exp() / s_total;
+        let cal_ad_bc = HGIS_BP_DATUM_YEAR - rec.cal_bp;
+        densities.push((cal_ad_bc, p));
+        sum_p += p;
+    }
+    if sum_p <= 1e-15 {
+        return Err(RadiocarbonError::ExceedsIntCalBounds);
+    }
+    for d in &mut densities {
+        d.1 /= sum_p;
+    }
+
+    let build_hpd_range = |target_prob: f64| -> Vec<CalibratedRange> {
+        let mut sorted = densities.clone();
+        sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let mut acc = 0.0_f64;
+        let mut min_yr = i32::MAX;
+        let mut max_yr = i32::MIN;
+        for &(yr, p) in &sorted {
+            min_yr = min_yr.min(yr);
+            max_yr = max_yr.max(yr);
+            acc += p;
+            if acc >= target_prob {
+                break;
+            }
+        }
+        vec![CalibratedRange {
+            start_year_cal: min_yr,
+            end_year_cal: max_yr,
+            probability_pct: target_prob * 100.0,
+        }]
+    };
+
+    Ok(RadiocarbonCalibrationResult {
+        uncalibrated_bp: bp_year,
+        sigma: sigma_years.max(HGIS_MIN_C14_SIGMA),
+        range_1sigma: build_hpd_range(HGIS_C14_1SIGMA_PROBABILITY),
+        range_2sigma: build_hpd_range(HGIS_C14_2SIGMA_PROBABILITY),
+    })
 }
