@@ -73,6 +73,55 @@ impl ViewportTransform {
     }
 }
 
+pub const HGIS_MAX_GRID_LINES: usize = 50;
+pub const HGIS_GRID_TARGET_SPACING_PX: f64 = 100.0;
+pub const HGIS_PRESET_GRID_INTERVALS: [f64; 5] = [10.0, 50.0, 100.0, 500.0, 1000.0];
+
+/// C++ `KaMapRotationController::setRotationAngleDeg` — 임의 각도를 `[0.0°, 360.0°)` 구간으로 모듈로 정규화
+#[must_use]
+pub fn normalize_rotation_angle_deg(angle_deg: f64) -> f64 {
+    if !angle_deg.is_finite() {
+        return 0.0;
+    }
+    angle_deg.rem_euclid(360.0)
+}
+
+/// C++ `KaMapRotationController` — 회전 중심점 `(cx, cy)` 보존 2D 아핀 회전 변환
+#[must_use]
+pub fn rotate_point_around_center(pt: [f64; 2], center: [f64; 2], angle_deg: f64) -> [f64; 2] {
+    let rad = normalize_rotation_angle_deg(angle_deg).to_radians();
+    let (s, c) = rad.sin_cos();
+    let dx = pt[0] - center[0];
+    let dy = pt[1] - center[1];
+    [center[0] + dx * c - dy * s, center[1] + dx * s + dy * c]
+}
+
+/// C++ `KaCoordinateGridOverlay::selectOptimalGridInterval` — `metersPerPixel * targetScreenSpacingPx`에 가장 가까운 표준 격자 간격(`10·50·100·500·1000m`) 자동 선택
+#[must_use]
+pub fn select_optimal_grid_interval(meters_per_pixel: f64, target_screen_spacing_px: f64) -> f64 {
+    let mpp = if meters_per_pixel > 0.0 && meters_per_pixel.is_finite() {
+        meters_per_pixel
+    } else {
+        1.0
+    };
+    let spacing_px = if target_screen_spacing_px > 0.0 && target_screen_spacing_px.is_finite() {
+        target_screen_spacing_px
+    } else {
+        HGIS_GRID_TARGET_SPACING_PX
+    };
+    let ideal_m = mpp * spacing_px;
+    let mut best = HGIS_PRESET_GRID_INTERVALS[0];
+    let mut best_diff = f64::INFINITY;
+    for &cand in &HGIS_PRESET_GRID_INTERVALS {
+        let diff = (cand - ideal_m).abs();
+        if diff < best_diff {
+            best_diff = diff;
+            best = cand;
+        }
+    }
+    best
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,5 +155,22 @@ mod tests {
         let off_after = vp.screen_to_world(off_cursor);
         assert!((off_after[0] - off_before[0]).abs() < 1e-6);
         assert!((off_after[1] - off_before[1]).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_angle_normalization_neg45_to_315_center_preservation_and_optimal_grid_interval_50m() {
+        assert!((normalize_rotation_angle_deg(-45.0) - 315.0).abs() < 1e-9);
+        let center = [200_000.0, 500_000.0];
+        let rotated_center = rotate_point_around_center(center, center, -45.0);
+        assert!((rotated_center[0] - center[0]).abs() < 1e-9);
+        assert!((rotated_center[1] - center[1]).abs() < 1e-9);
+
+        let pt = [200_100.0, 500_050.0];
+        let fwd = rotate_point_around_center(pt, center, -45.0);
+        let inv = rotate_point_around_center(fwd, center, 45.0);
+        assert!((inv[0] - pt[0]).abs() < 1e-9);
+        assert!((inv[1] - pt[1]).abs() < 1e-9);
+
+        assert!((select_optimal_grid_interval(0.5, 100.0) - 50.0).abs() < 1e-9);
     }
 }
