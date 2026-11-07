@@ -177,6 +177,42 @@ pub fn atomic_write_dem_avoiding_file_lock(target_path: &Path, payload: &[u8]) -
     Ok(fallback_path)
 }
 
+/// C++ `HGIS_SEAM_BLEND_WIDTH_M` (20.0m) 1:1 상수 — 인접 1:5,000 수치지형도 도엽 간 경계 단차 제거 중첩 폭
+pub const HGIS_SEAM_BLEND_WIDTH_M: f32 = 20.0;
+
+/// C++ `HGIS_DEM_NODATA_VAL` (-9999.0f) 및 유효성 판정 임계값(-9990.0f)
+pub const HGIS_DEM_NODATA_VAL: f32 = -9999.0;
+pub const HGIS_DEM_NODATA_THRESHOLD: f32 = -9990.0;
+
+/// C++ `KaDemSynthesizer::featherSeamOverlap` 1:1 대응:
+/// 두 인접 도엽의 경계 중첩 구간(`blend_width_m`, 기본 `20.0m`)에서 거리 `dist_m`에 따른
+/// 정규화 가중치 `alpha = clamp(dist_m / blend_width_m, 0.0, 1.0)`로 선형 블렌딩한다.
+/// 한쪽 타일이 `NoData` (`<= -9990.0`)일 때는 오염을 방지하기 위해 유효 타일 표고값을 100% 보존한다.
+#[must_use]
+pub fn feather_seam_overlap_cell(
+    val_a: f32,
+    val_b: f32,
+    dist_m: f32,
+    blend_width_m: f32,
+) -> f32 {
+    let valid_a = val_a.is_finite() && val_a > HGIS_DEM_NODATA_THRESHOLD;
+    let valid_b = val_b.is_finite() && val_b > HGIS_DEM_NODATA_THRESHOLD;
+    match (valid_a, valid_b) {
+        (false, true) => val_b,
+        (true, false) => val_a,
+        (false, false) => HGIS_DEM_NODATA_VAL,
+        (true, true) => {
+            let width = if blend_width_m.is_finite() && blend_width_m > 0.0 {
+                blend_width_m
+            } else {
+                HGIS_SEAM_BLEND_WIDTH_M
+            };
+            let alpha = (dist_m / width).clamp(0.0, 1.0);
+            (1.0 - alpha) * val_a + alpha * val_b
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,5 +316,31 @@ mod tests {
         assert_eq!(dem.len(), 400);
         assert!((tf_1m.cell_size - 1.0).abs() < 1e-9);
         assert!(dem.iter().all(|&z| (-50.0..=2000.0).contains(&z)));
+    }
+
+    #[test]
+    fn test_feather_seam_linear_midpoint_51m_and_nodata_preservation_50m() {
+        // 1. TestKaDemSynthesizer::testFeatherSeamLinearMidpoint:
+        // Tile A = 50.0m, Tile B = 52.0m, d = 10.0m over 20.0m blend width (alpha = 0.5) -> 51.0f
+        let blended = feather_seam_overlap_cell(50.0, 52.0, 10.0, HGIS_SEAM_BLEND_WIDTH_M);
+        assert!((blended - 51.0).abs() < 1e-6);
+
+        // 2. TestKaDemSynthesizer::testFeatherSeamNoDataPreservation:
+        // Tile A = 50.0m, Tile B = -9999.0m (NoData), d = 14.0m (alpha = 0.7) -> 50.0f preserved
+        let preserved_a =
+            feather_seam_overlap_cell(50.0, HGIS_DEM_NODATA_VAL, 14.0, HGIS_SEAM_BLEND_WIDTH_M);
+        assert!((preserved_a - 50.0).abs() < 1e-6);
+
+        let preserved_b =
+            feather_seam_overlap_cell(HGIS_DEM_NODATA_VAL, 52.0, 6.0, HGIS_SEAM_BLEND_WIDTH_M);
+        assert!((preserved_b - 52.0).abs() < 1e-6);
+
+        let both_nodata = feather_seam_overlap_cell(
+            HGIS_DEM_NODATA_VAL,
+            HGIS_DEM_NODATA_VAL,
+            10.0,
+            HGIS_SEAM_BLEND_WIDTH_M,
+        );
+        assert!((both_nodata - HGIS_DEM_NODATA_VAL).abs() < 1e-5);
     }
 }

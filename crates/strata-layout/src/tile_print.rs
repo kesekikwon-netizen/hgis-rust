@@ -2,6 +2,9 @@ use strata_types::error::{StrataError, StrataResult};
 
 use crate::sheet_composer::{DrawingSheet, SheetOrientation, SheetPaperSize};
 
+pub const HGIS_PRINT_OVERLAP_DEFAULT_MM: f64 = 10.0;
+pub const HGIS_CROP_MARK_LENGTH_MM: f64 = 5.0;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TilePrintPlan {
     pub rows: u32,
@@ -84,7 +87,7 @@ pub fn is_printer_page_size_within_tolerance(
         && (layout_height_mm - printer_height_mm).abs() <= TOLERANCE_MM
 }
 
-/// C++ `TilePrint::renderTiledPages` 인쇄 가능 영역(`printable_w`, `printable_h`) 및 오버랩(`overlap_mm`) 기준 행렬 분할 계산 1:1
+/// C++ `KaTilePrintEngine::calculateTileGrid` — 인쇄 가능 영역(`printable_w`, `printable_h`) 및 여백 50% 상한 클램핑 가드(`overlap_mm <= 0.5 * min(pw, ph)`)를 포함한 행렬 분할 계산 1:1
 #[must_use]
 pub fn compute_tile_print_grid_from_printable_mm(
     sheet_width_mm: f64,
@@ -93,15 +96,44 @@ pub fn compute_tile_print_grid_from_printable_mm(
     printable_height_mm: f64,
     overlap_mm: f64,
 ) -> TilePrintPlan {
-    let eff_w = (printable_width_mm - overlap_mm).max(50.0);
-    let eff_h = (printable_height_mm - overlap_mm).max(50.0);
-    let cols = (sheet_width_mm / eff_w).ceil().max(1.0) as u32;
-    let rows = (sheet_height_mm / eff_h).ceil().max(1.0) as u32;
+    let pw = printable_width_mm.max(20.0);
+    let ph = printable_height_mm.max(20.0);
+    let max_overlap = 0.5 * pw.min(ph);
+    let safe_overlap = overlap_mm.clamp(0.0, max_overlap);
+    let step_w = (pw - safe_overlap).max(pw * 0.5);
+    let step_h = (ph - safe_overlap).max(ph * 0.5);
+    let cols = if sheet_width_mm <= pw {
+        1
+    } else {
+        1 + ((sheet_width_mm - pw) / step_w).ceil().max(0.0) as u32
+    };
+    let rows = if sheet_height_mm <= ph {
+        1
+    } else {
+        1 + ((sheet_height_mm - ph) / step_h).ceil().max(0.0) as u32
+    };
     TilePrintPlan {
         rows,
         cols,
-        overlap_mm,
+        overlap_mm: safe_overlap,
     }
+}
+
+/// C++ `KaTilePrintEngine::renderCropMarks` — 분할 페이지 4개 모서리에 5.0mm 재단선 십자 마크(총 8개 선분) 생성
+#[must_use]
+pub fn generate_tile_crop_marks_mm(tile_rect_mm: [f64; 4]) -> [[[f64; 2]; 2]; 8] {
+    let [x0, y0, x1, y1] = tile_rect_mm;
+    let l = HGIS_CROP_MARK_LENGTH_MM;
+    [
+        [[x0 - l, y0], [x0 + l, y0]],
+        [[x0, y0 - l], [x0, y0 + l]],
+        [[x1 - l, y0], [x1 + l, y0]],
+        [[x1, y0 - l], [x1, y0 + l]],
+        [[x0 - l, y1], [x0 + l, y1]],
+        [[x0, y1 - l], [x0, y1 + l]],
+        [[x1 - l, y1], [x1 + l, y1]],
+        [[x1, y1 - l], [x1, y1 + l]],
+    ]
 }
 
 /// C++ `TilePrint::preparePage` 미지원 대형 규격일 때 타일 분할 전환 안내 문구 1:1
@@ -148,5 +180,16 @@ mod tests {
             format_tile_fallback_prompt_ko(SheetPaperSize::A3, 9),
             "단일 대형 인쇄 불가: 타일 분할 인쇄(A3 9장)로 전환하시겠습니까?"
         );
+
+        // 과도한 겹침 여백(overlap >= printable) 입력 시 50% 상한 클램핑 방어 및 5mm 재단선 검증
+        let clamped_plan =
+            compute_tile_print_grid_from_printable_mm(841.0, 594.0, 400.0, 277.0, 500.0);
+        assert!((clamped_plan.overlap_mm - 138.5).abs() < 1e-6);
+        assert!(clamped_plan.cols >= 2 && clamped_plan.rows >= 2);
+
+        let marks = generate_tile_crop_marks_mm([10.0, 10.0, 390.0, 267.0]);
+        assert_eq!(marks.len(), 8);
+        let mark0_len = (marks[0][1][0] - marks[0][0][0]).hypot(marks[0][1][1] - marks[0][0][1]);
+        assert!((mark0_len - 10.0).abs() < 1e-9);
     }
 }

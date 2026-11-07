@@ -1,5 +1,53 @@
 use crate::pipeline::CrossSectionProfile;
 
+/// C++ `HGIS_MIN_SECTION_VERT_RANGE_M` (10.0m) — 완전 평지(`z_max == z_min`) 시 최소 수직 표고 범위 보장
+pub const HGIS_MIN_SECTION_VERT_RANGE_M: f32 = 10.0;
+
+/// C++ `KaSectionRenderer2D` 4대 표준 지층 및 지하수위 RGB 색상 상수 (`kyi/main`)
+pub const HGIS_STRATUM_FILL_COLOR: [u8; 3] = [194, 158, 120]; // 성토층 (Warm Earth)
+pub const HGIS_STRATUM_ALLUVIUM_COLOR: [u8; 3] = [222, 203, 166]; // 충적층 (Sand/Silt)
+pub const HGIS_STRATUM_WEATHERED_COLOR: [u8; 3] = [168, 160, 144]; // 풍화암 (Grayish Khaki)
+pub const HGIS_STRATUM_BEDROCK_COLOR: [u8; 3] = [120, 115, 108]; // 기반암 (Dark Stone Gray)
+pub const HGIS_WATER_TABLE_COLOR: [u8; 3] = [41, 128, 185]; // 지하수위 (Sky Blue)
+
+/// C++ `KaSectionRenderer2D::renderSection` 수직 범위 정규화:
+/// `z_max - z_min < 10.0m` 인 평지 단면일 때 중심 표고를 기준으로 상하 `±5.0m` 확장하여 최소 `10.0m` 수직 범위를 보장한다.
+#[must_use]
+pub fn compute_section_vertical_bounds(z_values_m: &[f32]) -> (f32, f32) {
+    let mut z_min = f32::INFINITY;
+    let mut z_max = f32::NEG_INFINITY;
+    for &z in z_values_m {
+        if z.is_finite() {
+            z_min = z_min.min(z);
+            z_max = z_max.max(z);
+        }
+    }
+    if !z_min.is_finite() || !z_max.is_finite() {
+        return (0.0, HGIS_MIN_SECTION_VERT_RANGE_M);
+    }
+    if (z_max - z_min) < HGIS_MIN_SECTION_VERT_RANGE_M {
+        let center = 0.5 * (z_min + z_max);
+        let half = 0.5 * HGIS_MIN_SECTION_VERT_RANGE_M;
+        (center - half, center + half)
+    } else {
+        (z_min, z_max)
+    }
+}
+
+/// C++ `KaSectionRenderer2D::renderSection` 표고 `z` -> 화면 픽셀 `Y` 변환 수식 (0 나눗셈/NaN 방어 포함)
+#[must_use]
+pub fn section_elevation_to_pixel_y(
+    z_m: f32,
+    z_min_m: f32,
+    z_max_m: f32,
+    viewport_height_px: f32,
+    top_padding_px: f32,
+) -> f32 {
+    let span = (z_max_m - z_min_m).max(HGIS_MIN_SECTION_VERT_RANGE_M);
+    let norm = ((z_max_m - z_m) / span).clamp(0.0, 1.0);
+    top_padding_px + norm * viewport_height_px.max(1.0)
+}
+
 #[must_use]
 pub fn render_cross_section_rgba(
     profile: &CrossSectionProfile,
@@ -77,5 +125,26 @@ mod tests {
         };
         let rgba = render_cross_section_rgba(&profile, 240, 120);
         assert_eq!(rgba.len(), 240 * 120 * 4);
+    }
+
+    #[test]
+    fn test_flat_surface_min_range_10m_and_four_stratum_palette_constants() {
+        // TestKaSectionRenderer2D::testFlatSurfaceMinRange:
+        // Flat surface at 30.0m -> expanded to [25.0m, 35.0m] (10.0m span), no NaN or division by zero
+        let flat_profile = [30.0_f32, 30.0, 30.0, 30.0];
+        let (z_min, z_max) = compute_section_vertical_bounds(&flat_profile);
+        assert!((z_max - z_min - HGIS_MIN_SECTION_VERT_RANGE_M).abs() < 1e-6);
+        assert!((z_min - 25.0).abs() < 1e-6);
+        assert!((z_max - 35.0).abs() < 1e-6);
+
+        let y_mid = section_elevation_to_pixel_y(30.0, z_min, z_max, 200.0, 10.0);
+        assert!(y_mid.is_finite());
+        assert!((y_mid - 110.0).abs() < 1e-5);
+
+        assert_eq!(HGIS_STRATUM_FILL_COLOR, [194, 158, 120]);
+        assert_eq!(HGIS_STRATUM_ALLUVIUM_COLOR, [222, 203, 166]);
+        assert_eq!(HGIS_STRATUM_WEATHERED_COLOR, [168, 160, 144]);
+        assert_eq!(HGIS_STRATUM_BEDROCK_COLOR, [120, 115, 108]);
+        assert_eq!(HGIS_WATER_TABLE_COLOR, [41, 128, 185]);
     }
 }

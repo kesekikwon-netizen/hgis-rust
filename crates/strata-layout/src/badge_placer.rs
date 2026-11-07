@@ -26,6 +26,17 @@ impl HeritageNameBox {
     }
 }
 
+pub const HGIS_LEADER_MIN_DISTANCE_MM: f64 = 15.0;
+pub const HGIS_BADGE_NAMEBOX_SCALE_LIMIT: u32 = 5_000;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlacedBadgeWithLeader {
+    pub box_item: HeritageNameBox,
+    pub origin_mm: [f64; 2],
+    pub displacement_mm: f64,
+    pub leader_line: Option<[[f64; 2]; 3]>,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct LayoutBadgePlacer;
 
@@ -33,7 +44,7 @@ impl LayoutBadgePlacer {
     /// `HeritageLayoutNumbers.cpp` (`bfe8dd9`) — 1:5,000 이하 대축척에서 체크 켜짐 시에만 유적 이름으로 표시
     #[must_use]
     pub const fn should_render_site_names(scale_denominator: u32, prefer_names_under_5000: bool) -> bool {
-        prefer_names_under_5000 && scale_denominator <= 5_000
+        prefer_names_under_5000 && scale_denominator <= HGIS_BADGE_NAMEBOX_SCALE_LIMIT
     }
 
     #[must_use]
@@ -158,6 +169,34 @@ impl LayoutBadgePlacer {
         };
         (badges, name_boxes)
     }
+
+    /// C++ `KaBadgePlacer::placeBadgesAndLeaders` — 8방향 나선형 충돌 회피 배치 및 이격 거리 `>= 15.0mm`일 때 꺾인 지시선(Elbow Leader Line) 자동 생성
+    #[must_use]
+    pub fn place_boxes_with_leaders(
+        sites: &[(u32, String, f64, f64, f64, f64)],
+        allowed_rect_mm: Option<(f64, f64, f64, f64)>,
+    ) -> Vec<PlacedBadgeWithLeader> {
+        let boxes = Self::place_all_boxes(sites, allowed_rect_mm);
+        boxes
+            .into_iter()
+            .zip(sites.iter())
+            .map(|(b, &(_, _, ox, oy, _, _))| {
+                let dist = (b.center_x_mm - ox).hypot(b.center_y_mm - oy);
+                let leader_line = if dist >= HGIS_LEADER_MIN_DISTANCE_MM {
+                    let elbow_x = 0.5 * (ox + b.center_x_mm);
+                    Some([[ox, oy], [elbow_x, b.center_y_mm], [b.center_x_mm, b.center_y_mm]])
+                } else {
+                    None
+                };
+                PlacedBadgeWithLeader {
+                    box_item: b,
+                    origin_mm: [ox, oy],
+                    displacement_mm: dist,
+                    leader_line,
+                }
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -208,5 +247,26 @@ mod tests {
             LayoutBadgePlacer::place_badges_for_scale(&sites, 10_000, true, None);
         assert_eq!(badges_10k.len(), 2);
         assert!(names_10k.is_empty());
+    }
+
+    #[test]
+    fn test_overlapping_points_zero_collisions_and_leader_generation_over_15mm() {
+        let overlapping_sites = vec![
+            (1, "경주 월성 1지점".to_owned(), 100.0, 100.0, 26.0, 18.0),
+            (2, "경주 월성 2지점".to_owned(), 100.0, 100.0, 26.0, 18.0),
+            (3, "경주 월성 3지점".to_owned(), 100.0, 100.0, 26.0, 18.0),
+        ];
+        let placed = LayoutBadgePlacer::place_boxes_with_leaders(&overlapping_sites, None);
+        assert_eq!(placed.len(), 3);
+        for i in 0..placed.len() {
+            for j in (i + 1)..placed.len() {
+                assert!(!placed[i].box_item.overlaps(&placed[j].box_item, 0.5));
+            }
+        }
+        let leader_count = placed.iter().filter(|p| p.leader_line.is_some()).count();
+        assert!(
+            leader_count >= 2,
+            "expected >= 2 displaced boxes to generate leader lines, got {leader_count}"
+        );
     }
 }
