@@ -7,6 +7,9 @@ use strata_net::tile_fetcher::BasemapSource;
 
 use crate::real_survey::{ring_area_m2, RealSurveyData};
 
+pub const HGIS_BASEMAP_DEFAULT_OPACITY: f32 = 1.0;
+pub const HGIS_BASEMAP_DEFAULT_BRIGHTNESS: f32 = 0.0;
+
 #[derive(Debug, Clone)]
 pub struct HomeMapTabState {
     pub recent_files: Vec<String>,
@@ -23,6 +26,8 @@ pub struct HomeMapTabState {
     pub selected_sido_idx: usize,
     pub cad: CadSessionController,
     pub active_basemap: BasemapSource,
+    pub basemap_opacity: f32,
+    pub basemap_brightness: f32,
     pub real_survey: RealSurveyData,
 }
 
@@ -49,12 +54,29 @@ impl Default for HomeMapTabState {
             selected_sido_idx: 0,
             cad: CadSessionController::default(),
             active_basemap: BasemapSource::VworldSatellite,
+            basemap_opacity: HGIS_BASEMAP_DEFAULT_OPACITY,
+            basemap_brightness: HGIS_BASEMAP_DEFAULT_BRIGHTNESS,
             real_survey,
         }
     }
 }
 
 impl HomeMapTabState {
+    /// C++ `MapCanvasOverlay::setBasemapOpacity` — 배경지도 투명도 `[0.0, 1.0]` 클램핑 1:1
+    pub fn set_basemap_opacity(&mut self, opacity: f32) {
+        self.basemap_opacity = opacity.clamp(0.0, 1.0);
+    }
+
+    /// C++ `MapCanvasOverlay::setBasemapBrightness` — 배경지도 밝기 `[-1.0, 1.0]` 클램핑 1:1
+    pub fn set_basemap_brightness(&mut self, brightness: f32) {
+        self.basemap_brightness = brightness.clamp(-1.0, 1.0);
+    }
+
+    /// C++ `MapCanvasOverlay::syncUndoRedoPills` — 실행취소/다시실행 스택 상태에 따른 알약 버튼 활성화 여부 1:1
+    #[must_use]
+    pub const fn sync_undo_redo_pills(undo_count: usize, redo_count: usize) -> (bool, bool) {
+        (undo_count > 0, redo_count > 0)
+    }
     pub fn update_guide_for_tool(&mut self, tool: MapToolKind) {
         let hint = tool.guide_hint_ko();
         if hint.is_empty() {
@@ -168,5 +190,25 @@ impl HomeMapTabState {
                 .to_owned()
         });
         (changed_count, total_moved, total_inserted)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_map_canvas_overlay_opacity_clamping_150pct_to_1_0_and_undo_redo_pill_sync() {
+        let mut map = HomeMapTabState::default();
+        map.set_basemap_opacity(1.5);
+        assert!((map.basemap_opacity - 1.0).abs() < 1e-6);
+        map.set_basemap_opacity(-0.5);
+        assert!((map.basemap_opacity - 0.0).abs() < 1e-6);
+
+        map.set_basemap_brightness(2.5);
+        assert!((map.basemap_brightness - 1.0).abs() < 1e-6);
+
+        assert_eq!(HomeMapTabState::sync_undo_redo_pills(0, 0), (false, false));
+        assert_eq!(HomeMapTabState::sync_undo_redo_pills(1, 0), (true, false));
     }
 }

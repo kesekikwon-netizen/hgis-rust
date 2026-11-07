@@ -50,10 +50,55 @@ struct RawLayerItem {
     uscs: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BoreholeLayerError {
+    EmptyStrata,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct GeoInfoBoreholeService;
 
 impl GeoInfoBoreholeService {
+    pub const HGIS_DEPTH_EPSILON: f64 = 1.0e-4;
+
+    /// C++ `GeoinfoBoreholeClient::parseBoreholeLayers` — 심도 역전(`fromDepth >= toDepth`) 및 0두께 스킵, 총심도(`totalHoleDepth`) 초과 클램핑 1:1
+    pub fn validate_and_clamp_strata_layers(
+        raw_layers: &[StratumLayer],
+        total_hole_depth: f64,
+    ) -> Result<Vec<StratumLayer>, BoreholeLayerError> {
+        let mut valid = Vec::with_capacity(raw_layers.len());
+        for layer in raw_layers {
+            if !layer.from_m.is_finite()
+                || !layer.to_m.is_finite()
+                || layer.from_m < 0.0
+                || layer.to_m < 0.0
+            {
+                continue;
+            }
+            let clamped_to = if total_hole_depth > 0.0 && total_hole_depth.is_finite() {
+                layer.to_m.min(total_hole_depth)
+            } else {
+                layer.to_m
+            };
+            if layer.from_m >= clamped_to
+                || (clamped_to - layer.from_m).abs() < Self::HGIS_DEPTH_EPSILON
+            {
+                continue;
+            }
+            valid.push(StratumLayer {
+                from_m: layer.from_m,
+                to_m: clamped_to,
+                name: layer.name.clone(),
+                uscs: layer.uscs.clone(),
+            });
+        }
+        if valid.is_empty() {
+            Err(BoreholeLayerError::EmptyStrata)
+        } else {
+            Ok(valid)
+        }
+    }
+
     pub fn parse_sichudan_json(raw_bytes: &[u8]) -> StrataResult<BoreholeRecord> {
         let text = std::str::from_utf8(raw_bytes)
             .map_err(|e| StrataError::Network(format!("시추주상도 UTF-8 오류: {e}")))?;
@@ -168,5 +213,46 @@ mod tests {
         assert!((rec.weathered_depth_m - 6.0).abs() < 1e-6);
         assert_eq!(rec.dominant_uscs, "CL");
         Ok(())
+    }
+
+    #[test]
+    fn test_strata_depth_inversion_5_to_2_skipped_and_total_depth_clamped() {
+        let raw = vec![
+            StratumLayer {
+                from_m: 0.0,
+                to_m: 2.0,
+                name: "매립층".to_owned(),
+                uscs: "SM".to_owned(),
+            },
+            StratumLayer {
+                from_m: 5.0,
+                to_m: 2.0,
+                name: "역전지층".to_owned(),
+                uscs: "SM".to_owned(),
+            },
+            StratumLayer {
+                from_m: 2.0,
+                to_m: 15.0,
+                name: "충적층".to_owned(),
+                uscs: "CL".to_owned(),
+            },
+        ];
+        let valid = GeoInfoBoreholeService::validate_and_clamp_strata_layers(&raw, 10.0)
+            .expect("valid strata");
+        assert_eq!(valid.len(), 2);
+        assert_eq!(valid[0].name, "매립층");
+        assert_eq!(valid[1].name, "충적층");
+        assert!((valid[1].to_m - 10.0).abs() < 1e-6);
+
+        let all_invalid = vec![StratumLayer {
+            from_m: 5.0,
+            to_m: 2.0,
+            name: "역전지층".to_owned(),
+            uscs: "SM".to_owned(),
+        }];
+        assert_eq!(
+            GeoInfoBoreholeService::validate_and_clamp_strata_layers(&all_invalid, 10.0),
+            Err(BoreholeLayerError::EmptyStrata)
+        );
     }
 }
