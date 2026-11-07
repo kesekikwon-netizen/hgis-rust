@@ -57,11 +57,206 @@ pub struct SheetRectMm {
 
 impl SheetRectMm {
     #[must_use]
+    pub const fn left(&self) -> f64 {
+        self.x_mm
+    }
+
+    #[must_use]
+    pub const fn top(&self) -> f64 {
+        self.y_mm
+    }
+
+    #[must_use]
+    pub fn right(&self) -> f64 {
+        self.x_mm + self.width_mm
+    }
+
+    #[must_use]
+    pub fn bottom(&self) -> f64 {
+        self.y_mm + self.height_mm
+    }
+
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.width_mm > 0.0
+            && self.height_mm > 0.0
+            && self.x_mm.is_finite()
+            && self.y_mm.is_finite()
+            && self.width_mm.is_finite()
+            && self.height_mm.is_finite()
+    }
+
+    #[must_use]
     pub fn inside_sheet(&self, sheet_w: f64, sheet_h: f64) -> bool {
         self.x_mm >= 0.0
             && self.y_mm >= 0.0
             && (self.x_mm + self.width_mm) <= sheet_w
             && (self.y_mm + self.height_mm) <= sheet_h
+    }
+}
+
+/// C++ `LayoutService::SheetChromeRects` (`target/cpp-ref/src/core/LayoutService.h`)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SheetChromeRects {
+    pub map: SheetRectMm,
+    pub scale_bar: SheetRectMm,
+    pub scale_label: SheetRectMm,
+    pub crs: SheetRectMm,
+    pub north: SheetRectMm,
+}
+
+/// C++ `KaDrawingStudio::defaultMapRect()` (`target/cpp-ref/src/app/KaDrawingStudio.cpp:1344`)
+#[must_use]
+pub fn default_map_rect_mm(paper_w_mm: f64, paper_h_mm: f64) -> SheetRectMm {
+    const K_FIELD_EDGE_MM: f64 = 10.0;
+    const K_FIELD_BOTTOM_CHROME_MM: f64 = 38.0;
+    SheetRectMm {
+        x_mm: K_FIELD_EDGE_MM,
+        y_mm: K_FIELD_EDGE_MM,
+        width_mm: (paper_w_mm - K_FIELD_EDGE_MM * 2.0).max(40.0),
+        height_mm: (paper_h_mm - K_FIELD_EDGE_MM - K_FIELD_BOTTOM_CHROME_MM).max(40.0),
+    }
+}
+
+/// C++ `LayoutService::standardSheetChrome(const QRectF& page, const QRectF& requestedMap)`
+/// (`target/cpp-ref/src/core/LayoutService.cpp:895-966`) 1:1 이식
+#[must_use]
+pub fn standard_sheet_chrome(page: SheetRectMm, requested_map: SheetRectMm) -> SheetChromeRects {
+    const K_CHROME_H: f64 = 33.0;
+    const K_GAP: f64 = 7.0;
+    const K_MARGIN: f64 = 8.0;
+    const K_MIN_MAP_H: f64 = 40.0;
+    const K_BAR_H: f64 = 12.0;
+    const K_LABEL_H: f64 = 7.0;
+    const K_LABEL_GAP: f64 = 2.5;
+    const K_NORTH: f64 = 20.0;
+    const K_CRS_H: f64 = 7.0;
+    const K_CRS_W: f64 = 58.0;
+    const K_CRS_GAP: f64 = 6.0;
+
+    let mut map = requested_map;
+    if !map.is_valid() || map.width_mm < 8.0 || map.height_mm < 8.0 {
+        map = SheetRectMm {
+            x_mm: K_MARGIN,
+            y_mm: K_MARGIN,
+            width_mm: (page.width_mm - 2.0 * K_MARGIN).max(40.0),
+            height_mm: (page.height_mm - 2.0 * K_MARGIN - K_CHROME_H).max(K_MIN_MAP_H),
+        };
+    }
+
+    if map.bottom() + K_CHROME_H > page.bottom() - K_MARGIN {
+        let max_bottom = page.bottom() - K_MARGIN - K_CHROME_H;
+        let new_h = (max_bottom - map.top()).max(K_MIN_MAP_H);
+        map.height_mm = new_h;
+    }
+
+    let row_top = map.bottom() + K_GAP;
+    let mut north = SheetRectMm {
+        x_mm: map.right() - K_NORTH,
+        y_mm: row_top,
+        width_mm: K_NORTH,
+        height_mm: K_NORTH,
+    };
+    let mut crs = SheetRectMm {
+        x_mm: north.left() - K_CRS_GAP - K_CRS_W,
+        y_mm: row_top + ((K_BAR_H - K_CRS_H) * 0.5).max(0.0),
+        width_mm: K_CRS_W,
+        height_mm: K_CRS_H,
+    };
+
+    let bar_max_right = crs.left() - 8.0;
+    let bar_w = 88.0_f64
+        .min((map.width_mm * 0.38).max(48.0))
+        .min((bar_max_right - map.left()).max(32.0));
+    let mut scale_bar = SheetRectMm {
+        x_mm: map.left(),
+        y_mm: row_top,
+        width_mm: bar_w,
+        height_mm: K_BAR_H,
+    };
+    let mut scale_label = SheetRectMm {
+        x_mm: map.left(),
+        y_mm: scale_bar.bottom() + K_LABEL_GAP,
+        width_mm: bar_w,
+        height_mm: K_LABEL_H,
+    };
+
+    let clamp_on_page = |r: &mut SheetRectMm| {
+        if r.top() < map.bottom() {
+            r.y_mm = map.bottom();
+        }
+        if r.bottom() > page.bottom() - K_MARGIN {
+            r.height_mm = (page.bottom() - K_MARGIN - r.top()).max(4.0);
+        }
+        if r.left() < page.left() {
+            r.x_mm = page.left();
+        }
+        if r.right() > page.right() {
+            r.width_mm = (page.right() - r.left()).max(4.0);
+        }
+    };
+    clamp_on_page(&mut scale_bar);
+    clamp_on_page(&mut scale_label);
+    clamp_on_page(&mut north);
+    clamp_on_page(&mut crs);
+
+    if crs.right() > north.left() - 2.0 {
+        let new_right = (crs.left() + 4.0).max(north.left() - 2.0);
+        crs.width_mm = new_right - crs.left();
+    }
+    if scale_bar.right() > crs.left() - 4.0 {
+        scale_bar.width_mm = (crs.left() - 4.0 - scale_bar.left()).max(32.0);
+    }
+    scale_label.x_mm = scale_bar.left();
+    scale_label.width_mm = scale_bar.width_mm;
+    if scale_label.top() < scale_bar.bottom() {
+        scale_label.y_mm = scale_bar.bottom() + K_LABEL_GAP;
+    }
+    clamp_on_page(&mut scale_label);
+
+    SheetChromeRects {
+        map,
+        scale_bar,
+        scale_label,
+        crs,
+        north,
+    }
+}
+
+/// C++ `KaTitleBlock::defaultRect(const QRectF& page, const QRectF& mapRect)`
+/// (`target/cpp-ref/src/app/KaTitleBlock.cpp:67-77`) 1:1 이식
+#[must_use]
+pub fn default_title_block_rect_mm(page: SheetRectMm, map_rect: SheetRectMm) -> SheetRectMm {
+    let chrome = standard_sheet_chrome(page, map_rect);
+    let top = chrome.crs.bottom() + 1.5;
+    let height = 18.0_f64.min(page.bottom() - 3.0 - top);
+    let width = (chrome.north.left() - 2.0 - chrome.crs.left()).max(0.0);
+    if height >= 13.0 && width >= 50.0 {
+        return SheetRectMm {
+            x_mm: chrome.crs.left(),
+            y_mm: top,
+            width_mm: width,
+            height_mm: height,
+        };
+    }
+    let map = chrome.map;
+    let w = (map.width_mm * 0.4).clamp(40.0, 64.0);
+    SheetRectMm {
+        x_mm: map.right() - w - 2.0,
+        y_mm: map.bottom() - 19.0,
+        width_mm: w,
+        height_mm: 17.0,
+    }
+}
+
+/// C++ `KaDrawingStudio::defaultItemRect(kIdLegend)` (`target/cpp-ref/src/app/KaDrawingStudio.cpp:2321-2322`)
+#[must_use]
+pub fn default_legend_rect_mm(map_rect: SheetRectMm) -> SheetRectMm {
+    SheetRectMm {
+        x_mm: (map_rect.right() - 52.0).max(map_rect.left() + 4.0),
+        y_mm: map_rect.top() + 6.0,
+        width_mm: 48.0,
+        height_mm: 74.0,
     }
 }
 
@@ -197,6 +392,7 @@ pub struct DrawingSheet {
     pub crs_label_rect: SheetRectMm,
     pub north_arrow_rect: SheetRectMm,
     pub legend_rect: SheetRectMm,
+    pub title_block_rect: SheetRectMm,
     pub legend_kept_on_page: bool,
     pub scale_denominator: u32,
     pub grid_enabled: bool,
@@ -259,6 +455,12 @@ impl DrawingSheet {
                 width_mm: 0.0,
                 height_mm: 0.0,
             },
+            title_block_rect: SheetRectMm {
+                x_mm: 0.0,
+                y_mm: 0.0,
+                width_mm: 0.0,
+                height_mm: 0.0,
+            },
             legend_kept_on_page: true,
             scale_denominator: 5_000,
             grid_enabled: true,
@@ -294,37 +496,22 @@ impl DrawingSheet {
         self.recover_orphaned_items();
     }
 
-    /// `KaDrawingStudio::replaceSheetChrome` (`0001a93`) — 장식 넷(축척자·축척 글·좌표계·방위)을 어디에 끌어 두었든 새 용지의 아래 띠 자리로 되돌림
+    /// `KaDrawingStudio::replaceSheetChrome` (`0001a93`) — `LayoutService::standardSheetChrome` (`target/cpp-ref/src/core/LayoutService.cpp:895`)으로 지도·축척자·축척 글·좌표계·방위·표제란 사각형 계산
     pub fn replace_sheet_chrome(&mut self) {
-        let w = self.width_mm;
-        let h = self.height_mm;
-        let margin = 12.0;
-        let bottom_band_h = 22.0;
-        let band_y = h - margin - bottom_band_h + 2.0;
-        self.scale_bar_rect = SheetRectMm {
-            x_mm: margin,
-            y_mm: band_y,
-            width_mm: 55.0,
-            height_mm: 8.5,
+        let page = SheetRectMm {
+            x_mm: 0.0,
+            y_mm: 0.0,
+            width_mm: self.width_mm,
+            height_mm: self.height_mm,
         };
-        self.scale_text_rect = SheetRectMm {
-            x_mm: margin,
-            y_mm: band_y + 9.0,
-            width_mm: 55.0,
-            height_mm: 7.0,
-        };
-        self.crs_label_rect = SheetRectMm {
-            x_mm: margin + 60.0,
-            y_mm: band_y,
-            width_mm: 65.0,
-            height_mm: 16.0,
-        };
-        self.north_arrow_rect = SheetRectMm {
-            x_mm: (w - margin - 18.0).max(margin + 128.0),
-            y_mm: band_y,
-            width_mm: 16.0,
-            height_mm: 16.0,
-        };
+        let requested_map = default_map_rect_mm(self.width_mm, self.height_mm);
+        let chrome = standard_sheet_chrome(page, requested_map);
+        self.map_frame = chrome.map;
+        self.scale_bar_rect = chrome.scale_bar;
+        self.scale_text_rect = chrome.scale_label;
+        self.crs_label_rect = chrome.crs;
+        self.north_arrow_rect = chrome.north;
+        self.title_block_rect = default_title_block_rect_mm(page, self.map_frame);
     }
 
     /// `KaDrawingStudio.cpp` (`c9e58e3`) — A3 -> A4 전환 등에서 용지 밖으로 밀려난 범례/장식을 `clamp(pos, 4.0, max(4.0, page - size - 4.0))`로 복구
@@ -335,6 +522,10 @@ impl DrawingSheet {
             self.legend_rect.x_mm = self.legend_rect.x_mm.clamp(4.0, max_x);
             self.legend_rect.y_mm = self.legend_rect.y_mm.clamp(4.0, max_y);
         }
+        let tb_max_x = (self.width_mm - self.title_block_rect.width_mm - 4.0).max(4.0);
+        let tb_max_y = (self.height_mm - self.title_block_rect.height_mm - 3.0).max(3.0);
+        self.title_block_rect.x_mm = self.title_block_rect.x_mm.clamp(4.0, tb_max_x);
+        self.title_block_rect.y_mm = self.title_block_rect.y_mm.clamp(3.0, tb_max_y);
     }
 
     /// `LayoutService::applyMapCoordinateGrid` (`5362ef6`) — 지도에 미터 좌표격자가 켜져 있고 북쪽이 위(회전 0°)일 때 도면 격자를 지도 좌표격자와 같은 간격·같은 교점 오프셋으로 동기화
@@ -370,29 +561,16 @@ impl DrawingSheet {
         self.width_mm = w;
         self.height_mm = h;
 
-        let margin = 12.0;
-        let bottom_band_h = 22.0;
-        self.map_frame = SheetRectMm {
-            x_mm: margin,
-            y_mm: margin,
-            width_mm: (w - margin * 2.0).max(50.0),
-            height_mm: (h - margin * 2.0 - bottom_band_h).max(50.0),
-        };
-        let band_y = h - margin - bottom_band_h + 2.0;
         self.replace_sheet_chrome();
+        // KaDrawingStudio::defaultItemRect(kIdLegend): QRectF(mapR.right() - 52.0, mapR.top() + 6.0, 48.0, 74.0)
         self.legend_rect = if self.legend_kept_on_page {
-            SheetRectMm {
-                x_mm: w - margin - 52.0,
-                y_mm: band_y - 44.0,
-                width_mm: 48.0,
-                height_mm: 40.0,
-            }
+            default_legend_rect_mm(self.map_frame)
         } else {
             SheetRectMm {
                 x_mm: w + 15.0,
-                y_mm: margin,
+                y_mm: 10.0,
                 width_mm: 48.0,
-                height_mm: 40.0,
+                height_mm: 74.0,
             }
         };
     }
@@ -411,12 +589,29 @@ impl DrawingSheet {
                 .inside_sheet(self.width_mm, self.height_mm)
             && self
                 .north_arrow_rect
+                .inside_sheet(self.width_mm, self.height_mm)
+            && self
+                .title_block_rect
                 .inside_sheet(self.width_mm, self.height_mm);
         if self.legend_kept_on_page {
             in_frame && self.legend_rect.inside_sheet(self.width_mm, self.height_mm)
         } else {
             in_frame
         }
+    }
+
+    /// 지상 좌표 `world_xy` (m)를 현재 용지의 `map_frame` 내부 용지 밀리미터 좌표 `[x_mm, y_mm]`로 투영
+    /// (`LayoutService::extentForPaperScale` 및 `layoutMapItemFromXy` 1:1 대응)
+    #[must_use]
+    pub fn world_to_sheet_mm(&self, center_world_xy: [f64; 2], world_xy: [f64; 2]) -> [f64; 2] {
+        let scale = f64::from(self.scale_denominator.max(1));
+        let mm_per_meter = 1000.0 / scale;
+        let mc_x = self.map_frame.x_mm + self.map_frame.width_mm * 0.5;
+        let mc_y = self.map_frame.y_mm + self.map_frame.height_mm * 0.5;
+        [
+            mc_x + (world_xy[0] - center_world_xy[0]) * mm_per_meter,
+            mc_y - (world_xy[1] - center_world_xy[1]) * mm_per_meter,
+        ]
     }
 
     /// C++ `PlateScaleBar::calculateDivisions(mapScale, targetWidthMm)` — 1-2-5 계열 정수 단위 축척막대 간격(m) 산출 1:1
@@ -1034,6 +1229,100 @@ pub fn assign_sequential_layout_numbers(
         .collect()
 }
 
+/// C++ `LayoutService::niceScaleBarSegmentMeters(double mapWidthMm, double scaleDenominator, int segments)` 1:1 대응
+#[must_use]
+pub fn nice_scale_bar_segment_meters(
+    map_width_mm: f64,
+    scale_denominator: f64,
+    segments: u32,
+) -> f64 {
+    let segs = f64::from(segments.max(1));
+    if !map_width_mm.is_finite()
+        || !scale_denominator.is_finite()
+        || map_width_mm <= 0.0
+        || scale_denominator <= 0.0
+    {
+        return 1.0;
+    }
+    let target_bar_mm = (map_width_mm * 0.35).clamp(40.0, 160.0);
+    let raw_seg = (target_bar_mm / 1000.0 * scale_denominator) / segs;
+    const K_LEN: [f64; 19] = [
+        0.1, 0.2, 0.4, 0.5, 1.0, 2.0, 4.0, 5.0, 10.0, 20.0, 40.0, 50.0, 100.0, 200.0, 400.0, 500.0,
+        1000.0, 2000.0, 5000.0,
+    ];
+    let mut best = K_LEN[0];
+    let mut best_rel = f64::INFINITY;
+    for &n in &K_LEN {
+        let rel = (raw_seg - n).abs() / n;
+        if rel < best_rel {
+            best_rel = rel;
+            best = n;
+        }
+    }
+    best
+}
+
+/// C++ `LayoutService::niceGridIntervalMeters(double scaleDenominator, double mapWidthMm)` 1:1 대응
+#[must_use]
+pub fn nice_grid_interval_meters(scale_denominator: f64, map_width_mm: f64) -> f64 {
+    if !scale_denominator.is_finite() || scale_denominator <= 0.0 {
+        return 100.0;
+    }
+    let paper_mm = if map_width_mm > 0.0 && map_width_mm.is_finite() {
+        map_width_mm
+    } else {
+        180.0
+    };
+    let target_mm = (paper_mm * 0.24).clamp(25.0, 70.0);
+    let raw_m = target_mm / 1000.0 * scale_denominator;
+    const K_STEPS: [f64; 18] = [
+        0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 200.0, 250.0, 500.0, 1000.0,
+        2000.0, 5000.0, 10000.0,
+    ];
+    let mut best = K_STEPS[0];
+    let mut best_rel = f64::INFINITY;
+    for &s in &K_STEPS {
+        let rel = (raw_m - s).abs() / s;
+        if rel < best_rel {
+            best_rel = rel;
+            best = s;
+        }
+    }
+    best
+}
+
+/// C++ `KaTitleBlock::text` (`target/cpp-ref/src/app/KaTitleBlock.cpp:57-65`) — 표제란 5행 생성
+/// `도면명 / 조사명 / 유적명 / 축  척 / 작성일`, 빈 값은 `―`(U+2015)로 채움 (`orDash`)
+#[must_use]
+pub fn format_title_block_lines(
+    drawing_title: &str,
+    survey_name: &str,
+    site_name: &str,
+    scale_denominator: u32,
+    date_ymd: &str,
+) -> [String; 5] {
+    let or_dash = |s: &str| -> String {
+        let t = s.trim();
+        if t.is_empty() {
+            "―".to_owned()
+        } else {
+            t.to_owned()
+        }
+    };
+    let scale_str = if scale_denominator > 0 {
+        format!("1 : {scale_denominator}")
+    } else {
+        "1 : ―".to_owned()
+    };
+    [
+        format!("도면명   {}", or_dash(drawing_title)),
+        format!("조사명   {}", or_dash(survey_name)),
+        format!("유적명   {}", or_dash(site_name)),
+        format!("축  척   {scale_str}"),
+        format!("작성일   {}", or_dash(date_ymd)),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1067,10 +1356,10 @@ mod tests {
         // Switch down to A4 Portrait
         sheet.change_paper(SheetPaperSize::A4, SheetOrientation::Portrait);
         assert!(sheet.all_decorations_inside_sheet());
-        let expected_band_y = sheet.height_mm - 12.0 - 22.0 + 2.0;
-        assert!((sheet.scale_bar_rect.y_mm - expected_band_y).abs() < 1e-6);
-        assert!((sheet.crs_label_rect.y_mm - expected_band_y).abs() < 1e-6);
-        assert!((sheet.north_arrow_rect.y_mm - expected_band_y).abs() < 1e-6);
+        let expected_row_top = sheet.map_frame.bottom() + 7.0;
+        assert!((sheet.scale_bar_rect.y_mm - expected_row_top).abs() < 1e-6);
+        assert!((sheet.crs_label_rect.y_mm - (expected_row_top + 2.5)).abs() < 1e-6);
+        assert!((sheet.north_arrow_rect.y_mm - expected_row_top).abs() < 1e-6);
     }
 
     #[test]
@@ -1275,5 +1564,29 @@ mod tests {
         assert_eq!(ink_for_badge_rgb([255, 255, 0]), [0, 0, 0]);
         assert_eq!(ink_for_badge_rgb([231, 76, 60]), [255, 255, 255]);
         assert!(layout_badge_circle_size_mm(12) > layout_badge_circle_size_mm(1));
+    }
+
+    #[test]
+    fn test_world_to_sheet_mm_scale_and_nice_scalebar_grid_and_title_block() {
+        let mut sheet = DrawingSheet::new(SheetPaperSize::A4, SheetOrientation::Portrait);
+        sheet.scale_denominator = 5_000;
+        let center = [219_745.6, 360_930.5];
+        let p_center = sheet.world_to_sheet_mm(center, center);
+        let p_east_500m = sheet.world_to_sheet_mm(center, [center[0] + 500.0, center[1]]);
+        // At 1:5,000, 500m on ground = 100mm on paper
+        assert!((p_east_500m[0] - p_center[0] - 100.0).abs() < 1e-6);
+
+        let seg_m = nice_scale_bar_segment_meters(186.0, 5_000.0, 4);
+        assert!((seg_m - 100.0).abs() < 1e-6);
+        let grid_m = nice_grid_interval_meters(5_000.0, 186.0);
+        assert!((grid_m - 250.0).abs() < 1e-6);
+
+        let tb_lines = format_title_block_lines("조사도면", "조사구역", "", 5_000, "2026-11-08");
+        assert_eq!(tb_lines[0], "도면명   조사도면");
+        assert_eq!(tb_lines[1], "조사명   조사구역");
+        assert_eq!(tb_lines[2], "유적명   ―");
+        assert_eq!(tb_lines[3], "축  척   1 : 5000");
+        assert_eq!(tb_lines[4], "작성일   2026-11-08");
+        assert!(sheet.all_decorations_inside_sheet());
     }
 }

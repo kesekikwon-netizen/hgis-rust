@@ -34,6 +34,8 @@ pub struct RealTrenchPoly {
 pub struct RealSurveyData {
     pub survey_dir: PathBuf,
     pub gpkg_path: PathBuf,
+    pub survey_name: String,
+    pub site_name: String,
     pub survey_rings: Vec<Vec<[f64; 2]>>,
     pub survey_area_m2: f64,
     pub survey_center: [f64; 2],
@@ -121,6 +123,8 @@ impl RealSurveyData {
         let mut data = Self {
             survey_dir: dir.to_path_buf(),
             gpkg_path: gpkg_path.clone(),
+            survey_name: String::new(),
+            site_name: String::new(),
             survey_rings: Vec::new(),
             survey_area_m2: 86_865.77,
             survey_center: [219_745.6, 360_930.5],
@@ -151,6 +155,23 @@ impl RealSurveyData {
             self.populate_fallback_geometry();
             return;
         };
+        if let Ok(mut stmt) = conn.prepare("SELECT survey_name, site_name FROM survey_area LIMIT 1")
+        {
+            if let Ok((s_name, st_name)) = stmt.query_row([], |r| {
+                let s = r
+                    .get::<_, Option<String>>(0)
+                    .unwrap_or(None)
+                    .unwrap_or_default();
+                let st = r
+                    .get::<_, Option<String>>(1)
+                    .unwrap_or(None)
+                    .unwrap_or_default();
+                Ok((s, st))
+            }) {
+                self.survey_name = s_name.trim().to_owned();
+                self.site_name = st_name.trim().to_owned();
+            }
+        }
         if let Ok(mut stmt) = conn.prepare("SELECT geom FROM survey_area") {
             if let Ok(mut rows) = stmt.query([]) {
                 while let Ok(Some(r)) = rows.next() {
