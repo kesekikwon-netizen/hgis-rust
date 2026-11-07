@@ -609,6 +609,32 @@ mod tests {
         let labels = assign_cascading_figure_numbers(2, &roles);
         assert_eq!(labels, vec!["도면 2-1", "도면 2-2", "도면 2-3"]);
         assert!((sanitize_viewport_scale(0.0) - HGIS_DEFAULT_PLAN_SCALE).abs() < 1e-6);
+
+        // TestKaLabelPlacementEngine::testCollisionAvoidanceLeaderLine
+        let obstacles = [SheetRectMm {
+            x_mm: 40.0,
+            y_mm: 40.0,
+            width_mm: 20.0,
+            height_mm: 20.0,
+        }];
+        let tasks = [LabelPlacementTask {
+            fid: 1,
+            label_text: "1호 주거지".to_string(),
+            feature_anchor_point_mm: [50.0, 50.0],
+            text_size_mm: [14.0, 5.0],
+            priority: 1.0,
+        }];
+        let viewport = SheetRectMm {
+            x_mm: 0.0,
+            y_mm: 0.0,
+            width_mm: 200.0,
+            height_mm: 200.0,
+        };
+        let placed = solve_label_placement(&tasks, &obstacles, viewport);
+        assert_eq!(placed.len(), 1);
+        assert!(placed[0].needs_leader_line);
+        assert_eq!(placed[0].leader_line_path_mm.first().copied(), Some([50.0, 50.0]));
+        assert!(rects_overlap_mm(placed[0].final_label_rect_mm, obstacles[0]) <= 1e-9);
     }
 }
 
@@ -672,4 +698,146 @@ pub fn assign_cascading_figure_numbers(
     (0..clamped)
         .map(|idx| format_figure_number(base_sheet_number, Some(idx + 1)))
         .collect()
+}
+
+pub const HGIS_LEADER_LINE_MAX_DIST_MM: f64 = 25.0;
+pub const HGIS_LABEL_COLLISION_PENALTY: f64 = 1000.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LabelCandidatePos {
+    Top,
+    TopRight,
+    Right,
+    BottomRight,
+    Bottom,
+    BottomLeft,
+    Left,
+    TopLeft,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LabelPlacementTask {
+    pub fid: i64,
+    pub label_text: String,
+    pub feature_anchor_point_mm: [f64; 2],
+    pub text_size_mm: [f64; 2],
+    pub priority: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlacedLabelResult {
+    pub fid: i64,
+    pub final_label_rect_mm: SheetRectMm,
+    pub needs_leader_line: bool,
+    pub leader_line_path_mm: Vec<[f64; 2]>,
+}
+
+fn rects_overlap_mm(a: SheetRectMm, b: SheetRectMm) -> f64 {
+    let ox = (a.x_mm + a.width_mm).min(b.x_mm + b.width_mm) - a.x_mm.max(b.x_mm);
+    let oy = (a.y_mm + a.height_mm).min(b.y_mm + b.height_mm) - a.y_mm.max(b.y_mm);
+    if ox > 0.0 && oy > 0.0 {
+        ox * oy
+    } else {
+        0.0
+    }
+}
+
+/// C++ `KaLabelPlacementEngine::solveLabelPlacement` & `KaLeaderLineRouter` — 8방향 후보 위치 비용 함수 최소화, 장애물 충돌 회피 및 2단 굴절 지시선(`leaderLinePath`) 생성
+#[must_use]
+pub fn solve_label_placement(
+    tasks: &[LabelPlacementTask],
+    obstacle_rects_mm: &[SheetRectMm],
+    viewport_bounds_mm: SheetRectMm,
+) -> Vec<PlacedLabelResult> {
+    let dirs: [(LabelCandidatePos, [f64; 2], f64); 8] = [
+        (LabelCandidatePos::TopRight, [1.0, 1.0], 0.0),
+        (LabelCandidatePos::Right, [1.0, 0.0], 0.2),
+        (LabelCandidatePos::Top, [0.0, 1.0], 0.4),
+        (LabelCandidatePos::BottomRight, [1.0, -1.0], 0.6),
+        (LabelCandidatePos::TopLeft, [-1.0, 1.0], 0.8),
+        (LabelCandidatePos::Left, [-1.0, 0.0], 1.0),
+        (LabelCandidatePos::Bottom, [0.0, -1.0], 1.2),
+        (LabelCandidatePos::BottomLeft, [-1.0, -1.0], 1.4),
+    ];
+    let radii_mm = [2.0_f64, 6.0, 12.0, 20.0];
+    let leader_threshold_mm = 5.0;
+
+    let mut placed_obstacles: Vec<SheetRectMm> = obstacle_rects_mm.to_vec();
+    let mut results = Vec::with_capacity(tasks.len());
+
+    for task in tasks {
+        let [ax, ay] = task.feature_anchor_point_mm;
+        let [tw, th] = [task.text_size_mm[0].max(1.0), task.text_size_mm[1].max(1.0)];
+        let mut best_rect: Option<(f64, SheetRectMm, f64)> = None;
+
+        for &r in &radii_mm {
+            if r > HGIS_LEADER_LINE_MAX_DIST_MM {
+                continue;
+            }
+            for &(_, dir, dir_bias) in &dirs {
+                let norm = dir[0].hypot(dir[1]).max(1.0);
+                let cx = ax + (dir[0] / norm) * r;
+                let cy = ay + (dir[1] / norm) * r;
+                let cand_rect = SheetRectMm {
+                    x_mm: if dir[0] >= 0.0 { cx } else { cx - tw },
+                    y_mm: if dir[1] >= 0.0 { cy } else { cy - th },
+                    width_mm: tw,
+                    height_mm: th,
+                };
+                // Check inside viewport bounds
+                let inside = cand_rect.x_mm >= viewport_bounds_mm.x_mm
+                    && cand_rect.y_mm >= viewport_bounds_mm.y_mm
+                    && (cand_rect.x_mm + cand_rect.width_mm)
+                        <= (viewport_bounds_mm.x_mm + viewport_bounds_mm.width_mm)
+                    && (cand_rect.y_mm + cand_rect.height_mm)
+                        <= (viewport_bounds_mm.y_mm + viewport_bounds_mm.height_mm);
+                if !inside {
+                    continue;
+                }
+                let overlap_sum: f64 = placed_obstacles
+                    .iter()
+                    .map(|&obs| rects_overlap_mm(cand_rect, obs))
+                    .sum();
+                let cost = if overlap_sum > 0.0 {
+                    HGIS_LABEL_COLLISION_PENALTY * (1.0 + overlap_sum)
+                } else {
+                    0.0
+                } + 2.5 * r
+                    + dir_bias;
+
+                if best_rect.is_none_or(|(best_cost, _, _)| cost < best_cost) {
+                    best_rect = Some((cost, cand_rect, r));
+                }
+            }
+        }
+
+        if let Some((_, rect, dist)) = best_rect {
+            placed_obstacles.push(rect);
+            let needs_leader_line = dist > leader_threshold_mm;
+            let leader_line_path_mm = if needs_leader_line {
+                let end_x = if rect.x_mm >= ax {
+                    rect.x_mm
+                } else {
+                    rect.x_mm + rect.width_mm
+                };
+                let end_y = rect.y_mm + rect.height_mm * 0.5;
+                let elbow_x = if rect.x_mm >= ax {
+                    end_x - 3.0
+                } else {
+                    end_x + 3.0
+                };
+                vec![[ax, ay], [elbow_x, end_y], [end_x, end_y]]
+            } else {
+                Vec::new()
+            };
+            results.push(PlacedLabelResult {
+                fid: task.fid,
+                final_label_rect_mm: rect,
+                needs_leader_line,
+                leader_line_path_mm,
+            });
+        }
+    }
+
+    results
 }

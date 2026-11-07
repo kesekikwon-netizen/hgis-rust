@@ -135,6 +135,112 @@ pub fn export_sheet_pdf_atomic(
     })
 }
 
+pub const HGIS_DEFAULT_RASTER_TILE_SIZE: usize = 256;
+pub const HGIS_HISTO_PERCENTILE_LOW: f64 = 0.02;
+pub const HGIS_HISTO_PERCENTILE_HIGH: f64 = 0.98;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StretchMode {
+    MinMax,
+    Percentile2To98,
+    StandardDeviation2Sigma,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StretchedTileBuffer {
+    pub rgba_bytes: Vec<u8>,
+    pub has_valid_data: bool,
+    pub min_stretched: f32,
+    pub max_stretched: f32,
+}
+
+/// C++ `KaRasterPyramidReader` — 현재 뷰포트 해상도(`view_res_m`)와 원본 픽셀 해상도(`native_res_m`) 비율로부터 피라미드 오버뷰 레벨 `L = max(0, floor(log2(view_res_m / native_res_m)))` 산출
+#[must_use]
+pub fn select_raster_overview_level(view_res_m: f64, native_res_m: f64, max_level: u32) -> u32 {
+    if view_res_m <= 0.0 || native_res_m <= 0.0 || !view_res_m.is_finite() || !native_res_m.is_finite()
+    {
+        return 0;
+    }
+    let ratio = view_res_m / native_res_m;
+    if ratio <= 1.0 {
+        0
+    } else {
+        (ratio.log2().floor().max(0.0) as u32).min(max_level)
+    }
+}
+
+/// C++ `KaRasterPyramidReader::readAndStretchTile` & `KaHistogramStretchEngine` — 2% ~ 98% 퍼센타일 대비 스트레칭, 플랫 히스토그램(`|vmax - vmin| <= 1e-6` -> `128`) 방어 및 NoData 완전 투명(`alpha = 0`) 마스킹
+#[must_use]
+pub fn stretch_and_mask_raster_tile(
+    raw_band: &[f32],
+    no_data_val: f32,
+    mode: StretchMode,
+) -> StretchedTileBuffer {
+    let mut valid_vals: Vec<f32> = raw_band
+        .iter()
+        .copied()
+        .filter(|&v| v.is_finite() && (v - no_data_val).abs() > 1e-5)
+        .collect();
+
+    if valid_vals.is_empty() {
+        return StretchedTileBuffer {
+            rgba_bytes: vec![0_u8; raw_band.len() * 4],
+            has_valid_data: false,
+            min_stretched: 0.0,
+            max_stretched: 0.0,
+        };
+    }
+
+    valid_vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = valid_vals.len();
+    let (v_min, v_max) = match mode {
+        StretchMode::MinMax => (valid_vals[0], valid_vals[n - 1]),
+        StretchMode::Percentile2To98 => {
+            let low_idx = ((n as f64 * HGIS_HISTO_PERCENTILE_LOW).floor() as usize).min(n - 1);
+            let high_idx = ((n as f64 * HGIS_HISTO_PERCENTILE_HIGH).floor().max(0.0) as usize)
+                .saturating_sub(1)
+                .min(n - 1);
+            (valid_vals[low_idx], valid_vals[high_idx.max(low_idx)])
+        }
+        StretchMode::StandardDeviation2Sigma => {
+            let mean = valid_vals.iter().map(|&v| f64::from(v)).sum::<f64>() / n as f64;
+            let var = valid_vals
+                .iter()
+                .map(|&v| (f64::from(v) - mean).powi(2))
+                .sum::<f64>()
+                / n as f64;
+            let sigma = var.sqrt();
+            ((mean - 2.0 * sigma) as f32, (mean + 2.0 * sigma) as f32)
+        }
+    };
+
+    let span = f64::from(v_max) - f64::from(v_min);
+    let is_flat = span.abs() <= 1e-6;
+    let mut rgba_bytes = Vec::with_capacity(raw_band.len() * 4);
+    for &v in raw_band {
+        if !v.is_finite() || (v - no_data_val).abs() <= 1e-5 {
+            rgba_bytes.extend_from_slice(&[0, 0, 0, 0]);
+        } else {
+            let byte_val = if is_flat {
+                128_u8
+            } else {
+                let norm = ((f64::from(v) - f64::from(v_min)) / span * 255.0)
+                    .round()
+                    .clamp(0.0, 255.0);
+                norm as u8
+            };
+            rgba_bytes.extend_from_slice(&[byte_val, byte_val, byte_val, 255]);
+        }
+    }
+
+    StretchedTileBuffer {
+        rgba_bytes,
+        has_valid_data: true,
+        min_stretched: v_min,
+        max_stretched: v_max,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,5 +315,35 @@ mod tests {
         assert!(!target_pdf.with_extension("pdf.tmp").exists());
         let _ = std::fs::remove_dir_all(&dir);
         Ok(())
+    }
+
+    #[test]
+    fn test_percentile_2_to_98_stretch_and_nodata_alpha_masking() {
+        // TestKaHistogramStretchEngine::testPercentile2To98Stretch
+        // 100 valid pixels: 2 bottom = 0.0, 3rd (2% index) = 10.0, 98th = 90.0, 2 top = 100.0
+        let mut band = Vec::with_capacity(101);
+        band.push(0.0_f32);
+        band.push(0.0_f32);
+        for i in 0..96 {
+            let val = 10.0 + (80.0 * (i as f32) / 95.0);
+            band.push(val);
+        }
+        band.push(100.0_f32);
+        band.push(100.0_f32);
+        // Append a mid-value pixel 50.0 and a NoData pixel -9999.0
+        band[50] = 50.0_f32;
+        band.push(-9999.0_f32);
+
+        let tile = stretch_and_mask_raster_tile(&band, -9999.0, StretchMode::Percentile2To98);
+        assert!(tile.has_valid_data);
+        assert!((tile.min_stretched - 10.0).abs() < 1e-3);
+        assert!((tile.max_stretched - 90.0).abs() < 1e-3);
+        // Pixel 50 (value 50.0) -> round((50 - 10) / 80 * 255) = round(127.5) = 128
+        assert_eq!(tile.rgba_bytes[50 * 4], 128);
+        assert_eq!(tile.rgba_bytes[50 * 4 + 3], 255);
+        // Last pixel (-9999.0 NoData) -> alpha == 0
+        let last_alpha = tile.rgba_bytes[100 * 4 + 3];
+        assert_eq!(last_alpha, 0);
+        assert_eq!(select_raster_overview_level(0.4, 0.05, 5), 3);
     }
 }
