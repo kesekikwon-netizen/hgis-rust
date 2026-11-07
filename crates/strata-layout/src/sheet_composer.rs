@@ -389,6 +389,36 @@ pub fn elide_title_block_text_right(raw_text: &str, max_chars: usize) -> String 
 
 pub const HGIS_TITLE_BLOCK_DEFAULT_W_MM: f64 = 180.0;
 pub const HGIS_TITLE_BLOCK_ROW_H_MM: f64 = 8.0;
+pub const HGIS_MIN_INSET_BOX_SIZE_MM: f64 = 3.0;
+pub const HGIS_INSET_CROSSHAIR_LEN_MM: f64 = 2.0;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InsetExtentBoxMm {
+    pub rect_mm: SheetRectMm,
+    pub has_crosshair: bool,
+    pub crosshair_len_mm: f64,
+}
+
+/// C++ `KaInsetMapItem` / `KaOverviewMapSync` — 광역 위치도 내 메인 지도 영역 사각형 최소 크기(`3.0mm × 3.0mm`) 보장 클램핑 및 중심 십자선(`2.0mm`) 표시
+#[must_use]
+pub fn compute_inset_overview_box_mm(projected_rect_mm: SheetRectMm) -> InsetExtentBoxMm {
+    let cx = projected_rect_mm.x_mm + projected_rect_mm.width_mm * 0.5;
+    let cy = projected_rect_mm.y_mm + projected_rect_mm.height_mm * 0.5;
+    let clamped_w = projected_rect_mm.width_mm.max(HGIS_MIN_INSET_BOX_SIZE_MM);
+    let clamped_h = projected_rect_mm.height_mm.max(HGIS_MIN_INSET_BOX_SIZE_MM);
+    let has_crosshair = projected_rect_mm.width_mm <= HGIS_MIN_INSET_BOX_SIZE_MM
+        || projected_rect_mm.height_mm <= HGIS_MIN_INSET_BOX_SIZE_MM;
+    InsetExtentBoxMm {
+        rect_mm: SheetRectMm {
+            x_mm: cx - clamped_w * 0.5,
+            y_mm: cy - clamped_h * 0.5,
+            width_mm: clamped_w,
+            height_mm: clamped_h,
+        },
+        has_crosshair,
+        crosshair_len_mm: HGIS_INSET_CROSSHAIR_LEN_MM,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LegendLayerCandidate {
@@ -558,5 +588,16 @@ mod tests {
         let entries = collect_visible_non_empty_legend_entries(&candidates);
         assert_eq!(entries.len(), 3);
         assert!(!entries.contains(&DomainLayerKey::FeaturePoly));
+
+        let tiny = SheetRectMm {
+            x_mm: 20.0,
+            y_mm: 30.0,
+            width_mm: 1.2,
+            height_mm: 0.8,
+        };
+        let inset_box = compute_inset_overview_box_mm(tiny);
+        assert!((inset_box.rect_mm.width_mm - 3.0).abs() < 1e-9);
+        assert!((inset_box.rect_mm.height_mm - 3.0).abs() < 1e-9);
+        assert!(inset_box.has_crosshair);
     }
 }
