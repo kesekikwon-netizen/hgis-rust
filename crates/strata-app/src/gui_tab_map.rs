@@ -13,6 +13,48 @@ pub const UX_MAP_LEFT_WIDTH: f32 = 351.0;
 pub const UX_MAP_CANVAS_WIDTH: f32 = 954.0;
 pub const UX_MAP_RIGHT_WIDTH: f32 = 236.0;
 
+/// `KaShellGridControls.cpp:41-145` `KaShellGridSettings` — 2줄 격자 세부 설정
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShellGridConfig {
+    /// 0.1~10000 m
+    pub step_m: f64,
+    pub show_labels: bool,
+    /// `미터 격자` = false, `경위도 격자` = true
+    pub is_geo: bool,
+    /// `SHELL_GRID_SWATCHES` index
+    pub color_idx: usize,
+    /// 0.0~360.0°, meters grid only
+    pub rotation_deg: f32,
+    /// 0.5~5.0
+    pub line_width: f32,
+    /// 0 = 실선, 1 = 점선, 2 = 점
+    pub dash_idx: usize,
+}
+
+impl Default for ShellGridConfig {
+    fn default() -> Self {
+        Self {
+            step_m: 20.0,
+            show_labels: true,
+            is_geo: false,
+            color_idx: 0,
+            rotation_deg: 0.0,
+            line_width: 1.2,
+            dash_idx: 1,
+        }
+    }
+}
+
+/// `KaShellGridControls.cpp:74-76` — 실선 / 점선 / 점
+pub const SHELL_GRID_DASH_LABELS: [&str; 3] = ["실선", "점선", "점"];
+
+/// `KaShellGridControls.cpp:83-87` — 격자 선 색 견본 셋
+pub const SHELL_GRID_SWATCHES: [(Color32, &str); 3] = [
+    (Color32::from_rgb(0xD9, 0x2B, 0x2B), "빨간색 격자"),
+    (Color32::from_rgb(0x1D, 0x4E, 0xD8), "파란색 격자"),
+    (Color32::from_rgb(0x1F, 0x29, 0x37), "검정색 격자"),
+];
+
 fn w2s(rect: Rect, vp: &ViewportTransform, xy: [f64; 2]) -> Pos2 {
     let [sx, sy] = vp.world_to_screen(xy);
     Pos2::new(rect.left() + sx as f32, rect.top() + sy as f32)
@@ -842,7 +884,8 @@ impl StrataAppState {
         }
     }
 
-    /// `KaShellGridControls.cpp:41-193` — 우하단 좌표격자 컨트롤 바 (`☐ 좌표격자` + 격자 종류 + 간격 선택 + 라벨 표시 + 선 색상)
+    /// `KaShellGridControls.cpp:41-193` — 좌표격자 토글 + 2줄 `gridDetail`
+    /// (미터·경위도, 간격, 회전 / 굵기, 선 모양, 색 견본 셋과 직접 고르기)
     fn paint_shell_grid_controls(
         &mut self,
         ctx: &egui::Context,
@@ -850,13 +893,16 @@ impl StrataAppState {
         p: &egui::Painter,
         rect: Rect,
     ) {
-        let (mut step_m, mut show_labels, mut is_geo, mut color_idx) = ctx.data_mut(|d| {
-            d.get_temp::<(f64, bool, bool, usize)>(egui::Id::new("ka_shell_grid_cfg"))
-                .unwrap_or((100.0, true, false, 2))
+        let mut cfg = ctx.data_mut(|d| {
+            d.get_temp::<ShellGridConfig>(egui::Id::new("ka_shell_grid_cfg"))
+                .unwrap_or_default()
         });
+        let enabled = self.home_map.grid_enabled;
 
+        // KaShellGridControls.cpp:120-125 — 세부 설정은 「좌표격자」를 켤 때만 보인다
+        let detail_h = if enabled { 60.0 } else { 0.0 };
+        let bar_h = 28.0 + detail_h;
         let bar_w = 344.0;
-        let bar_h = 30.0;
         let bar_r = Rect::from_min_size(
             Pos2::new(rect.right() - bar_w - 12.0, rect.bottom() - bar_h - 10.0),
             Vec2::new(bar_w, bar_h),
@@ -873,13 +919,94 @@ impl StrataAppState {
             egui::StrokeKind::Middle,
         );
 
-        // 1) ☐ 좌표격자 체크박스 (KaShellGridControls.cpp:49-51)
-        let chk_r = Rect::from_min_size(bar_r.min + Vec2::new(6.0, 3.0), Vec2::new(78.0, 24.0));
-        let chk_lbl = if self.home_map.grid_enabled {
-            "☑ 좌표격자"
-        } else {
-            "☐ 좌표격자"
-        };
+        let detail_r = Rect::from_min_size(bar_r.min, Vec2::new(bar_w, detail_h));
+        if enabled {
+            ui.scope_builder(egui::UiBuilder::new().max_rect(detail_r.shrink2(Vec2::new(8.0, 6.0))), |ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(4.0, 3.0);
+                // Row 0 — 미터/경위도 · 간격 · 회전 (KaShellGridControls.cpp:113-116)
+                ui.horizontal(|ui| {
+                    let kind_lbl = if cfg.is_geo { "경위도 격자" } else { "미터 격자" };
+                    if ui
+                        .selectable_label(cfg.is_geo, kind_lbl)
+                        .on_hover_text(
+                            "미터 격자는 작업 좌표계(5186·5187) 좌표로, 경위도 격자는 도·분·초로 긋습니다.",
+                        )
+                        .clicked()
+                    {
+                        cfg.is_geo = !cfg.is_geo;
+                    }
+                    ui.add_enabled(
+                        !cfg.is_geo,
+                        egui::DragValue::new(&mut cfg.step_m)
+                            .range(0.1..=10000.0)
+                            .speed(1.0)
+                            .fixed_decimals(1)
+                            .prefix("간격 ")
+                            .suffix(" m"),
+                    )
+                    .on_hover_text("격자 간격(미터). 시굴격자를 옮길 때도 이 간격에 붙습니다.");
+                    ui.add_enabled(
+                        !cfg.is_geo,
+                        egui::DragValue::new(&mut cfg.rotation_deg)
+                            .range(0.0..=360.0)
+                            .speed(1.0)
+                            .fixed_decimals(1)
+                            .prefix("회전 ")
+                            .suffix("°"),
+                    )
+                    .on_hover_text("격자 회전 (동쪽 기준 시계 방향)");
+                });
+                // Row 1 — 굵기 · 선 모양 · 색 견본 (KaShellGridControls.cpp:116-118)
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut cfg.line_width)
+                            .range(0.5..=5.0)
+                            .speed(0.1)
+                            .fixed_decimals(1)
+                            .prefix("굵기 "),
+                    )
+                    .on_hover_text("격자 선 굵기");
+                    let dash_lbl = SHELL_GRID_DASH_LABELS[cfg.dash_idx.min(2)];
+                    if ui
+                        .selectable_label(false, dash_lbl)
+                        .on_hover_text("격자 선 모양")
+                        .clicked()
+                    {
+                        cfg.dash_idx = (cfg.dash_idx + 1) % SHELL_GRID_DASH_LABELS.len();
+                    }
+                    for (si, (scol, stip)) in SHELL_GRID_SWATCHES.into_iter().enumerate() {
+                        let (sr, resp) = ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::click());
+                        p.rect_filled(sr, 3.0, scol);
+                        if cfg.color_idx == si {
+                            p.rect_stroke(
+                                sr,
+                                3.0,
+                                Stroke::new(1.5, Color32::from_rgb(38, 37, 34)),
+                                egui::StrokeKind::Inside,
+                            );
+                        }
+                        if resp.on_hover_text(stip).clicked() {
+                            cfg.color_idx = si;
+                        }
+                    }
+                    // 「…」 그 밖의 색을 직접 고른다 (KaShellGridControls.cpp:101-111)
+                    if ui
+                        .small_button("…")
+                        .on_hover_text("그 밖의 색을 직접 고릅니다")
+                        .clicked()
+                    {
+                        cfg.color_idx = (cfg.color_idx + 1) % SHELL_GRID_SWATCHES.len();
+                    }
+                });
+            });
+        }
+
+        // 1) ☐ 좌표격자 체크박스 (KaShellGridControls.cpp:49-51, 124)
+        let chk_r = Rect::from_min_size(
+            Pos2::new(bar_r.right() - 88.0, bar_r.bottom() - 25.0),
+            Vec2::new(82.0, 22.0),
+        );
+        let chk_lbl = if enabled { "☑ 좌표격자" } else { "☐ 좌표격자" };
         p.text(
             chk_r.center(),
             egui::Align2::CENTER_CENTER,
@@ -895,138 +1022,8 @@ impl StrataAppState {
             self.home_map.grid_enabled = !self.home_map.grid_enabled;
         }
 
-        // 2) 미터 격자 / 경위도 격자 선택 (KaShellGridControls.cpp:60-64)
-        let kind_r = Rect::from_min_size(
-            Pos2::new(chk_r.right() + 4.0, bar_r.top() + 3.0),
-            Vec2::new(72.0, 24.0),
-        );
-        p.rect_filled(kind_r, 4.0, Color32::from_rgb(245, 243, 236));
-        p.rect_stroke(
-            kind_r,
-            4.0,
-            Stroke::new(1.0, Color32::from_rgb(205, 202, 194)),
-            egui::StrokeKind::Middle,
-        );
-        let kind_lbl = if is_geo {
-            "경위도 ▼"
-        } else {
-            "미터 격자 ▼"
-        };
-        p.text(
-            kind_r.center(),
-            egui::Align2::CENTER_CENTER,
-            kind_lbl,
-            FontId::proportional(11.0),
-            Color32::from_rgb(45, 44, 40),
-        );
-        if ui
-            .interact(kind_r, ui.id().with("map_grid_kind"), egui::Sense::click())
-            .on_hover_text(
-                "미터 격자는 작업 좌표계(5186·5187) 좌표로, 경위도 격자는 도·분·초로 긋습니다.",
-            )
-            .clicked()
-        {
-            is_geo = !is_geo;
-            self.home_map.grid_enabled = true;
-        }
-
-        // 3) 간격 선택 (KaShellGridControls.cpp:65-67 — 간격 20/50/100/200/500 m)
-        let step_r = Rect::from_min_size(
-            Pos2::new(kind_r.right() + 4.0, bar_r.top() + 3.0),
-            Vec2::new(82.0, 24.0),
-        );
-        p.rect_filled(step_r, 4.0, Color32::from_rgb(245, 243, 236));
-        p.rect_stroke(
-            step_r,
-            4.0,
-            Stroke::new(1.0, Color32::from_rgb(205, 202, 194)),
-            egui::StrokeKind::Middle,
-        );
-        p.text(
-            step_r.center(),
-            egui::Align2::CENTER_CENTER,
-            format!("간격 {step_m:.0} m"),
-            FontId::proportional(11.0),
-            Color32::from_rgb(45, 44, 40),
-        );
-        if ui
-            .interact(step_r, ui.id().with("map_grid_step"), egui::Sense::click())
-            .on_hover_text(
-                "격자 간격(미터). 클릭하면 20m · 50m · 100m · 200m · 500m 간격으로 바뀝니다.",
-            )
-            .clicked()
-        {
-            step_m = match step_m as i32 {
-                20 => 50.0,
-                50 => 100.0,
-                100 => 200.0,
-                200 => 500.0,
-                _ => 20.0,
-            };
-            self.home_map.grid_enabled = true;
-        }
-
-        // 4) 라벨 표시 토글
-        let lbl_r = Rect::from_min_size(
-            Pos2::new(step_r.right() + 4.0, bar_r.top() + 3.0),
-            Vec2::new(56.0, 24.0),
-        );
-        let lbl_txt = if show_labels {
-            "☑ 라벨"
-        } else {
-            "☐ 라벨"
-        };
-        p.text(
-            lbl_r.center(),
-            egui::Align2::CENTER_CENTER,
-            lbl_txt,
-            FontId::proportional(11.0),
-            Color32::from_rgb(45, 44, 40),
-        );
-        if ui
-            .interact(lbl_r, ui.id().with("map_grid_labels"), egui::Sense::click())
-            .on_hover_text("격자선 가장자리에 좌표 라벨(X·Y)을 표시합니다.")
-            .clicked()
-        {
-            show_labels = !show_labels;
-            self.home_map.grid_enabled = true;
-        }
-
-        // 5) 격자 선 색상 스와치 3종 (KaShellGridControls.cpp:83-87 — 빨강 / 파랑 / 검정)
-        let swatches = [
-            (Color32::from_rgb(0xD9, 0x2B, 0x2B), "빨간색 격자"),
-            (Color32::from_rgb(0x1D, 0x4E, 0xD8), "파란색 격자"),
-            (Color32::from_rgb(0x1F, 0x29, 0x37), "검정색 격자"),
-        ];
-        for (si, (scol, stip)) in swatches.into_iter().enumerate() {
-            let sr = Rect::from_min_size(
-                Pos2::new(lbl_r.right() + 4.0 + (si as f32) * 14.0, bar_r.top() + 9.0),
-                Vec2::new(11.0, 12.0),
-            );
-            p.rect_filled(sr, 2.0, scol);
-            if color_idx == si {
-                p.rect_stroke(
-                    sr,
-                    2.0,
-                    Stroke::new(1.5, Color32::WHITE),
-                    egui::StrokeKind::Inside,
-                );
-            }
-            if ui
-                .interact(sr, ui.id().with(("map_grid_col", si)), egui::Sense::click())
-                .on_hover_text(stip)
-                .clicked()
-            {
-                color_idx = si;
-                self.home_map.grid_enabled = true;
-            }
-        }
-
         ctx.data_mut(|d| {
-            d.insert_temp(
-                egui::Id::new("ka_shell_grid_cfg"),
-                (step_m, show_labels, is_geo, color_idx),
-            );
+            d.insert_temp(egui::Id::new("ka_shell_grid_cfg"), cfg);
         });
     }
 
@@ -1249,15 +1246,13 @@ impl StrataAppState {
 
         // KaShellGridControls 활성 시 지도 위 좌표격자 및 라벨 렌더링
         if self.home_map.grid_enabled {
-            let (step_m, show_labels, is_geo, color_idx) = ctx.data_mut(|d| {
-                d.get_temp::<(f64, bool, bool, usize)>(egui::Id::new("ka_shell_grid_cfg"))
-                    .unwrap_or((100.0, true, false, 2))
+            let cfg = ctx.data_mut(|d| {
+                d.get_temp::<ShellGridConfig>(egui::Id::new("ka_shell_grid_cfg"))
+                    .unwrap_or_default()
             });
-            let grid_col = match color_idx {
-                0 => Color32::from_rgba_unmultiplied(0xD9, 0x2B, 0x2B, 150),
-                1 => Color32::from_rgba_unmultiplied(0x1D, 0x4E, 0xD8, 150),
-                _ => Color32::from_rgba_unmultiplied(0x1F, 0x29, 0x37, 145),
-            };
+            let (step_m, show_labels, is_geo) = (cfg.step_m, cfg.show_labels, cfg.is_geo);
+            let (scol, _) = SHELL_GRID_SWATCHES[cfg.color_idx.min(2)];
+            let grid_col = Color32::from_rgba_unmultiplied(scol.r(), scol.g(), scol.b(), 150);
             let world_tl = s2w(rect, vp, rect.left_top());
             let world_br = s2w(rect, vp, rect.right_bottom());
             let min_wx = world_tl[0].min(world_br[0]);

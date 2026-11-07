@@ -12,6 +12,13 @@ pub const UX_STATUS_BAR_HEIGHT: f32 = 32.0;
 pub const UX_TAB_BODY_Y: f32 = 158.0;
 pub const UX_TAB_BODY_HEIGHT: f32 = 681.0;
 
+/// KaStatusBar.cpp:86-87 — 13개 기본 축척 프리셋
+pub const KA_STATUS_SCALE_PRESETS: [u32; 13] = [
+    100, 200, 250, 500, 1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000,
+    500_000,
+];
+
+
 impl StrataAppState {
     /// C++ `MainWindow.cpp` + `MainWindowRibbon.cpp` + `KaShellFocus.h` 단축키 1:1 처리
     fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
@@ -175,11 +182,21 @@ impl StrataAppState {
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if self.active_tab == MainTab::Map {
-                                ui.label(
-                                    egui::RichText::new("지도갱신 켜짐")
-                                        .size(11.0)
-                                        .color(Color32::from_rgb(95, 94, 88)),
-                                );
+                                // KaStatusBar.cpp:121-134 renderToggle — 지도 다시 그리기를 잠시 멈춘다
+                                let render_lbl = if self.map_rendering_enabled {
+                                    "지도갱신 켜짐"
+                                } else {
+                                    "지도갱신 멈춤"
+                                };
+                                if ui
+                                    .small_button(render_lbl)
+                                    .on_hover_text(
+                                        "지도 다시 그리기를 잠시 멈춥니다. 레이어를 여러 개 켜고 끌 때 편합니다.",
+                                    )
+                                    .clicked()
+                                {
+                                    self.map_rendering_enabled = !self.map_rendering_enabled;
+                                }
                                 ui.separator();
                             }
                             if ui.small_button("→ 제출 5179").clicked() {
@@ -206,6 +223,9 @@ impl StrataAppState {
                             let scale_btn = ui.small_button(format!("1:{live_scale} ▼"));
                             if scale_btn.clicked() {
                                 self.scale_menu_open = !self.scale_menu_open;
+                                if self.scale_menu_open {
+                                    self.scale_input_buf = format!("1:{live_scale}");
+                                }
                             }
                             if self.scale_menu_open {
                                 let popup_pos = egui::Pos2::new(
@@ -224,31 +244,49 @@ impl StrataAppState {
                                             ))
                                             .inner_margin(egui::Margin::symmetric(8, 6))
                                             .show(ui, |ui| {
-                                                for (preset_lbl, denom) in [
-                                                    ("1:500", 500u32),
-                                                    ("1:1,000", 1_000),
-                                                    ("1:2,500", 2_500),
-                                                    ("1:5,000", 5_000),
-                                                    ("1:10,000", 10_000),
-                                                    ("1:25,000", 25_000),
-                                                ] {
-                                                    if ui
-                                                        .selectable_label(
-                                                            live_scale == denom,
-                                                            preset_lbl,
-                                                        )
-                                                        .clicked()
-                                                    {
-                                                        if self.active_tab == MainTab::Drawing {
-                                                            self.drawing.sheet.scale_denominator =
-                                                                denom;
-                                                        } else {
-                                                            self.home_map
-                                                                .viewport
-                                                                .meters_per_pixel =
-                                                                f64::from(denom) / 3780.0;
+                                                // KaStatusBar.cpp:77-99 — 입력칸과 프리셋 목록이
+                                                // 같은 축척 경로를 탄다. 「1000」도 「1:1000」도 된다.
+                                                let edit = ui.add(
+                                                    egui::TextEdit::singleline(
+                                                        &mut self.scale_input_buf,
+                                                    )
+                                                    .hint_text("예: 1000")
+                                                    .desired_width(96.0),
+                                                );
+                                                if edit.lost_focus()
+                                                    && ui.input(|i| {
+                                                        i.key_pressed(egui::Key::Enter)
+                                                    })
+                                                    && self.apply_scale_input()
+                                                {
+                                                    self.scale_menu_open = false;
+                                                }
+                                                if self.scale_menu_open {
+                                                    ui.separator();
+                                                    for denom in KA_STATUS_SCALE_PRESETS {
+                                                        let preset_lbl =
+                                                            format!("1:{denom}");
+                                                        if ui
+                                                            .selectable_label(
+                                                                live_scale == denom,
+                                                                preset_lbl,
+                                                            )
+                                                            .clicked()
+                                                        {
+                                                            if self.active_tab
+                                                                == MainTab::Drawing
+                                                            {
+                                                                self.drawing
+                                                                    .sheet
+                                                                .scale_denominator = denom;
+                                                            } else {
+                                                                self.home_map
+                                                                    .viewport
+                                                                    .meters_per_pixel =
+                                                                    f64::from(denom) / 3780.0;
+                                                            }
+                                                            self.scale_menu_open = false;
                                                         }
-                                                        self.scale_menu_open = false;
                                                     }
                                                 }
                                             });
@@ -340,6 +378,34 @@ mod tests {
         UX_RIBBON_BUTTON_SIZE, UX_RIBBON_GROUP_WIDTHS, UX_RIBBON_HEIGHT, UX_VIEW_TAB_BAR_HEIGHT,
     };
     use crate::gui_tab_map::{UX_MAP_CANVAS_WIDTH, UX_MAP_LEFT_WIDTH, UX_MAP_RIGHT_WIDTH};
+
+    // D12 KaStatusBar.cpp:77-136 — 13단계 축척 프리셋, 직접 입력 칸, 지도갱신 토글
+    #[test]
+    fn test_d12_status_bar_13_scale_presets_and_render_toggle() {
+        assert_eq!(KA_STATUS_SCALE_PRESETS.len(), 13);
+        assert_eq!(KA_STATUS_SCALE_PRESETS[0], 100);
+        assert_eq!(KA_STATUS_SCALE_PRESETS[12], 500_000);
+
+        let mut app = StrataAppState::new_startup();
+        assert!(app.map_rendering_enabled);
+        assert!(app.scale_input_buf.is_empty());
+
+        // 「1000」과 「1:2500」이 모두 그대로 쓰인다 (KaStatusBar.cpp:92-98)
+        app.active_tab = MainTab::Map;
+        app.scale_input_buf = "1000".to_owned();
+        assert!(app.apply_scale_input());
+        assert!((app.home_map.viewport.meters_per_pixel - 1000.0 / 3780.0).abs() < 1e-12);
+        app.scale_input_buf = "1:2500".to_owned();
+        assert!(app.apply_scale_input());
+        assert!((app.home_map.viewport.meters_per_pixel - 2500.0 / 3780.0).abs() < 1e-12);
+        assert_eq!(app.scale_input_buf, "1:2500");
+
+        // 읽을 수 없는 글자는 아무것도 바꾸지 않는다
+        let before = app.home_map.viewport.meters_per_pixel;
+        app.scale_input_buf = "abc".to_owned();
+        assert!(!app.apply_scale_input());
+        assert!((app.home_map.viewport.meters_per_pixel - before).abs() < 1e-12);
+    }
 
     #[test]
     fn test_u1_ux_layout_spec_1600x900_skeleton_ribbon_and_3_column_split() {

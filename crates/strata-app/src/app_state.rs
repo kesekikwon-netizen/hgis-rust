@@ -109,6 +109,9 @@ pub struct StrataAppState {
     pub active_tab: MainTab,
     pub open_studio_tabs: Vec<MainTab>,
     pub scale_menu_open: bool,
+    // D12 KaStatusBar.cpp:121-136,77-98 — 지도갱신 토글과 축척 직접 입력칸
+    pub map_rendering_enabled: bool,
+    pub scale_input_buf: String,
     pub theme_menu_open: bool,
     pub large_font_mode: bool,
     pub display_options: DisplayOptions,
@@ -136,6 +139,8 @@ impl StrataAppState {
             active_tab: MainTab::Home,
             open_studio_tabs: Vec::new(),
             scale_menu_open: false,
+            map_rendering_enabled: true,
+            scale_input_buf: String::new(),
             theme_menu_open: false,
             large_font_mode: false,
             display_options: DisplayOptions::default(),
@@ -213,6 +218,24 @@ impl StrataAppState {
     pub fn compute_representative_scale_or_fallback(meters_per_pixel: f64, screen_dpi: f64) -> f64 {
         Self::compute_representative_scale(meters_per_pixel, screen_dpi)
             .unwrap_or(Self::HGIS_FALLBACK_SCALE_DENOM)
+    }
+
+    /// C++ `KaStatusBar.cpp:82-84,92-98` `scaleEdit` — 축척칸에 `"1000"` 또는 `"1:2500"`을
+    /// 적고 Enter를 누르면 그 분모를 그대로 쓴다(`parse_scale_string`).
+    ///
+    /// 지도 탭은 화면 축척(`meters_per_pixel × 3780`)을, 도면 탭은 도면 축척을 바꾼다.
+    /// 읽을 수 없는 글자는 아무것도 바꾸지 않고 `false`를 돌려준다.
+    pub fn apply_scale_input(&mut self) -> bool {
+        let Ok(denom) = strata_canvas2d::viewport::parse_scale_string(&self.scale_input_buf) else {
+            return false;
+        };
+        if self.active_tab == MainTab::Drawing {
+            self.drawing.sheet.scale_denominator = denom.round() as u32;
+        } else {
+            self.home_map.viewport.meters_per_pixel = denom / 3780.0;
+        }
+        self.scale_input_buf = strata_canvas2d::viewport::format_scale_denominator(denom);
+        true
     }
 
     /// C++ `KaStatusBar::computeRepresentativeScale(metersPerPixel, screenDpi)` — 0 나누기/NaN 방어 및 1:N 축척 분모 산출
