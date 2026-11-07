@@ -53,7 +53,11 @@ impl LeftLayerPanel {
     }
 
     pub fn add_cadastral_wms_layer(&mut self) {
-        if self.entries.iter().any(|e| e.layer_key == "vworld_cadastral_wms") {
+        if self
+            .entries
+            .iter()
+            .any(|e| e.layer_key == "vworld_cadastral_wms")
+        {
             return;
         }
         self.entries.push(LayerTreeEntry {
@@ -92,7 +96,10 @@ impl LeftLayerPanel {
 
     /// C++ `KaLeftLayerPanel::filterLayersByKeyword` — 정규식 메타문자 리터럴 이스케이프 및 대소문자 무시 부분 문자열 필터링, 매칭 자식이 있는 부모 그룹 자동 확장
     #[must_use]
-    pub fn filter_layers_by_keyword(&self, keyword: &str) -> (Vec<&LayerTreeEntry>, Vec<LegendGroup>) {
+    pub fn filter_layers_by_keyword(
+        &self,
+        keyword: &str,
+    ) -> (Vec<&LayerTreeEntry>, Vec<LegendGroup>) {
         let needle = keyword.trim().to_lowercase();
         if needle.is_empty() {
             let matched: Vec<&LayerTreeEntry> = self.entries.iter().collect();
@@ -147,5 +154,91 @@ mod tests {
         let (none_matched, none_expanded) = panel.filter_layers_by_keyword(".*[+(?");
         assert!(none_matched.is_empty());
         assert!(none_expanded.is_empty());
+    }
+
+    #[test]
+    fn test_dxf_and_gpkg_auto_detection_and_layer_preset_switching() {
+        // TestKaFileDrawerLoader::testDxfAndGpkgAutoDetection
+        assert_eq!(
+            detect_file_drawer_driver(std::path::Path::new("site_survey.gpkg")),
+            Ok(FileLoadDriver::GeoPackageVector)
+        );
+        assert_eq!(
+            detect_file_drawer_driver(std::path::Path::new("cad_drawing.dxf")),
+            Ok(FileLoadDriver::AutoCadDxfCp949)
+        );
+        assert_eq!(
+            detect_file_drawer_driver(std::path::Path::new("points.csv")),
+            Ok(FileLoadDriver::DelimitedTextCsv)
+        );
+        assert_eq!(
+            detect_file_drawer_driver(std::path::Path::new("ortho.tif")),
+            Ok(FileLoadDriver::GdalGeoTiff)
+        );
+        assert_eq!(
+            detect_file_drawer_driver(std::path::Path::new("broken.xyz_corrupted")),
+            Err(FileLoadError::UnsupportedExtension)
+        );
+    }
+}
+
+/// C++ `LayerPresetType` 레이어 세트 프리셋 4종 1:1 대응
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayerPresetType {
+    SurveyGridMode,
+    FeatureDetailedMode,
+    TopographyAnalysis,
+    CadastralOverlay,
+}
+
+impl LayerPresetType {
+    pub const ALL: [Self; 4] = [
+        Self::SurveyGridMode,
+        Self::FeatureDetailedMode,
+        Self::TopographyAnalysis,
+        Self::CadastralOverlay,
+    ];
+
+    #[must_use]
+    pub const fn label_ko(self) -> &'static str {
+        match self {
+            Self::SurveyGridMode => "시굴·조사구역 중심",
+            Self::FeatureDetailedMode => "유구·유물 정밀도면",
+            Self::TopographyAnalysis => "등고선·지형·수계 분석",
+            Self::CadastralOverlay => "지적도·항공사진 중첩",
+        }
+    }
+}
+
+/// C++ `FileLoadError` 파일함 적재 오류 열거형 1:1 대응
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileLoadError {
+    UnsupportedExtension,
+    CorruptedFileFormat,
+}
+
+/// C++ `KaFileDrawerLoader::loadFileDirect` 확장자별 프로바이더 분기 결과
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileLoadDriver {
+    GeoPackageVector,
+    AutoCadDxfCp949,
+    DelimitedTextCsv,
+    GdalGeoTiff,
+}
+
+/// 파일함 더블클릭 시 4대 확장자(`.gpkg`, `.dxf`, `.csv`, `.tif`/`.tiff`) 자동 감지 및 미지원 확장자 차단
+/// (C++ `KaFileDrawerLoader::loadFileDirect` 1:1 대응)
+pub fn detect_file_drawer_driver(path: &std::path::Path) -> Result<FileLoadDriver, FileLoadError> {
+    let ext = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "gpkg" => Ok(FileLoadDriver::GeoPackageVector),
+        "dxf" => Ok(FileLoadDriver::AutoCadDxfCp949),
+        "csv" => Ok(FileLoadDriver::DelimitedTextCsv),
+        "tif" | "tiff" => Ok(FileLoadDriver::GdalGeoTiff),
+        _ => Err(FileLoadError::UnsupportedExtension),
     }
 }

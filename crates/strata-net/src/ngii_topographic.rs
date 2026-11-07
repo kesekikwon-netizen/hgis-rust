@@ -43,7 +43,8 @@ mod tests {
 
     #[test]
     fn test_ngii_bbox_to_sheets_gongju_gongsanseong_returns_deduplicated_367084_367085() {
-        let sheets = NgiiTopographicClient::bbox_to_sheets_5k(10_000.0, 442_500.0, 12_600.0, 443_000.0);
+        let sheets =
+            NgiiTopographicClient::bbox_to_sheets_5k(10_000.0, 442_500.0, 12_600.0, 443_000.0);
         assert_eq!(sheets, vec!["367084".to_owned(), "367085".to_owned()]);
     }
 }

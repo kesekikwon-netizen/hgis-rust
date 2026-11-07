@@ -66,7 +66,10 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
 
     // V3: OGC GeoPackage WKB 이진 인코딩·디코딩 왕복
     let wkb_poly = WkbGeometry::Polygon(vec![vec![
-        [200_000.0, 500_000.0], [200_050.0, 500_000.0], [200_050.0, 500_050.0], [200_000.0, 500_000.0],
+        [200_000.0, 500_000.0],
+        [200_050.0, 500_000.0],
+        [200_050.0, 500_050.0],
+        [200_000.0, 500_000.0],
     ]]);
     let bytes = encode_gpkg_wkb(5187, &wkb_poly);
     gates.push(GateResult {
@@ -79,8 +82,11 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
     // V4: 36분할 500m 원형 버퍼 및 표준 시굴격자(20m) 생성
     let site = Polygon::new(
         LineString::from(vec![
-            Coord { x: 0.0, y: 0.0 }, Coord { x: 80.0, y: 0.0 },
-            Coord { x: 80.0, y: 80.0 }, Coord { x: 0.0, y: 80.0 }, Coord { x: 0.0, y: 0.0 },
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 80.0, y: 0.0 },
+            Coord { x: 80.0, y: 80.0 },
+            Coord { x: 0.0, y: 80.0 },
+            Coord { x: 0.0, y: 0.0 },
         ]),
         vec![],
     );
@@ -102,8 +108,10 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
     });
 
     // V5: VWorld 지적 WMS DOMAIN 미포함 & 문화재청 인트라넷 URL 마스킹
-    let wms_url = VworldClient::cadastral_wms_url("KEY123", [100.0, 200.0, 300.0, 400.0], "EPSG:3857");
-    let xml_err = VworldClient::is_xml_error_tile(b"<?xml version=\"1.0\"?><ServiceExceptionReport/>");
+    let wms_url =
+        VworldClient::cadastral_wms_url("KEY123", [100.0, 200.0, 300.0, 400.0], "EPSG:3857");
+    let xml_err =
+        VworldClient::is_xml_error_tile(b"<?xml version=\"1.0\"?><ServiceExceptionReport/>");
     let js_ok = !HeritageIntranetFlow::search_script().contains("location.href");
     gates.push(GateResult {
         gate_id: "V5",
@@ -173,7 +181,10 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
     for &tab in MainTab::all() {
         gui_state.active_tab = tab;
         let raw_input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1440.0, 900.0))),
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1440.0, 900.0),
+            )),
             ..Default::default()
         };
         let mut rect_out = egui::Rect::NOTHING;
@@ -205,7 +216,11 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
         gate_id: "V11",
         title_ko: "2D 마우스 CAD 드로잉·스냅·우클릭 폴리곤 확정 및 거리·면적 측정",
         passed: committed && cad_scene.buffer_500m_ring.len() == 37 && cad.last_measure.is_some(),
-        detail: format!("polygons={} ring={}", cad_scene.polygons.len(), cad_scene.buffer_500m_ring.len()),
+        detail: format!(
+            "polygons={} ring={}",
+            cad_scene.polygons.len(),
+            cad_scene.buffer_500m_ring.len()
+        ),
     });
 
     // V12: 비동기 배경지도(Basemap RGBA) 합성 및 인트라넷/NGII WebView 자동화 계획
@@ -257,15 +272,32 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
     // V14: 11대 실무 모달 대화상자(용지·DEM·유산·수치지형·지적·시굴격자·고지형자료·PDF준비·도면인쇄·계정·제출) Headless egui 렌더링
     let mut modal_ok = true;
     for modal in [
-        ActiveModalDialog::AccountSettings, ActiveModalDialog::TrenchGenerator, ActiveModalDialog::ExportSubmitPackage,
-        ActiveModalDialog::PaperSetup, ActiveModalDialog::DemDownload, ActiveModalDialog::HeritageRegionSelect,
-        ActiveModalDialog::NgiiTopoDownload, ActiveModalDialog::CadastralDownload, ActiveModalDialog::PaleoSourceDownload,
-        ActiveModalDialog::PdfPreparing, ActiveModalDialog::DrawingPrint,
+        ActiveModalDialog::AccountSettings,
+        ActiveModalDialog::TrenchGenerator,
+        ActiveModalDialog::ExportSubmitPackage,
+        ActiveModalDialog::PaperSetup,
+        ActiveModalDialog::DemDownload,
+        ActiveModalDialog::HeritageRegionSelect,
+        ActiveModalDialog::NgiiTopoDownload,
+        ActiveModalDialog::CadastralDownload,
+        ActiveModalDialog::PaleoSourceDownload,
+        ActiveModalDialog::PdfPreparing,
+        ActiveModalDialog::DrawingPrint,
     ] {
         gui_state.modals.active = Some(modal);
-        let raw_input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1680.0, 960.0))), ..Default::default() };
-        let _ = ctx.run(raw_input, |ctx| { let _ = gui_state.render_workspace_egui(ctx); });
-        if gui_state.modals.active != Some(modal) { modal_ok = false; }
+        let raw_input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1680.0, 960.0),
+            )),
+            ..Default::default()
+        };
+        let _ = ctx.run(raw_input, |ctx| {
+            let _ = gui_state.render_workspace_egui(ctx);
+        });
+        if gui_state.modals.active != Some(modal) {
+            modal_ok = false;
+        }
     }
     gates.push(GateResult {
         gate_id: "V14",
@@ -340,16 +372,17 @@ mod tests {
         assert!(shortcuts.register_shortcut("view.pan", "Space"));
 
         let mut app = StrataAppState::new_startup();
-        app.left_layers.ensure_domain_layer(DomainLayerKey::SurveyArea);
-        let crash_path = std::env::temp_dir().join(format!(
-            "crash_recovery_{}.gpkg",
-            std::process::id()
-        ));
+        app.left_layers
+            .ensure_domain_layer(DomainLayerKey::SurveyArea);
+        let crash_path =
+            std::env::temp_dir().join(format!("crash_recovery_{}.gpkg", std::process::id()));
         assert!(app.emergency_auto_save(&crash_path));
         assert!(crash_path.exists());
         let recovered = GpkgRepository::open_read_only(&crash_path)
             .expect("crash recovery GPKG must open cleanly");
-        assert!(recovered.layers.contains_key(DomainLayerKey::SurveyArea.id()));
+        assert!(recovered
+            .layers
+            .contains_key(DomainLayerKey::SurveyArea.id()));
         let _ = std::fs::remove_file(&crash_path);
     }
 }

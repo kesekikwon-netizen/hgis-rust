@@ -141,12 +141,7 @@ mod tests {
                 dem[y * width + x] = (x as f64) * 10.0 * slope_tan;
             }
         }
-        let rect_feature = vec![vec![
-            [10.0, 10.0],
-            [40.0, 10.0],
-            [40.0, 30.0],
-            [10.0, 30.0],
-        ]];
+        let rect_feature = vec![vec![[10.0, 10.0], [40.0, 10.0], [40.0, 30.0], [10.0, 30.0]]];
         let draped = drape_vector_features_on_dem(
             &rect_feature,
             &dem,
@@ -207,8 +202,11 @@ mod tests {
                 color_rgba: [222, 203, 166, 255],
             },
         ];
-        let cylinders =
-            crate::quadtree_lod::build_stratum_cylinders([219_800.0, 361_500.0, 45.0], &strata, 1.0);
+        let cylinders = crate::quadtree_lod::build_stratum_cylinders(
+            [219_800.0, 361_500.0, 45.0],
+            &strata,
+            1.0,
+        );
         assert_eq!(cylinders.len(), 2);
         assert_eq!(cylinders[0].segments, 16);
         assert!((cylinders[0].height_m - 3.5).abs() < 1e-5);

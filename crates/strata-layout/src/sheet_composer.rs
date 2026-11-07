@@ -65,6 +65,126 @@ impl SheetRectMm {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NorthArrowStyle {
+    LetterOnly,
+    #[default]
+    SingleArrow,
+    CompassRose,
+    WindRose,
+}
+
+impl NorthArrowStyle {
+    pub const ALL: [Self; 4] = [
+        Self::LetterOnly,
+        Self::SingleArrow,
+        Self::CompassRose,
+        Self::WindRose,
+    ];
+
+    #[must_use]
+    pub const fn label_ko(self) -> &'static str {
+        match self {
+            Self::LetterOnly => "북 글자",
+            Self::SingleArrow => "북 화살",
+            Self::CompassRose => "나침반",
+            Self::WindRose => "바람장미",
+        }
+    }
+
+    #[must_use]
+    pub const fn symbol_glyph(self) -> &'static str {
+        match self {
+            Self::LetterOnly => "▲\nN",
+            Self::SingleArrow => "▲",
+            Self::CompassRose => "◎",
+            Self::WindRose => "✳",
+        }
+    }
+
+    #[must_use]
+    pub const fn svg_resource_path(self) -> &'static str {
+        match self {
+            Self::LetterOnly => ":/symbols/north_arrows/letter_n.svg",
+            Self::SingleArrow => ":/symbols/north_arrows/single_arrow.svg",
+            Self::CompassRose => ":/symbols/north_arrows/compass_rose.svg",
+            Self::WindRose => ":/symbols/north_arrows/wind_rose.svg",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScaleBarStyle {
+    #[default]
+    DoubleBox,
+    SingleBox,
+    SteppedTicks,
+}
+
+impl ScaleBarStyle {
+    pub const ALL: [Self; 3] = [Self::DoubleBox, Self::SingleBox, Self::SteppedTicks];
+
+    #[must_use]
+    pub const fn label_ko(self) -> &'static str {
+        match self {
+            Self::DoubleBox => "쌍칸",
+            Self::SingleBox => "외칸",
+            Self::SteppedTicks => "눈금",
+        }
+    }
+
+    #[must_use]
+    pub const fn symbol_glyph(self) -> &'static str {
+        match self {
+            Self::DoubleBox => "■■",
+            Self::SingleBox => "□",
+            Self::SteppedTicks => "lll",
+        }
+    }
+}
+
+/// 기본 축척자 분할 칸 수 (4, C++ `HGIS_DEFAULT_SCALEBAR_SEGMENTS`)
+pub const HGIS_DEFAULT_SCALEBAR_SEGMENTS: u32 = 4;
+/// 축척자 표준 세로 폭 (3.0 mm, C++ `HGIS_DEFAULT_SCALEBAR_HEIGHT_MM`)
+pub const HGIS_DEFAULT_SCALEBAR_HEIGHT_MM: f64 = 3.0;
+
+/// 축척 분모(`S`) 및 세그먼트 지상 거리(`L` m)로부터 용지상 물리 가로 폭(mm) 산출
+/// (`W_seg_mm = (L_meters * 1000.0) / S`, 0m 이하 입력은 1.0m로 강제 클램핑, `S <= 0`은 500.0 폴백)
+#[must_use]
+pub fn compute_scalebar_segment_width_mm(scale_denominator: f64, segment_units_meters: f64) -> f64 {
+    let eff_scale = if scale_denominator.is_finite() && scale_denominator > 0.0 {
+        scale_denominator
+    } else {
+        500.0
+    };
+    let eff_meters = if segment_units_meters.is_finite() {
+        segment_units_meters.max(1.0)
+    } else {
+        1.0
+    };
+    (eff_meters * 1000.0) / eff_scale
+}
+
+/// 캔버스 회전각(`canvas_rotation_deg`)과 도북-자북 편차각(`declination_deg`)을 합산한 방위표 회전 각도 산출
+/// (C++ `LayoutNorthArrow::applyNorthArrowStyle` 1:1 대응)
+#[must_use]
+pub fn compute_north_arrow_rotation_with_declination(
+    canvas_rotation_deg: f64,
+    declination_deg: f64,
+) -> f64 {
+    let c = if canvas_rotation_deg.is_finite() {
+        canvas_rotation_deg
+    } else {
+        0.0
+    };
+    let d = if declination_deg.is_finite() {
+        declination_deg
+    } else {
+        0.0
+    };
+    c + d
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct DrawingSheet {
     pub paper_size: SheetPaperSize,
@@ -84,6 +204,15 @@ pub struct DrawingSheet {
     pub grid_follow_map: bool,
     pub grid_offset_xy_m: [f64; 2],
     pub show_site_names_under_5000: bool,
+    pub north_arrow_style: NorthArrowStyle,
+    pub north_arrow_size_mm: f64,
+    pub scale_bar_style: ScaleBarStyle,
+    pub legend_title: String,
+    pub legend_visible: bool,
+    pub title_block_visible: bool,
+    pub legend_font_pt: u32,
+    pub legend_bold: bool,
+    pub legend_italic: bool,
 }
 
 impl DrawingSheet {
@@ -94,12 +223,42 @@ impl DrawingSheet {
             orientation,
             width_mm: 0.0,
             height_mm: 0.0,
-            map_frame: SheetRectMm { x_mm: 0.0, y_mm: 0.0, width_mm: 0.0, height_mm: 0.0 },
-            scale_bar_rect: SheetRectMm { x_mm: 0.0, y_mm: 0.0, width_mm: 0.0, height_mm: 0.0 },
-            scale_text_rect: SheetRectMm { x_mm: 0.0, y_mm: 0.0, width_mm: 0.0, height_mm: 0.0 },
-            crs_label_rect: SheetRectMm { x_mm: 0.0, y_mm: 0.0, width_mm: 0.0, height_mm: 0.0 },
-            north_arrow_rect: SheetRectMm { x_mm: 0.0, y_mm: 0.0, width_mm: 0.0, height_mm: 0.0 },
-            legend_rect: SheetRectMm { x_mm: 0.0, y_mm: 0.0, width_mm: 0.0, height_mm: 0.0 },
+            map_frame: SheetRectMm {
+                x_mm: 0.0,
+                y_mm: 0.0,
+                width_mm: 0.0,
+                height_mm: 0.0,
+            },
+            scale_bar_rect: SheetRectMm {
+                x_mm: 0.0,
+                y_mm: 0.0,
+                width_mm: 0.0,
+                height_mm: 0.0,
+            },
+            scale_text_rect: SheetRectMm {
+                x_mm: 0.0,
+                y_mm: 0.0,
+                width_mm: 0.0,
+                height_mm: 0.0,
+            },
+            crs_label_rect: SheetRectMm {
+                x_mm: 0.0,
+                y_mm: 0.0,
+                width_mm: 0.0,
+                height_mm: 0.0,
+            },
+            north_arrow_rect: SheetRectMm {
+                x_mm: 0.0,
+                y_mm: 0.0,
+                width_mm: 0.0,
+                height_mm: 0.0,
+            },
+            legend_rect: SheetRectMm {
+                x_mm: 0.0,
+                y_mm: 0.0,
+                width_mm: 0.0,
+                height_mm: 0.0,
+            },
             legend_kept_on_page: true,
             scale_denominator: 5_000,
             grid_enabled: true,
@@ -107,6 +266,15 @@ impl DrawingSheet {
             grid_follow_map: false,
             grid_offset_xy_m: [0.0, 0.0],
             show_site_names_under_5000: false,
+            north_arrow_style: NorthArrowStyle::SingleArrow,
+            north_arrow_size_mm: 28.0,
+            scale_bar_style: ScaleBarStyle::DoubleBox,
+            legend_title: "범례".to_owned(),
+            legend_visible: true,
+            title_block_visible: true,
+            legend_font_pt: 10,
+            legend_bold: true,
+            legend_italic: false,
         };
         sheet.recompute_layout();
         sheet
@@ -232,10 +400,18 @@ impl DrawingSheet {
     #[must_use]
     pub fn all_decorations_inside_sheet(&self) -> bool {
         let in_frame = self.map_frame.inside_sheet(self.width_mm, self.height_mm)
-            && self.scale_bar_rect.inside_sheet(self.width_mm, self.height_mm)
-            && self.scale_text_rect.inside_sheet(self.width_mm, self.height_mm)
-            && self.crs_label_rect.inside_sheet(self.width_mm, self.height_mm)
-            && self.north_arrow_rect.inside_sheet(self.width_mm, self.height_mm);
+            && self
+                .scale_bar_rect
+                .inside_sheet(self.width_mm, self.height_mm)
+            && self
+                .scale_text_rect
+                .inside_sheet(self.width_mm, self.height_mm)
+            && self
+                .crs_label_rect
+                .inside_sheet(self.width_mm, self.height_mm)
+            && self
+                .north_arrow_rect
+                .inside_sheet(self.width_mm, self.height_mm);
         if self.legend_kept_on_page {
             in_frame && self.legend_rect.inside_sheet(self.width_mm, self.height_mm)
         } else {
@@ -446,7 +622,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn paper_size_and_orientation_change_keeps_decorations_in_bounds_and_preserves_off_page_legend() {
+    fn paper_size_and_orientation_change_keeps_decorations_in_bounds_and_preserves_off_page_legend()
+    {
         let mut sheet = DrawingSheet::new(SheetPaperSize::A4, SheetOrientation::Portrait);
         assert!(sheet.all_decorations_inside_sheet());
         sheet.set_legend_kept_on_page(false);
@@ -633,8 +810,20 @@ mod tests {
         let placed = solve_label_placement(&tasks, &obstacles, viewport);
         assert_eq!(placed.len(), 1);
         assert!(placed[0].needs_leader_line);
-        assert_eq!(placed[0].leader_line_path_mm.first().copied(), Some([50.0, 50.0]));
+        assert_eq!(
+            placed[0].leader_line_path_mm.first().copied(),
+            Some([50.0, 50.0])
+        );
         assert!(rects_overlap_mm(placed[0].final_label_rect_mm, obstacles[0]) <= 1e-9);
+
+        // TestLayoutScaleBar::testDoubleBoxSegmentWidthCalculation
+        let seg_w = compute_scalebar_segment_width_mm(500.0, 10.0);
+        assert!((seg_w - 20.0).abs() < 1e-4);
+        assert!((compute_scalebar_segment_width_mm(500.0, 0.0) - 2.0).abs() < 1e-4);
+
+        // TestLayoutNorthArrow::testNorthArrowRotationWithDeclination
+        let rot = compute_north_arrow_rotation_with_declination(30.0, -5.5);
+        assert!((rot - 24.5).abs() < 1e-6);
     }
 }
 

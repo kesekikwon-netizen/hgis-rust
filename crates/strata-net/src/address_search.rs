@@ -190,8 +190,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn vworld_address_search_parser_extracts_parcel_coords_and_sido_presets_exist() -> StrataResult<()>
-    {
+    fn vworld_address_search_parser_extracts_parcel_coords_and_sido_presets_exist(
+    ) -> StrataResult<()> {
         assert!(!sido_presets().is_empty());
         let sample = r#"{
             "response": {
@@ -225,9 +225,7 @@ mod tests {
         assert_eq!(parsed.eup_myeon_dong, "부여읍");
         assert_eq!(parsed.ri_or_detail, "쌍북리");
         assert_eq!(parsed.jibun, "123");
-        assert!(
-            format_geocode_error_ko(GeocodeError::NotFound)
-                .contains("해당 지번을 찾을 수 없습니다.")
-        );
+        assert!(format_geocode_error_ko(GeocodeError::NotFound)
+            .contains("해당 지번을 찾을 수 없습니다."));
     }
 }

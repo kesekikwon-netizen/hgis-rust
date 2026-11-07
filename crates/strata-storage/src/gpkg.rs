@@ -139,12 +139,15 @@ pub fn check_project_open_preflight(project_path: &Path, force_unlock: bool) -> 
     if !project_path.exists() {
         return ProjectOpenResult::FileNotFound;
     }
-    let lock_path = std::path::PathBuf::from(format!("{}{HGIS_LOCK_FILE_EXT}", project_path.display()));
+    let lock_path =
+        std::path::PathBuf::from(format!("{}{HGIS_LOCK_FILE_EXT}", project_path.display()));
     if lock_path.exists() && !force_unlock {
         return ProjectOpenResult::LockedByAnotherProcess;
     }
-    let autosave_path =
-        std::path::PathBuf::from(format!("{}{HGIS_AUTOSAVE_FILE_EXT}", project_path.display()));
+    let autosave_path = std::path::PathBuf::from(format!(
+        "{}{HGIS_AUTOSAVE_FILE_EXT}",
+        project_path.display()
+    ));
     let wal_path = std::path::PathBuf::from(format!("{}.wal", project_path.display()));
     if autosave_path.exists() || wal_path.exists() {
         return ProjectOpenResult::CrashDetectedNeedsRecovery;
@@ -353,8 +356,14 @@ impl GpkgRepository {
         for (layer_id, buf) in &ws.layers {
             let desc = buf.key.map_or("", DomainLayerKey::name_ko);
             let geom_type_name = match buf.key {
-                Some(DomainLayerKey::SurveyArea | DomainLayerKey::FeaturePoly | DomainLayerKey::TrialTrench) => "MULTIPOLYGON",
-                Some(DomainLayerKey::FeatureLine | DomainLayerKey::SectionLine) => "MULTILINESTRING",
+                Some(
+                    DomainLayerKey::SurveyArea
+                    | DomainLayerKey::FeaturePoly
+                    | DomainLayerKey::TrialTrench,
+                ) => "MULTIPOLYGON",
+                Some(DomainLayerKey::FeatureLine | DomainLayerKey::SectionLine) => {
+                    "MULTILINESTRING"
+                }
                 Some(DomainLayerKey::ControlPoints | DomainLayerKey::ArtifactPoint) => "POINT",
                 None => "GEOMETRY",
             };
@@ -420,8 +429,8 @@ mod tests {
         let path = dir.path().join("real_sqlite_test.gpkg");
         GpkgRepository::create_new_survey(&path, WorkCrs::Epsg5187)?;
 
-        let conn = rusqlite::Connection::open(&path)
-            .map_err(|e| StrataError::Storage(e.to_string()))?;
+        let conn =
+            rusqlite::Connection::open(&path).map_err(|e| StrataError::Storage(e.to_string()))?;
         let integrity: String = conn
             .query_row("PRAGMA integrity_check", [], |r| r.get(0))
             .map_err(|e| StrataError::Storage(e.to_string()))?;
@@ -500,7 +509,8 @@ mod tests {
         let dir = tempfile::tempdir()?;
         let v1_path = dir.path().join("legacy_v1.gpkg");
         {
-            let conn = Connection::open(&v1_path).map_err(|e| StrataError::Storage(e.to_string()))?;
+            let conn =
+                Connection::open(&v1_path).map_err(|e| StrataError::Storage(e.to_string()))?;
             conn.execute_batch("PRAGMA user_version = 1;")
                 .map_err(|e| StrataError::Storage(e.to_string()))?;
         }
@@ -646,6 +656,169 @@ mod tests {
         assert!((loaded[0].completed_area_m2 - 6000.0).abs() < 1e-6);
         Ok(())
     }
+
+    #[test]
+    fn test_windows_reserved_file_names_and_central_meridian_128_detection() {
+        // TestSurveyProjectFactory::testWindowsReservedFileNames
+        for invalid in [
+            "CON",
+            "prn",
+            "aux",
+            "com1",
+            "lpt3",
+            "경주_유적?조사",
+            "",
+            "   ",
+        ] {
+            assert!(
+                !is_valid_project_name(invalid),
+                "expected {invalid:?} to be rejected"
+            );
+        }
+        assert!(is_valid_project_name("정상_조사_2026"));
+        assert_eq!(
+            validate_survey_name_ko("CON"),
+            Err("윈도우가 장치 이름으로 쓰는 단어라 파일 이름으로 쓸 수 없습니다.")
+        );
+        assert_eq!(
+            validate_survey_name_ko("경주?유적"),
+            Err("조사명에 쓸 수 없는 글자(\\ / : * ? \" < > |)가 있습니다.")
+        );
+        assert_eq!(
+            validate_survey_name_ko("..."),
+            Err("점이나 공백만으로는 파일 이름을 만들 수 없습니다.")
+        );
+        assert_eq!(validate_survey_name_ko("병산동"), Ok("병산동".to_string()));
+
+        // TestKaLongitudeRuler::testCentralMeridian128Detection
+        assert!(is_central_meridian_128(5186));
+        assert!(!is_central_meridian_128(5187));
+        assert_eq!(recommend_crs_for_longitude(127.38), WorkCrs::Epsg5186);
+        assert_eq!(recommend_crs_for_longitude(128.90), WorkCrs::Epsg5187);
+        let ticks = calculate_longitude_ticks(126.0, 130.0, 1.0);
+        assert_eq!(ticks.len(), 5);
+        assert!((ticks[2] - HGIS_CENTRAL_MERIDIAN_LON).abs() < 1e-9);
+    }
+}
+
+/// 중부원점 기준 경도 (128.0° E, C++ `HGIS_CENTRAL_MERIDIAN_LON`)
+pub const HGIS_CENTRAL_MERIDIAN_LON: f64 = 128.0;
+/// 한국 중부원점 GRS80 기본 EPSG 코드 (C++ `HGIS_DEFAULT_EPSG_CODE`)
+pub const HGIS_DEFAULT_EPSG_CODE: u32 = 5186;
+/// 프로젝트명 최대 허용 길이 (C++ `HGIS_MAX_PROJECT_NAME_LEN`)
+pub const HGIS_MAX_PROJECT_NAME_LEN: usize = 128;
+
+/// C++ `KaLongitudeRuler` 8개 기준 도시 및 경도(`126°~130°`)
+pub const KA_LONGITUDE_RULER_CITIES: [(&str, f64); 8] = [
+    ("제주", 126.53),
+    ("광주", 126.85),
+    ("대전", 127.38),
+    ("춘천", 127.73),
+    ("대구", 128.60),
+    ("강릉", 128.90),
+    ("부산", 129.08),
+    ("울산", 129.31),
+];
+
+/// C++ `ProjectCreationError` 1:1 대응
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectCreationError {
+    InvalidSurveyName,
+    WindowsReservedFileName,
+    DirectoryAlreadyExists,
+    CrsOutOfRange,
+    DiskWritePermissionDenied,
+}
+
+/// 윈도우 예약 파일명(`CON`, `PRN`, `AUX`, `NUL`, `COM1..9`, `LPT1..9`) 및 금지 특수문자 검증
+/// (C++ `SurveyProjectFactory::isValidProjectName` 1:1 대응)
+#[must_use]
+pub fn is_valid_project_name(name: &str) -> bool {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed.chars().count() > HGIS_MAX_PROJECT_NAME_LEN {
+        return false;
+    }
+    if trimmed.chars().all(|c| c == '.' || c.is_whitespace()) {
+        return false;
+    }
+    let stem = trimmed
+        .split('.')
+        .next()
+        .unwrap_or(trimmed)
+        .trim()
+        .to_ascii_uppercase();
+    const RESERVED: [&str; 22] = [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    if RESERVED.contains(&stem.as_str()) {
+        return false;
+    }
+    !trimmed
+        .chars()
+        .any(|c| matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+}
+
+/// C++ `KaNewSurveyDialog::nameProblem` 한글 안내 문구 검증 1:1 대응
+pub fn validate_survey_name_ko(raw: &str) -> Result<String, &'static str> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return Err("조사명을 적어 주세요.");
+    }
+    if s.chars()
+        .any(|c| matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+    {
+        return Err("조사명에 쓸 수 없는 글자(\\ / : * ? \" < > |)가 있습니다.");
+    }
+    let stem = s.trim_end_matches(|c: char| c == '.' || c.is_whitespace());
+    if stem.is_empty() {
+        return Err("점이나 공백만으로는 파일 이름을 만들 수 없습니다.");
+    }
+    let upper = stem
+        .split('.')
+        .next()
+        .unwrap_or(stem)
+        .trim()
+        .to_ascii_uppercase();
+    const RESERVED: [&str; 22] = [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    if RESERVED.contains(&upper.as_str()) {
+        return Err("윈도우가 장치 이름으로 쓰는 단어라 파일 이름으로 쓸 수 없습니다.");
+    }
+    if s.chars().count() > 80 {
+        return Err("조사명은 80자 이내로 적어 주세요.");
+    }
+    Ok(s.to_owned())
+}
+
+/// 동경 128° 기준 자오선 판별 (C++ `KaLongitudeRuler::isCentralMeridian128`)
+#[must_use]
+pub const fn is_central_meridian_128(epsg_code: u32) -> bool {
+    epsg_code == HGIS_DEFAULT_EPSG_CODE
+}
+
+/// 경도에 따른 중부원점(5186) / 동부원점(5187) 추천 좌표계 반환 (`128.0°` 경계)
+#[must_use]
+pub fn recommend_crs_for_longitude(lon_deg: f64) -> WorkCrs {
+    if lon_deg >= HGIS_CENTRAL_MERIDIAN_LON {
+        WorkCrs::Epsg5187
+    } else {
+        WorkCrs::Epsg5186
+    }
+}
+
+/// 경도 눈금 배열 생성 (C++ `KaLongitudeRuler::calculateTicks`)
+#[must_use]
+pub fn calculate_longitude_ticks(min_lon: f64, max_lon: f64, step_degree: f64) -> Vec<f64> {
+    if !min_lon.is_finite() || !max_lon.is_finite() || step_degree <= 1e-6 || max_lon < min_lon {
+        return Vec::new();
+    }
+    let count = (((max_lon - min_lon) / step_degree).floor() as usize).min(10_000);
+    (0..=count)
+        .map(|i| min_lon + (i as f64) * step_degree)
+        .collect()
 }
 
 /// SQLite 현장 야장 테이블명 (C++ `HGIS_DIARY_TABLE_NAME`)
@@ -682,10 +855,7 @@ pub fn calculate_excavation_progress_metrics(
     total_survey_area_m2: f64,
     diary_history: &[FieldDiaryEntry],
 ) -> ProgressMetrics {
-    let total_man_days: i32 = diary_history
-        .iter()
-        .map(|d| d.worker_count.max(0))
-        .sum();
+    let total_man_days: i32 = diary_history.iter().map(|d| d.worker_count.max(0)).sum();
     let excavated_area_m2 = diary_history
         .last()
         .map_or(0.0, |d| d.completed_area_m2.max(0.0));
@@ -704,12 +874,8 @@ pub fn calculate_excavation_progress_metrics(
 
 /// SQLite/GeoPackage 내부 `ka_field_diary` 테이블에 현장 야장 레코드 트랜잭션 기록
 /// (C++ `KaFieldDiaryManager::recordDiaryEntry` 1:1 대응)
-pub fn record_diary_entry_sqlite(
-    db_path: &Path,
-    entry: &FieldDiaryEntry,
-) -> StrataResult<i64> {
-    let mut conn =
-        Connection::open(db_path).map_err(|e| StrataError::Storage(e.to_string()))?;
+pub fn record_diary_entry_sqlite(db_path: &Path, entry: &FieldDiaryEntry) -> StrataResult<i64> {
+    let mut conn = Connection::open(db_path).map_err(|e| StrataError::Storage(e.to_string()))?;
     let tx = conn
         .transaction()
         .map_err(|e| StrataError::Storage(e.to_string()))?;

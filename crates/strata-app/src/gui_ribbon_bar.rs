@@ -8,20 +8,46 @@ use crate::dialogs_modal::ActiveModalDialog;
 use crate::ribbon::{SubToolsMode, PENINSULA_REGION_TILES};
 use crate::ribbon_icons::{cpp_ribbon_tooltip, paint_ribbon_icon};
 
-fn draw_buffer_pill(ui: &mut egui::Ui, icon_key: &str, badge_bg: bool, text: &str, width: f32) -> bool {
+fn draw_buffer_pill(
+    ui: &mut egui::Ui,
+    icon_key: &str,
+    badge_bg: bool,
+    text: &str,
+    width: f32,
+) -> bool {
     let (r, resp) = ui.allocate_exact_size(Vec2::new(width, 28.0), egui::Sense::click());
     let p = ui.painter_at(r);
     p.rect_filled(r, 6.0, Color32::WHITE);
-    p.rect_stroke(r, 6.0, Stroke::new(1.0, Color32::from_rgb(160, 158, 150)), egui::StrokeKind::Middle);
+    p.rect_stroke(
+        r,
+        6.0,
+        Stroke::new(1.0, Color32::from_rgb(160, 158, 150)),
+        egui::StrokeKind::Middle,
+    );
     if !icon_key.is_empty() {
-        let ir = Rect::from_center_size(Pos2::new(r.left() + 16.0, r.center().y), Vec2::new(20.0, 20.0));
+        let ir = Rect::from_center_size(
+            Pos2::new(r.left() + 16.0, r.center().y),
+            Vec2::new(20.0, 20.0),
+        );
         if badge_bg {
             p.rect_filled(ir, 4.0, Color32::from_rgb(236, 233, 224));
         }
-        paint_ribbon_icon(&p, ir. expand(2.0), icon_key, Color32::from_rgb(38, 37, 34));
-        p.text(Pos2::new(r.left() + 31.0, r.center().y), egui::Align2::LEFT_CENTER, text, egui::FontId::proportional(12.5), Color32::from_rgb(30, 30, 28));
+        paint_ribbon_icon(&p, ir.expand(2.0), icon_key, Color32::from_rgb(38, 37, 34));
+        p.text(
+            Pos2::new(r.left() + 31.0, r.center().y),
+            egui::Align2::LEFT_CENTER,
+            text,
+            egui::FontId::proportional(12.5),
+            Color32::from_rgb(30, 30, 28),
+        );
     } else {
-        p.text(r.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(12.5), Color32::from_rgb(30, 30, 28));
+        p.text(
+            r.center(),
+            egui::Align2::CENTER_CENTER,
+            text,
+            egui::FontId::proportional(12.5),
+            Color32::from_rgb(30, 30, 28),
+        );
     }
     resp.clicked()
 }
@@ -31,9 +57,10 @@ impl StrataAppState {
     pub(crate) fn render_cpp_top_bars(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let is_home = self.active_tab == MainTab::Home;
         let dirty_save = !is_home && self.is_dirty;
+        let [pr, pg, pb, _] = self.theme.chrome;
 
         egui::Frame::NONE
-            .fill(Color32::from_rgb(245, 243, 236))
+            .fill(Color32::from_rgb(pr, pg, pb))
             .inner_margin(egui::Margin::symmetric(8, 5))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -42,7 +69,19 @@ impl StrataAppState {
                         ("조사", &["새 조사", "열기", "저장", "다른 이름"]),
                         ("기록", &["선택", "측거", "그리기", "시굴격자", "버퍼"]),
                         ("자료 받기", &["지적", "수치지형", "유산"]),
-                        ("배경 지도", &["지형", "DEM", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"]),
+                        (
+                            "배경 지도",
+                            &[
+                                "지형",
+                                "DEM",
+                                "등고선",
+                                "토양",
+                                "고지형",
+                                "지질",
+                                "수계",
+                                "옛 지도",
+                            ],
+                        ),
                         ("정합", &["정합"]),
                         ("내보내기", &["도면", "인쇄", "GeoTIFF", "검수·제출"]),
                         ("기타", &["더보기"]),
@@ -52,23 +91,45 @@ impl StrataAppState {
                         if g_idx > 0 {
                             let (_, sep_r) = ui.allocate_space(Vec2::new(2.0, 66.0));
                             ui.painter().line_segment(
-                                [Pos2::new(sep_r.center().x, sep_r.top() + 2.0), Pos2::new(sep_r.center().x, sep_r.bottom() - 2.0)],
+                                [
+                                    Pos2::new(sep_r.center().x, sep_r.top() + 2.0),
+                                    Pos2::new(sep_r.center().x, sep_r.bottom() - 2.0),
+                                ],
                                 Stroke::new(1.0, Color32::from_rgb(214, 211, 200)),
                             );
                         }
                         ui.vertical(|ui| {
                             ui.spacing_mut().item_spacing.y = 2.0;
-                            ui.label(egui::RichText::new(*g_title).size(10.5).strong().color(Color32::from_rgb(65, 64, 60)));
+                            ui.label(
+                                egui::RichText::new(*g_title)
+                                    .size(10.5)
+                                    .strong()
+                                    .color(Color32::from_rgb(65, 64, 60)),
+                            );
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 3.0;
                                 for &label in *items {
                                     let muted = is_home && *g_title == "기록";
                                     let highlight_save = label == "저장" && dirty_save;
-                                    let dark_active = (label == "측거" && self.active_tool == MapToolKind::Measure)
-                                        || (label == "그리기" && (self.active_tool == MapToolKind::Measure || (self.ribbon.sub_toolbar_visible && self.ribbon.sub_mode == SubToolsMode::Draw)))
-                                        || (label == "버퍼" && self.ribbon.sub_toolbar_visible && self.ribbon.sub_mode == SubToolsMode::Buffer);
+                                    let dark_active = (label == "측거"
+                                        && self.active_tool == MapToolKind::Measure)
+                                        || (label == "그리기"
+                                            && (self.active_tool == MapToolKind::Measure
+                                                || (self.ribbon.sub_toolbar_visible
+                                                    && self.ribbon.sub_mode
+                                                        == SubToolsMode::Draw)))
+                                        || (label == "버퍼"
+                                            && self.ribbon.sub_toolbar_visible
+                                            && self.ribbon.sub_mode == SubToolsMode::Buffer);
                                     let warm_active = label == "DEM" && !is_home;
-                                    if self.draw_ribbon_chip(ui, label, muted, highlight_save, dark_active, warm_active) {
+                                    if self.draw_ribbon_chip(
+                                        ui,
+                                        label,
+                                        muted,
+                                        highlight_save,
+                                        dark_active,
+                                        warm_active,
+                                    ) {
                                         self.handle_ribbon_click(label);
                                     }
                                 }
@@ -84,15 +145,20 @@ impl StrataAppState {
                         );
                         if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                             self.active_tab = MainTab::Map;
-                            self.home_map.draw_guide_message = Some(format!("주소·지번 「{}」 위치로 이동했습니다.", self.ribbon.app_bar.query));
+                            self.home_map.draw_guide_message = Some(format!(
+                                "주소·지번 「{}」 위치로 이동했습니다.",
+                                self.ribbon.app_bar.query
+                            ));
                         }
-                        let reg_btn = egui::Button::new(egui::RichText::new("● 지역").size(12.0).strong())
-                            .fill(Color32::WHITE)
-                            .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
-                            .corner_radius(6.0)
-                            .min_size(Vec2::new(60.0, 30.0));
+                        let reg_btn =
+                            egui::Button::new(egui::RichText::new("● 지역").size(12.0).strong())
+                                .fill(Color32::WHITE)
+                                .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                                .corner_radius(6.0)
+                                .min_size(Vec2::new(60.0, 30.0));
                         if ui.add(reg_btn).clicked() {
-                            self.ribbon.app_bar.region_popup_open = !self.ribbon.app_bar.region_popup_open;
+                            self.ribbon.app_bar.region_popup_open =
+                                !self.ribbon.app_bar.region_popup_open;
                         }
                     });
                 });
@@ -367,7 +433,7 @@ impl StrataAppState {
                             self.theme_menu_open = !self.theme_menu_open;
                         }
                         if self.theme_menu_open {
-                            let popup_pos = Pos2::new((theme_resp.rect.right() - 180.0).max(16.0), theme_resp.rect.bottom() + 4.0);
+                            let popup_pos = Pos2::new((theme_resp.rect.right() - 210.0).max(16.0), theme_resp.rect.bottom() + 4.0);
                             egui::Area::new(ui.id().with("ka_theme_menu_popup"))
                                 .fixed_pos(popup_pos)
                                 .order(egui::Order::Foreground)
@@ -377,12 +443,53 @@ impl StrataAppState {
                                         .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
                                         .inner_margin(egui::Margin::symmetric(8, 6))
                                         .show(ui, |ui| {
-                                            ui.set_min_width(172.0);
-                                            if ui.checkbox(&mut self.paper_look, "새 모양 (조용한 도판)").changed() {
-                                                self.theme = strata_types::theme_tokens::ThemeTokens::paper_tokens(!self.paper_look);
+                                            ui.set_min_width(198.0);
+                                            for ct in strata_types::theme_tokens::ColorTheme::ALL {
+                                                let changed = ui
+                                                    .radio_value(
+                                                        &mut self.display_options.color_theme,
+                                                        ct,
+                                                        ct.label_ko(),
+                                                    )
+                                                    .on_hover_text(ct.tooltip_ko())
+                                                    .changed();
+                                                if changed {
+                                                    self.theme = strata_types::theme_tokens::ThemeTokens::for_options(&self.display_options);
+                                                }
                                             }
-                                            if ui.checkbox(&mut self.large_font_mode, "큰 글씨 모드").changed() {
-                                                ctx.set_pixels_per_point(if self.large_font_mode { 1.15 } else { 1.0 });
+                                            ui.separator();
+                                            if ui
+                                                .checkbox(
+                                                    &mut self.display_options.paper_look,
+                                                    "새 모양 (종이·흙색)",
+                                                )
+                                                .changed()
+                                            {
+                                                self.paper_look = self.display_options.paper_look;
+                                                self.theme = strata_types::theme_tokens::ThemeTokens::for_options(&self.display_options);
+                                            }
+                                            if ui
+                                                .checkbox(
+                                                    &mut self.display_options.high_contrast,
+                                                    "고대비 화면 (햇빛 아래)",
+                                                )
+                                                .changed()
+                                            {
+                                                self.theme = strata_types::theme_tokens::ThemeTokens::for_options(&self.display_options);
+                                            }
+                                            if ui
+                                                .checkbox(
+                                                    &mut self.display_options.large_text,
+                                                    "큰 글씨",
+                                                )
+                                                .changed()
+                                            {
+                                                self.large_font_mode = self.display_options.large_text;
+                                                ctx.set_pixels_per_point(if self.large_font_mode {
+                                                    1.15
+                                                } else {
+                                                    1.0
+                                                });
                                             }
                                         });
                                 });
@@ -402,50 +509,177 @@ impl StrataAppState {
         self.render_region_locator_popup(ctx);
     }
 
-    fn draw_ribbon_chip(&self, ui: &mut egui::Ui, label: &str, muted: bool, highlight_save: bool, dark_active: bool, warm_active: bool) -> bool {
+    fn draw_ribbon_chip(
+        &self,
+        ui: &mut egui::Ui,
+        label: &str,
+        muted: bool,
+        highlight_save: bool,
+        dark_active: bool,
+        warm_active: bool,
+    ) -> bool {
         let (rect, resp) = ui.allocate_exact_size(Vec2::new(43.0, 54.0), egui::Sense::click());
         let p = ui.painter_at(rect);
-        let icon_box = Rect::from_center_size(Pos2::new(rect.center().x, rect.top() + 18.0), Vec2::new(35.0, 33.0));
+        let icon_box = Rect::from_center_size(
+            Pos2::new(rect.center().x, rect.top() + 18.0),
+            Vec2::new(35.0, 33.0),
+        );
         if highlight_save {
             p.rect_filled(icon_box, 7.0, Color32::from_rgb(181, 87, 58));
             paint_ribbon_icon(&p, icon_box, label, Color32::WHITE);
-            p.circle_filled(Pos2::new(icon_box.right() - 5.5, icon_box.top() + 5.5), 4.0, Color32::WHITE);
-            p.circle_filled(Pos2::new(icon_box.right() - 5.5, icon_box.top() + 5.5), 2.6, Color32::from_rgb(235, 152, 34));
+            p.circle_filled(
+                Pos2::new(icon_box.right() - 5.5, icon_box.top() + 5.5),
+                4.0,
+                Color32::WHITE,
+            );
+            p.circle_filled(
+                Pos2::new(icon_box.right() - 5.5, icon_box.top() + 5.5),
+                2.6,
+                Color32::from_rgb(235, 152, 34),
+            );
         } else if dark_active {
             p.rect_filled(icon_box, 7.0, Color32::from_rgb(44, 43, 41));
             paint_ribbon_icon(&p, icon_box, label, Color32::WHITE);
         } else {
-            let bg = if warm_active || resp.hovered() { Color32::from_rgb(220, 215, 203) } else { Color32::from_rgb(236, 233, 224) };
-            let border = if warm_active { Stroke::new(1.5, Color32::from_rgb(142, 138, 128)) } else { Stroke::new(1.0, Color32::from_rgb(212, 209, 199)) };
+            let bg = if warm_active || resp.hovered() {
+                Color32::from_rgb(220, 215, 203)
+            } else {
+                Color32::from_rgb(236, 233, 224)
+            };
+            let border = if warm_active {
+                Stroke::new(1.5, Color32::from_rgb(142, 138, 128))
+            } else {
+                Stroke::new(1.0, Color32::from_rgb(212, 209, 199))
+            };
             p.rect_filled(icon_box, 7.0, bg);
             p.rect_stroke(icon_box, 7.0, border, egui::StrokeKind::Middle);
-            let stroke_col = if muted { Color32::from_rgb(155, 153, 146) } else { Color32::from_rgb(38, 37, 34) };
+            let stroke_col = if muted {
+                Color32::from_rgb(155, 153, 146)
+            } else {
+                Color32::from_rgb(38, 37, 34)
+            };
             paint_ribbon_icon(&p, icon_box, label, stroke_col);
         }
-        let txt_col = if muted { Color32::from_rgb(150, 148, 140) } else { Color32::from_rgb(30, 30, 28) };
-        p.text(Pos2::new(rect.center().x, rect.bottom() - 6.0), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(11.0), txt_col);
+        let txt_col = if muted {
+            Color32::from_rgb(150, 148, 140)
+        } else {
+            Color32::from_rgb(30, 30, 28)
+        };
+        p.text(
+            Pos2::new(rect.center().x, rect.bottom() - 6.0),
+            egui::Align2::CENTER_CENTER,
+            label,
+            egui::FontId::proportional(11.0),
+            txt_col,
+        );
         resp.on_hover_text(cpp_ribbon_tooltip(label)).clicked()
     }
 
     fn handle_ribbon_click(&mut self, label: &str) {
         match label {
-            "새 조사" => self.start_new_survey_project("경주시"),
+            "새 조사" => self.modals.active = Some(ActiveModalDialog::NewSurvey),
             "열기" => self.open_sample_survey_project(0),
             "저장" | "다른 이름" => {
                 self.is_dirty = false;
-                self.home_map.draw_guide_message = Some(format!("「{}」 조사를 안전하게 저장했습니다.", self.project_title));
+                self.home_map.draw_guide_message = Some(format!(
+                    "「{}」 조사를 안전하게 저장했습니다.",
+                    self.project_title
+                ));
             }
-            "선택" => { self.active_tab = MainTab::Map; self.active_tool = MapToolKind::Select; }
+            "선택" => {
+                self.active_tab = MainTab::Map;
+                self.active_tool = MapToolKind::Select;
+            }
             "측거" => self.trigger_map_ribbon_tool(MapToolKind::Measure),
-            "그리기" => { self.active_tab = MainTab::Map; self.ribbon.toggle_sub_mode(SubToolsMode::Draw); self.active_tool = MapToolKind::DrawPolygon; }
+            "그리기" => {
+                self.active_tab = MainTab::Map;
+                self.ribbon.toggle_sub_mode(SubToolsMode::Draw);
+                self.active_tool = MapToolKind::DrawPolygon;
+            }
             "시굴격자" => self.modals.active = Some(ActiveModalDialog::TrenchGenerator),
-            "버퍼" => { self.active_tab = MainTab::Map; self.ribbon.toggle_sub_mode(SubToolsMode::Buffer); }
-            "DEM" => { self.active_tab = MainTab::Map; self.modals.active = Some(ActiveModalDialog::DemDownload); }
-            "지적" => { self.active_tab = MainTab::Map; self.left_layers.add_cadastral_wms_layer(); self.modals.active = Some(ActiveModalDialog::CadastralDownload); }
-            "수치지형" => { self.active_tab = MainTab::Map; self.modals.active = Some(ActiveModalDialog::NgiiTopoDownload); }
-            "유산" => { self.active_tab = MainTab::Map; self.modals.active = Some(ActiveModalDialog::HeritageRegionSelect); }
-            "지형" => { self.active_tab = MainTab::Map; self.home_map.active_basemap = BasemapSource::VworldBase; }
-            "등고선" => { self.active_tab = MainTab::Map; self.left_layers.ensure_domain_layer(DomainLayerKey::SectionLine); }
+            "버퍼" => {
+                self.active_tab = MainTab::Map;
+                self.ribbon.toggle_sub_mode(SubToolsMode::Buffer);
+            }
+            "DEM" => {
+                self.active_tab = MainTab::Map;
+                self.modals.active = Some(ActiveModalDialog::DemDownload);
+            }
+            "지적" => {
+                self.active_tab = MainTab::Map;
+                self.left_layers.add_cadastral_wms_layer();
+                self.modals.active = Some(ActiveModalDialog::CadastralDownload);
+            }
+            "수치지형" => {
+                self.active_tab = MainTab::Map;
+                self.modals.active = Some(ActiveModalDialog::NgiiTopoDownload);
+            }
+            "유산" => {
+                self.active_tab = MainTab::Map;
+                self.modals.active = Some(ActiveModalDialog::HeritageRegionSelect);
+            }
+            "지형" => {
+                self.active_tab = MainTab::Map;
+                self.home_map.active_basemap = BasemapSource::VworldBase;
+            }
+            "등고선" => {
+                self.active_tab = MainTab::Map;
+                self.left_layers
+                    .ensure_domain_layer(DomainLayerKey::SectionLine);
+                self.modals.active = Some(ActiveModalDialog::SurveyContour);
+            }
+            "토양" => {
+                self.active_tab = MainTab::Map;
+                let spec = strata_net::tile_fetcher::build_wms_thematic_layer_spec(
+                    strata_net::tile_fetcher::ThematicLayerType::SoilDrainage,
+                    self.work_crs.auth_id(),
+                );
+                self.home_map.draw_guide_message = Some(format!(
+                    "{} ({}) 오버레이를 켰습니다 (투명도 {:.0}%).",
+                    spec.layer_title_ko,
+                    self.work_crs.auth_id(),
+                    spec.opacity * 100.0
+                ));
+            }
+            "지질" => {
+                self.active_tab = MainTab::Map;
+                let spec = strata_net::tile_fetcher::build_wms_thematic_layer_spec(
+                    strata_net::tile_fetcher::ThematicLayerType::Geology1to50k,
+                    self.work_crs.auth_id(),
+                );
+                self.home_map.draw_guide_message = Some(format!(
+                    "{} ({}) 오버레이를 켰습니다 (투명도 {:.0}%).",
+                    spec.layer_title_ko,
+                    self.work_crs.auth_id(),
+                    spec.opacity * 100.0
+                ));
+            }
+            "수계" => {
+                self.active_tab = MainTab::Map;
+                let spec = strata_net::tile_fetcher::build_wms_thematic_layer_spec(
+                    strata_net::tile_fetcher::ThematicLayerType::HydroNetworkWaterway,
+                    self.work_crs.auth_id(),
+                );
+                self.home_map.draw_guide_message = Some(format!(
+                    "{} ({}) 오버레이를 켰습니다 (투명도 {:.0}%).",
+                    spec.layer_title_ko,
+                    self.work_crs.auth_id(),
+                    spec.opacity * 100.0
+                ));
+            }
+            "옛 지도" => {
+                self.active_tab = MainTab::Map;
+                let spec = strata_net::tile_fetcher::build_historical_tms_layer_spec(
+                    strata_net::tile_fetcher::HistoricalMapType::Chosun1919_1to50000,
+                    0.8,
+                );
+                self.home_map.draw_guide_message = Some(format!(
+                    "{} ({}) 배경을 적용했습니다 (투명도 {:.0}%).",
+                    spec.layer_title_ko,
+                    self.work_crs.auth_id(),
+                    spec.opacity * 100.0
+                ));
+            }
             "고지형" => self.open_studio_tab(MainTab::Paleo),
             "정합" => {
                 self.active_tab = MainTab::Map;
@@ -453,8 +687,29 @@ impl StrataAppState {
                 self.active_tool = MapToolKind::GeorefAlign;
             }
             "도면" => self.modals.active = Some(ActiveModalDialog::PaperSetup),
-            "인쇄" => { self.open_studio_tab(MainTab::Drawing); self.modals.active = Some(ActiveModalDialog::DrawingPrint); }
-            "GeoTIFF" => self.open_studio_tab(MainTab::Drawing),
+            "인쇄" => {
+                self.open_studio_tab(MainTab::Drawing);
+                self.modals.active = Some(ActiveModalDialog::DrawingPrint);
+            }
+            "GeoTIFF" => {
+                self.open_studio_tab(MainTab::Drawing);
+                let out_path = std::env::temp_dir().join("strata_drawing_plate.tif");
+                if strata_layout::pdf_geotiff::export_geotiff_with_cancel(
+                    &out_path,
+                    2480,
+                    3508,
+                    self.work_crs.epsg_code(),
+                    None,
+                )
+                .is_ok()
+                {
+                    self.home_map.draw_guide_message = Some(format!(
+                        "GeoTIFF 도면(300 DPI · {})을 저장했습니다: {}",
+                        self.work_crs.auth_id(),
+                        out_path.display()
+                    ));
+                }
+            }
             "검수·제출" => self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage),
             "더보기" => self.modals.active = Some(ActiveModalDialog::AccountSettings),
             _ => self.active_tab = MainTab::Map,
@@ -477,15 +732,25 @@ impl StrataAppState {
                     .show(ui, |ui| {
                         for r in 0..6 {
                             for c in 0..4 {
-                                if let Some(tile) = PENINSULA_REGION_TILES.iter().find(|t| t.row == r && t.col == c) {
+                                if let Some(tile) = PENINSULA_REGION_TILES
+                                    .iter()
+                                    .find(|t| t.row == r && t.col == c)
+                                {
                                     let is_sel = self.ribbon.app_bar.selected_sido == tile.name;
                                     let btn = egui::Button::new(
-                                        egui::RichText::new(tile.name)
-                                            .size(12.5)
-                                            .strong()
-                                            .color(if is_sel { Color32::WHITE } else { Color32::from_rgb(30, 30, 28) }),
+                                        egui::RichText::new(tile.name).size(12.5).strong().color(
+                                            if is_sel {
+                                                Color32::WHITE
+                                            } else {
+                                                Color32::from_rgb(30, 30, 28)
+                                            },
+                                        ),
                                     )
-                                    .fill(if is_sel { Color32::from_rgb(44, 43, 41) } else { Color32::WHITE })
+                                    .fill(if is_sel {
+                                        Color32::from_rgb(44, 43, 41)
+                                    } else {
+                                        Color32::WHITE
+                                    })
                                     .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
                                     .corner_radius(5.0);
                                     if ui.add_sized([66.0, 28.0], btn).clicked() {
@@ -532,7 +797,10 @@ impl StrataAppState {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     let move_btn = egui::Button::new(
-                        egui::RichText::new("이동").color(Color32::WHITE).strong().size(13.0),
+                        egui::RichText::new("이동")
+                            .color(Color32::WHITE)
+                            .strong()
+                            .size(13.0),
                     )
                     .fill(Color32::from_rgb(181, 87, 58))
                     .corner_radius(5.0)
@@ -551,7 +819,10 @@ impl StrataAppState {
                             .real_survey
                             .cadastral_parcels
                             .iter()
-                            .find(|p| !self.ribbon.app_bar.lot_input.trim().is_empty() && p.jibun.contains(self.ribbon.app_bar.lot_input.trim()))
+                            .find(|p| {
+                                !self.ribbon.app_bar.lot_input.trim().is_empty()
+                                    && p.jibun.contains(self.ribbon.app_bar.lot_input.trim())
+                            })
                         {
                             self.home_map.viewport.center_xy = parcel.center;
                             self.home_map.viewport.meters_per_pixel = 1.25;

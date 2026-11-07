@@ -61,7 +61,10 @@ impl VworldClient {
             return None;
         }
         let upper = trimmed.to_uppercase();
-        if upper.contains("INCORRECT_KEY") || upper.contains("INVALID KEY") || upper.contains("INVALID_KEY") {
+        if upper.contains("INCORRECT_KEY")
+            || upper.contains("INVALID KEY")
+            || upper.contains("INVALID_KEY")
+        {
             Some(VworldError::InvalidKey)
         } else if upper.contains("QUOTA") || upper.contains("OVER_LIMIT") {
             Some(VworldError::QuotaExceeded)

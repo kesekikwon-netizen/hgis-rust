@@ -1,6 +1,4 @@
-use crate::cad_csv_io::{
-    extract_dxf_elevation_points, parse_control_points_csv, ControlPointRow,
-};
+use crate::cad_csv_io::{extract_dxf_elevation_points, parse_control_points_csv, ControlPointRow};
 use crate::gpkg::{GpkgRepository, SurveyWorkspace};
 use crate::session_save::persist_workspace;
 use std::io::Read;
@@ -93,7 +91,9 @@ mod tests {
 
         let reopened = WorkspaceFileActions::save_and_reopen_gpkg(&gpkg_path, &mut ws)?;
         assert_eq!(reopened.schema_version, 3);
-        assert!(reopened.layers.contains_key(DomainLayerKey::SurveyArea.id()));
+        assert!(reopened
+            .layers
+            .contains_key(DomainLayerKey::SurveyArea.id()));
 
         let dxf_path = dir.path().join("sample_contour.dxf");
         std::fs::write(
@@ -113,7 +113,8 @@ mod tests {
     }
 
     #[test]
-    fn test_mru_max_limit_12_to_10_prune_3_missing_to_7_and_verify_gpkg_magic_bytes() -> StrataResult<()> {
+    fn test_mru_max_limit_12_to_10_prune_3_missing_to_7_and_verify_gpkg_magic_bytes(
+    ) -> StrataResult<()> {
         let dir = tempfile::tempdir()?;
         let mut mgr = RecentProjectManager::new();
         for i in 1..=12 {

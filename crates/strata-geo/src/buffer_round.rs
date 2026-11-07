@@ -24,11 +24,26 @@ pub fn round_buffer_polygon(poly: &Polygon<f64>, radius_m: f64, segments: usize)
             let ny = dx / len * radius_m;
             let rect = Polygon::new(
                 LineString::from(vec![
-                    Coord { x: a.x + nx, y: a.y + ny },
-                    Coord { x: b.x + nx, y: b.y + ny },
-                    Coord { x: b.x - nx, y: b.y - ny },
-                    Coord { x: a.x - nx, y: a.y - ny },
-                    Coord { x: a.x + nx, y: a.y + ny },
+                    Coord {
+                        x: a.x + nx,
+                        y: a.y + ny,
+                    },
+                    Coord {
+                        x: b.x + nx,
+                        y: b.y + ny,
+                    },
+                    Coord {
+                        x: b.x - nx,
+                        y: b.y - ny,
+                    },
+                    Coord {
+                        x: a.x - nx,
+                        y: a.y - ny,
+                    },
+                    Coord {
+                        x: a.x + nx,
+                        y: a.y + ny,
+                    },
                 ]),
                 vec![],
             );

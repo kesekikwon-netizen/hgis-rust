@@ -90,7 +90,9 @@ pub fn probe_multi_elevation_at_world_coord(
     let section_distance_d =
         project_world_coord_to_section_distance(world_xy, section_start_xy, section_end_xy);
     match (current_elevation_m, paleo_elevation_m) {
-        (Some(zc), Some(zp)) if zc.is_finite() && zp.is_finite() && zc > -9000.0 && zp > -9000.0 => {
+        (Some(zc), Some(zp))
+            if zc.is_finite() && zp.is_finite() && zc > -9000.0 && zp > -9000.0 =>
+        {
             MultiElevationProbeResult {
                 has_valid_sample: true,
                 current_elevation_m: zc,
@@ -129,11 +131,12 @@ pub fn render_cross_section_rgba(
 
     let mut min_z = f64::INFINITY;
     let mut max_z = f64::NEG_INFINITY;
-    for (&zs, (&zp, &zb)) in profile
-        .z_surface_curr_m
-        .iter()
-        .zip(profile.z_paleo_top_m.iter().zip(profile.z_bedrock_base_m.iter()))
-    {
+    for (&zs, (&zp, &zb)) in profile.z_surface_curr_m.iter().zip(
+        profile
+            .z_paleo_top_m
+            .iter()
+            .zip(profile.z_bedrock_base_m.iter()),
+    ) {
         min_z = min_z.min(zb).min(zp).min(zs);
         max_z = max_z.max(zs).max(zp).max(zb);
     }
@@ -149,9 +152,15 @@ pub fn render_cross_section_rgba(
         let frac = t - (idx as f64);
         let lerp = |a: f64, b: f64| a + (b - a) * frac;
 
-        let zs = lerp(profile.z_surface_curr_m[idx], profile.z_surface_curr_m[idx + 1]);
+        let zs = lerp(
+            profile.z_surface_curr_m[idx],
+            profile.z_surface_curr_m[idx + 1],
+        );
         let zp = lerp(profile.z_paleo_top_m[idx], profile.z_paleo_top_m[idx + 1]);
-        let zb = lerp(profile.z_bedrock_base_m[idx], profile.z_bedrock_base_m[idx + 1]);
+        let zb = lerp(
+            profile.z_bedrock_base_m[idx],
+            profile.z_bedrock_base_m[idx + 1],
+        );
 
         let ys = z_to_y(zs).min(h - 1);
         let yp = z_to_y(zp).min(h - 1);
@@ -492,9 +501,7 @@ fn solve_8x8_linear_system(mut m: [[f64; 8]; 8], mut rhs: [f64; 8]) -> Option<[f
 
 /// 4점 타겟 핀 기준 2D 사영 변환(DLT) 3x3 호모그래피 행렬(`h33 = 1.0`) 산출
 /// (C++ `KaHomographySolver::solveHomography4Point` 1:1 대응)
-pub fn solve_homography_4point(
-    pins: &[TargetPinPair; 4],
-) -> Result<[f64; 9], HomographyError> {
+pub fn solve_homography_4point(pins: &[TargetPinPair; 4]) -> Result<[f64; 9], HomographyError> {
     let src_quad = [
         pins[0].photo_pixel,
         pins[1].photo_pixel,
@@ -525,8 +532,7 @@ pub fn solve_homography_4point(
         mat[r1] = [0.0, 0.0, 0.0, u, v, 1.0, -u * y, -v * y];
         rhs[r1] = y;
     }
-    let sol =
-        solve_8x8_linear_system(mat, rhs).ok_or(HomographyError::CollinearOrConcavePins)?;
+    let sol = solve_8x8_linear_system(mat, rhs).ok_or(HomographyError::CollinearOrConcavePins)?;
     Ok([
         sol[0], sol[1], sol[2], sol[3], sol[4], sol[5], sol[6], sol[7], 1.0,
     ])

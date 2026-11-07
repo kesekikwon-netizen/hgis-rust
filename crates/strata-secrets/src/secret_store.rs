@@ -153,11 +153,12 @@ pub fn parse_qt_ini_str(content: &str) -> BTreeMap<String, String> {
         if let Some((k, v)) = line.split_once('=') {
             let key = k.trim();
             let val = v.trim().trim_matches('"').to_string();
-            let full_key = if current_section.is_empty() || current_section.eq_ignore_ascii_case("General") {
-                key.to_string()
-            } else {
-                format!("{current_section}/{key}")
-            };
+            let full_key =
+                if current_section.is_empty() || current_section.eq_ignore_ascii_case("General") {
+                    key.to_string()
+                } else {
+                    format!("{current_section}/{key}")
+                };
             map.insert(full_key, val);
         }
     }

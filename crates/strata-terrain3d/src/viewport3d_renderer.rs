@@ -122,10 +122,7 @@ pub fn sample_dem_bilinear(
         }
     }
 
-    z00 * (1.0 - tx) * (1.0 - ty)
-        + z10 * tx * (1.0 - ty)
-        + z01 * (1.0 - tx) * ty
-        + z11 * tx * ty
+    z00 * (1.0 - tx) * (1.0 - ty) + z10 * tx * (1.0 - ty) + z01 * (1.0 - tx) * ty + z11 * tx * ty
 }
 
 #[must_use]
@@ -156,10 +153,12 @@ pub fn render_terrain3d_rgba(
             }
         } else {
             let ty = (y - sky_rows) as f64 / ((h - sky_rows).max(1) as f64);
-            let gy = ((ty * (grid_h.saturating_sub(1) as f64)) as usize).min(grid_h.saturating_sub(1));
+            let gy =
+                ((ty * (grid_h.saturating_sub(1) as f64)) as usize).min(grid_h.saturating_sub(1));
             for x in 0..w {
                 let tx = x as f64 / (w.saturating_sub(1).max(1) as f64);
-                let gx = ((tx * (grid_w.saturating_sub(1) as f64)) as usize).min(grid_w.saturating_sub(1));
+                let gx = ((tx * (grid_w.saturating_sub(1) as f64)) as usize)
+                    .min(grid_w.saturating_sub(1));
                 let z = dem.get(gy * grid_w + gx).copied().unwrap_or(40.0);
                 let z_norm = ((z * f64::from(cam.z_exaggeration) - 20.0) / 120.0).clamp(0.1, 1.4);
                 let yaw_mod = 0.85 + 0.15 * f64::from(cam.yaw_deg.to_radians().cos());

@@ -9,6 +9,37 @@ pub enum ColorTheme {
     BlossomPastel,
 }
 
+impl ColorTheme {
+    pub const ALL: [Self; 4] = [
+        Self::Default,
+        Self::SkySnow,
+        Self::BoltYellow,
+        Self::BlossomPastel,
+    ];
+
+    /// C++ `KaThemeOptions.cpp` 4개 색상 테마 한글 라벨 1:1
+    #[must_use]
+    pub const fn label_ko(self) -> &'static str {
+        match self {
+            Self::Default => "기본",
+            Self::SkySnow => "하늘 눈밭",
+            Self::BoltYellow => "번개 노랑",
+            Self::BlossomPastel => "벚꽃 파스텔",
+        }
+    }
+
+    /// C++ `KaThemeOptions.cpp` 4개 색상 테마 툴팁 1:1
+    #[must_use]
+    pub const fn tooltip_ko(self) -> &'static str {
+        match self {
+            Self::Default => "종이·흙색 또는 기본 회백 화면을 씁니다.",
+            Self::SkySnow => "맑은 하늘빛과 눈밭처럼 밝은 화면으로 바꿉니다.",
+            Self::BoltYellow => "따뜻한 크림 바탕에 노란 강조색을 씁니다.",
+            Self::BlossomPastel => "차분한 벚꽃 파스텔 바탕과 자주빛 강조색을 씁니다.",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct DisplayOptions {
     pub high_contrast: bool,
@@ -242,11 +273,130 @@ impl ThemeTokens {
         t
     }
 
+    pub const fn sky_snow_tokens(high_contrast: bool) -> Self {
+        let mut t = Self::paper_tokens(false);
+        t.accent = rgb(0x25, 0x6B, 0xA8);
+        t.accent_hover = rgb(0x1D, 0x5B, 0x91);
+        t.accent_deep = rgb(0x16, 0x48, 0x73);
+        t.accent_wash = rgb(0xDC, 0xEC, 0xFA);
+        t.ink = rgb(0x14, 0x22, 0x30);
+        t.ink_muted = rgb(0x4E, 0x62, 0x75);
+        t.ink_disabled = rgb(0x5E, 0x6D, 0x7B);
+        t.surface = rgb(0xFF, 0xFF, 0xFF);
+        t.desk = rgb(0xEE, 0xF5, 0xFB);
+        t.alt_row = rgb(0xF7, 0xFA, 0xFD);
+        t.stripe = rgb(0xF1, 0xF7, 0xFC);
+        t.hover = rgb(0xE8, 0xF2, 0xFA);
+        t.selected = rgb(0xD6, 0xE7, 0xF7);
+        t.pressed = rgb(0xC9, 0xDF, 0xF4);
+        t.disabled_surface = rgb(0xE5, 0xEE, 0xF6);
+        t.dialog_ground = rgb(0xF7, 0xFA, 0xFD);
+        t.chrome = rgb(0xF5, 0xF9, 0xFC);
+        t.chosen_fill = rgb(0xD6, 0xE7, 0xF7);
+        t.border = rgb(0xCE, 0xDC, 0xEB);
+        t.border_strong = rgb(0xAB, 0xC1, 0xD6);
+        t.primary = rgb(0x25, 0x6B, 0xA8);
+        t.primary_text = rgb(0xFF, 0xFF, 0xFF);
+        t.tile = rgb(0xE8, 0xF1, 0xF9);
+        t.tile_on = rgb(0x18, 0x38, 0x54);
+        t.glyph = rgb(0x1B, 0x35, 0x50);
+        t.glyph_on = rgb(0xF7, 0xFA, 0xFD);
+        if high_contrast {
+            t.ink_muted = rgb(0x2F, 0x43, 0x56);
+            t.border = rgb(0x6F, 0x8D, 0xA8);
+            t.border_strong = rgb(0x4E, 0x6D, 0x8A);
+            t.warn = rgb(0x5C, 0x37, 0x00);
+        }
+        t
+    }
+
+    pub const fn bolt_yellow_tokens(high_contrast: bool) -> Self {
+        let mut t = Self::paper_tokens(false);
+        t.accent = rgb(0x9A, 0x65, 0x00);
+        t.accent_hover = rgb(0x82, 0x55, 0x00);
+        t.accent_deep = rgb(0x6B, 0x45, 0x00);
+        t.accent_wash = rgb(0xFA, 0xED, 0xC2);
+        t.ink = rgb(0x1F, 0x1A, 0x0E);
+        t.ink_muted = rgb(0x65, 0x5A, 0x3E);
+        t.ink_disabled = rgb(0x70, 0x65, 0x4A);
+        t.surface = rgb(0xFF, 0xFE, 0xFA);
+        t.desk = rgb(0xFA, 0xF4, 0xDF);
+        t.alt_row = rgb(0xFD, 0xF9, 0xEC);
+        t.stripe = rgb(0xFA, 0xF3, 0xDC);
+        t.hover = rgb(0xF6, 0xEC, 0xCB);
+        t.selected = rgb(0xEF, 0xE0, 0xAD);
+        t.pressed = rgb(0xE5, 0xD4, 0x9B);
+        t.disabled_surface = rgb(0xEF, 0xE9, 0xD4);
+        t.dialog_ground = rgb(0xFD, 0xF9, 0xEC);
+        t.chrome = rgb(0xFB, 0xF6, 0xE4);
+        t.chosen_fill = rgb(0xEF, 0xE0, 0xAD);
+        t.border = rgb(0xDF, 0xD4, 0xB4);
+        t.border_strong = rgb(0xC5, 0xB6, 0x8C);
+        t.primary = rgb(0x9A, 0x65, 0x00);
+        t.primary_text = rgb(0xFF, 0xFF, 0xFF);
+        t.tile = rgb(0xF2, 0xE9, 0xCC);
+        t.tile_on = rgb(0x2E, 0x25, 0x10);
+        t.glyph = rgb(0x2E, 0x25, 0x10);
+        t.glyph_on = rgb(0xFD, 0xF9, 0xEC);
+        if high_contrast {
+            t.ink_muted = rgb(0x3F, 0x36, 0x1F);
+            t.border = rgb(0x8F, 0x7E, 0x4B);
+            t.border_strong = rgb(0x6E, 0x5F, 0x32);
+            t.accent = rgb(0x7F, 0x52, 0x00);
+            t.primary = rgb(0x7F, 0x52, 0x00);
+        }
+        t
+    }
+
+    pub const fn blossom_pastel_tokens(high_contrast: bool) -> Self {
+        let mut t = Self::paper_tokens(false);
+        t.accent = rgb(0xA8, 0x44, 0x68);
+        t.accent_hover = rgb(0x91, 0x38, 0x58);
+        t.accent_deep = rgb(0x78, 0x2C, 0x48);
+        t.accent_wash = rgb(0xF8, 0xDF, 0xE8);
+        t.ink = rgb(0x26, 0x18, 0x20);
+        t.ink_muted = rgb(0x6B, 0x55, 0x61);
+        t.ink_disabled = rgb(0x74, 0x5F, 0x6B);
+        t.surface = rgb(0xFF, 0xFC, 0xFD);
+        t.desk = rgb(0xFA, 0xF0, 0xF4);
+        t.alt_row = rgb(0xFD, 0xF6, 0xF9);
+        t.stripe = rgb(0xF9, 0xEE, 0xF3);
+        t.hover = rgb(0xF6, 0xE6, 0xEE);
+        t.selected = rgb(0xEE, 0xD6, 0xE2);
+        t.pressed = rgb(0xE4, 0xC7, 0xD6);
+        t.disabled_surface = rgb(0xF1, 0xE6, 0xEC);
+        t.dialog_ground = rgb(0xFD, 0xF6, 0xF9);
+        t.chrome = rgb(0xFB, 0xF2, 0xF6);
+        t.chosen_fill = rgb(0xEE, 0xD6, 0xE2);
+        t.border = rgb(0xE3, 0xCE, 0xD8);
+        t.border_strong = rgb(0xC9, 0xAE, 0xBC);
+        t.primary = rgb(0xA8, 0x44, 0x68);
+        t.primary_text = rgb(0xFF, 0xFF, 0xFF);
+        t.tile = rgb(0xF2, 0xE2, 0xEA);
+        t.tile_on = rgb(0x38, 0x1E, 0x2B);
+        t.glyph = rgb(0x38, 0x1E, 0x2B);
+        t.glyph_on = rgb(0xFD, 0xF6, 0xF9);
+        if high_contrast {
+            t.ink_muted = rgb(0x46, 0x31, 0x3D);
+            t.border = rgb(0x98, 0x77, 0x88);
+            t.border_strong = rgb(0x78, 0x58, 0x69);
+            t.warn = rgb(0x5C, 0x37, 0x00);
+        }
+        t
+    }
+
     pub const fn for_options(opts: &DisplayOptions) -> Self {
-        if opts.paper_look {
-            Self::paper_tokens(opts.high_contrast)
-        } else {
-            Self::stock_tokens(opts.high_contrast)
+        match opts.color_theme {
+            ColorTheme::SkySnow => Self::sky_snow_tokens(opts.high_contrast),
+            ColorTheme::BoltYellow => Self::bolt_yellow_tokens(opts.high_contrast),
+            ColorTheme::BlossomPastel => Self::blossom_pastel_tokens(opts.high_contrast),
+            ColorTheme::Default => {
+                if opts.paper_look {
+                    Self::paper_tokens(opts.high_contrast)
+                } else {
+                    Self::stock_tokens(opts.high_contrast)
+                }
+            }
         }
     }
 
@@ -302,7 +452,9 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(large_opts.font_point_size(), 15);
-        assert!(((f64::from(base_opts.font_point_size()) * HGIS_FONT_LARGE_RATIO) - 15.0).abs() < 1e-9);
+        assert!(
+            ((f64::from(base_opts.font_point_size()) * HGIS_FONT_LARGE_RATIO) - 15.0).abs() < 1e-9
+        );
 
         let ratio = ThemeTokens::compute_wcag_contrast_ratio(
             [0x22, 0x22, 0x22, 0xFF],
@@ -326,10 +478,8 @@ mod tests {
         assert_eq!(EraPreset::BronzeAge.standard_rgb(), [211, 84, 0]);
         assert_eq!(EraPreset::Goryeo.standard_rgb(), [17, 120, 100]);
 
-        let dwelling = ArchaeologicalFeatureStyleRule::for_feature_type(
-            "Dwelling",
-            EraPreset::ThreeKingdoms,
-        );
+        let dwelling =
+            ArchaeologicalFeatureStyleRule::for_feature_type("Dwelling", EraPreset::ThreeKingdoms);
         assert_eq!(dwelling.stroke_rgb, [44, 62, 80]);
         assert!((dwelling.outline_width_mm - 0.35).abs() < 1e-6);
 

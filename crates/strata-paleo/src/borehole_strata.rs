@@ -116,8 +116,7 @@ pub fn parse_single_borehole(bh: &BoreholeRawInput) -> ParsedBoreholeSummary {
         }
         if name.contains("매립") || name.contains("성토") || name.contains("표토") {
             fill_thickness_m += thick;
-        } else if name.contains("충적") || name.contains("퇴적") || name.contains("붕적")
-        {
+        } else if name.contains("충적") || name.contains("퇴적") || name.contains("붕적") {
             alluvial_thickness_m += thick;
             if dominant_uscs.is_empty() && !s.uscs_code.trim().is_empty() {
                 dominant_uscs = s.uscs_code.trim().to_ascii_uppercase();
@@ -192,7 +191,8 @@ pub fn decluster_boreholes_by_grid(
         match best_per_cell.get(&(cx, cy)) {
             Some((prev_depth, prev_cnt, _))
                 if *prev_depth > max_depth
-                    || ((*prev_depth - max_depth).abs() < 1e-6 && *prev_cnt >= score_strata_cnt) => {}
+                    || ((*prev_depth - max_depth).abs() < 1e-6
+                        && *prev_cnt >= score_strata_cnt) => {}
             _ => {
                 best_per_cell.insert((cx, cy), (max_depth, score_strata_cnt, bh.clone()));
             }
@@ -406,7 +406,11 @@ mod tests {
 
         let holes: Vec<BoreholeRawInput> = (0..15)
             .map(|i| {
-                let depth = if i == 7 { 45.0 } else { 5.0 + f64::from(i) * 2.5 };
+                let depth = if i == 7 {
+                    45.0
+                } else {
+                    5.0 + f64::from(i) * 2.5
+                };
                 let x = 200_000.0 + f64::from(i % 5) * 12.0;
                 let y = 350_000.0 + f64::from(i / 5) * 14.0;
                 BoreholeRawInput {
@@ -482,12 +486,7 @@ mod tests {
         );
 
         // TestKaSoilDescriptionGenerator::testSentenceComposition
-        let desc = generate_soil_description(
-            "황갈색(10YR 4/6)",
-            "사질점토",
-            "미세 목탄립",
-            "치밀",
-        );
+        let desc = generate_soil_description("황갈색(10YR 4/6)", "사질점토", "미세 목탄립", "치밀");
         assert_eq!(
             desc,
             "황갈색(10YR 4/6)의 사질점토로서, 미세 목탄립이(가) 포함되어 있으며 층위 상태는 치밀함."
@@ -555,7 +554,11 @@ pub fn parse_munsell_notation(notation_str: &str) -> Result<MunsellColorRecord, 
         return Err(MunsellParseError::InvalidFormat);
     }
 
-    let (korean_name, srgb) = match (hue_part, (value * 10.0).round() as i32, (chroma * 10.0).round() as i32) {
+    let (korean_name, srgb) = match (
+        hue_part,
+        (value * 10.0).round() as i32,
+        (chroma * 10.0).round() as i32,
+    ) {
         ("10YR", 40, 60) => ("황갈색", [156, 104, 36]),
         ("2.5Y", 50, 30) => ("회황색", [148, 132, 92]),
         ("5YR", 30, 40) => ("암갈색", [96, 58, 42]),

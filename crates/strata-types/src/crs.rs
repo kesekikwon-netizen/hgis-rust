@@ -139,9 +139,7 @@ pub const HGIS_KOREA_MAX_LON: f64 = 132.0;
 /// C++ `KaCrsRegistry::recommendKoreanBeltFromLon` — 경도 기준 서부(5185)·중부(5186)·동부(5187)·동해(5188) 자동 추천 및 한반도 영역 밖(124°~132° 이탈) 입력 시 중부원점(5186) 폴백
 #[must_use]
 pub fn recommend_korean_belt_from_lon(longitude: f64) -> u32 {
-    if !longitude.is_finite()
-        || !(HGIS_KOREA_MIN_LON..=HGIS_KOREA_MAX_LON).contains(&longitude)
-    {
+    if !longitude.is_finite() || !(HGIS_KOREA_MIN_LON..=HGIS_KOREA_MAX_LON).contains(&longitude) {
         return 5186;
     }
     if longitude < HGIS_LON_BOUNDARY_WEST_MID {
@@ -160,8 +158,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_recommend_korean_belt_gyeongju_5187_seoul_5186_baengnyeong_5185_dokdo_5188_and_fallback()
-    {
+    fn test_recommend_korean_belt_gyeongju_5187_seoul_5186_baengnyeong_5185_dokdo_5188_and_fallback(
+    ) {
         assert_eq!(recommend_korean_belt_from_lon(129.22), 5187);
         assert_eq!(recommend_korean_belt_from_lon(126.97), 5186);
         assert_eq!(recommend_korean_belt_from_lon(124.67), 5185);
@@ -189,8 +187,12 @@ mod tests {
         .sqrt();
         assert!(delta < 0.05, "expected delta < 0.05m, got {delta}");
 
-        let fallback = transform_bessel_5174_to_grs80_5186_safe(f64::NAN, 300_000.0, [200_000.0, 400_000.0]);
+        let fallback =
+            transform_bessel_5174_to_grs80_5186_safe(f64::NAN, 300_000.0, [200_000.0, 400_000.0]);
         assert_eq!(fallback, [200_000.0, 400_000.0]);
-        assert_eq!(format_status_bar_coordinates(f64::NAN, 100.0), "X: ---, Y: ---");
+        assert_eq!(
+            format_status_bar_coordinates(f64::NAN, 100.0),
+            "X: ---, Y: ---"
+        );
     }
 }

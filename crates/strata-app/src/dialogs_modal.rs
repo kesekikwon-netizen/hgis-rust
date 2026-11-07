@@ -3,7 +3,7 @@ use strata_check_export::checklist_engine::ChecklistEngine;
 use strata_check_export::submit_package::export_submission_package;
 use strata_geo::trench_grid::{TrenchShapeKind, TrenchStandardLength};
 use strata_layout::sheet_composer::{SheetOrientation, SheetPaperSize};
-use strata_types::crs::SubmitCrs;
+use strata_types::crs::{SubmitCrs, WorkCrs};
 
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_download_print::render_download_and_print_dialogs;
@@ -11,6 +11,8 @@ use crate::ribbon_icons::paint_strata_logo;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveModalDialog {
+    NewSurvey,
+    SurveyContour,
     AccountSettings,
     TrenchGenerator,
     ExportSubmitPackage,
@@ -27,6 +29,20 @@ pub enum ActiveModalDialog {
 #[derive(Debug, Clone)]
 pub struct ModalDialogController {
     pub active: Option<ActiveModalDialog>,
+    pub new_survey_name: String,
+    pub new_survey_dir: String,
+    pub new_survey_lon_deg: f64,
+    pub new_survey_crs: WorkCrs,
+    pub new_survey_crs_manual: bool,
+    pub new_survey_error: Option<String>,
+    pub contour_file_path: String,
+    pub contour_interval_m: f64,
+    pub contour_swap_axes: bool,
+    pub contour_exclude_suspicious: bool,
+    pub contour_use_breaklines: bool,
+    pub contour_advanced_open: bool,
+    pub contour_max_edge_m: f64,
+    pub contour_cell_size_m: f64,
     pub vworld_key_input: String,
     pub heritage_id_input: String,
     pub ngii_id_input: String,
@@ -47,6 +63,20 @@ impl Default for ModalDialogController {
     fn default() -> Self {
         Self {
             active: None,
+            new_survey_name: "병산동".to_owned(),
+            new_survey_dir: r"C:\Users\권을\Documents".to_owned(),
+            new_survey_lon_deg: 129.21,
+            new_survey_crs: WorkCrs::Epsg5187,
+            new_survey_crs_manual: false,
+            new_survey_error: None,
+            contour_file_path: "실측점_표고_248점.csv".to_owned(),
+            contour_interval_m: 0.5,
+            contour_swap_axes: false,
+            contour_exclude_suspicious: true,
+            contour_use_breaklines: true,
+            contour_advanced_open: false,
+            contour_max_edge_m: 50.0,
+            contour_cell_size_m: 0.5,
             vworld_key_input: String::new(),
             heritage_id_input: String::new(),
             ngii_id_input: String::new(),
@@ -95,11 +125,19 @@ pub fn render_strata_modal_header(ui: &mut egui::Ui, title: &str, open: &mut boo
         let (logo_r, _) = ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::hover());
         paint_strata_logo(&ui.painter_at(logo_r), logo_r);
         ui.add_space(4.0);
-        ui.label(egui::RichText::new(title).size(13.5).color(Color32::from_rgb(30, 30, 28)));
+        ui.label(
+            egui::RichText::new(title)
+                .size(13.5)
+                .color(Color32::from_rgb(30, 30, 28)),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let close_btn = egui::Button::new(egui::RichText::new("×").size(18.0).color(Color32::from_rgb(55, 54, 50)))
-                .fill(Color32::TRANSPARENT)
-                .stroke(Stroke::NONE);
+            let close_btn = egui::Button::new(
+                egui::RichText::new("×")
+                    .size(18.0)
+                    .color(Color32::from_rgb(55, 54, 50)),
+            )
+            .fill(Color32::TRANSPARENT)
+            .stroke(Stroke::NONE);
             if ui.add(close_btn).clicked() {
                 *open = false;
             }
@@ -109,7 +147,9 @@ pub fn render_strata_modal_header(ui: &mut egui::Ui, title: &str, open: &mut boo
 }
 
 pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context) {
-    let Some(kind) = app.modals.active else { return };
+    let Some(kind) = app.modals.active else {
+        return;
+    };
     let mut open = true;
     match kind {
         ActiveModalDialog::PaperSetup => {
@@ -236,35 +276,81 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                 .default_width(520.0)
                 .show(ctx, |ui| {
                     render_strata_modal_header(ui, "API 키 · 사이트 계정 설정 - Strata", &mut open);
-                    ui.label(egui::RichText::new(&app.accounts.status_summary_ko).size(12.5).strong());
+                    ui.label(
+                        egui::RichText::new(&app.accounts.status_summary_ko)
+                            .size(12.5)
+                            .strong(),
+                    );
                     ui.separator();
                     let show_pw = app.accounts.show_passwords;
-                    egui::Grid::new("ka_account_grid").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
-                        ui.label("VWorld API 키:");
-                        ui.add(egui::TextEdit::singleline(&mut app.accounts.vworld_key).desired_width(340.0));
-                        ui.end_row();
-                        ui.label("역사지리정보DB 키:");
-                        ui.add(egui::TextEdit::singleline(&mut app.accounts.history_gis_key).desired_width(340.0));
-                        ui.end_row();
-                        ui.label("VWorld 지적도 ID / PW:");
-                        ui.horizontal(|ui| {
-                            ui.add(egui::TextEdit::singleline(&mut app.accounts.cadastral_creds.username).desired_width(140.0));
-                            ui.add(egui::TextEdit::singleline(&mut app.accounts.cadastral_creds.password).password(!show_pw).desired_width(188.0));
+                    egui::Grid::new("ka_account_grid")
+                        .num_columns(2)
+                        .spacing([12.0, 8.0])
+                        .show(ui, |ui| {
+                            ui.label("VWorld API 키:");
+                            ui.add(
+                                egui::TextEdit::singleline(&mut app.accounts.vworld_key)
+                                    .desired_width(340.0),
+                            );
+                            ui.end_row();
+                            ui.label("역사지리정보DB 키:");
+                            ui.add(
+                                egui::TextEdit::singleline(&mut app.accounts.history_gis_key)
+                                    .desired_width(340.0),
+                            );
+                            ui.end_row();
+                            ui.label("VWorld 지적도 ID / PW:");
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut app.accounts.cadastral_creds.username,
+                                    )
+                                    .desired_width(140.0),
+                                );
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut app.accounts.cadastral_creds.password,
+                                    )
+                                    .password(!show_pw)
+                                    .desired_width(188.0),
+                                );
+                            });
+                            ui.end_row();
+                            ui.label("수치지형도(NGII) ID / PW:");
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut app.accounts.ngii_creds.username,
+                                    )
+                                    .desired_width(140.0),
+                                );
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut app.accounts.ngii_creds.password,
+                                    )
+                                    .password(!show_pw)
+                                    .desired_width(188.0),
+                                );
+                            });
+                            ui.end_row();
+                            ui.label("국가유산청 인트라넷 ID / PW:");
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut app.accounts.heritage_creds.username,
+                                    )
+                                    .desired_width(140.0),
+                                );
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut app.accounts.heritage_creds.password,
+                                    )
+                                    .password(!show_pw)
+                                    .desired_width(188.0),
+                                );
+                            });
+                            ui.end_row();
                         });
-                        ui.end_row();
-                        ui.label("수치지형도(NGII) ID / PW:");
-                        ui.horizontal(|ui| {
-                            ui.add(egui::TextEdit::singleline(&mut app.accounts.ngii_creds.username).desired_width(140.0));
-                            ui.add(egui::TextEdit::singleline(&mut app.accounts.ngii_creds.password).password(!show_pw).desired_width(188.0));
-                        });
-                        ui.end_row();
-                        ui.label("국가유산청 인트라넷 ID / PW:");
-                        ui.horizontal(|ui| {
-                            ui.add(egui::TextEdit::singleline(&mut app.accounts.heritage_creds.username).desired_width(140.0));
-                            ui.add(egui::TextEdit::singleline(&mut app.accounts.heritage_creds.password).password(!show_pw).desired_width(188.0));
-                        });
-                        ui.end_row();
-                    });
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut app.accounts.show_passwords, "비밀번호 표시");
@@ -272,13 +358,17 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                             if ui.button("닫기").clicked() {
                                 app.modals.active = None;
                             }
-                            let save_b = egui::Button::new(egui::RichText::new("저장").color(Color32::WHITE).strong())
-                                .fill(Color32::from_rgb(181, 87, 58))
-                                .corner_radius(6.0)
-                                .min_size(Vec2::new(78.0, 30.0));
+                            let save_b = egui::Button::new(
+                                egui::RichText::new("저장").color(Color32::WHITE).strong(),
+                            )
+                            .fill(Color32::from_rgb(181, 87, 58))
+                            .corner_radius(6.0)
+                            .min_size(Vec2::new(78.0, 30.0));
                             if ui.add(save_b).clicked() {
                                 app.accounts.save_all_to_disk();
-                                app.home_map.draw_guide_message = Some("API 키와 사이트 계정(DPAPI 암호화)을 저장했습니다.".to_owned());
+                                app.home_map.draw_guide_message = Some(
+                                    "API 키와 사이트 계정(DPAPI 암호화)을 저장했습니다.".to_owned(),
+                                );
                                 app.modals.active = None;
                             }
                         });
@@ -448,7 +538,9 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         }
         other => render_download_and_print_dialogs(app, ctx, other, &mut open),
     }
-    if !open { app.modals.active = None; }
+    if !open {
+        app.modals.active = None;
+    }
 }
 
 #[cfg(test)]

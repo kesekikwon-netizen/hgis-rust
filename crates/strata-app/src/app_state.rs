@@ -4,7 +4,7 @@ use std::path::Path;
 use strata_canvas2d::map_tools::MapToolKind;
 use strata_types::crs::WorkCrs;
 use strata_types::schema::DomainLayerKey;
-use strata_types::theme_tokens::ThemeTokens;
+use strata_types::theme_tokens::{DisplayOptions, ThemeTokens};
 
 use crate::dialogs_account::AccountDialogState;
 use crate::dialogs_modal::ModalDialogController;
@@ -33,10 +33,15 @@ impl ShortcutManager {
         if normalized_seq.is_empty() || action_id.trim().is_empty() {
             return false;
         }
-        if self.bindings.values().any(|existing| existing == &normalized_seq) {
+        if self
+            .bindings
+            .values()
+            .any(|existing| existing == &normalized_seq)
+        {
             return false;
         }
-        self.bindings.insert(action_id.trim().to_owned(), normalized_seq);
+        self.bindings
+            .insert(action_id.trim().to_owned(), normalized_seq);
         true
     }
 }
@@ -106,6 +111,7 @@ pub struct StrataAppState {
     pub scale_menu_open: bool,
     pub theme_menu_open: bool,
     pub large_font_mode: bool,
+    pub display_options: DisplayOptions,
     pub work_crs: WorkCrs,
     pub theme: ThemeTokens,
     pub paper_look: bool,
@@ -132,8 +138,9 @@ impl StrataAppState {
             scale_menu_open: false,
             theme_menu_open: false,
             large_font_mode: false,
+            display_options: DisplayOptions::default(),
             work_crs: WorkCrs::Epsg5187,
-            theme: ThemeTokens::paper_tokens(false),
+            theme: ThemeTokens::for_options(&DisplayOptions::default()),
             paper_look: true,
             project_title: "새 고고학 지표·시굴조사".to_owned(),
             is_dirty: false,
@@ -203,10 +210,7 @@ impl StrataAppState {
 
     /// C++ `KaStatusBar::computeRepresentativeScale` 폴백 버전 — 비정상 입력 시 `1000.0` (`1:1,000`) 반환
     #[must_use]
-    pub fn compute_representative_scale_or_fallback(
-        meters_per_pixel: f64,
-        screen_dpi: f64,
-    ) -> f64 {
+    pub fn compute_representative_scale_or_fallback(meters_per_pixel: f64, screen_dpi: f64) -> f64 {
         Self::compute_representative_scale(meters_per_pixel, screen_dpi)
             .unwrap_or(Self::HGIS_FALLBACK_SCALE_DENOM)
     }
@@ -264,11 +268,7 @@ impl StrataAppState {
         if !parent.exists() && fs::create_dir_all(parent).is_err() {
             return None;
         }
-        let layer_codes: Vec<&str> = config
-            .default_layers
-            .iter()
-            .map(|l| l.id())
-            .collect();
+        let layer_codes: Vec<&str> = config.default_layers.iter().map(|l| l.id()).collect();
         let payload = format!(
             "STRATA_PROJECT_V1\ntitle={}\ncrs={}\ninvestigator={}\nlayers={}\n",
             config.survey_title,
@@ -377,8 +377,8 @@ impl StrataAppState {
 
     /// C++ `CrashHandler::handleCrash` / `emergencyAutoSave` — 비정상 종료 시 현재 열려 있는 조사 버퍼를 `.crash_recovery.gpkg`로 즉시 직렬화 백업 1:1
     pub fn emergency_auto_save(&self, crash_recovery_path: &Path) -> bool {
-        use strata_storage::gpkg::{GpkgRepository, SurveyWorkspace};
         use std::collections::BTreeMap;
+        use strata_storage::gpkg::{GpkgRepository, SurveyWorkspace};
 
         let mut ws = SurveyWorkspace {
             schema_version: 3,
@@ -434,10 +434,8 @@ mod tests {
 
     #[test]
     fn test_project_lifecycle_creates_and_reopens_4_default_layers_and_epsg_5186() {
-        let tmp_path = std::env::temp_dir().join(format!(
-            "strata_test_project_{}.qgs",
-            std::process::id()
-        ));
+        let tmp_path =
+            std::env::temp_dir().join(format!("strata_test_project_{}.qgs", std::process::id()));
         let mut creator = StrataAppState::new_startup();
         let config = ProjectTemplateConfig::default();
         let created = creator.create_new_project(&tmp_path, &config);
@@ -456,8 +454,9 @@ mod tests {
     #[test]
     fn test_status_bar_scale_1000_from_0264583333m_and_dirty_label_and_studio_tab_close() {
         let mpp = 0.264_583_333_333_333_3_f64;
-        let scale = StrataAppState::compute_representative_scale(mpp, StrataAppState::HGIS_STANDARD_DPI)
-            .expect("valid scale");
+        let scale =
+            StrataAppState::compute_representative_scale(mpp, StrataAppState::HGIS_STANDARD_DPI)
+                .expect("valid scale");
         assert!((scale - 1000.0).abs() < 1e-4);
         assert_eq!(
             StrataAppState::format_representative_scale(mpp, StrataAppState::HGIS_STANDARD_DPI),

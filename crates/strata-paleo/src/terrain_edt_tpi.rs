@@ -304,11 +304,7 @@ pub fn compute_river_distance_edt(tf: &GridTransform, river_mask: &[u8]) -> Vec<
         .collect()
 }
 
-pub fn compute_tpi_integral_image(
-    tf: &GridTransform,
-    z_grid: &[f64],
-    radius_m: f64,
-) -> Vec<f64> {
+pub fn compute_tpi_integral_image(tf: &GridTransform, z_grid: &[f64], radius_m: f64) -> Vec<f64> {
     let w = tf.width;
     let h = tf.height;
     let rad_px = ((radius_m / tf.cell_size).round() as usize).max(1);
@@ -338,10 +334,7 @@ pub fn compute_tpi_integral_image(
     tpi
 }
 
-pub fn compute_slope_and_hillshade(
-    tf: &GridTransform,
-    z_grid: &[f64],
-) -> (Vec<f64>, Vec<f64>) {
+pub fn compute_slope_and_hillshade(tf: &GridTransform, z_grid: &[f64]) -> (Vec<f64>, Vec<f64>) {
     let w = tf.width;
     let h = tf.height;
     let mut slope = vec![0.0_f64; w * h];
@@ -367,8 +360,7 @@ pub fn compute_slope_and_hillshade(
             let slp_rad = (dzdx * dzdx + dzdy * dzdy).sqrt().atan();
             slope[r * w + c] = slp_rad.to_degrees();
             let aspect = dzdy.atan2(-dzdx);
-            let hs = alt.sin() * slp_rad.cos()
-                + alt.cos() * slp_rad.sin() * (az - aspect).cos();
+            let hs = alt.sin() * slp_rad.cos() + alt.cos() * slp_rad.sin() * (az - aspect).cos();
             shade[r * w + c] = hs.clamp(0.1, 1.0);
         }
     }

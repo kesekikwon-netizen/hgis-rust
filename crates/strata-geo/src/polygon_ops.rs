@@ -599,10 +599,10 @@ pub fn solve_gcp_transform(
                     aty[i] += row[i] * y;
                 }
             }
-            let abc = solve_3x3_linear_system(ata, atx)
-                .ok_or(GcpSolverError::SingularMatrixCollinear)?;
-            let def = solve_3x3_linear_system(ata, aty)
-                .ok_or(GcpSolverError::SingularMatrixCollinear)?;
+            let abc =
+                solve_3x3_linear_system(ata, atx).ok_or(GcpSolverError::SingularMatrixCollinear)?;
+            let def =
+                solve_3x3_linear_system(ata, aty).ok_or(GcpSolverError::SingularMatrixCollinear)?;
             [abc[0], abc[1], abc[2], def[0], def[1], def[2]]
         }
         TransformType::Helmert4Param => {
@@ -1020,8 +1020,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn polygon_split_and_helmert_georef_produce_two_pieces_and_submillimeter_rms() -> StrataResult<()>
-    {
+    fn polygon_split_and_helmert_georef_produce_two_pieces_and_submillimeter_rms(
+    ) -> StrataResult<()> {
         let rect = Polygon::new(
             LineString::from(vec![
                 Coord { x: 0.0, y: 0.0 },
@@ -1036,7 +1036,11 @@ mod tests {
         assert_eq!(pieces.len(), 2);
 
         let src = [[0.0, 0.0], [100.0, 0.0], [0.0, 100.0]];
-        let dst = [[200_000.0, 500_000.0], [200_200.0, 500_000.0], [200_000.0, 500_200.0]];
+        let dst = [
+            [200_000.0, 500_000.0],
+            [200_200.0, 500_000.0],
+            [200_000.0, 500_200.0],
+        ];
         let tf = solve_helmert_georef(&src, &dst)?;
         assert!((tf.scale - 2.0).abs() < 1e-6);
         assert!(tf.rms_error_m < 1e-6);
@@ -1157,10 +1161,7 @@ mod tests {
 
         let mut list = vec!["10호", "2호", "1호", "10-2호", "10-1호", "20호"];
         list.sort_by(|a, b| natural_sort_compare(a, b));
-        assert_eq!(
-            list,
-            vec!["1호", "2호", "10호", "10-1호", "10-2호", "20호"]
-        );
+        assert_eq!(list, vec!["1호", "2호", "10호", "10-1호", "10-2호", "20호"]);
         assert_eq!(format_nullable_catalog_field(None), "-");
         assert_eq!(format_nullable_catalog_field(Some("   ")), "-");
     }
@@ -1179,26 +1180,14 @@ mod tests {
             ]),
             vec![],
         );
-        let hole = [
-            [4.0, 4.0],
-            [6.0, 4.0],
-            [6.0, 6.0],
-            [4.0, 6.0],
-            [4.0, 4.0],
-        ];
+        let hole = [[4.0, 4.0], [6.0, 4.0], [6.0, 6.0], [4.0, 6.0], [4.0, 4.0]];
         let punched = punch_interior_hole_polygon(&outer, &hole);
         assert_eq!(punched.interiors().len(), 1);
         assert!((punched.unsigned_area() - 96.0).abs() < 1e-6);
 
         // TestKaBooleanPolygonEditor::testSliverCleaningUnder0_05m2:
         // Sliver interior hole of 0.2m x 0.1m = 0.02 m² (< 0.05 m²) -> removed (0 interior rings)
-        let sliver_hole = [
-            [1.0, 1.0],
-            [1.2, 1.0],
-            [1.2, 1.1],
-            [1.0, 1.1],
-            [1.0, 1.0],
-        ];
+        let sliver_hole = [[1.0, 1.0], [1.2, 1.0], [1.2, 1.1], [1.0, 1.1], [1.0, 1.0]];
         let with_sliver = punch_interior_hole_polygon(&outer, &sliver_hole);
         assert_eq!(with_sliver.interiors().len(), 1);
         let cleaned = clean_sliver_interior_rings(&with_sliver, HGIS_MIN_SLIVER_AREA_M2);

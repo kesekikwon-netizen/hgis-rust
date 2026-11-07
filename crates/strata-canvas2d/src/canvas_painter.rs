@@ -356,6 +356,68 @@ pub fn compute_marker_size_px(
     }
 }
 
+/// C++ `HGIS_SELECTION_TOLERANCE_PX` — 선택 허용 기본 반경 (`10.0 px`)
+pub const HGIS_SELECTION_TOLERANCE_PX: f64 = 10.0;
+/// C++ `HGIS_HIGHLIGHT_WIDTH_PX` — 하이라이트 외곽선 두께 (`2.5 px`)
+pub const HGIS_HIGHLIGHT_WIDTH_PX: f64 = 2.5;
+
+/// C++ `HitTestResult` (`KaCanvasHitTester::performHitTest`) — 캔버스 10px 히트 테스팅 결과
+#[derive(Debug, Clone, PartialEq)]
+pub struct CanvasHitTestResult {
+    pub has_hit: bool,
+    pub hit_fid: Option<u64>,
+    pub hit_distance_pixels: f64,
+}
+
+/// C++ `KaCanvasHitTester::performHitTest` — 폴리곤 내부 포함(`0.0 px`) 및 선/점 10px 허용 반경 히트 검사 (`metersPerPixel <= 0.0` 시 `0.001 m` 안전 클램핑)
+#[must_use]
+pub fn perform_canvas_hit_test_10px(
+    polygon_bbox_xy: Option<([f64; 2], [f64; 2], u64)>,
+    line_distance_m: Option<(f64, u64)>,
+    click_world_xy: [f64; 2],
+    meters_per_pixel: f64,
+    search_radius_px: f64,
+) -> CanvasHitTestResult {
+    let safe_mpp = if meters_per_pixel.is_finite() && meters_per_pixel > 0.0 {
+        meters_per_pixel
+    } else {
+        0.001
+    };
+    let tol_px = if search_radius_px > 0.0 {
+        search_radius_px
+    } else {
+        HGIS_SELECTION_TOLERANCE_PX
+    };
+    if let Some((min_xy, max_xy, poly_fid)) = polygon_bbox_xy {
+        if click_world_xy[0] >= min_xy[0]
+            && click_world_xy[0] <= max_xy[0]
+            && click_world_xy[1] >= min_xy[1]
+            && click_world_xy[1] <= max_xy[1]
+        {
+            return CanvasHitTestResult {
+                has_hit: true,
+                hit_fid: Some(poly_fid),
+                hit_distance_pixels: 0.0,
+            };
+        }
+    }
+    if let Some((dist_m, line_fid)) = line_distance_m {
+        let dist_px = dist_m / safe_mpp;
+        if dist_px <= tol_px {
+            return CanvasHitTestResult {
+                has_hit: true,
+                hit_fid: Some(line_fid),
+                hit_distance_pixels: dist_px,
+            };
+        }
+    }
+    CanvasHitTestResult {
+        has_hit: false,
+        hit_fid: None,
+        hit_distance_pixels: f64::INFINITY,
+    }
+}
+
 /// C++ `KaArchaeologicalMarkerRenderer::renderNorthArrowWithDeclination` — 지도 회전각(`map_rotation_deg`), 도북 편각(`grid_convergence_deg`), 자북 편차각(`magnetic_declination_deg`)으로부터 `(도북 화살표 각도, 자북 침 각도)` 산출
 #[must_use]
 pub fn compute_north_arrow_declination_angles_deg(
@@ -451,5 +513,26 @@ mod tests {
             (compute_marker_size_px(10.0, SizingMode::WorldProportionalM, 96.0, 0.5) - 20.0).abs()
                 < 1e-9
         );
+
+        // 6. TestKaCanvasHitTester::testPolygonPointInPolygon & testLineTolerance10px
+        let poly_hit = perform_canvas_hit_test_10px(
+            Some(([45.0, 45.0], [55.0, 55.0], 1)),
+            None,
+            [52.0, 48.0],
+            0.05,
+            HGIS_SELECTION_TOLERANCE_PX,
+        );
+        assert!(poly_hit.has_hit);
+        assert!((poly_hit.hit_distance_pixels - 0.0).abs() < 1e-9);
+
+        let line_hit = perform_canvas_hit_test_10px(
+            None,
+            Some((0.40, 2)),
+            [0.0, 0.0],
+            0.05,
+            HGIS_SELECTION_TOLERANCE_PX,
+        );
+        assert!(line_hit.has_hit);
+        assert!((line_hit.hit_distance_pixels - 8.0).abs() < 1e-9);
     }
 }

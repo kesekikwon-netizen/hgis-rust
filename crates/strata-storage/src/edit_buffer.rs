@@ -96,7 +96,9 @@ mod tests {
     #[test]
     fn test_undo_redo_feature_push_undo_to_zero_and_redo_restores_exact_geometry() {
         let mut buf = LayerEditBuffer::new(DomainLayerKey::FeaturePoly);
-        let wkt = "POLYGON((219800 361500, 219810 361500, 219810 361510, 219800 361510, 219800 361500))".to_owned();
+        let wkt =
+            "POLYGON((219800 361500, 219810 361500, 219810 361510, 219800 361510, 219800 361500))"
+                .to_owned();
         let mut attrs = BTreeMap::new();
         attrs.insert("FEAT_NO".to_owned(), "1호 주거지".to_owned());
         buf.add_unsaved_feature(wkt.clone(), attrs);

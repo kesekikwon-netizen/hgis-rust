@@ -13,7 +13,10 @@ fn w2s(rect: Rect, vp: &ViewportTransform, xy: [f64; 2]) -> Pos2 {
 }
 
 fn s2w(rect: Rect, vp: &ViewportTransform, pos: Pos2) -> [f64; 2] {
-    vp.screen_to_world([f64::from(pos.x - rect.left()), f64::from(pos.y - rect.top())])
+    vp.screen_to_world([
+        f64::from(pos.x - rect.left()),
+        f64::from(pos.y - rect.top()),
+    ])
 }
 
 impl StrataAppState {
@@ -68,9 +71,76 @@ impl StrataAppState {
             if response.clicked() {
                 if let Some(cp) = response.interact_pointer_pos() {
                     let wxy = s2w(rect, &self.home_map.viewport, cp);
-                    if matches!(self.active_tool, MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint | MapToolKind::Measure) {
-                        let tool = self.active_tool;
-                        self.home_map.on_canvas_left_click(wxy, tool);
+                    match self.active_tool {
+                        MapToolKind::DrawPolygon
+                        | MapToolKind::DrawLine
+                        | MapToolKind::PlacePoint
+                        | MapToolKind::Measure => {
+                            let tool = self.active_tool;
+                            self.home_map.on_canvas_left_click(wxy, tool);
+                        }
+                        MapToolKind::TrenchPlace => {
+                            let len_m = self.modals.trench_length.meters();
+                            let ring_5 = strata_geo::trench_grid::create_trench_rectangle_polygon(
+                                wxy,
+                                2.0,
+                                len_m,
+                                self.modals.trench_azimuth_deg,
+                            );
+                            let next_no = self.home_map.real_survey.trenches.len() + 1;
+                            let name = format!("Tr-{next_no}");
+                            let area_m2 = 2.0 * len_m;
+                            self.home_map
+                                .real_survey
+                                .trenches
+                                .push(crate::real_survey::RealTrenchPoly {
+                                    name: name.clone(),
+                                    ring: ring_5.0,
+                                    area_m2,
+                                    center: wxy,
+                                });
+                            self.is_dirty = true;
+                            self.home_map.draw_guide_message = Some(format!(
+                                "시굴격자 {name} ({area_m2:.1} m²)을(를) 배치했습니다 — 화살표 키(Shift: 1 m)로 미세 이동할 수 있습니다."
+                            ));
+                        }
+                        MapToolKind::Select => {
+                            let mpp = self.home_map.viewport.meters_per_pixel;
+                            if let Some((idx, tr)) = self
+                                .home_map
+                                .real_survey
+                                .trenches
+                                .iter()
+                                .enumerate()
+                                .find(|(_, t)| {
+                                    let min_x = t.ring.iter().map(|p| p[0]).fold(f64::INFINITY, f64::min);
+                                    let max_x = t.ring.iter().map(|p| p[0]).fold(f64::NEG_INFINITY, f64::max);
+                                    let min_y = t.ring.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min);
+                                    let max_y = t.ring.iter().map(|p| p[1]).fold(f64::NEG_INFINITY, f64::max);
+                                    strata_canvas2d::canvas_painter::perform_canvas_hit_test_10px(
+                                        Some(([min_x, min_y], [max_x, max_y], 1)),
+                                        None,
+                                        wxy,
+                                        mpp,
+                                        10.0,
+                                    )
+                                    .has_hit
+                                })
+                            {
+                                let tr_name = tr.name.clone();
+                                let tr_area = tr.area_m2;
+                                self.right_inspector.selected_layer_key = Some("시굴격자".to_owned());
+                                self.home_map.draw_guide_message = Some(format!(
+                                    "도형 선택: 시굴격자 #{idx} ({tr_name}, {tr_area:.1} m²) — 화살표 키(0.1 m) 또는 Shift+화살표(1.0 m)로 이동"
+                                ));
+                            } else {
+                                self.home_map.draw_guide_message = Some(format!(
+                                    "클릭 좌표 (X {:.2}, Y {:.2}) 주변 10px 이내에 선택된 도형이 없습니다.",
+                                    wxy[0], wxy[1]
+                                ));
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -199,25 +269,87 @@ impl StrataAppState {
     fn paint_undo_redo_pill(&mut self, ui: &mut egui::Ui, p: &egui::Painter, min: Pos2) {
         let ur_r = Rect::from_min_size(min, Vec2::new(56.0, 30.0));
         p.rect_filled(ur_r, 5.0, Color32::WHITE);
-        p.rect_stroke(ur_r, 5.0, Stroke::new(1.0, Color32::from_rgb(195, 192, 182)), egui::StrokeKind::Middle);
-        p.line_segment([Pos2::new(ur_r.center().x, ur_r.top() + 1.0), Pos2::new(ur_r.center().x, ur_r.bottom() - 1.0)], Stroke::new(1.0, Color32::from_rgb(212, 209, 200)));
-        p.text(Pos2::new(ur_r.left() + 14.0, ur_r.center().y), egui::Align2::CENTER_CENTER, "↺", egui::FontId::proportional(12.5), Color32::from_rgb(90, 88, 82));
-        p.text(Pos2::new(ur_r.right() - 14.0, ur_r.center().y), egui::Align2::CENTER_CENTER, "↻", egui::FontId::proportional(12.5), Color32::from_rgb(90, 88, 82));
+        p.rect_stroke(
+            ur_r,
+            5.0,
+            Stroke::new(1.0, Color32::from_rgb(195, 192, 182)),
+            egui::StrokeKind::Middle,
+        );
+        p.line_segment(
+            [
+                Pos2::new(ur_r.center().x, ur_r.top() + 1.0),
+                Pos2::new(ur_r.center().x, ur_r.bottom() - 1.0),
+            ],
+            Stroke::new(1.0, Color32::from_rgb(212, 209, 200)),
+        );
+        p.text(
+            Pos2::new(ur_r.left() + 14.0, ur_r.center().y),
+            egui::Align2::CENTER_CENTER,
+            "↺",
+            egui::FontId::proportional(12.5),
+            Color32::from_rgb(90, 88, 82),
+        );
+        p.text(
+            Pos2::new(ur_r.right() - 14.0, ur_r.center().y),
+            egui::Align2::CENTER_CENTER,
+            "↻",
+            egui::FontId::proportional(12.5),
+            Color32::from_rgb(90, 88, 82),
+        );
         let undo_r = Rect::from_min_max(ur_r.min, Pos2::new(ur_r.center().x, ur_r.max.y));
         let redo_r = Rect::from_min_max(Pos2::new(ur_r.center().x, ur_r.min.y), ur_r.max);
-        if ui.interact(undo_r, ui.id().with("ka_canvas_undo_btn"), egui::Sense::click()).on_hover_text("실행취소 (Ctrl+Z)").clicked() {
+        if ui
+            .interact(
+                undo_r,
+                ui.id().with("ka_canvas_undo_btn"),
+                egui::Sense::click(),
+            )
+            .on_hover_text("실행취소 (Ctrl+Z)")
+            .clicked()
+        {
             self.home_map.cad.on_backspace(&mut self.home_map.scene);
-            self.home_map.draw_guide_message = Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
+            self.home_map.draw_guide_message =
+                Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
         }
-        if ui.interact(redo_r, ui.id().with("ka_canvas_redo_btn"), egui::Sense::click()).on_hover_text("다시실행 (Ctrl+Y)").clicked() {
-            self.home_map.draw_guide_message = Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
+        if ui
+            .interact(
+                redo_r,
+                ui.id().with("ka_canvas_redo_btn"),
+                egui::Sense::click(),
+            )
+            .on_hover_text("다시실행 (Ctrl+Y)")
+            .clicked()
+        {
+            self.home_map.draw_guide_message =
+                Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
         }
     }
 
-    fn paint_opacity_card(&mut self, ui: &mut egui::Ui, p: &egui::Painter, card_r: Rect, title: &str) {
-        p.rect_filled(card_r, 6.0, Color32::from_rgba_unmultiplied(252, 251, 247, 248));
-        p.rect_stroke(card_r, 6.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
-        p.text(Pos2::new(card_r.left() + 12.0, card_r.top() + 16.0), egui::Align2::LEFT_CENTER, title, egui::FontId::proportional(12.0), Color32::from_rgb(30, 30, 28));
+    fn paint_opacity_card(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &egui::Painter,
+        card_r: Rect,
+        title: &str,
+    ) {
+        p.rect_filled(
+            card_r,
+            6.0,
+            Color32::from_rgba_unmultiplied(252, 251, 247, 248),
+        );
+        p.rect_stroke(
+            card_r,
+            6.0,
+            Stroke::new(1.0, Color32::from_rgb(185, 182, 172)),
+            egui::StrokeKind::Middle,
+        );
+        p.text(
+            Pos2::new(card_r.left() + 12.0, card_r.top() + 16.0),
+            egui::Align2::LEFT_CENTER,
+            title,
+            egui::FontId::proportional(12.0),
+            Color32::from_rgb(30, 30, 28),
+        );
         let opacity_val = self.home_map.real_survey.layer_opacity.clamp(0.0, 1.0);
         let bright_val = self.home_map.real_survey.layer_brightness.clamp(0.0, 1.0);
         let opacity_txt = format!("{:.0}%", opacity_val * 100.0);
@@ -227,24 +359,54 @@ impl StrataAppState {
             format!("{:+.0}%", (bright_val - 0.5) * 200.0)
         };
         for (row_i, (lbl, pct_txt, knob_t, col)) in [
-            ("투명도", opacity_txt, opacity_val, Color32::from_rgb(181, 87, 58)),
-            ("밝기", bright_txt, bright_val, Color32::from_rgb(125, 124, 118)),
+            (
+                "투명도",
+                opacity_txt,
+                opacity_val,
+                Color32::from_rgb(181, 87, 58),
+            ),
+            (
+                "밝기",
+                bright_txt,
+                bright_val,
+                Color32::from_rgb(125, 124, 118),
+            ),
         ]
         .into_iter()
         .enumerate()
         {
             let y = card_r.top() + 38.0 + (row_i as f32) * 22.0;
-            p.text(Pos2::new(card_r.left() + 12.0, y), egui::Align2::LEFT_CENTER, lbl, egui::FontId::proportional(11.5), Color32::from_rgb(95, 94, 88));
+            p.text(
+                Pos2::new(card_r.left() + 12.0, y),
+                egui::Align2::LEFT_CENTER,
+                lbl,
+                egui::FontId::proportional(11.5),
+                Color32::from_rgb(95, 94, 88),
+            );
             let (sx0, sx1) = (card_r.left() + 56.0, card_r.right() - 48.0);
             let kx = sx0 + (sx1 - sx0) * knob_t;
             p.line_segment([Pos2::new(sx0, y), Pos2::new(kx, y)], Stroke::new(3.0, col));
-            p.line_segment([Pos2::new(kx, y), Pos2::new(sx1, y)], Stroke::new(3.0, Color32::from_rgb(205, 202, 194)));
+            p.line_segment(
+                [Pos2::new(kx, y), Pos2::new(sx1, y)],
+                Stroke::new(3.0, Color32::from_rgb(205, 202, 194)),
+            );
             p.circle_filled(Pos2::new(kx, y), 5.5, Color32::WHITE);
             p.circle_stroke(Pos2::new(kx, y), 5.5, Stroke::new(1.8, col));
-            p.text(Pos2::new(card_r.right() - 10.0, y), egui::Align2::RIGHT_CENTER, &pct_txt, egui::FontId::proportional(11.0), Color32::from_rgb(75, 74, 70));
+            p.text(
+                Pos2::new(card_r.right() - 10.0, y),
+                egui::Align2::RIGHT_CENTER,
+                &pct_txt,
+                egui::FontId::proportional(11.0),
+                Color32::from_rgb(75, 74, 70),
+            );
 
-            let track_r = Rect::from_min_max(Pos2::new(sx0 - 6.0, y - 9.0), Pos2::new(sx1 + 6.0, y + 9.0));
-            let resp = ui.interact(track_r, ui.id().with(("ka_opacity_slider", row_i)), egui::Sense::click_and_drag());
+            let track_r =
+                Rect::from_min_max(Pos2::new(sx0 - 6.0, y - 9.0), Pos2::new(sx1 + 6.0, y + 9.0));
+            let resp = ui.interact(
+                track_r,
+                ui.id().with(("ka_opacity_slider", row_i)),
+                egui::Sense::click_and_drag(),
+            );
             if resp.clicked() || resp.dragged() {
                 if let Some(pos) = resp.interact_pointer_pos() {
                     let t = ((pos.x - sx0) / (sx1 - sx0).max(1.0)).clamp(0.0, 1.0);
@@ -258,19 +420,33 @@ impl StrataAppState {
         }
     }
 
-    pub(crate) fn paint_gyeongju_heritage_canvas(&self, p: &egui::Painter, rect: Rect, cadastral_detail: bool) {
+    pub(crate) fn paint_gyeongju_heritage_canvas(
+        &self,
+        p: &egui::Painter,
+        rect: Rect,
+        cadastral_detail: bool,
+    ) {
         let vp = &self.home_map.viewport;
         let rs = &self.home_map.real_survey;
         let [cx, cy] = rs.survey_center;
 
-        if rs.is_layer_visible("지형 음영") || rs.is_layer_visible("지표모델(DSM) 30m · Coperni...") {
+        if rs.is_layer_visible("지형 음영") || rs.is_layer_visible("지표모델(DSM) 30m · Coperni...")
+        {
             let tl = w2s(rect, vp, [cx - 1050.0, cy + 720.0]);
             let br = w2s(rect, vp, [cx + 1050.0, cy - 720.0]);
-            p.rect_filled(Rect::from_min_max(tl, br), 0.0, Color32::from_rgb(154, 198, 120));
+            p.rect_filled(
+                Rect::from_min_max(tl, br),
+                0.0,
+                Color32::from_rgb(154, 198, 120),
+            );
         }
 
         if rs.is_layer_visible("지적도 · 조사 주변 5km") {
-            let cad_col = if cadastral_detail { Color32::from_rgb(38, 37, 34) } else { Color32::from_rgba_unmultiplied(60, 58, 52, 110) };
+            let cad_col = if cadastral_detail {
+                Color32::from_rgb(38, 37, 34)
+            } else {
+                Color32::from_rgba_unmultiplied(60, 58, 52, 110)
+            };
             let cad_s = Stroke::new(if cadastral_detail { 0.85 } else { 0.55 }, cad_col);
             for parcel in &rs.cadastral_parcels {
                 let pts: Vec<Pos2> = parcel.ring.iter().map(|&pt| w2s(rect, vp, pt)).collect();
@@ -282,26 +458,53 @@ impl StrataAppState {
             let green_s = Stroke::new(1.3, Color32::from_rgb(34, 148, 52));
             let mag_s = Stroke::new(1.2, Color32::from_rgb(176, 28, 128));
             for h in &rs.heritage_polys {
-                if !rs.is_layer_visible(&h.layer_name) { continue; }
+                if !rs.is_layer_visible(&h.layer_name) {
+                    continue;
+                }
                 let pts: Vec<Pos2> = h.ring.iter().map(|&pt| w2s(rect, vp, pt)).collect();
-                p.add(egui::Shape::line(pts, if h.is_green { green_s } else { mag_s }));
+                p.add(egui::Shape::line(
+                    pts,
+                    if h.is_green { green_s } else { mag_s },
+                ));
             }
         }
 
         if rs.is_layer_visible("조사구역") {
             let sc = self.right_inspector.active_stroke_color();
-            let fill_col = if self.right_inspector.no_fill { Color32::TRANSPARENT } else { Color32::from_rgba_unmultiplied(sc.r(), sc.g(), sc.b(), 85) };
-            let stroke = if self.right_inspector.no_stroke { Stroke::NONE } else { Stroke::new(self.right_inspector.stroke_width_mm * 1.6, sc) };
+            let fill_col = if self.right_inspector.no_fill {
+                Color32::TRANSPARENT
+            } else {
+                Color32::from_rgba_unmultiplied(sc.r(), sc.g(), sc.b(), 85)
+            };
+            let stroke = if self.right_inspector.no_stroke {
+                Stroke::NONE
+            } else {
+                Stroke::new(self.right_inspector.stroke_width_mm * 1.6, sc)
+            };
             for ring in &rs.survey_rings {
                 let pts: Vec<Pos2> = ring.iter().map(|&pt| w2s(rect, vp, pt)).collect();
-                p.add(egui::Shape::convex_polygon(pts.clone(), fill_col, Stroke::NONE));
+                p.add(egui::Shape::convex_polygon(
+                    pts.clone(),
+                    fill_col,
+                    Stroke::NONE,
+                ));
                 p.add(egui::Shape::line(pts, stroke));
             }
             if rs.is_label_visible("조사구역") {
                 let sp = w2s(rect, vp, rs.survey_center);
                 let lbl_r = Rect::from_center_size(sp, Vec2::new(66.0, 16.0));
-                p.rect_filled(lbl_r, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 220));
-                p.text(lbl_r.center(), egui::Align2::CENTER_CENTER, format!("{:.2} m²", rs.survey_area_m2), egui::FontId::proportional(10.0), Color32::BLACK);
+                p.rect_filled(
+                    lbl_r,
+                    3.0,
+                    Color32::from_rgba_unmultiplied(255, 255, 255, 220),
+                );
+                p.text(
+                    lbl_r.center(),
+                    egui::Align2::CENTER_CENTER,
+                    format!("{:.2} m²", rs.survey_area_m2),
+                    egui::FontId::proportional(10.0),
+                    Color32::BLACK,
+                );
             }
         }
 
@@ -312,25 +515,47 @@ impl StrataAppState {
                 p.add(egui::Shape::line(pts, tr_s));
                 if cadastral_detail && rs.is_label_visible("시굴격자") && ti % 14 == 3 {
                     let tp = w2s(rect, vp, tr.center);
-                    p.text(tp, egui::Align2::CENTER_CENTER, format!("{}\n({:.1} m²)", tr.name, tr.area_m2), egui::FontId::proportional(8.5), Color32::WHITE);
+                    p.text(
+                        tp,
+                        egui::Align2::CENTER_CENTER,
+                        format!("{}\n({:.1} m²)", tr.name, tr.area_m2),
+                        egui::FontId::proportional(8.5),
+                        Color32::WHITE,
+                    );
                 }
             }
         }
 
         if rs.is_layer_visible("주변 500m") && !rs.buffer_500m.is_empty() {
             let ring_pts: Vec<Pos2> = rs.buffer_500m.iter().map(|&pt| w2s(rect, vp, pt)).collect();
-            p.add(egui::Shape::line(ring_pts, Stroke::new(2.6, Color32::from_rgb(184, 58, 24))));
+            p.add(egui::Shape::line(
+                ring_pts,
+                Stroke::new(2.6, Color32::from_rgb(184, 58, 24)),
+            ));
         }
         if rs.show_buffer_1000m && !rs.buffer_1000m.is_empty() {
-            let ring_pts: Vec<Pos2> = rs.buffer_1000m.iter().map(|&pt| w2s(rect, vp, pt)).collect();
-            p.add(egui::Shape::line(ring_pts, Stroke::new(2.2, Color32::from_rgb(148, 42, 18))));
+            let ring_pts: Vec<Pos2> = rs
+                .buffer_1000m
+                .iter()
+                .map(|&pt| w2s(rect, vp, pt))
+                .collect();
+            p.add(egui::Shape::line(
+                ring_pts,
+                Stroke::new(2.2, Color32::from_rgb(148, 42, 18)),
+            ));
         }
         if rs.is_layer_visible("주변 500m 거리") && rs.is_label_visible("주변 500m 거리") {
             for (lbl, pt) in &rs.dist_labels_500m {
                 let bp = w2s(rect, vp, *pt);
                 let b500 = Rect::from_center_size(bp, Vec2::new(36.0, 15.0));
                 p.rect_filled(b500, 3.0, Color32::WHITE);
-                p.text(b500.center(), egui::Align2::CENTER_CENTER, lbl, egui::FontId::proportional(9.5), Color32::from_rgb(184, 58, 24));
+                p.text(
+                    b500.center(),
+                    egui::Align2::CENTER_CENTER,
+                    lbl,
+                    egui::FontId::proportional(9.5),
+                    Color32::from_rgb(184, 58, 24),
+                );
             }
         }
 
@@ -338,17 +563,30 @@ impl StrataAppState {
             for &pt in &self.home_map.cad.preview_markers_world {
                 let sp = w2s(rect, vp, pt);
                 p.circle_filled(sp, 4.5, Color32::from_rgba_unmultiplied(255, 251, 235, 210));
-                p.circle_stroke(sp, 4.5, Stroke::new(2.0, Color32::from_rgba_unmultiplied(217, 119, 6, 230)));
+                p.circle_stroke(
+                    sp,
+                    4.5,
+                    Stroke::new(2.0, Color32::from_rgba_unmultiplied(217, 119, 6, 230)),
+                );
             }
         }
 
         if !self.home_map.scene.active_rubberband.is_empty() {
-            let mut active_pts: Vec<Pos2> = self.home_map.scene.active_rubberband.iter().map(|&pt| w2s(rect, vp, pt)).collect();
+            let mut active_pts: Vec<Pos2> = self
+                .home_map
+                .scene
+                .active_rubberband
+                .iter()
+                .map(|&pt| w2s(rect, vp, pt))
+                .collect();
             for &v in &active_pts {
                 p.circle_filled(v, 4.0, Color32::from_rgb(214, 78, 22));
             }
             active_pts.push(w2s(rect, vp, self.home_map.cursor_world_xy));
-            p.add(egui::Shape::line(active_pts, Stroke::new(2.2, Color32::from_rgb(214, 78, 22))));
+            p.add(egui::Shape::line(
+                active_pts,
+                Stroke::new(2.2, Color32::from_rgb(214, 78, 22)),
+            ));
         }
     }
 }

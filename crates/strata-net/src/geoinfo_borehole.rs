@@ -177,10 +177,10 @@ impl GeoInfoBoreholeService {
         let step = cell_meters.max(10.0);
         let mut sorted = raw.to_vec();
         sorted.sort_by(|a, b| {
-            let da = (a.pt_5186[0] - center_5186[0]).powi(2)
-                + (a.pt_5186[1] - center_5186[1]).powi(2);
-            let db = (b.pt_5186[0] - center_5186[0]).powi(2)
-                + (b.pt_5186[1] - center_5186[1]).powi(2);
+            let da =
+                (a.pt_5186[0] - center_5186[0]).powi(2) + (a.pt_5186[1] - center_5186[1]).powi(2);
+            let db =
+                (b.pt_5186[0] - center_5186[0]).powi(2) + (b.pt_5186[1] - center_5186[1]).powi(2);
             da.total_cmp(&db)
         });
         let mut occupied: BTreeSet<(i64, i64)> = BTreeSet::new();
@@ -204,8 +204,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn geoinfo_sichudan_json_parser_extracts_fill_alluvial_and_weathered_depths(
-    ) -> StrataResult<()> {
+    fn geoinfo_sichudan_json_parser_extracts_fill_alluvial_and_weathered_depths() -> StrataResult<()>
+    {
         let sample = r#"{"jsonView":"[{\"FROM_DEPTH\":0.0,\"TO_DEPTH\":1.5,\"LAYER_NAME\":\"매립층\",\"USCS\":\"SM\"},{\"FROM_DEPTH\":1.5,\"TO_DEPTH\":6.0,\"LAYER_NAME\":\"충적층\",\"USCS\":\"CL\"},{\"FROM_DEPTH\":6.0,\"TO_DEPTH\":10.0,\"LAYER_NAME\":\"풍화암\",\"USCS\":\"WR\"}]"}"#.as_bytes();
         let rec = GeoInfoBoreholeService::parse_sichudan_json(sample)?;
         assert!((rec.fill_depth_m - 1.5).abs() < 1e-6);

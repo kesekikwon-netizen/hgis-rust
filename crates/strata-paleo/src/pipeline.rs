@@ -297,9 +297,7 @@ pub fn run_paleo_pipeline(
         profile.dist_m.push((c as f64) * tf.cell_size);
         profile.z_surface_curr_m.push(z_curr[idx]);
         profile.z_paleo_top_m.push(z_paleo[idx]);
-        profile
-            .z_bedrock_base_m
-            .push(z_curr[idx] - base_grid[idx]);
+        profile.z_bedrock_base_m.push(z_curr[idx] - base_grid[idx]);
     }
 
     let aoi_summary_text = format!(
@@ -480,10 +478,9 @@ mod tests {
         // Cancel immediately after stage 1 (20%) before stage 2 finishes -> UserCancelled & progress <= 50%
         let cancel_flag = AtomicBool::new(false);
         let mut reported = Vec::new();
-        let (status, last_pct) =
-            run_paleo_pipeline_staged(Some(1), &cancel_flag, |pct, _stage| {
-                reported.push(pct);
-            });
+        let (status, last_pct) = run_paleo_pipeline_staged(Some(1), &cancel_flag, |pct, _stage| {
+            reported.push(pct);
+        });
         assert_eq!(status, PaleoPipelineStatus::UserCancelled);
         assert_eq!(last_pct, HGIS_STAGE1_PROGRESS_END);
         assert!(last_pct <= HGIS_STAGE2_PROGRESS_END);
@@ -492,10 +489,9 @@ mod tests {
         // Full run reaches 100% across all 4 stages
         let clean_flag = AtomicBool::new(false);
         let mut all_stages = Vec::new();
-        let (ok_status, final_pct) =
-            run_paleo_pipeline_staged(None, &clean_flag, |pct, _stage| {
-                all_stages.push(pct);
-            });
+        let (ok_status, final_pct) = run_paleo_pipeline_staged(None, &clean_flag, |pct, _stage| {
+            all_stages.push(pct);
+        });
         assert_eq!(ok_status, PaleoPipelineStatus::Completed);
         assert_eq!(final_pct, 100);
         assert_eq!(all_stages, vec![20, 50, 80, 100]);

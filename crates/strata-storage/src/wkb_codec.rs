@@ -125,7 +125,9 @@ fn read_polygon_rings(wkb: &[u8], pos: &mut usize) -> StrataResult<Vec<Vec<[f64;
 
 pub fn decode_gpkg_wkb(bytes: &[u8]) -> StrataResult<(i32, WkbGeometry)> {
     if bytes.len() < 8 || &bytes[0..2] != b"GP" {
-        return Err(StrataError::Storage("유효한 GeoPackage WKB 헤더가 아닙니다".into()));
+        return Err(StrataError::Storage(
+            "유효한 GeoPackage WKB 헤더가 아닙니다".into(),
+        ));
     }
     let flags = bytes[3];
     let env_ind = (flags >> 1) & 0x07;
@@ -134,7 +136,11 @@ pub fn decode_gpkg_wkb(bytes: &[u8]) -> StrataResult<(i32, WkbGeometry)> {
         1 => 32,
         2 | 3 => 48,
         4 => 64,
-        _ => return Err(StrataError::Storage("지원하지 않는 GPKG envelope 코드".into())),
+        _ => {
+            return Err(StrataError::Storage(
+                "지원하지 않는 GPKG envelope 코드".into(),
+            ))
+        }
     };
     let srs_id = i32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
     let wkb_offset = 8 + env_bytes;
@@ -218,12 +224,15 @@ mod tests {
     }
 
     #[test]
-    fn test_wkb_codec_100_vertex_polygon_roundtrip_and_truncated_buffer_detection() -> StrataResult<()>
-    {
+    fn test_wkb_codec_100_vertex_polygon_roundtrip_and_truncated_buffer_detection(
+    ) -> StrataResult<()> {
         let mut ring: Vec<[f64; 2]> = (0..100)
             .map(|i| {
                 let angle = f64::from(i) * std::f64::consts::TAU / 100.0;
-                [219_800.0 + angle.cos() * 50.0, 361_500.0 + angle.sin() * 50.0]
+                [
+                    219_800.0 + angle.cos() * 50.0,
+                    361_500.0 + angle.sin() * 50.0,
+                ]
             })
             .collect();
         if let Some(&first) = ring.first() {

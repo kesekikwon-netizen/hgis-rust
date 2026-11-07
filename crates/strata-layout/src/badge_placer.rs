@@ -43,12 +43,18 @@ pub struct LayoutBadgePlacer;
 impl LayoutBadgePlacer {
     /// `HeritageLayoutNumbers.cpp` (`bfe8dd9`) — 1:5,000 이하 대축척에서 체크 켜짐 시에만 유적 이름으로 표시
     #[must_use]
-    pub const fn should_render_site_names(scale_denominator: u32, prefer_names_under_5000: bool) -> bool {
+    pub const fn should_render_site_names(
+        scale_denominator: u32,
+        prefer_names_under_5000: bool,
+    ) -> bool {
         prefer_names_under_5000 && scale_denominator <= HGIS_BADGE_NAMEBOX_SCALE_LIMIT
     }
 
     #[must_use]
-    pub fn place_non_overlapping_badges(points_mm: &[(u32, f64, f64)], radius_mm: f64) -> Vec<HeritageBadge> {
+    pub fn place_non_overlapping_badges(
+        points_mm: &[(u32, f64, f64)],
+        radius_mm: f64,
+    ) -> Vec<HeritageBadge> {
         let mut placed: Vec<HeritageBadge> = Vec::with_capacity(points_mm.len());
         let min_dist = radius_mm * 2.2;
         for &(number, mut x, mut y) in points_mm {
@@ -113,7 +119,11 @@ impl LayoutBadgePlacer {
                 width_mm,
                 height_mm,
             };
-            if !fits_bounds(*ox, *oy) || placed.iter().any(|p| initial_candidate.overlaps(p, EDGE_MARGIN_MM)) {
+            if !fits_bounds(*ox, *oy)
+                || placed
+                    .iter()
+                    .any(|p| initial_candidate.overlaps(p, EDGE_MARGIN_MM))
+            {
                 'search: for ring in 1..=20 {
                     let step_x = (width_mm * 0.65 + 1.2) * f64::from(ring);
                     let step_y = (height_mm * 0.85 + 1.0) * f64::from(ring);
@@ -159,14 +169,17 @@ impl LayoutBadgePlacer {
         prefer_names_under_5000: bool,
         allowed_rect_mm: Option<(f64, f64, f64, f64)>,
     ) -> (Vec<HeritageBadge>, Vec<HeritageNameBox>) {
-        let points_mm: Vec<(u32, f64, f64)> =
-            sites.iter().map(|(n, _, x, y, _, _)| (*n, *x, *y)).collect();
+        let points_mm: Vec<(u32, f64, f64)> = sites
+            .iter()
+            .map(|(n, _, x, y, _, _)| (*n, *x, *y))
+            .collect();
         let badges = Self::place_non_overlapping_badges(&points_mm, 2.2);
-        let name_boxes = if Self::should_render_site_names(scale_denominator, prefer_names_under_5000) {
-            Self::place_all_boxes(sites, allowed_rect_mm)
-        } else {
-            Vec::new()
-        };
+        let name_boxes =
+            if Self::should_render_site_names(scale_denominator, prefer_names_under_5000) {
+                Self::place_all_boxes(sites, allowed_rect_mm)
+            } else {
+                Vec::new()
+            };
         (badges, name_boxes)
     }
 
@@ -184,7 +197,11 @@ impl LayoutBadgePlacer {
                 let dist = (b.center_x_mm - ox).hypot(b.center_y_mm - oy);
                 let leader_line = if dist >= HGIS_LEADER_MIN_DISTANCE_MM {
                     let elbow_x = 0.5 * (ox + b.center_x_mm);
-                    Some([[ox, oy], [elbow_x, b.center_y_mm], [b.center_x_mm, b.center_y_mm]])
+                    Some([
+                        [ox, oy],
+                        [elbow_x, b.center_y_mm],
+                        [b.center_x_mm, b.center_y_mm],
+                    ])
                 } else {
                     None
                 };
@@ -232,8 +249,8 @@ mod tests {
     }
 
     #[test]
-    fn test_badge_placer_scale_filtering_1000_emits_name_boxes_and_10000_emits_only_numbered_circles()
-    {
+    fn test_badge_placer_scale_filtering_1000_emits_name_boxes_and_10000_emits_only_numbered_circles(
+    ) {
         let sites = vec![
             (1, "경주 황남동 고분군".to_owned(), 50.0, 50.0, 24.0, 5.0),
             (2, "경주 인왕동 사지".to_owned(), 55.0, 60.0, 22.0, 5.0),

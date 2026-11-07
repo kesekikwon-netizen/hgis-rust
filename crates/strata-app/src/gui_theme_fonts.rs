@@ -12,9 +12,10 @@ pub fn configure_korean_fonts_and_theme(ctx: &egui::Context, tokens: &ThemeToken
     ];
     for path in candidate_paths {
         if let Ok(bytes) = std::fs::read(path) {
-            fonts
-                .font_data
-                .insert("korean_sys".to_owned(), egui::FontData::from_owned(bytes).into());
+            fonts.font_data.insert(
+                "korean_sys".to_owned(),
+                egui::FontData::from_owned(bytes).into(),
+            );
             if let Some(fam) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
                 fam.insert(0, "korean_sys".to_owned());
             }

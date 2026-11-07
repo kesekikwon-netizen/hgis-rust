@@ -6,5 +6,3 @@ pub mod map_tools;
 pub mod tile_layer;
 pub mod vector_tessellator;
 pub mod viewport;
-
-

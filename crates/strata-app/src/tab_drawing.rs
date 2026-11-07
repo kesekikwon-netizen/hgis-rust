@@ -26,7 +26,8 @@ impl Default for DrawingTabState {
 impl DrawingTabState {
     pub fn set_paper_and_orientation(&mut self, size: SheetPaperSize, ori: SheetOrientation) {
         self.sheet.change_paper(size, ori);
-        self.last_findings = ChecklistEngine::evaluate_sheet(&self.sheet, SubmitCrs::Epsg5179, true);
+        self.last_findings =
+            ChecklistEngine::evaluate_sheet(&self.sheet, SubmitCrs::Epsg5179, true);
     }
 
     pub fn export_pdf_to_temp(&self) -> std::io::Result<PathBuf> {

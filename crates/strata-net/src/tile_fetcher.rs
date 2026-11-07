@@ -59,8 +59,11 @@ pub fn lon_lat_to_tile_index(lon_deg: f64, lat_deg: f64, zoom: u8) -> (u32, u32)
     let n = f64::from(1_u32 << z);
     let clamped_lat = lat_deg.clamp(-HGIS_WEB_MERCATOR_MAX_LAT, HGIS_WEB_MERCATOR_MAX_LAT);
     let lat_rad = clamped_lat.to_radians();
-    let tx = (((lon_deg + 180.0) / 360.0) * n).floor().clamp(0.0, n - 1.0) as u32;
-    let ty_f = ((1.0 - (lat_rad.tan() + 1.0 / lat_rad.cos()).ln() / std::f64::consts::PI) / 2.0) * n;
+    let tx = (((lon_deg + 180.0) / 360.0) * n)
+        .floor()
+        .clamp(0.0, n - 1.0) as u32;
+    let ty_f =
+        ((1.0 - (lat_rad.tan() + 1.0 / lat_rad.cos()).ln() / std::f64::consts::PI) / 2.0) * n;
     let ty = ty_f.floor().clamp(0.0, n - 1.0) as u32;
     (tx, ty)
 }
@@ -312,5 +315,117 @@ mod tests {
         assert_eq!(removed, 2);
         let remaining_bytes: u64 = disk_entries.iter().map(|(_, sz, _)| *sz).sum();
         assert!(remaining_bytes <= HGIS_PRUNE_TARGET_BYTES);
+    }
+
+    #[test]
+    fn test_chosun_1919_tms_layer_url_building_and_thematic_wms() {
+        // TestHistoricalMapOps::testChosun1919TmsLayerUrlBuilding
+        let spec = build_historical_tms_layer_spec(HistoricalMapType::Chosun1919_1to50000, 0.75);
+        assert_eq!(spec.provider_type, "wms");
+        assert!((spec.opacity - 0.75).abs() < 1e-6);
+        assert_eq!(spec.layer_title_ko, "1919 조선지형도 (1:50,000)");
+        assert_eq!(spec.source_url, HGIS_CHOSUN1919_TMS_URL);
+
+        let daedong = build_historical_tms_layer_spec(HistoricalMapType::Daedongyeojido, 0.80);
+        assert_eq!(daedong.layer_title_ko, "대동여지도 (1861 목판본)");
+        assert_eq!(daedong.source_url, HGIS_DAEDONG_TMS_URL);
+
+        let soil = build_wms_thematic_layer_spec(ThematicLayerType::SoilDrainage, "EPSG:5187");
+        assert_eq!(soil.layer_title_ko, "토양도 (배수등급)");
+        assert!(soil.source_url.contains("crs=EPSG:5187"));
+    }
+}
+
+/// 1919 조선지형도 TMS URL 템플릿 (C++ `HGIS_CHOSUN1919_TMS_URL`)
+pub const HGIS_CHOSUN1919_TMS_URL: &str =
+    "type=xyz&url=http://hgis.local/tiles/1919/{z}/{x}/{-y}.png";
+/// 대동여지도 TMS URL 템플릿 (C++ `HGIS_DAEDONG_TMS_URL`)
+pub const HGIS_DAEDONG_TMS_URL: &str =
+    "type=xyz&url=http://hgis.local/tiles/daedong/{z}/{x}/{-y}.png";
+/// WMS 최대 연결 대기 시간 (5,000 ms, C++ `HGIS_WMS_TIMEOUT_MS`)
+pub const HGIS_WMS_TIMEOUT_MS: u64 = 5000;
+
+/// C++ `HistoricalMapType` 고지도 종류 1:1 대응
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoricalMapType {
+    Chosun1919_1to50000,
+    Daedongyeojido,
+    Kwangbok1945,
+    Cadastral1910Original,
+}
+
+/// C++ `ThematicLayerType` 주제도(토양·지질·수계) 종류 1:1 대응
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThematicLayerType {
+    SoilDrainage,
+    Geology1to50k,
+    HydroNetworkWaterway,
+}
+
+/// C++ `HistoricalMapOps::loadHistoricalTileMap` 및 `SoilGeologyHydroLayerOps::loadWmsThematicLayer` 반환 레이어 명세
+#[derive(Debug, Clone, PartialEq)]
+pub struct RasterThematicLayerSpec {
+    pub provider_type: &'static str,
+    pub layer_title_ko: &'static str,
+    pub source_url: String,
+    pub opacity: f64,
+}
+
+/// 고지도 TMS 레이어 명세 생성 (C++ `HistoricalMapOps::loadHistoricalTileMap` 1:1 대응)
+#[must_use]
+pub fn build_historical_tms_layer_spec(
+    map_type: HistoricalMapType,
+    opacity: f64,
+) -> RasterThematicLayerSpec {
+    let clamped_opacity = if opacity.is_finite() {
+        opacity.clamp(0.0, 1.0)
+    } else {
+        0.8
+    };
+    let (title, url) = match map_type {
+        HistoricalMapType::Chosun1919_1to50000 => {
+            ("1919 조선지형도 (1:50,000)", HGIS_CHOSUN1919_TMS_URL)
+        }
+        HistoricalMapType::Daedongyeojido => ("대동여지도 (1861 목판본)", HGIS_DAEDONG_TMS_URL),
+        HistoricalMapType::Kwangbok1945 => (
+            "1945 해방 직후 지형도",
+            "type=xyz&url=http://hgis.local/tiles/1945/{z}/{x}/{-y}.png",
+        ),
+        HistoricalMapType::Cadastral1910Original => (
+            "1910년대 토지조사사업 지적원도",
+            "type=xyz&url=http://hgis.local/tiles/1910_cad/{z}/{x}/{-y}.png",
+        ),
+    };
+    RasterThematicLayerSpec {
+        provider_type: "wms",
+        layer_title_ko: title,
+        source_url: url.to_owned(),
+        opacity: clamped_opacity,
+    }
+}
+
+/// 토양·지질·수계 OGC WMS 1.3.0 레이어 명세 생성 (C++ `SoilGeologyHydroLayerOps::loadWmsThematicLayer` 1:1 대응)
+#[must_use]
+pub fn build_wms_thematic_layer_spec(
+    layer_type: ThematicLayerType,
+    crs_auth_id: &str,
+) -> RasterThematicLayerSpec {
+    let crs = if crs_auth_id.trim().is_empty() {
+        "EPSG:5186"
+    } else {
+        crs_auth_id.trim()
+    };
+    let (title, layer_id) = match layer_type {
+        ThematicLayerType::SoilDrainage => ("토양도 (배수등급)", "soil_drainage"),
+        ThematicLayerType::Geology1to50k => ("수치지질도 (1:50,000)", "kigam_geology_50k"),
+        ThematicLayerType::HydroNetworkWaterway => ("국가하천·수계망", "wamis_hydro_network"),
+    };
+    RasterThematicLayerSpec {
+        provider_type: "wms",
+        layer_title_ko: title,
+        source_url: format!(
+            "contextualWMSLegend=0&crs={crs}&format=image/png&layers={layer_id}&styles=default&transparent=true&version=1.3.0"
+        ),
+        opacity: 0.75,
     }
 }

@@ -152,18 +152,58 @@ impl StrataAppState {
         p.rect_stroke(rect, 3.0, border, egui::StrokeKind::Middle);
 
         let (y1, y2) = (rect.top() + 28.0, rect.top() + 96.0);
-        p.line_segment([Pos2::new(rect.left(), y1), Pos2::new(rect.right(), y1)], sub_border);
-        p.line_segment([Pos2::new(rect.left(), y2), Pos2::new(rect.right(), y2)], sub_border);
-        p.text(Pos2::new(rect.left() + 12.0, rect.top() + 14.0), egui::Align2::LEFT_CENTER, "이어서 작업", egui::FontId::proportional(11.5), Color32::from_rgb(95, 94, 88));
-        p.text(Pos2::new(rect.right() - 12.0, rect.top() + 14.0), egui::Align2::RIGHT_CENTER, "저장됨", egui::FontId::proportional(11.5), Color32::from_rgb(95, 94, 88));
+        p.line_segment(
+            [Pos2::new(rect.left(), y1), Pos2::new(rect.right(), y1)],
+            sub_border,
+        );
+        p.line_segment(
+            [Pos2::new(rect.left(), y2), Pos2::new(rect.right(), y2)],
+            sub_border,
+        );
+        p.text(
+            Pos2::new(rect.left() + 12.0, rect.top() + 14.0),
+            egui::Align2::LEFT_CENTER,
+            "이어서 작업",
+            egui::FontId::proportional(11.5),
+            Color32::from_rgb(95, 94, 88),
+        );
+        p.text(
+            Pos2::new(rect.right() - 12.0, rect.top() + 14.0),
+            egui::Align2::RIGHT_CENTER,
+            "저장됨",
+            egui::FontId::proportional(11.5),
+            Color32::from_rgb(95, 94, 88),
+        );
 
         let split_x = rect.right() - 210.0;
         p.line_segment([Pos2::new(split_x, y1), Pos2::new(split_x, y2)], sub_border);
-        p.text(Pos2::new(rect.left() + 14.0, (y1 + y2) * 0.5), egui::Align2::LEFT_CENTER, "경주시", egui::FontId::proportional(26.0), Color32::from_rgb(30, 30, 28));
-        let btn_rect = Rect::from_center_size(Pos2::new((split_x + rect.right()) * 0.5, (y1 + y2) * 0.5), Vec2::new(178.0, 38.0));
+        p.text(
+            Pos2::new(rect.left() + 14.0, (y1 + y2) * 0.5),
+            egui::Align2::LEFT_CENTER,
+            "경주시",
+            egui::FontId::proportional(26.0),
+            Color32::from_rgb(30, 30, 28),
+        );
+        let btn_rect = Rect::from_center_size(
+            Pos2::new((split_x + rect.right()) * 0.5, (y1 + y2) * 0.5),
+            Vec2::new(178.0, 38.0),
+        );
         p.rect_filled(btn_rect, 5.0, Color32::from_rgb(181, 87, 58));
-        p.text(btn_rect.center(), egui::Align2::CENTER_CENTER, "이어서 열기  →", egui::FontId::proportional(13.5), Color32::WHITE);
-        if ui.interact(btn_rect, ui.id().with("home_resume_btn"), egui::Sense::click()).clicked() {
+        p.text(
+            btn_rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "이어서 열기  →",
+            egui::FontId::proportional(13.5),
+            Color32::WHITE,
+        );
+        if ui
+            .interact(
+                btn_rect,
+                ui.id().with("home_resume_btn"),
+                egui::Sense::click(),
+            )
+            .clicked()
+        {
             self.open_sample_survey_project(0);
         }
 
@@ -179,9 +219,26 @@ impl StrataAppState {
         let cw = rect.width() / 6.0;
         for (i, (k, v)) in cells.iter().enumerate() {
             let x0 = rect.left() + cw * (i as f32);
-            if i > 0 { p.line_segment([Pos2::new(x0, y2), Pos2::new(x0, rect.bottom())], sub_border); }
-            p.text(Pos2::new(x0 + 10.0, y2 + 14.0), egui::Align2::LEFT_CENTER, *k, egui::FontId::proportional(11.0), Color32::from_rgb(105, 103, 96));
-            p.text(Pos2::new(x0 + 10.0, y2 + 33.0), egui::Align2::LEFT_CENTER, *v, egui::FontId::proportional(12.5), Color32::from_rgb(35, 35, 32));
+            if i > 0 {
+                p.line_segment(
+                    [Pos2::new(x0, y2), Pos2::new(x0, rect.bottom())],
+                    sub_border,
+                );
+            }
+            p.text(
+                Pos2::new(x0 + 10.0, y2 + 14.0),
+                egui::Align2::LEFT_CENTER,
+                *k,
+                egui::FontId::proportional(11.0),
+                Color32::from_rgb(105, 103, 96),
+            );
+            p.text(
+                Pos2::new(x0 + 10.0, y2 + 33.0),
+                egui::Align2::LEFT_CENTER,
+                *v,
+                egui::FontId::proportional(12.5),
+                Color32::from_rgb(35, 35, 32),
+            );
         }
     }
 
@@ -189,7 +246,12 @@ impl StrataAppState {
         let (box_r, _) = ui.allocate_exact_size(Vec2::new(width, 206.0), egui::Sense::hover());
         let p = ui.painter_at(box_r);
         p.rect_filled(box_r, 2.0, Color32::WHITE);
-        p.rect_stroke(box_r, 2.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
+        p.rect_stroke(
+            box_r,
+            2.0,
+            Stroke::new(1.0, Color32::from_rgb(185, 182, 172)),
+            egui::StrokeKind::Middle,
+        );
 
         let col_x = [
             box_r.left() + 14.0,
@@ -199,34 +261,123 @@ impl StrataAppState {
             box_r.left() + width * 0.84,
             box_r.left() + width * 0.91,
         ];
-        for (i, h) in ["조사", "상태", "조사구역", "유구", "검수", "마지막 열림"].iter().enumerate() {
-            p.text(Pos2::new(col_x[i], box_r.top() + 15.0), egui::Align2::LEFT_CENTER, *h, egui::FontId::proportional(11.0), Color32::from_rgb(95, 94, 88));
+        for (i, h) in ["조사", "상태", "조사구역", "유구", "검수", "마지막 열림"]
+            .iter()
+            .enumerate()
+        {
+            p.text(
+                Pos2::new(col_x[i], box_r.top() + 15.0),
+                egui::Align2::LEFT_CENTER,
+                *h,
+                egui::FontId::proportional(11.0),
+                Color32::from_rgb(95, 94, 88),
+            );
         }
-        p.line_segment([Pos2::new(box_r.left(), box_r.top() + 28.0), Pos2::new(box_r.right(), box_r.top() + 28.0)], Stroke::new(1.0, Color32::from_rgb(222, 220, 210)));
+        p.line_segment(
+            [
+                Pos2::new(box_r.left(), box_r.top() + 28.0),
+                Pos2::new(box_r.right(), box_r.top() + 28.0),
+            ],
+            Stroke::new(1.0, Color32::from_rgb(222, 220, 210)),
+        );
 
         let rows = [
-            ("경주시", "문서 › 경주시", "저장됨", "1", "0", "검수 전", "어제 22:26", true),
-            ("verify1-저장", "... › ka-hgis-survey-verify", "⊗ 원본 없음", "—", "—", "—", "찾을 수 없음", false),
-            ("verify1", "... › ka-hgis-survey-verify", "⊗ 원본 없음", "—", "—", "—", "찾을 수 없음", false),
-            ("andong", "바탕 화면 › andong", "⊗ 원본 없음", "—", "—", "—", "찾을 수 없음", false),
+            (
+                "경주시",
+                "문서 › 경주시",
+                "저장됨",
+                "1",
+                "0",
+                "검수 전",
+                "어제 22:26",
+                true,
+            ),
+            (
+                "verify1-저장",
+                "... › ka-hgis-survey-verify",
+                "⊗ 원본 없음",
+                "—",
+                "—",
+                "—",
+                "찾을 수 없음",
+                false,
+            ),
+            (
+                "verify1",
+                "... › ka-hgis-survey-verify",
+                "⊗ 원본 없음",
+                "—",
+                "—",
+                "—",
+                "찾을 수 없음",
+                false,
+            ),
+            (
+                "andong",
+                "바탕 화면 › andong",
+                "⊗ 원본 없음",
+                "—",
+                "—",
+                "—",
+                "찾을 수 없음",
+                false,
+            ),
         ];
         for (idx, (name, folder, st, area, feat, chk, opened, ok)) in rows.into_iter().enumerate() {
-            if !self.home_map.recent_filter.trim().is_empty() && !name.contains(self.home_map.recent_filter.trim()) {
+            if !self.home_map.recent_filter.trim().is_empty()
+                && !name.contains(self.home_map.recent_filter.trim())
+            {
                 continue;
             }
             let ry = box_r.top() + 30.0 + (idx as f32) * 43.0;
-            let row_r = Rect::from_min_size(Pos2::new(box_r.left() + 1.0, ry), Vec2::new(width - 2.0, 42.0));
+            let row_r = Rect::from_min_size(
+                Pos2::new(box_r.left() + 1.0, ry),
+                Vec2::new(width - 2.0, 42.0),
+            );
             if idx == 0 {
                 p.rect_filled(row_r, 0.0, Color32::from_rgb(239, 236, 226));
             }
-            p.text(Pos2::new(col_x[0], ry + 13.0), egui::Align2::LEFT_CENTER, name, egui::FontId::proportional(13.0), Color32::from_rgb(35, 35, 32));
-            p.text(Pos2::new(col_x[0], ry + 30.0), egui::Align2::LEFT_CENTER, folder, egui::FontId::proportional(11.0), Color32::from_rgb(115, 113, 106));
-            let st_col = if ok { Color32::from_rgb(65, 64, 60) } else { Color32::from_rgb(181, 87, 58) };
+            p.text(
+                Pos2::new(col_x[0], ry + 13.0),
+                egui::Align2::LEFT_CENTER,
+                name,
+                egui::FontId::proportional(13.0),
+                Color32::from_rgb(35, 35, 32),
+            );
+            p.text(
+                Pos2::new(col_x[0], ry + 30.0),
+                egui::Align2::LEFT_CENTER,
+                folder,
+                egui::FontId::proportional(11.0),
+                Color32::from_rgb(115, 113, 106),
+            );
+            let st_col = if ok {
+                Color32::from_rgb(65, 64, 60)
+            } else {
+                Color32::from_rgb(181, 87, 58)
+            };
             for (ci, val) in [(1, st), (2, area), (3, feat), (4, chk), (5, opened)] {
-                let c = if ci == 1 { st_col } else { Color32::from_rgb(65, 64, 60) };
-                p.text(Pos2::new(col_x[ci], ry + 21.0), egui::Align2::LEFT_CENTER, val, egui::FontId::proportional(12.0), c);
+                let c = if ci == 1 {
+                    st_col
+                } else {
+                    Color32::from_rgb(65, 64, 60)
+                };
+                p.text(
+                    Pos2::new(col_x[ci], ry + 21.0),
+                    egui::Align2::LEFT_CENTER,
+                    val,
+                    egui::FontId::proportional(12.0),
+                    c,
+                );
             }
-            if ui.interact(row_r, ui.id().with(("recent_row", idx)), egui::Sense::click()).clicked() {
+            if ui
+                .interact(
+                    row_r,
+                    ui.id().with(("recent_row", idx)),
+                    egui::Sense::click(),
+                )
+                .clicked()
+            {
                 self.open_sample_survey_project(idx);
             }
         }
@@ -236,7 +387,8 @@ impl StrataAppState {
         self.project_title = name.to_owned();
         let path = std::env::temp_dir().join(format!("{name}.gpkg"));
         let _ = GpkgRepository::create_new_survey(&path, self.work_crs);
-        self.left_layers.ensure_domain_layer(DomainLayerKey::SurveyArea);
+        self.left_layers
+            .ensure_domain_layer(DomainLayerKey::SurveyArea);
         self.home_map.fit_to_survey();
         self.active_tab = MainTab::Map;
         self.home_map.draw_guide_message = Some("위성과 지적도를 올려 두었습니다.".to_owned());
@@ -244,15 +396,18 @@ impl StrataAppState {
 
     pub fn open_sample_survey_project(&mut self, _idx: usize) {
         self.project_title = "경주시".to_owned();
-        self.left_layers.ensure_domain_layer(DomainLayerKey::SurveyArea);
+        self.left_layers
+            .ensure_domain_layer(DomainLayerKey::SurveyArea);
         self.left_layers.add_cadastral_wms_layer();
         self.home_map.fit_to_survey();
         self.active_tab = MainTab::Map;
-        self.home_map.draw_guide_message = Some("다 그렸으면 리본의 「도면」으로 종이에 옮기세요.".to_owned());
+        self.home_map.draw_guide_message =
+            Some("다 그렸으면 리본의 「도면」으로 종이에 옮기세요.".to_owned());
     }
 
     pub fn import_demo_dxf_and_csv(&mut self) {
-        self.left_layers.ensure_domain_layer(DomainLayerKey::ControlPoints);
+        self.left_layers
+            .ensure_domain_layer(DomainLayerKey::ControlPoints);
         self.active_tab = MainTab::Map;
     }
 }

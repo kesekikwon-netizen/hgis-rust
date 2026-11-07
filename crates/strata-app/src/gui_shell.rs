@@ -18,7 +18,8 @@ impl StrataAppState {
                 self.active_tool = MapToolKind::Pan;
             }
             if i.key_pressed(egui::Key::F9) {
-                self.right_inspector.left_panel_collapsed = !self.right_inspector.left_panel_collapsed;
+                self.right_inspector.left_panel_collapsed =
+                    !self.right_inspector.left_panel_collapsed;
                 self.home_map.draw_guide_message = Some(
                     if self.right_inspector.left_panel_collapsed {
                         "왼쪽 패널을 접었습니다. F9 키를 누르면 다시 펼칩니다."
@@ -29,7 +30,8 @@ impl StrataAppState {
                 );
             }
             if i.key_pressed(egui::Key::F10) {
-                self.right_inspector.right_panel_collapsed = !self.right_inspector.right_panel_collapsed;
+                self.right_inspector.right_panel_collapsed =
+                    !self.right_inspector.right_panel_collapsed;
                 self.home_map.draw_guide_message = Some(
                     if self.right_inspector.right_panel_collapsed {
                         "오른쪽 패널을 접었습니다. F10 키를 누르면 다시 펼칩니다."
@@ -54,8 +56,44 @@ impl StrataAppState {
                 self.active_tab = MainTab::Map;
                 self.active_tool = MapToolKind::Select;
             }
-            if !wants_kb && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+            if !wants_kb
+                && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
+            {
                 self.home_map.cad.on_backspace(&mut self.home_map.scene);
+            }
+            if !wants_kb && self.active_tab == MainTab::Map {
+                let arrow = if i.key_pressed(egui::Key::ArrowLeft) {
+                    Some(strata_geo::trench_grid::TrenchArrowKey::Left)
+                } else if i.key_pressed(egui::Key::ArrowRight) {
+                    Some(strata_geo::trench_grid::TrenchArrowKey::Right)
+                } else if i.key_pressed(egui::Key::ArrowUp) {
+                    Some(strata_geo::trench_grid::TrenchArrowKey::Up)
+                } else if i.key_pressed(egui::Key::ArrowDown) {
+                    Some(strata_geo::trench_grid::TrenchArrowKey::Down)
+                } else {
+                    None
+                };
+                if let Some(key) = arrow {
+                    if let Ok(next_origin) =
+                        strata_geo::trench_grid::translate_trench_center_with_key(
+                            [0.0, 0.0],
+                            key,
+                            i.modifiers.shift,
+                            true,
+                        )
+                    {
+                        self.home_map.real_survey.translate_all_trenches(
+                            next_origin[0],
+                            next_origin[1],
+                            None,
+                        );
+                        self.is_dirty = true;
+                        let step_m = if i.modifiers.shift { 1.0 } else { 0.1 };
+                        self.home_map.draw_guide_message = Some(format!(
+                            "시굴격자를 화살표 방향으로 {step_m:.1} m 이동했습니다."
+                        ));
+                    }
+                }
             }
             if i.modifiers.ctrl {
                 if i.key_pressed(egui::Key::N) {
@@ -64,7 +102,8 @@ impl StrataAppState {
                     self.open_sample_survey_project(0);
                 } else if i.key_pressed(egui::Key::S) {
                     self.is_dirty = false;
-                    self.home_map.draw_guide_message = Some(format!("「{}」 조사를 저장했습니다.", self.project_title));
+                    self.home_map.draw_guide_message =
+                        Some(format!("「{}」 조사를 저장했습니다.", self.project_title));
                 } else if i.key_pressed(egui::Key::Num1) {
                     self.active_tab = MainTab::Map;
                     self.active_tool = MapToolKind::Select;
@@ -80,9 +119,11 @@ impl StrataAppState {
                 } else if i.key_pressed(egui::Key::E) {
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
                 } else if i.key_pressed(egui::Key::Z) {
-                    self.home_map.draw_guide_message = Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
+                    self.home_map.draw_guide_message =
+                        Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
                 } else if i.key_pressed(egui::Key::Y) {
-                    self.home_map.draw_guide_message = Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
+                    self.home_map.draw_guide_message =
+                        Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
                 }
             }
         });
@@ -113,12 +154,23 @@ impl StrataAppState {
                         let msg = if self.active_tab == MainTab::Drawing {
                             "지도 칸을 만들었습니다. 나침반·좌표계·축척자·축척이 들어갔습니다."
                         } else {
-                            self.home_map.draw_guide_message.as_deref().unwrap_or("위성과 지적도를 올려 두었습니다.")
+                            self.home_map
+                                .draw_guide_message
+                                .as_deref()
+                                .unwrap_or("위성과 지적도를 올려 두었습니다.")
                         };
-                        ui.label(egui::RichText::new(msg).size(11.5).color(Color32::from_rgb(75, 74, 70)));
+                        ui.label(
+                            egui::RichText::new(msg)
+                                .size(11.5)
+                                .color(Color32::from_rgb(75, 74, 70)),
+                        );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if self.active_tab == MainTab::Map {
-                                ui.label(egui::RichText::new("지도갱신 켜짐").size(11.0).color(Color32::from_rgb(95, 94, 88)));
+                                ui.label(
+                                    egui::RichText::new("지도갱신 켜짐")
+                                        .size(11.0)
+                                        .color(Color32::from_rgb(95, 94, 88)),
+                                );
                                 ui.separator();
                             }
                             if ui.small_button("→ 제출 5179").clicked() {
@@ -139,21 +191,28 @@ impl StrataAppState {
                             let live_scale = if self.active_tab == MainTab::Drawing {
                                 self.drawing.sheet.scale_denominator.max(100)
                             } else {
-                                ((self.home_map.viewport.meters_per_pixel * 3780.0).round() as u32).max(100)
+                                ((self.home_map.viewport.meters_per_pixel * 3780.0).round() as u32)
+                                    .max(100)
                             };
                             let scale_btn = ui.small_button(format!("1:{live_scale} ▼"));
                             if scale_btn.clicked() {
                                 self.scale_menu_open = !self.scale_menu_open;
                             }
                             if self.scale_menu_open {
-                                let popup_pos = egui::Pos2::new(scale_btn.rect.left(), (scale_btn.rect.top() - 165.0).max(40.0));
+                                let popup_pos = egui::Pos2::new(
+                                    scale_btn.rect.left(),
+                                    (scale_btn.rect.top() - 165.0).max(40.0),
+                                );
                                 egui::Area::new(ui.id().with("ka_status_scale_popup"))
                                     .fixed_pos(popup_pos)
                                     .order(egui::Order::Foreground)
                                     .show(ctx, |ui| {
                                         egui::Frame::popup(ui.style())
                                             .fill(Color32::from_rgb(252, 251, 247))
-                                            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                                            .stroke(egui::Stroke::new(
+                                                1.0,
+                                                Color32::from_rgb(185, 182, 172),
+                                            ))
                                             .inner_margin(egui::Margin::symmetric(8, 6))
                                             .show(ui, |ui| {
                                                 for (preset_lbl, denom) in [
@@ -164,11 +223,21 @@ impl StrataAppState {
                                                     ("1:10,000", 10_000),
                                                     ("1:25,000", 25_000),
                                                 ] {
-                                                    if ui.selectable_label(live_scale == denom, preset_lbl).clicked() {
+                                                    if ui
+                                                        .selectable_label(
+                                                            live_scale == denom,
+                                                            preset_lbl,
+                                                        )
+                                                        .clicked()
+                                                    {
                                                         if self.active_tab == MainTab::Drawing {
-                                                            self.drawing.sheet.scale_denominator = denom;
+                                                            self.drawing.sheet.scale_denominator =
+                                                                denom;
                                                         } else {
-                                                            self.home_map.viewport.meters_per_pixel = f64::from(denom) / 3780.0;
+                                                            self.home_map
+                                                                .viewport
+                                                                .meters_per_pixel =
+                                                                f64::from(denom) / 3780.0;
                                                         }
                                                         self.scale_menu_open = false;
                                                     }
@@ -180,7 +249,10 @@ impl StrataAppState {
                             if self.active_tab == MainTab::Map {
                                 ui.separator();
                                 let [cx, cy] = self.home_map.cursor_world_xy;
-                                ui.label(egui::RichText::new(format!("X {cx:11.3}    Y {cy:11.3}")).size(11.0));
+                                ui.label(
+                                    egui::RichText::new(format!("X {cx:11.3}    Y {cy:11.3}"))
+                                        .size(11.0),
+                                );
                             }
                             if self.is_dirty {
                                 ui.colored_label(
@@ -194,11 +266,20 @@ impl StrataAppState {
                                 );
                             }
                             if self.active_tab == MainTab::Map {
-                                let snap_lbl = if self.home_map.cad.snap_enabled { "자석 켬" } else { "자석 끔" };
+                                let snap_lbl = if self.home_map.cad.snap_enabled {
+                                    "자석 켬"
+                                } else {
+                                    "자석 끔"
+                                };
                                 if ui.small_button(snap_lbl).clicked() {
-                                    self.home_map.cad.snap_enabled = !self.home_map.cad.snap_enabled;
+                                    self.home_map.cad.snap_enabled =
+                                        !self.home_map.cad.snap_enabled;
                                 }
-                                ui.label(egui::RichText::new(self.active_tool.label_ko()).size(11.0).strong());
+                                ui.label(
+                                    egui::RichText::new(self.active_tool.label_ko())
+                                        .size(11.0)
+                                        .strong(),
+                                );
                             }
                         });
                     }

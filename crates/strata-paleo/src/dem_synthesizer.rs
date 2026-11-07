@@ -35,7 +35,8 @@ pub fn synthesize_dem_from_contours_and_spots(
     spot_elevations_xyz: &[[f64; 3]],
 ) -> Vec<f64> {
     let sample_step_m = tf.cell_size.abs().max(1.0);
-    let mut pts_3d: Vec<[f64; 3]> = Vec::with_capacity(spot_elevations_xyz.len() + contours.len() * 8);
+    let mut pts_3d: Vec<[f64; 3]> =
+        Vec::with_capacity(spot_elevations_xyz.len() + contours.len() * 8);
     pts_3d.extend_from_slice(spot_elevations_xyz);
 
     for contour in contours {
@@ -43,7 +44,11 @@ pub fn synthesize_dem_from_contours_and_spots(
         if !z.is_finite() {
             continue;
         }
-        for (&a, &b) in contour.vertices_xy.iter().zip(contour.vertices_xy.iter().skip(1)) {
+        for (&a, &b) in contour
+            .vertices_xy
+            .iter()
+            .zip(contour.vertices_xy.iter().skip(1))
+        {
             let seg_len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
             let steps = ((seg_len / sample_step_m).ceil() as usize).clamp(1, 64);
             for s in 0..=steps {
@@ -152,7 +157,10 @@ pub fn merge_multi_sheet_dem_grids(
 }
 
 /// `PaleoLayerWriter.cpp` (`ceb5fd2`) — Windows 파일 잠금(EBUSY / Access Denied) 회피용 원자적 스테이징 기록 및 백오프 재시도
-pub fn atomic_write_dem_avoiding_file_lock(target_path: &Path, payload: &[u8]) -> io::Result<PathBuf> {
+pub fn atomic_write_dem_avoiding_file_lock(
+    target_path: &Path,
+    payload: &[u8],
+) -> io::Result<PathBuf> {
     if let Some(parent) = target_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -172,8 +180,9 @@ pub fn atomic_write_dem_avoiding_file_lock(target_path: &Path, payload: &[u8]) -
     }
     // If target_path is still locked by an external reader, keep a numbered unlocked file so the pipeline never aborts
     let fallback_path = target_path.with_extension("unlocked.tif");
-    std::fs::rename(&staging_path, &fallback_path)
-        .map_err(|_| last_err.unwrap_or_else(|| io::Error::other("DEM file lock retry exhausted")))?;
+    std::fs::rename(&staging_path, &fallback_path).map_err(|_| {
+        last_err.unwrap_or_else(|| io::Error::other("DEM file lock retry exhausted"))
+    })?;
     Ok(fallback_path)
 }
 
@@ -189,12 +198,7 @@ pub const HGIS_DEM_NODATA_THRESHOLD: f32 = -9990.0;
 /// 정규화 가중치 `alpha = clamp(dist_m / blend_width_m, 0.0, 1.0)`로 선형 블렌딩한다.
 /// 한쪽 타일이 `NoData` (`<= -9990.0`)일 때는 오염을 방지하기 위해 유효 타일 표고값을 100% 보존한다.
 #[must_use]
-pub fn feather_seam_overlap_cell(
-    val_a: f32,
-    val_b: f32,
-    dist_m: f32,
-    blend_width_m: f32,
-) -> f32 {
+pub fn feather_seam_overlap_cell(val_a: f32, val_b: f32, dist_m: f32, blend_width_m: f32) -> f32 {
     let valid_a = val_a.is_finite() && val_a > HGIS_DEM_NODATA_THRESHOLD;
     let valid_b = val_b.is_finite() && val_b > HGIS_DEM_NODATA_THRESHOLD;
     match (valid_a, valid_b) {
@@ -456,9 +460,6 @@ mod tests {
             compute_d8_cell_flow_direction(50.0, &neighbors, 10.0),
             HGIS_D8_SOUTHEAST
         );
-        assert_eq!(
-            filter_stream_cells_by_threshold(&[300, 600], 500),
-            vec![1]
-        );
+        assert_eq!(filter_stream_cells_by_threshold(&[300, 600], 500), vec![1]);
     }
 }

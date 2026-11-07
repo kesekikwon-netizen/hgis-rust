@@ -151,7 +151,8 @@ mod tests {
         )
         .is_ok());
 
-        let blocked = HeritageIntranetFlow::is_allowed_frame_url("https://malicious.example.com/phish");
+        let blocked =
+            HeritageIntranetFlow::is_allowed_frame_url("https://malicious.example.com/phish");
         assert!(blocked.is_err());
         assert_eq!(
             blocked.expect_err("external host must be blocked"),

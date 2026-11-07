@@ -71,7 +71,9 @@ pub fn unprotect_bytes(b64: &str) -> StrataResult<Vec<u8>> {
         .decode(trimmed)
         .map_err(|e| StrataError::Secret(format!("Base64 복호화 실패: {e}")))?;
     if decoded.is_empty() {
-        return Err(StrataError::Secret("복호화된 바이트가 비어 있습니다".into()));
+        return Err(StrataError::Secret(
+            "복호화된 바이트가 비어 있습니다".into(),
+        ));
     }
     if let Some(payload) = decoded.strip_prefix(DPAPI_BLOB_PREFIX) {
         if payload.is_empty() {

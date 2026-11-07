@@ -82,8 +82,7 @@ pub fn lonlat_to_tm(lon_deg: f64, lat_deg: f64, p: &TmParams) -> [f64; 2] {
         + p.k0
             * (m - m0
                 + n * phi.tan()
-                    * (a * a / 2.0
-                        + (5.0 - t + 9.0 * c + 4.0 * c * c) * a.powi(4) / 24.0));
+                    * (a * a / 2.0 + (5.0 - t + 9.0 * c + 4.0 * c * c) * a.powi(4) / 24.0));
     [x, y]
 }
 
@@ -109,9 +108,9 @@ pub fn tm_to_lonlat(x: f64, y: f64, p: &TmParams) -> [f64; 2] {
 
     let lat_rad = phi1
         - (n1 * tan_p / r1)
-            * (d * d / 2.0 - (5.0 + 3.0 * t1 + 10.0 * c1 - 4.0 * c1 * c1 - 9.0 * ep2) * d.powi(4) / 24.0);
-    let lon_rad = p.lon0_deg.to_radians()
-        + (d - (1.0 + 2.0 * t1 + c1) * d.powi(3) / 6.0) / cos_p;
+            * (d * d / 2.0
+                - (5.0 + 3.0 * t1 + 10.0 * c1 - 4.0 * c1 * c1 - 9.0 * ep2) * d.powi(4) / 24.0);
+    let lon_rad = p.lon0_deg.to_radians() + (d - (1.0 + 2.0 * t1 + c1) * d.powi(3) / 6.0) / cos_p;
     [lon_rad.to_degrees(), lat_rad.to_degrees()]
 }
 
@@ -134,7 +133,8 @@ impl CrsTransformer {
             CrsCode::Epsg4326 => [x, y],
             CrsCode::Epsg3857 | CrsCode::Epsg900913 => {
                 let lon = (x / GRS80_A).to_degrees();
-                let lat = (2.0 * (y / GRS80_A).exp().atan() - std::f64::consts::FRAC_PI_2).to_degrees();
+                let lat =
+                    (2.0 * (y / GRS80_A).exp().atan() - std::f64::consts::FRAC_PI_2).to_degrees();
                 [lon, lat]
             }
             other => {
@@ -149,7 +149,8 @@ impl CrsTransformer {
             CrsCode::Epsg4326 => [lon, lat],
             CrsCode::Epsg3857 | CrsCode::Epsg900913 => {
                 let mx = GRS80_A * lon.to_radians();
-                let my = GRS80_A * ((std::f64::consts::FRAC_PI_4 + lat.to_radians() * 0.5).tan()).ln();
+                let my =
+                    GRS80_A * ((std::f64::consts::FRAC_PI_4 + lat.to_radians() * 0.5).tan()).ln();
                 [mx, my]
             }
             other => {

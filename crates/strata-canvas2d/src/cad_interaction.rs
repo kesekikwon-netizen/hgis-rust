@@ -216,7 +216,9 @@ impl BoundaryGraph {
             p[0] + self.merge_tol,
             p[1] + self.merge_tol,
         );
-        cands.into_iter().find(|&i| sqr_dist(self.nodes[i], p) <= self.merge_sq)
+        cands
+            .into_iter()
+            .find(|&i| sqr_dist(self.nodes[i], p) <= self.merge_sq)
     }
 
     pub fn add_node(&mut self, p: [f64; 2]) -> usize {
@@ -240,7 +242,13 @@ impl BoundaryGraph {
         self.segs.push((u, v));
     }
 
-    pub fn add_ring(&mut self, ring: &[[f64; 2]], min_xy: [f64; 2], max_xy: [f64; 2], closed: bool) {
+    pub fn add_ring(
+        &mut self,
+        ring: &[[f64; 2]],
+        min_xy: [f64; 2],
+        max_xy: [f64; 2],
+        closed: bool,
+    ) {
         if ring.len() < 2 || self.full() {
             return;
         }
@@ -464,7 +472,8 @@ pub fn nearby_vertices(
     radius_px: f64,
     max_count: usize,
 ) -> Vec<[f64; 2]> {
-    if radius_px <= 0.0 || max_count == 0 || !cursor_xy[0].is_finite() || !cursor_xy[1].is_finite() {
+    if radius_px <= 0.0 || max_count == 0 || !cursor_xy[0].is_finite() || !cursor_xy[1].is_finite()
+    {
         return Vec::new();
     }
     let eff_mupp = if mupp > 0.0 { mupp } else { 0.05 };
@@ -493,7 +502,11 @@ pub fn nearby_vertices(
         }
     }
     cands.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
-    cands.into_iter().take(max_count).map(|(_, pt)| pt).collect()
+    cands
+        .into_iter()
+        .take(max_count)
+        .map(|(_, pt)| pt)
+        .collect()
 }
 
 /// `SnapTraceOps::traceBetween` — 두 클릭 점 사이 경계선을 따라 빠진 꼭짓점 자동 채움
@@ -518,8 +531,14 @@ pub fn trace_between(
         return Vec::new();
     }
     let grow = (chord * 0.6).max(snap_tol * 2.0);
-    let min_xy = [from_xy[0].min(to_xy[0]) - grow, from_xy[1].min(to_xy[1]) - grow];
-    let max_xy = [from_xy[0].max(to_xy[0]) + grow, from_xy[1].max(to_xy[1]) + grow];
+    let min_xy = [
+        from_xy[0].min(to_xy[0]) - grow,
+        from_xy[1].min(to_xy[1]) - grow,
+    ];
+    let max_xy = [
+        from_xy[0].max(to_xy[0]) + grow,
+        from_xy[1].max(to_xy[1]) + grow,
+    ];
     let span = (max_xy[0] - min_xy[0]).max(max_xy[1] - min_xy[1]);
 
     let mut graph = BoundaryGraph::new(merge_tol, span);
@@ -612,7 +631,10 @@ pub fn snap_ring_to_nearest_lines(
 
     let mut clean: Vec<[f64; 2]> = Vec::new();
     for pt in built {
-        if clean.last().is_some_and(|&last| sqr_dist(last, pt) <= graph.merge_sq) {
+        if clean
+            .last()
+            .is_some_and(|&last| sqr_dist(last, pt) <= graph.merge_sq)
+        {
             continue;
         }
         if clean.len() >= 2 && sqr_dist(clean[clean.len() - 2], pt) <= graph.merge_sq {
@@ -785,8 +807,14 @@ impl CadSessionController {
         let mut all_rings: Vec<Vec<[f64; 2]>> =
             scene.polygons.iter().map(|p| p.world_pts.clone()).collect();
         all_rings.extend_from_slice(extra_rings);
-        self.preview_markers_world =
-            nearby_vertices(cursor_xy, scene.snap_marker_world, &all_rings, mupp, 48.0, 24);
+        self.preview_markers_world = nearby_vertices(
+            cursor_xy,
+            scene.snap_marker_world,
+            &all_rings,
+            mupp,
+            48.0,
+            24,
+        );
     }
 
     pub fn on_right_click(&mut self, tool: MapToolKind, scene: &mut MapSceneModel) -> bool {
@@ -911,12 +939,7 @@ mod tests {
         let mids = trace_between([0.0, 0.0], [30.0, 0.0], &refs, 0.2, 20);
         assert_eq!(mids, vec![[10.0, 1.5], [20.0, 0.5]]);
 
-        let rough = vec![
-            [0.4, -0.3],
-            [29.7, 0.2],
-            [30.2, 19.8],
-            [-0.2, 20.1],
-        ];
+        let rough = vec![[0.4, -0.3], [29.7, 0.2], [30.2, 19.8], [-0.2, 20.1]];
         let (snapped, moved, inserted) = snap_ring_to_nearest_lines(&rough, true, &refs, 0.2);
         assert_eq!(moved, 4);
         assert_eq!(inserted, 2);
@@ -927,9 +950,12 @@ mod tests {
 
     #[test]
     fn point_grid_nearby_vertices_deduplicates_and_sorts_by_distance() {
-        let rings = vec![
-            vec![[10.0, 10.0], [10.01, 10.01], [15.0, 10.0], [100.0, 100.0]],
-        ];
+        let rings = vec![vec![
+            [10.0, 10.0],
+            [10.01, 10.01],
+            [15.0, 10.0],
+            [100.0, 100.0],
+        ]];
         let near = nearby_vertices([10.0, 10.0], None, &rings, 0.5, 20.0, 10);
         assert_eq!(near.len(), 2);
         assert_eq!(near[0], [10.0, 10.0]);

@@ -104,7 +104,10 @@ pub fn parse_control_points_csv(bytes: &[u8]) -> StrataResult<Vec<ControlPointRo
         let Ok(y) = cols[2].parse::<f64>() else {
             continue;
         };
-        let z = cols.get(3).and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0);
+        let z = cols
+            .get(3)
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
         rows.push(ControlPointRow {
             point_id: cols[0].to_string(),
             x,
@@ -168,10 +171,7 @@ pub struct CadInsertBlock {
 }
 
 /// C++ `DxfBlockAnnotationParser::parseBlockInserts(dxfPath, blockNameFilter)` 1:1
-pub fn parse_dxf_block_inserts(
-    dxf_bytes: &[u8],
-    block_name_filter: &str,
-) -> Vec<CadInsertBlock> {
+pub fn parse_dxf_block_inserts(dxf_bytes: &[u8], block_name_filter: &str) -> Vec<CadInsertBlock> {
     let text = decode_korean_text(dxf_bytes);
     let lines: Vec<&str> = text.lines().map(str::trim).collect();
     let filter_trim = block_name_filter.trim();
@@ -182,22 +182,23 @@ pub fn parse_dxf_block_inserts(
     let mut cur_y: Option<f64> = None;
     let mut cur_rot = 0.0_f64;
 
-    let mut flush_insert = |name: &mut String, x: &mut Option<f64>, y: &mut Option<f64>, rot: &mut f64| {
-        if let (Some(px), Some(py)) = (*x, *y) {
-            if !name.is_empty() && (filter_trim.is_empty() || name == filter_trim) {
-                blocks.push(CadInsertBlock {
-                    block_name: name.clone(),
-                    x: px,
-                    y: py,
-                    rotation_deg: *rot,
-                });
+    let mut flush_insert =
+        |name: &mut String, x: &mut Option<f64>, y: &mut Option<f64>, rot: &mut f64| {
+            if let (Some(px), Some(py)) = (*x, *y) {
+                if !name.is_empty() && (filter_trim.is_empty() || name == filter_trim) {
+                    blocks.push(CadInsertBlock {
+                        block_name: name.clone(),
+                        x: px,
+                        y: py,
+                        rotation_deg: *rot,
+                    });
+                }
             }
-        }
-        name.clear();
-        *x = None;
-        *y = None;
-        *rot = 0.0;
-    };
+            name.clear();
+            *x = None;
+            *y = None;
+            *rot = 0.0;
+        };
 
     let mut i = 0;
     while i + 1 < lines.len() {
@@ -364,7 +365,9 @@ pub struct GnssPositionRecord {
 /// C++ `KaGnssNmeaParser::parseGgaSentence` — `$GPGGA` / `$GNGGA` XOR 체크섬(`*XX`) 검증 및 `DDMM.MMMM` 도분 → 십진도(`deg + min / 60.0`) 변환
 pub fn parse_gga_sentence(nmea_sentence: &str) -> Result<GnssPositionRecord, &'static str> {
     let s = nmea_sentence.trim();
-    if s.len() > HGIS_NMEA_MAX_SENTENCE_LEN || (!s.starts_with("$GPGGA,") && !s.starts_with("$GNGGA,")) {
+    if s.len() > HGIS_NMEA_MAX_SENTENCE_LEN
+        || (!s.starts_with("$GPGGA,") && !s.starts_with("$GNGGA,"))
+    {
         return Err("MalformedSentence");
     }
     let Some(star_idx) = s.rfind('*') else {
@@ -373,8 +376,8 @@ pub fn parse_gga_sentence(nmea_sentence: &str) -> Result<GnssPositionRecord, &'s
     if star_idx + 3 > s.len() {
         return Err("MalformedSentence");
     }
-    let expected_cs = u8::from_str_radix(&s[star_idx + 1..star_idx + 3], 16)
-        .map_err(|_| "MalformedSentence")?;
+    let expected_cs =
+        u8::from_str_radix(&s[star_idx + 1..star_idx + 3], 16).map_err(|_| "MalformedSentence")?;
     let actual_cs = s[1..star_idx].bytes().fold(0_u8, |acc, b| acc ^ b);
     if actual_cs != expected_cs {
         return Err("ChecksumMismatch");
@@ -410,8 +413,12 @@ pub fn parse_gga_sentence(nmea_sentence: &str) -> Result<GnssPositionRecord, &'s
         if raw.len() <= deg_len {
             return Err("MalformedSentence");
         }
-        let deg = raw[..deg_len].parse::<f64>().map_err(|_| "MalformedSentence")?;
-        let min = raw[deg_len..].parse::<f64>().map_err(|_| "MalformedSentence")?;
+        let deg = raw[..deg_len]
+            .parse::<f64>()
+            .map_err(|_| "MalformedSentence")?;
+        let min = raw[deg_len..]
+            .parse::<f64>()
+            .map_err(|_| "MalformedSentence")?;
         let mut dd = deg + min / 60.0;
         if hemi.eq_ignore_ascii_case("S") || hemi.eq_ignore_ascii_case("W") {
             dd = -dd;
@@ -718,7 +725,8 @@ mod tests {
 
         // TestKaDxfSpotImporter::testTextElevationFallback:
         // POINT (100.0, 200.0, 0.0) + TEXT at 0.5m distance with "78.45" -> elevated to 78.45m
-        let dxf_2d_with_text = "0\nPOINT\n10\n100.0\n20\n200.0\n30\n0.0\n0\nTEXT\n10\n100.3\n20\n200.4\n1\n78.45\n";
+        let dxf_2d_with_text =
+            "0\nPOINT\n10\n100.0\n20\n200.0\n30\n0.0\n0\nTEXT\n10\n100.3\n20\n200.4\n1\n78.45\n";
         let spots = extract_dxf_spot_elevations_with_text_fallback(dxf_2d_with_text.as_bytes());
         assert_eq!(spots.len(), 1);
         assert!((spots[0][0] - 100.0).abs() < 1e-6);
@@ -770,11 +778,17 @@ mod tests {
         let mapped = resolve_field_schema_mapping(&fields);
         assert!(mapped.is_all_required_mapped);
         assert_eq!(
-            mapped.source_to_target_map.get("유구명").map(String::as_str),
+            mapped
+                .source_to_target_map
+                .get("유구명")
+                .map(String::as_str),
             Some("FEAT_NO")
         );
         assert_eq!(
-            mapped.source_to_target_map.get("유구종류").map(String::as_str),
+            mapped
+                .source_to_target_map
+                .get("유구종류")
+                .map(String::as_str),
             Some("FEAT_TYPE")
         );
         assert_eq!(
@@ -782,7 +796,10 @@ mod tests {
             Some("PERIOD")
         );
         assert_eq!(
-            mapped.source_to_target_map.get("해발고도").map(String::as_str),
+            mapped
+                .source_to_target_map
+                .get("해발고도")
+                .map(String::as_str),
             Some("ELEVATION")
         );
         assert_eq!(mapped.unmapped_source_fields, vec!["비고".to_string()]);

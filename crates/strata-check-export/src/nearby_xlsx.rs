@@ -31,6 +31,7 @@ pub fn export_nearby_heritage_xlsx(
     }
     xml.push_str("</sheetData></worksheet>");
     zip.write_all(xml.as_bytes())?;
-    zip.finish().map_err(|e| StrataError::Export(e.to_string()))?;
+    zip.finish()
+        .map_err(|e| StrataError::Export(e.to_string()))?;
     Ok(())
 }

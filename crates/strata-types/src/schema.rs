@@ -93,10 +93,18 @@ pub struct FieldSpec {
 
 impl FieldSpec {
     pub const fn str_field(name: &'static str, required: bool) -> Self {
-        Self { name, field_type: FieldType::String, required }
+        Self {
+            name,
+            field_type: FieldType::String,
+            required,
+        }
     }
     pub const fn f64_field(name: &'static str, required: bool) -> Self {
-        Self { name, field_type: FieldType::Double, required }
+        Self {
+            name,
+            field_type: FieldType::Double,
+            required,
+        }
     }
 }
 
@@ -255,11 +263,7 @@ impl Default for SurveySchemaV3 {
                     id: "trial_trench",
                     geometry: GeometryKind::Polygon,
                     name_ko: "시굴격자",
-                    fields: vec![
-                        s("name", false),
-                        f("width", false),
-                        f("length", false),
-                    ],
+                    fields: vec![s("name", false), f("width", false), f("length", false)],
                 },
             ],
         }
@@ -287,7 +291,10 @@ mod tests {
         assert_eq!(schema.submit_crs, SubmitCrs::Epsg5179);
         assert_eq!(schema.layers.len(), 7);
         assert_eq!(schema.layer(DomainLayerKey::SurveyArea).name_ko, "조사구역");
-        assert_eq!(schema.layer(DomainLayerKey::TrialTrench).name_ko, "시굴격자");
+        assert_eq!(
+            schema.layer(DomainLayerKey::TrialTrench).name_ko,
+            "시굴격자"
+        );
         assert_eq!(schema.layer(DomainLayerKey::FeaturePoly).fields.len(), 16);
         assert_eq!(schema.layer(DomainLayerKey::ControlPoints).fields.len(), 17);
     }

@@ -157,7 +157,10 @@ pub struct StretchedTileBuffer {
 /// C++ `KaRasterPyramidReader` — 현재 뷰포트 해상도(`view_res_m`)와 원본 픽셀 해상도(`native_res_m`) 비율로부터 피라미드 오버뷰 레벨 `L = max(0, floor(log2(view_res_m / native_res_m)))` 산출
 #[must_use]
 pub fn select_raster_overview_level(view_res_m: f64, native_res_m: f64, max_level: u32) -> u32 {
-    if view_res_m <= 0.0 || native_res_m <= 0.0 || !view_res_m.is_finite() || !native_res_m.is_finite()
+    if view_res_m <= 0.0
+        || native_res_m <= 0.0
+        || !view_res_m.is_finite()
+        || !native_res_m.is_finite()
     {
         return 0;
     }
@@ -241,6 +244,70 @@ pub fn stretch_and_mask_raster_tile(
     }
 }
 
+/// C++ `HGIS_MAX_IMAGE_BUFFER_BYTES` — 최대 허용 렌더 버퍼 크기 (`256 MB` = `0x1000_0000`)
+pub const HGIS_MAX_IMAGE_BUFFER_BYTES: usize = 0x1000_0000;
+
+/// C++ `KaGeoTiffExporter` World File (`.tfw`) 6-파라미터 (`A, D, B, E, C, F`)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TfwWorldFileParams {
+    pub a_pixel_size_x: f64,
+    pub d_rot_y: f64,
+    pub b_rot_x: f64,
+    pub e_pixel_size_y: f64,
+    pub c_origin_center_x: f64,
+    pub f_origin_center_y: f64,
+}
+
+impl TfwWorldFileParams {
+    /// `.tfw` 6줄 텍스트 포맷 반환
+    #[must_use]
+    pub fn to_tfw_lines(self) -> [String; 6] {
+        [
+            format!("{:.2}", self.a_pixel_size_x),
+            format!("{:.2}", self.d_rot_y),
+            format!("{:.2}", self.b_rot_x),
+            format!("{:.2}", self.e_pixel_size_y),
+            format!("{:.2}", self.c_origin_center_x),
+            format!("{:.2}", self.f_origin_center_y),
+        ]
+    }
+}
+
+/// C++ `KaGeoTiffExporter::exportMapToGeoTiff` — BBOX `[min_x, min_y, max_x, max_y]`와 픽셀 크기 `(width_px, height_px)`로부터 `.tfw` 6파라미터 산출
+#[must_use]
+pub fn compute_tfw_world_file_params(
+    bbox_min_max_xy: [f64; 4],
+    width_px: u32,
+    height_px: u32,
+) -> TfwWorldFileParams {
+    let w = f64::from(width_px.max(1));
+    let h = f64::from(height_px.max(1));
+    let a = (bbox_min_max_xy[2] - bbox_min_max_xy[0]) / w;
+    let e = -((bbox_min_max_xy[3] - bbox_min_max_xy[1]) / h);
+    let c = bbox_min_max_xy[0] + a * 0.5;
+    let f = bbox_min_max_xy[3] + e * 0.5;
+    TfwWorldFileParams {
+        a_pixel_size_x: a,
+        d_rot_y: 0.0,
+        b_rot_x: 0.0,
+        e_pixel_size_y: e,
+        c_origin_center_x: c,
+        f_origin_center_y: f,
+    }
+}
+
+/// C++ `KaGeoTiffExporter` / `KaClipboardImageExporter` — 고해상도 래스터 버퍼 OOM 사전 검사 (`width * height * 4 <= 256MB`)
+pub fn validate_export_image_buffer_size(
+    width_px: usize,
+    height_px: usize,
+) -> Result<usize, &'static str> {
+    let bytes = width_px.saturating_mul(height_px).saturating_mul(4);
+    if bytes == 0 || bytes > HGIS_MAX_IMAGE_BUFFER_BYTES {
+        return Err("요청한 해상도가 시스템 메모리 허용 한계를 초과했습니다. DPI를 낮춰주세요.");
+    }
+    Ok(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,7 +350,9 @@ mod tests {
 
         let cancel_tif = dir.join("cancelled.tif");
         let cancelled = AtomicBool::new(true);
-        assert!(export_geotiff_with_cancel(&cancel_tif, 2480, 3508, 5186, Some(&cancelled)).is_err());
+        assert!(
+            export_geotiff_with_cancel(&cancel_tif, 2480, 3508, 5186, Some(&cancelled)).is_err()
+        );
         assert!(!cancel_tif.exists());
         assert!(!cancel_tif.with_extension("tif.tmp").exists());
         let _ = std::fs::remove_dir_all(&dir);
@@ -345,5 +414,16 @@ mod tests {
         let last_alpha = tile.rgba_bytes[100 * 4 + 3];
         assert_eq!(last_alpha, 0);
         assert_eq!(select_raster_overview_level(0.4, 0.05, 5), 3);
+
+        // TestKaGeoTiffExporter::testTfwWorldFileParameters:
+        // BBOX [100.0, 200.0, 300.0, 400.0], 1000x1000px -> A=0.20, E=-0.20, C=100.10, F=399.90
+        let tfw = compute_tfw_world_file_params([100.0, 200.0, 300.0, 400.0], 1000, 1000);
+        let lines = tfw.to_tfw_lines();
+        assert_eq!(lines[0], "0.20");
+        assert_eq!(lines[3], "-0.20");
+        assert_eq!(lines[4], "100.10");
+        assert_eq!(lines[5], "399.90");
+        assert!(validate_export_image_buffer_size(4960, 3508).is_ok());
+        assert!(validate_export_image_buffer_size(9000, 9000).is_err());
     }
 }

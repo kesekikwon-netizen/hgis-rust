@@ -212,18 +212,35 @@ impl StrataAppState {
                     .into_iter()
                     .enumerate()
                     {
-                        let (tr, resp) = cols[ci].allocate_exact_size(Vec2::new(cols[ci].available_width(), 24.0), egui::Sense::click());
+                        let (tr, resp) = cols[ci].allocate_exact_size(
+                            Vec2::new(cols[ci].available_width(), 24.0),
+                            egui::Sense::click(),
+                        );
                         let tp = cols[ci].painter_at(tr);
                         tp.text(
                             tr.center(),
                             egui::Align2::CENTER_CENTER,
                             lbl,
                             egui::FontId::proportional(12.5),
-                            if active { Color32::from_rgb(30, 30, 28) } else { Color32::from_rgb(105, 103, 96) },
+                            if active {
+                                Color32::from_rgb(30, 30, 28)
+                            } else {
+                                Color32::from_rgb(105, 103, 96)
+                            },
                         );
-                        let line_col = if active { Color32::from_rgb(35, 35, 32) } else { Color32::from_rgb(212, 209, 200) };
+                        let line_col = if active {
+                            Color32::from_rgb(35, 35, 32)
+                        } else {
+                            Color32::from_rgb(212, 209, 200)
+                        };
                         let line_w = if active { 2.0 } else { 1.0 };
-                        tp.line_segment([Pos2::new(tr.left(), tr.bottom()), Pos2::new(tr.right(), tr.bottom())], Stroke::new(line_w, line_col));
+                        tp.line_segment(
+                            [
+                                Pos2::new(tr.left(), tr.bottom()),
+                                Pos2::new(tr.right(), tr.bottom()),
+                            ],
+                            Stroke::new(line_w, line_col),
+                        );
                         if resp.clicked() {
                             self.right_inspector.active_card = target;
                         }
@@ -248,15 +265,20 @@ impl StrataAppState {
                             .inner_margin(egui::Margin::symmetric(8, 6))
                             .show(ui, |ui| {
                                 ui.label(
-                                    egui::RichText::new(format!("면적: {area_m2:.2} m² ({pyeong:.1} 평)"))
-                                        .size(12.0)
-                                        .strong()
-                                        .color(Color32::from_rgb(30, 30, 28)),
+                                    egui::RichText::new(format!(
+                                        "면적: {area_m2:.2} m² ({pyeong:.1} 평)"
+                                    ))
+                                    .size(12.0)
+                                    .strong()
+                                    .color(Color32::from_rgb(30, 30, 28)),
                                 );
                                 ui.label(
-                                    egui::RichText::new(format!("둘레: {perim_m:.2} m · {}", self.work_crs.auth_id()))
-                                        .size(11.5)
-                                        .color(Color32::from_rgb(80, 79, 74)),
+                                    egui::RichText::new(format!(
+                                        "둘레: {perim_m:.2} m · {}",
+                                        self.work_crs.auth_id()
+                                    ))
+                                    .size(11.5)
+                                    .color(Color32::from_rgb(80, 79, 74)),
                                 );
                             });
                         ui.add_space(6.0);
@@ -266,7 +288,12 @@ impl StrataAppState {
                             .show(ui, |ui| {
                                 ui.label(egui::RichText::new("조사명").size(11.5));
                                 if ui
-                                    .add(egui::TextEdit::singleline(&mut self.right_inspector.survey_name).desired_width(155.0))
+                                    .add(
+                                        egui::TextEdit::singleline(
+                                            &mut self.right_inspector.survey_name,
+                                        )
+                                        .desired_width(155.0),
+                                    )
                                     .changed()
                                 {
                                     self.is_dirty = true;
@@ -274,7 +301,12 @@ impl StrataAppState {
                                 ui.end_row();
                                 ui.label(egui::RichText::new("유구번호").size(11.5));
                                 if ui
-                                    .add(egui::TextEdit::singleline(&mut self.right_inspector.feature_no).desired_width(155.0))
+                                    .add(
+                                        egui::TextEdit::singleline(
+                                            &mut self.right_inspector.feature_no,
+                                        )
+                                        .desired_width(155.0),
+                                    )
                                     .changed()
                                 {
                                     self.is_dirty = true;
@@ -285,8 +317,23 @@ impl StrataAppState {
                                     .selected_text(&self.right_inspector.feature_type)
                                     .width(155.0)
                                     .show_ui(ui, |ui| {
-                                        for ft in ["조사구역", "주거지", "수혈", "분묘", "구", "주초", "유물포함층"] {
-                                            if ui.selectable_value(&mut self.right_inspector.feature_type, ft.to_owned(), ft).changed() {
+                                        for ft in [
+                                            "조사구역",
+                                            "주거지",
+                                            "수혈",
+                                            "분묘",
+                                            "구",
+                                            "주초",
+                                            "유물포함층",
+                                        ] {
+                                            if ui
+                                                .selectable_value(
+                                                    &mut self.right_inspector.feature_type,
+                                                    ft.to_owned(),
+                                                    ft,
+                                                )
+                                                .changed()
+                                            {
                                                 self.is_dirty = true;
                                             }
                                         }
@@ -297,8 +344,25 @@ impl StrataAppState {
                                     .selected_text(&self.right_inspector.feature_period)
                                     .width(155.0)
                                     .show_ui(ui, |ui| {
-                                        for pd in ["미상", "구석기", "신석기", "청동기", "원삼국", "삼국", "통일신라", "고려", "조선"] {
-                                            if ui.selectable_value(&mut self.right_inspector.feature_period, pd.to_owned(), pd).changed() {
+                                        for pd in [
+                                            "미상",
+                                            "구석기",
+                                            "신석기",
+                                            "청동기",
+                                            "원삼국",
+                                            "삼국",
+                                            "통일신라",
+                                            "고려",
+                                            "조선",
+                                        ] {
+                                            if ui
+                                                .selectable_value(
+                                                    &mut self.right_inspector.feature_period,
+                                                    pd.to_owned(),
+                                                    pd,
+                                                )
+                                                .changed()
+                                            {
                                                 self.is_dirty = true;
                                             }
                                         }
@@ -332,53 +396,93 @@ impl StrataAppState {
                         }
                     } else {
                         ui.label(
-                            egui::RichText::new("지도에서 도형 하나를 고르면 기록이\n여기에 나옵니다.")
-                                .size(12.0)
-                                .color(Color32::from_rgb(95, 94, 88)),
+                            egui::RichText::new(
+                                "지도에서 도형 하나를 고르면 기록이\n여기에 나옵니다.",
+                            )
+                            .size(12.0)
+                            .color(Color32::from_rgb(95, 94, 88)),
                         );
                     }
                 } else {
-                    let layer_name = self.right_inspector.selected_layer_key.as_deref().unwrap_or("조사구역");
+                    let layer_name = self
+                        .right_inspector
+                        .selected_layer_key
+                        .as_deref()
+                        .unwrap_or("조사구역");
                     let stroke_col = self.right_inspector.active_stroke_color();
                     ui.horizontal(|ui| {
-                        let (sr, _) = ui.allocate_exact_size(Vec2::new(16.0, 12.0), egui::Sense::hover());
+                        let (sr, _) =
+                            ui.allocate_exact_size(Vec2::new(16.0, 12.0), egui::Sense::hover());
                         let sp = ui.painter_at(sr);
-                        sp.rect_filled(sr, 1.0, Color32::from_rgba_unmultiplied(stroke_col.r(), stroke_col.g(), stroke_col.b(), 70));
-                        sp.rect_stroke(sr, 1.0, Stroke::new(2.0, stroke_col), egui::StrokeKind::Middle);
-                        ui.label(egui::RichText::new(layer_name).size(12.5).color(Color32::from_rgb(35, 35, 32)));
+                        sp.rect_filled(
+                            sr,
+                            1.0,
+                            Color32::from_rgba_unmultiplied(
+                                stroke_col.r(),
+                                stroke_col.g(),
+                                stroke_col.b(),
+                                70,
+                            ),
+                        );
+                        sp.rect_stroke(
+                            sr,
+                            1.0,
+                            Stroke::new(2.0, stroke_col),
+                            egui::StrokeKind::Middle,
+                        );
+                        ui.label(
+                            egui::RichText::new(layer_name)
+                                .size(12.5)
+                                .color(Color32::from_rgb(35, 35, 32)),
+                        );
                     });
                     ui.add_space(6.0);
-                    ui.label(egui::RichText::new("색").size(12.0).color(Color32::from_rgb(80, 79, 74)));
+                    ui.label(
+                        egui::RichText::new("색")
+                            .size(12.0)
+                            .color(Color32::from_rgb(80, 79, 74)),
+                    );
                     ui.add_space(2.0);
-                    egui::Grid::new("ka_inspector_style_palette").spacing([5.0, 5.0]).show(ui, |ui| {
-                        for (idx, (r, g, b, name)) in KA_STYLE_PALETTE.iter().enumerate() {
-                            let (rect, resp) = ui.allocate_exact_size(Vec2::new(46.0, 24.0), egui::Sense::click());
-                            let p = ui.painter_at(rect);
-                            let col = Color32::from_rgb(*r, *g, *b);
-                            p.rect_filled(rect, 4.0, col);
-                            let chosen = self.right_inspector.style_color_index == idx;
-                            let border = if chosen {
-                                Stroke::new(2.6, Color32::from_rgb(28, 28, 26))
-                            } else {
-                                Stroke::new(1.0, Color32::from_rgb(175, 172, 162))
-                            };
-                            p.rect_stroke(rect, 4.0, border, egui::StrokeKind::Middle);
-                            if resp.on_hover_text(*name).clicked() {
-                                self.right_inspector.style_color_index = idx;
+                    egui::Grid::new("ka_inspector_style_palette")
+                        .spacing([5.0, 5.0])
+                        .show(ui, |ui| {
+                            for (idx, (r, g, b, name)) in KA_STYLE_PALETTE.iter().enumerate() {
+                                let (rect, resp) = ui.allocate_exact_size(
+                                    Vec2::new(46.0, 24.0),
+                                    egui::Sense::click(),
+                                );
+                                let p = ui.painter_at(rect);
+                                let col = Color32::from_rgb(*r, *g, *b);
+                                p.rect_filled(rect, 4.0, col);
+                                let chosen = self.right_inspector.style_color_index == idx;
+                                let border = if chosen {
+                                    Stroke::new(2.6, Color32::from_rgb(28, 28, 26))
+                                } else {
+                                    Stroke::new(1.0, Color32::from_rgb(175, 172, 162))
+                                };
+                                p.rect_stroke(rect, 4.0, border, egui::StrokeKind::Middle);
+                                if resp.on_hover_text(*name).clicked() {
+                                    self.right_inspector.style_color_index = idx;
+                                }
+                                if idx % 4 == 3 {
+                                    ui.end_row();
+                                }
                             }
-                            if idx % 4 == 3 {
-                                ui.end_row();
-                            }
-                        }
-                    });
+                        });
                     ui.add_space(6.0);
-                    if ui.radio(self.right_inspector.no_fill, "채우기 없음 (선만)").clicked() {
+                    if ui
+                        .radio(self.right_inspector.no_fill, "채우기 없음 (선만)")
+                        .clicked()
+                    {
                         self.right_inspector.no_fill = !self.right_inspector.no_fill;
                         if self.right_inspector.no_fill {
                             self.right_inspector.no_stroke = false;
                         }
                     }
-                    if ui.radio(self.right_inspector.no_stroke, "선 없음").clicked() {
+                    if ui
+                        .radio(self.right_inspector.no_stroke, "선 없음")
+                        .clicked()
+                    {
                         self.right_inspector.no_stroke = !self.right_inspector.no_stroke;
                         if self.right_inspector.no_stroke {
                             self.right_inspector.no_fill = false;
@@ -386,20 +490,26 @@ impl StrataAppState {
                     }
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("외곽선 굵기").size(12.0).color(Color32::from_rgb(80, 79, 74)));
+                        ui.label(
+                            egui::RichText::new("외곽선 굵기")
+                                .size(12.0)
+                                .color(Color32::from_rgb(80, 79, 74)),
+                        );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let w_txt = format!("{:.1} mm    ↕", self.right_inspector.stroke_width_mm);
+                            let w_txt =
+                                format!("{:.1} mm    ↕", self.right_inspector.stroke_width_mm);
                             let wb = egui::Button::new(egui::RichText::new(w_txt).size(12.0))
                                 .fill(Color32::WHITE)
                                 .stroke(Stroke::new(1.0, Color32::from_rgb(175, 172, 162)))
                                 .corner_radius(5.0)
                                 .min_size(Vec2::new(88.0, 26.0));
                             if ui.add(wb).clicked() {
-                                self.right_inspector.stroke_width_mm = if self.right_inspector.stroke_width_mm >= 2.5 {
-                                    0.5
-                                } else {
-                                    self.right_inspector.stroke_width_mm + 0.5
-                                };
+                                self.right_inspector.stroke_width_mm =
+                                    if self.right_inspector.stroke_width_mm >= 2.5 {
+                                        0.5
+                                    } else {
+                                        self.right_inspector.stroke_width_mm + 0.5
+                                    };
                             }
                         });
                     });
@@ -413,18 +523,23 @@ impl StrataAppState {
                             ("지형", BasemapSource::VworldBase),
                             ("옛 지도 ▼", BasemapSource::Daedongyeojido),
                         ] {
-                            let btn = egui::Button::new(egui::RichText::new(lbl).size(12.0).strong())
-                                .fill(Color32::WHITE)
-                                .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
-                                .corner_radius(5.0)
-                                .min_size(Vec2::new(66.0, 30.0));
+                            let btn =
+                                egui::Button::new(egui::RichText::new(lbl).size(12.0).strong())
+                                    .fill(Color32::WHITE)
+                                    .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                                    .corner_radius(5.0)
+                                    .min_size(Vec2::new(66.0, 30.0));
                             if ui.add(btn).clicked() {
                                 self.home_map.active_basemap = src;
                             }
                         }
                     });
                     ui.add_space(4.0);
-                    ui.label(egui::RichText::new("바탕 지도").size(11.5).color(Color32::from_rgb(95, 94, 88)));
+                    ui.label(
+                        egui::RichText::new("바탕 지도")
+                            .size(11.5)
+                            .color(Color32::from_rgb(95, 94, 88)),
+                    );
                     ui.separator();
                 });
             });
@@ -465,7 +580,9 @@ impl StrataAppState {
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         let save_btn = egui::Button::new(
-                            egui::RichText::new("조사카드 저장").color(Color32::WHITE).strong(),
+                            egui::RichText::new("조사카드 저장")
+                                .color(Color32::WHITE)
+                                .strong(),
                         )
                         .fill(Color32::from_rgb(181, 87, 58))
                         .corner_radius(5.0);
@@ -492,7 +609,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_feature_card_area_calculation_10x20_rect_formats_exact_200m2_605_pyeong_and_60m_perim() {
+    fn test_feature_card_area_calculation_10x20_rect_formats_exact_200m2_605_pyeong_and_60m_perim()
+    {
         let rect_10x20 = [
             [0.0, 0.0],
             [10.0, 0.0],
