@@ -1,0 +1,30 @@
+{
+  "protocol": "YAML_SPEC_V1_BOARD",
+  "completed_tasks": [
+    "U1",
+    "D1",
+    "D2",
+    "D3",
+    "D4",
+    "D5",
+    "D6",
+    "D7",
+    "D8",
+    "D9",
+    "D10",
+    "D11"
+  ],
+  "last_commit": "f81f162",
+  "active_task": "D12",
+  "queued_tasks": [
+    "D13"
+  ],
+  "require_live_5tab_screenshots_before_commit": true,
+  "required_shots": [
+    "target/shots/now-home.png",
+    "target/shots/now-map.png",
+    "target/shots/now-drawing.png",
+    "target/shots/now-paleo.png",
+    "target/shots/now-terrain3d.png"
+  ]
+}
