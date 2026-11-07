@@ -370,6 +370,35 @@ impl StrataAppState {
                                 ui.end_row();
                             });
                         ui.add_space(4.0);
+                        let (pit_depth, pit_caption) =
+                            strata_terrain3d::trench_profile3d::compute_pit_elevation_depth_and_caption(
+                                Some(48.50),
+                                Some(47.20),
+                                None,
+                            );
+                        egui::Frame::NONE
+                            .fill(Color32::from_rgb(245, 240, 232))
+                            .stroke(Stroke::new(1.0, Color32::from_rgb(212, 204, 191)))
+                            .corner_radius(5.0)
+                            .inner_margin(egui::Margin::symmetric(8, 5))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    egui::RichText::new("단면 표고 (KaElevationFigure)")
+                                        .size(11.0)
+                                        .strong()
+                                        .color(Color32::from_rgb(107, 78, 61)),
+                                );
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "상면 EL. 48.50 · 바닥 EL. 47.20 · 깊이 {:.2} m",
+                                        pit_depth.unwrap_or(0.0)
+                                    ))
+                                    .size(11.0)
+                                    .color(Color32::from_rgb(47, 42, 38)),
+                                )
+                                .on_hover_text(pit_caption);
+                            });
+                        ui.add_space(4.0);
                         ui.label(egui::RichText::new("메모").size(11.5));
                         if ui
                             .add(

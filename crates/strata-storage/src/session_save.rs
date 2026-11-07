@@ -80,6 +80,104 @@ pub fn create_generation_snapshot(gpkg_path: &Path, max_generations: usize) -> b
     false
 }
 
+/// 백그라운드 자동 저장 주기 (3분 = 180,000ms, C++ `HGIS_AUTOSAVE_INTERVAL_MS`)
+pub const HGIS_AUTOSAVE_INTERVAL_MS: u64 = 180_000;
+/// 위생 정리 대상 임시 파일 기본 경과 시간 (24시간, C++ `HGIS_STALE_TEMP_FILE_HOURS`)
+pub const HGIS_STALE_TEMP_FILE_HOURS: u64 = 24;
+
+/// 파일 무결성 지문 레코드 (C++ `FileFingerprint`)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileFingerprint {
+    pub sha256_hex: String,
+    pub file_size_bytes: u64,
+}
+
+/// 비정상 종료 복구 상태 (C++ `RecoveryStatus`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryStatus {
+    NoRecoveryNeeded,
+    CrashDetectedRecoverable,
+    JournalCorrupted,
+}
+
+/// 임시 파일 쓰기 + `sync_all()`(`fsync`/`FlushFileBuffers`) + 원자적 `rename` 교체 및 SHA-256 지문 반환
+/// (C++ `SurveyDurability::safeAtomicSave` & `SurveyFileFingerprint::computeFingerprint` 1:1 대응)
+pub fn safe_atomic_save_bytes(target_path: &Path, bytes: &[u8]) -> StrataResult<FileFingerprint> {
+    use std::io::Write;
+    let tmp_path = target_path.with_extension("hgis.atomic-tmp");
+    {
+        let mut f = std::fs::File::create(&tmp_path)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+    }
+    std::fs::rename(&tmp_path, target_path)?;
+    let sha256_hex = sha256_fingerprint(target_path)?;
+    Ok(FileFingerprint {
+        sha256_hex,
+        file_size_bytes: bytes.len() as u64,
+    })
+}
+
+/// 파일의 현재 SHA-256 지문 및 바이트 크기가 기대 지문(`expected`)과 일치하는지 검증
+/// (C++ `SurveyFileFingerprint::verifyIntegrity` 1:1 대응)
+#[must_use]
+pub fn verify_file_fingerprint(path: &Path, expected: &FileFingerprint) -> bool {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
+    if meta.len() != expected.file_size_bytes {
+        return false;
+    }
+    sha256_fingerprint(path).is_ok_and(|hex| hex == expected.sha256_hex)
+}
+
+/// 이전 편집 서명과 현재 편집 서명을 비교하여 복구 스냅샷 갱신 필요 여부 판정
+/// (C++ `SurveyRecovery::snapshotNeeded` 1:1 대응)
+#[must_use]
+pub fn recovery_snapshot_needed(last_signature: &str, current_signature: &str) -> bool {
+    last_signature.is_empty() || current_signature.is_empty() || last_signature != current_signature
+}
+
+/// 프로젝트 폴더 내 지정 경과 시간(`max_age_hours`) 이상 방치된 잔류 임시 파일(`.tmp`, `.journal`, `.gen-tmp`, `.saveas-tmp`) 정리
+/// (C++ `SurveyFileHygiene::sweepStaleTempFiles` 1:1 대응)
+#[must_use]
+pub fn sweep_stale_temp_files(project_dir: &Path, max_age_hours: u64) -> usize {
+    let Ok(entries) = std::fs::read_dir(project_dir) else {
+        return 0;
+    };
+    let threshold = std::time::Duration::from_secs(max_age_hours.saturating_mul(3600));
+    let now = std::time::SystemTime::now();
+    let mut removed = 0usize;
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if !p.is_file() {
+            continue;
+        }
+        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        let is_temp = name.ends_with(".tmp")
+            || name.ends_with(".journal")
+            || name.ends_with(".gen-tmp")
+            || name.ends_with(".saveas-tmp");
+        if !is_temp {
+            continue;
+        }
+        let old_enough = if max_age_hours == 0 {
+            true
+        } else {
+            entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|mtime| now.duration_since(mtime).ok())
+                .is_some_and(|age| age >= threshold)
+        };
+        if old_enough && std::fs::remove_file(&p).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,6 +230,31 @@ mod tests {
         assert!(std::path::Path::new(&format!("{base}.v2")).exists());
         assert!(std::path::Path::new(&format!("{base}.v3")).exists());
         assert!(!std::path::Path::new(&format!("{base}.v4")).exists());
+        Ok(())
+    }
+
+    #[test]
+    fn test_atomic_save_success_and_fingerprint_and_stale_temp_hygiene() -> StrataResult<()> {
+        // TestSurveyDurability::testAtomicSaveSuccessAndBackup & SurveyFileFingerprint
+        let tmp = TempDir::new()?;
+        let target = tmp.path().join("project.hgis");
+        std::fs::write(&target, b"initial-v1")?;
+
+        let payload = b"updated-survey-v2-payload";
+        let fp = safe_atomic_save_bytes(&target, payload)?;
+        assert_eq!(fp.file_size_bytes, payload.len() as u64);
+        assert!(verify_file_fingerprint(&target, &fp));
+
+        // SurveyRecovery::snapshotNeeded
+        assert!(recovery_snapshot_needed("", &fp.sha256_hex));
+        assert!(!recovery_snapshot_needed(&fp.sha256_hex, &fp.sha256_hex));
+
+        // SurveyFileHygiene::sweepStaleTempFiles
+        let stale_tmp = tmp.path().join("project.hgis.tmp");
+        std::fs::write(&stale_tmp, b"orphan")?;
+        let swept = sweep_stale_temp_files(tmp.path(), 0);
+        assert_eq!(swept, 1);
+        assert!(!stale_tmp.exists());
         Ok(())
     }
 }

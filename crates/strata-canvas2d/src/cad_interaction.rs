@@ -895,6 +895,83 @@ impl CadSessionController {
     }
 }
 
+/// 1평 환산 제곱미터 계수 (`3.305785`, C++ `HGIS_PYEONG_CONVERSION_FACTOR`)
+pub const HGIS_PYEONG_CONVERSION_FACTOR: f64 = 3.305_785;
+/// 좌표 콜아웃 말풍선 모서리 반경 (`2.0 mm`, C++ `HGIS_CALLOUT_CORNER_RADIUS_MM`)
+pub const HGIS_CALLOUT_CORNER_RADIUS_MM: f64 = 2.0;
+
+/// 슈레이스 공식(Shoelace Formula)으로 다각형 면적(`㎡`) 및 한국 고고학 발굴 평수(`㎡ / 3.305785`) 산출
+/// (C++ `MeasureOps::calculatePolygonAreaM2` 1:1 대응)
+#[must_use]
+pub fn calculate_polygon_area_and_pyeong(points: &[[f64; 2]]) -> (f64, f64) {
+    if points.len() < 3 {
+        return (0.0, 0.0);
+    }
+    let mut shoelace = 0.0_f64;
+    for i in 0..points.len() {
+        let j = (i + 1) % points.len();
+        shoelace += points[i][0] * points[j][1] - points[j][0] * points[i][1];
+    }
+    let area_m2 = 0.5 * shoelace.abs();
+    let pyeong = area_m2 / HGIS_PYEONG_CONVERSION_FACTOR;
+    (area_m2, pyeong)
+}
+
+/// 방위각(`degrees`)을 도·분·초(`D°MM′SS″`) 문자열로 포맷팅
+/// (C++ `MeasureOps::formatBearing` 1:1 대응)
+#[must_use]
+pub fn format_bearing_dms(degrees: f64) -> String {
+    if !degrees.is_finite() {
+        return "—".to_owned();
+    }
+    let total = (degrees * 3600.0).round() as i64;
+    let wrapped = total.rem_euclid(360 * 3600);
+    let d = wrapped / 3600;
+    let m = (wrapped % 3600) / 60;
+    let s = wrapped % 60;
+    format!("{d}°{m:02}′{s:02}″")
+}
+
+/// 방위각 다이얼 위젯 한국어 안내 문구 생성
+/// (C++ `KaAzimuthDial::note` 1:1 대응)
+#[must_use]
+pub fn azimuth_dial_note_ko(degrees: f64) -> String {
+    let turn = degrees.rem_euclid(360.0);
+    if turn.abs() < 0.5 || (turn - 360.0).abs() < 0.5 {
+        "위가 북쪽입니다".to_owned()
+    } else {
+        format!("북에서 시계 방향 {:.0}°", turn)
+    }
+}
+
+/// 도면 좌표 인출선 콜아웃 문자열(`X: ...\nY: ...\nEL: ...`) 생성
+/// (C++ `KaDrawingCoordCallout::drawCoordCallout` 1:1 대응)
+#[must_use]
+pub fn format_drawing_coord_callout(world_xy: [f64; 2], ground_z: f64) -> String {
+    fn fmt_with_commas(v: f64) -> String {
+        let sign = if v < 0.0 { "-" } else { "" };
+        let abs = v.abs();
+        let whole = abs.trunc() as u64;
+        let frac = ((abs - (whole as f64)) * 100.0).round() as u64;
+        let s = whole.to_string();
+        let mut out = String::new();
+        for (i, ch) in s.chars().rev().enumerate() {
+            if i > 0 && i % 3 == 0 {
+                out.push(',');
+            }
+            out.push(ch);
+        }
+        let whole_comma: String = out.chars().rev().collect();
+        format!("{sign}{whole_comma}.{frac:02}")
+    }
+    format!(
+        "X: {}m\nY: {}m\nEL: {:.2}m",
+        fmt_with_commas(world_xy[0]),
+        fmt_with_commas(world_xy[1]),
+        ground_z
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1010,5 +1087,20 @@ mod tests {
         assert_eq!(format_measure_distance(850.5), "850.50 m");
         assert_eq!(format_measure_distance(1500.0), "1.50 km");
         assert_eq!(format_measure_area(25000.0), "2.50 ha");
+
+        // TestMeasureOps::testShoelacePyeongCalculation: 10m x 10m = 100.0 m² -> 30.250 평
+        let sq = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]];
+        let (area_m2, pyeong) = calculate_polygon_area_and_pyeong(&sq);
+        assert!((area_m2 - 100.0).abs() < 1e-6);
+        assert!((pyeong - 30.250).abs() <= 0.001);
+
+        // MeasureOps::formatBearing & KaAzimuthDial::note & KaDrawingCoordCallout
+        assert_eq!(format_bearing_dms(45.5), "45°30′00″");
+        assert_eq!(azimuth_dial_note_ko(0.0), "위가 북쪽입니다");
+        assert_eq!(azimuth_dial_note_ko(35.0), "북에서 시계 방향 35°");
+        assert_eq!(
+            format_drawing_coord_callout([198_421.35, 541_208.92], 45.32),
+            "X: 198,421.35m\nY: 541,208.92m\nEL: 45.32m"
+        );
     }
 }

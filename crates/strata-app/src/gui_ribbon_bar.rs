@@ -337,7 +337,13 @@ impl StrataAppState {
                                     self.import_demo_dxf_and_csv();
                                     self.home_map.draw_guide_message = Some("발굴 실측 DXF 도면 기준점 레이어(GRID_CROSS)를 적재했습니다.".to_owned());
                                 }
-                                ui.label(egui::RichText::new("잔차(RMS): 0.008 m (허용 ≤ 0.10 m)").size(11.5).color(Color32::from_rgb(21, 128, 61)));
+                                ui.label(
+                                    egui::RichText::new(
+                                        strata_geo::polygon_ops::georef_quality_summary_ko(4, 0.008, 0.012),
+                                    )
+                                    .size(11.5)
+                                    .color(Color32::from_rgb(21, 128, 61)),
+                                );
                                 if ui.button("4매개변수 헬머트 정합 적용").clicked() {
                                     let src = [[0.0, 0.0], [100.0, 0.0], [0.0, 100.0]];
                                     let [cx, cy] = self.home_map.real_survey.survey_center;

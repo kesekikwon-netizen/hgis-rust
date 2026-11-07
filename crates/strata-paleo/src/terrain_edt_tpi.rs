@@ -460,6 +460,216 @@ pub fn compute_imhof_multidirectional_hillshade_and_slope_rgba(
     (slope_deg, rgba)
 }
 
+/// 미지형 TPI 국소 반경 (15.0m, C++ `HGIS_TPI_INNER_RADIUS_M`)
+pub const HGIS_TPI_INNER_RADIUS_M: f64 = 15.0;
+/// 미지형 TPI 광역 반경 (150.0m, C++ `HGIS_TPI_OUTER_RADIUS_M`)
+pub const HGIS_TPI_OUTER_RADIUS_M: f64 = 150.0;
+
+/// 고지형 폴리곤 DEM·수계·시추 통합 계측치 (C++ `PaleoDemClassifier::Metrics`)
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaleoDemMetrics {
+    pub has_dem: bool,
+    pub mean_elev_m: f64,
+    pub local_relief_m: f64,
+    pub mean_slope_deg: f64,
+    pub river_dist_m: f64,
+    pub has_borehole: bool,
+    pub borehole_code: String,
+    pub alluvial_thickness_m: f64,
+    pub weathered_depth_m: f64,
+    pub deposit_env: String,
+    pub dominant_uscs: String,
+}
+
+/// 고지형 폴리곤 자동 분류 결과 및 근거 주석 (C++ `PaleoDemClassifier::Classification`)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaleoDemClassification {
+    pub kind: String,
+    pub note: String,
+}
+
+/// 표준화 TPI(`tpi_std`)와 경사도(`slope_deg`) 결정 트리로 고지형 미지형 분류
+/// (C++ `PaleoDemClassifier::classifyLandformGrid` 1:1 대응)
+#[must_use]
+pub fn classify_tpi_std_slope_landform(tpi_std: f64, slope_deg: f64) -> PaleoLandformType {
+    if !tpi_std.is_finite() || !slope_deg.is_finite() {
+        return PaleoLandformType::NoData;
+    }
+    if (0.3..=1.5).contains(&tpi_std) && slope_deg < 3.0 {
+        PaleoLandformType::NaturalLevee
+    } else if tpi_std < -0.2 && slope_deg < 1.5 {
+        PaleoLandformType::Backswamp
+    } else if tpi_std > 1.5 && slope_deg < 5.0 {
+        PaleoLandformType::FluvialTerrace
+    } else if tpi_std < -0.5 {
+        PaleoLandformType::PaleoChannel
+    } else if (3.0..15.0).contains(&slope_deg) {
+        PaleoLandformType::AlluvialFan
+    } else if slope_deg >= 15.0 {
+        PaleoLandformType::Hillslope
+    } else {
+        PaleoLandformType::Floodplain
+    }
+}
+
+/// C++ `PaleoDemClassifier::classify(baseKind, Metrics)` 1:1 대응 — 하안단구 T1/T2/T3 단구면 세분, 시추 퇴적상(사질/점토) 기반 자연제방·구하도 보정 및 `"자동: ..."` 판독 근거 생성
+#[must_use]
+pub fn classify_paleo_dem_polygon(base_kind: &str, m: &PaleoDemMetrics) -> PaleoDemClassification {
+    let mut out_kind = base_kind.to_owned();
+    let mut notes = Vec::new();
+
+    if base_kind == "하안단구" {
+        let step = if m.has_dem {
+            if m.local_relief_m >= 35.0 {
+                format!("고위단구(T3, 비고 {:.1}m)", m.local_relief_m)
+            } else if m.local_relief_m >= 15.0 {
+                format!("중위단구(T2, 비고 {:.1}m)", m.local_relief_m)
+            } else {
+                format!("저위단구(T1, 비고 {:.1}m)", m.local_relief_m)
+            }
+        } else {
+            "단구면".to_owned()
+        };
+        notes.push(step);
+    } else if matches!(base_kind, "자연제방" | "구하도" | "미저지" | "미고지") {
+        if m.has_borehole {
+            if m.deposit_env.contains("사질") && matches!(base_kind, "미저지" | "자연제방")
+            {
+                out_kind = "자연제방".to_owned();
+            } else if m.deposit_env.contains("점토") && matches!(base_kind, "미저지" | "구하도")
+            {
+                out_kind = "구하도".to_owned();
+            }
+        } else if m.has_dem
+            && base_kind == "미저지"
+            && m.local_relief_m >= 2.5
+            && m.mean_slope_deg <= 5.0
+        {
+            out_kind = "미고지".to_owned();
+        }
+        notes.push(out_kind.clone());
+    } else {
+        notes.push(out_kind.clone());
+    }
+
+    if m.has_dem {
+        notes.push(format!(
+            "표고 {:.1}m(비고 +{:.1}m)·경사 {:.1}°",
+            m.mean_elev_m, m.local_relief_m, m.mean_slope_deg
+        ));
+    }
+    if m.river_dist_m >= 0.0 {
+        notes.push(format!("하천거리 {:.0}m", m.river_dist_m));
+    }
+    if m.has_borehole {
+        let sed = if m.dominant_uscs.trim().is_empty() {
+            m.deposit_env.as_str()
+        } else {
+            m.dominant_uscs.as_str()
+        };
+        let mut bh = format!(
+            "시추 {} 충적 {:.1}m({sed})",
+            m.borehole_code, m.alluvial_thickness_m
+        );
+        if m.weathered_depth_m >= 0.0 {
+            bh.push_str(&format!("·생토 {:.1}m", m.weathered_depth_m));
+        }
+        notes.push(bh);
+    }
+
+    PaleoDemClassification {
+        kind: out_kind,
+        note: format!("자동: {}", notes.join(" · ")),
+    }
+}
+
+/// 지구 평균 반경 (m, C++ `HGIS_EARTH_RADIUS_M`)
+pub const HGIS_EARTH_RADIUS_M: f64 = 6_371_000.0;
+/// 대기 굴절 보정 기본 계수 (C++ `HGIS_REFRACTION_INDEX_K`)
+pub const HGIS_REFRACTION_INDEX_K: f64 = 0.13;
+/// 토블러 보행 함수 최대 속도 (km/h, C++ `HGIS_TOBLER_MAX_SPEED_KMH`)
+pub const HGIS_TOBLER_MAX_SPEED_KMH: f64 = 6.0;
+/// 최대 속도 최적 경사도 (탄젠트, C++ `HGIS_TOBLER_OPTIMAL_SLOPE`)
+pub const HGIS_TOBLER_OPTIMAL_SLOPE: f64 = -0.05;
+/// 통행 불가 단애 경사 임계치 (C++ `HGIS_IMPASSABLE_CLIFF_SLOPE`)
+pub const HGIS_IMPASSABLE_CLIFF_SLOPE: f64 = 1.5;
+
+/// 토블러 보행 함수(Tobler's Hiking Function) 보행 속도(`km/h`) 산출 (`W = 6 * exp(-3.5 * |S + 0.05|)`)
+/// (C++ `KaToblerHikingFunction` 1:1 대응)
+#[must_use]
+pub fn compute_tobler_hiking_speed_kmh(slope_tan: f64) -> f64 {
+    if !slope_tan.is_finite() || slope_tan.abs() >= HGIS_IMPASSABLE_CLIFF_SLOPE {
+        return 0.0001;
+    }
+    (HGIS_TOBLER_MAX_SPEED_KMH * (-3.5 * (slope_tan - HGIS_TOBLER_OPTIMAL_SLOPE).abs()).exp())
+        .max(0.0001)
+}
+
+/// 지구 곡률 및 대기 굴절(`k = 0.13`)을 반영한 수평 거리별 지형 겉보기 침하량(`m`) 산출
+/// (C++ `KaViewshedAnalyzer` 1:1 대응)
+#[must_use]
+pub fn compute_earth_curvature_drop_m(distance_m: f64, refraction_k: f64) -> f64 {
+    if distance_m <= 0.0 || !distance_m.is_finite() {
+        return 0.0;
+    }
+    (distance_m * distance_m * (1.0 - refraction_k)) / (2.0 * HGIS_EARTH_RADIUS_M)
+}
+
+/// 유적·봉수·산성 간 상호 조망(Intervisibility) 기선 검증 결과 (C++ `IntervisibilityEdge`)
+#[derive(Debug, Clone, PartialEq)]
+pub struct IntervisibilityEdge {
+    pub from_site_id: String,
+    pub to_site_id: String,
+    pub is_visible: bool,
+    pub distance_m: f64,
+    pub min_clearance_m: f64,
+}
+
+/// 출발점과 목표점 사이의 중간 지형 표고 샘플(`(dist_m, terrain_elev_m)`)에 대한 가시선(LOS) 차폐 및 여유 고도 판정
+/// (C++ `KaIntervisibilityNetwork::buildIntervisibilityNetwork` 1:1 대응)
+#[must_use]
+pub fn evaluate_line_of_sight_profile(
+    from_site_id: &str,
+    to_site_id: &str,
+    obs_elev_m: f64,
+    target_elev_m: f64,
+    distance_m: f64,
+    intermediate_samples: &[(f64, f64)],
+    refraction_k: f64,
+) -> IntervisibilityEdge {
+    if distance_m <= 1e-6 || !distance_m.is_finite() {
+        return IntervisibilityEdge {
+            from_site_id: from_site_id.to_owned(),
+            to_site_id: to_site_id.to_owned(),
+            is_visible: true,
+            distance_m: 0.0,
+            min_clearance_m: 0.0,
+        };
+    }
+    let adj_target_el = target_elev_m - compute_earth_curvature_drop_m(distance_m, refraction_k);
+    let mut min_clearance_m = f64::INFINITY;
+    for &(d, z_terr) in intermediate_samples {
+        if d <= 0.0 || d >= distance_m {
+            continue;
+        }
+        let frac = d / distance_m;
+        let los_z = obs_elev_m + (adj_target_el - obs_elev_m) * frac;
+        let adj_terr_z = z_terr - compute_earth_curvature_drop_m(d, refraction_k);
+        let clearance = los_z - adj_terr_z;
+        min_clearance_m = min_clearance_m.min(clearance);
+    }
+    if !min_clearance_m.is_finite() {
+        min_clearance_m = 0.0;
+    }
+    IntervisibilityEdge {
+        from_site_id: from_site_id.to_owned(),
+        to_site_id: to_site_id.to_owned(),
+        is_visible: min_clearance_m >= 0.0,
+        distance_m,
+        min_clearance_m,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -599,94 +809,32 @@ mod tests {
             &[(1000.0, 600.0)],
             HGIS_REFRACTION_INDEX_K,
         );
+        assert_eq!(edge.from_site_id, "봉수대-A");
         assert!(!edge.is_visible);
         assert!(edge.min_clearance_m < 0.0);
-    }
-}
 
-/// 지구 평균 반경 (m, C++ `HGIS_EARTH_RADIUS_M`)
-pub const HGIS_EARTH_RADIUS_M: f64 = 6_371_000.0;
-/// 대기 굴절 보정 기본 계수 (C++ `HGIS_REFRACTION_INDEX_K`)
-pub const HGIS_REFRACTION_INDEX_K: f64 = 0.13;
-/// 토블러 보행 함수 최대 속도 (km/h, C++ `HGIS_TOBLER_MAX_SPEED_KMH`)
-pub const HGIS_TOBLER_MAX_SPEED_KMH: f64 = 6.0;
-/// 최대 속도 최적 경사도 (탄젠트, C++ `HGIS_TOBLER_OPTIMAL_SLOPE`)
-pub const HGIS_TOBLER_OPTIMAL_SLOPE: f64 = -0.05;
-/// 통행 불가 단애 경사 임계치 (C++ `HGIS_IMPASSABLE_CLIFF_SLOPE`)
-pub const HGIS_IMPASSABLE_CLIFF_SLOPE: f64 = 1.5;
-
-/// 토블러 보행 함수(Tobler's Hiking Function) 보행 속도(`km/h`) 산출 (`W = 6 * exp(-3.5 * |S + 0.05|)`)
-/// (C++ `KaToblerHikingFunction` 1:1 대응)
-#[must_use]
-pub fn compute_tobler_hiking_speed_kmh(slope_tan: f64) -> f64 {
-    if !slope_tan.is_finite() || slope_tan.abs() >= HGIS_IMPASSABLE_CLIFF_SLOPE {
-        return 0.0001;
-    }
-    (HGIS_TOBLER_MAX_SPEED_KMH * (-3.5 * (slope_tan - HGIS_TOBLER_OPTIMAL_SLOPE).abs()).exp())
-        .max(0.0001)
-}
-
-/// 지구 곡률 및 대기 굴절(`k = 0.13`)을 반영한 수평 거리별 지형 겉보기 침하량(`m`) 산출
-/// (C++ `KaViewshedAnalyzer` 1:1 대응)
-#[must_use]
-pub fn compute_earth_curvature_drop_m(distance_m: f64, refraction_k: f64) -> f64 {
-    if distance_m <= 0.0 || !distance_m.is_finite() {
-        return 0.0;
-    }
-    (distance_m * distance_m * (1.0 - refraction_k)) / (2.0 * HGIS_EARTH_RADIUS_M)
-}
-
-/// 유적·봉수·산성 간 상호 조망(Intervisibility) 기선 검증 결과 (C++ `IntervisibilityEdge`)
-#[derive(Debug, Clone, PartialEq)]
-pub struct IntervisibilityEdge {
-    pub from_site_id: String,
-    pub to_site_id: String,
-    pub is_visible: bool,
-    pub distance_m: f64,
-    pub min_clearance_m: f64,
-}
-
-/// 출발점과 목표점 사이의 중간 지형 표고 샘플(`(dist_m, terrain_elev_m)`)에 대한 가시선(LOS) 차폐 및 여유 고도 판정
-/// (C++ `KaIntervisibilityNetwork::buildIntervisibilityNetwork` 1:1 대응)
-#[must_use]
-pub fn evaluate_line_of_sight_profile(
-    from_site_id: &str,
-    to_site_id: &str,
-    obs_elev_m: f64,
-    target_elev_m: f64,
-    distance_m: f64,
-    intermediate_samples: &[(f64, f64)],
-    refraction_k: f64,
-) -> IntervisibilityEdge {
-    if distance_m <= 1e-6 || !distance_m.is_finite() {
-        return IntervisibilityEdge {
-            from_site_id: from_site_id.to_owned(),
-            to_site_id: to_site_id.to_owned(),
-            is_visible: true,
-            distance_m: 0.0,
-            min_clearance_m: 0.0,
-        };
-    }
-    let adj_target_el = target_elev_m - compute_earth_curvature_drop_m(distance_m, refraction_k);
-    let mut min_clearance_m = f64::INFINITY;
-    for &(d, z_terr) in intermediate_samples {
-        if d <= 0.0 || d >= distance_m {
-            continue;
-        }
-        let frac = d / distance_m;
-        let los_z = obs_elev_m + (adj_target_el - obs_elev_m) * frac;
-        let adj_terr_z = z_terr - compute_earth_curvature_drop_m(d, refraction_k);
-        let clearance = los_z - adj_terr_z;
-        min_clearance_m = min_clearance_m.min(clearance);
-    }
-    if !min_clearance_m.is_finite() {
-        min_clearance_m = 0.0;
-    }
-    IntervisibilityEdge {
-        from_site_id: from_site_id.to_owned(),
-        to_site_id: to_site_id.to_owned(),
-        is_visible: min_clearance_m >= 0.0,
-        distance_m,
-        min_clearance_m,
+        // TestPaleoDemClassifier::testNaturalLeveeClassification & C++ PaleoDemClassifier::classify
+        assert_eq!(
+            classify_tpi_std_slope_landform(0.85, 1.8),
+            PaleoLandformType::NaturalLevee
+        );
+        let terrace_cls = classify_paleo_dem_polygon(
+            "하안단구",
+            &PaleoDemMetrics {
+                has_dem: true,
+                mean_elev_m: 42.0,
+                local_relief_m: 18.5,
+                mean_slope_deg: 2.4,
+                river_dist_m: 120.0,
+                has_borehole: true,
+                borehole_code: "BH-02".to_owned(),
+                alluvial_thickness_m: 3.6,
+                weathered_depth_m: 4.8,
+                deposit_env: "사질".to_owned(),
+                dominant_uscs: "SM".to_owned(),
+            },
+        );
+        assert_eq!(terrace_cls.kind, "하안단구");
+        assert!(terrace_cls.note.contains("중위단구(T2, 비고 18.5m)"));
     }
 }

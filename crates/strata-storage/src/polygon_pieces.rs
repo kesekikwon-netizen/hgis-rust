@@ -103,6 +103,82 @@ fn collect_valid_polygons(geom: &Geometry<f64>, out: &mut Vec<Polygon<f64>>) {
     }
 }
 
+/// 원본 폴리곤(`target_polygon`)에서 지우개 폴리곤(`eraser_polygon`)을 기하 차집합(`difference`)으로 도려내고 면적 내림차순으로 정렬된 조각 목록 반환 (`<= 1e-9` 미세 잔여물 자동 제거)
+/// (C++ `PolygonErase::erased` & `partsFor` 1:1 대응)
+#[must_use]
+pub fn erase_polygon_area_difference(
+    target_polygon: &Polygon<f64>,
+    eraser_polygon: &Polygon<f64>,
+) -> Vec<Polygon<f64>> {
+    use geo::BooleanOps;
+
+    let from_area = target_polygon.unsigned_area();
+    if !from_area.is_finite() || from_area <= 1e-9 {
+        return Vec::new();
+    }
+    if eraser_polygon.unsigned_area() <= 1e-9 {
+        return vec![target_polygon.clone()];
+    }
+    let diff = target_polygon.difference(eraser_polygon);
+    let mut parts: Vec<Polygon<f64>> = diff
+        .0
+        .into_iter()
+        .filter(|p| p.unsigned_area() > from_area * 1e-9)
+        .collect();
+    parts.sort_by(|a, b| {
+        b.unsigned_area()
+            .partial_cmp(&a.unsigned_area())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    parts
+}
+
+/// 다중 레이어 원자적 편집 트랜잭션 레코드 (C++ `KaEditUndoOrder` 매크로 항목)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MultiLayerEditRecord {
+    pub macro_label: String,
+    pub layer_fids: Vec<(String, i64)>,
+}
+
+/// 다중 레이어 편집 시계열 동기화 Undo/Redo 스택 (C++ `KaEditUndoOrder` 1:1 대응)
+#[derive(Debug, Clone, Default)]
+pub struct MultiLayerUndoStack {
+    undo_stack: Vec<MultiLayerEditRecord>,
+    redo_stack: Vec<MultiLayerEditRecord>,
+}
+
+impl MultiLayerUndoStack {
+    pub fn record_multi_layer_edit(&mut self, macro_label: &str, layer_fids: Vec<(String, i64)>) {
+        self.redo_stack.clear();
+        self.undo_stack.push(MultiLayerEditRecord {
+            macro_label: macro_label.to_owned(),
+            layer_fids,
+        });
+    }
+
+    pub fn undo(&mut self) -> Option<MultiLayerEditRecord> {
+        let rec = self.undo_stack.pop()?;
+        self.redo_stack.push(rec.clone());
+        Some(rec)
+    }
+
+    pub fn redo(&mut self) -> Option<MultiLayerEditRecord> {
+        let rec = self.redo_stack.pop()?;
+        self.undo_stack.push(rec.clone());
+        Some(rec)
+    }
+
+    #[must_use]
+    pub fn undo_depth(&self) -> usize {
+        self.undo_stack.len()
+    }
+
+    #[must_use]
+    pub fn redo_depth(&self) -> usize {
+        self.redo_stack.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -155,5 +231,31 @@ mod tests {
         );
         assert_eq!(named_ko[0].piece_number, "1호-가");
         assert_eq!(named_ko[1].piece_number, "1호-나");
+
+        // TestPolygonErase::testSquareEraseCenter:
+        // 10m x 10m square (100 m²) minus 2m x 2m center eraser (4 m²) -> 96.0 m² and 1 interior ring
+        let target_sq = wkt!(POLYGON((0.0 0.0, 10.0 0.0, 10.0 10.0, 0.0 10.0, 0.0 0.0)));
+        let eraser_sq = wkt!(POLYGON((4.0 4.0, 6.0 4.0, 6.0 6.0, 4.0 6.0, 4.0 4.0)));
+        let erased_parts = erase_polygon_area_difference(&target_sq, &eraser_sq);
+        assert_eq!(erased_parts.len(), 1);
+        assert!((erased_parts[0].unsigned_area() - 96.0).abs() <= 1e-4);
+        assert_eq!(erased_parts[0].interiors().len(), 1);
+
+        // Multi-layer composite Undo/Redo stack (KaEditUndoOrder)
+        let mut undo_stack = MultiLayerUndoStack::default();
+        undo_stack.record_multi_layer_edit(
+            "겹친 곳 지우기",
+            vec![
+                ("feature_poly".to_owned(), 1),
+                ("artifact_point".to_owned(), 2),
+            ],
+        );
+        assert_eq!(undo_stack.undo_depth(), 1);
+        let undone = undo_stack.undo().expect("macro undo");
+        assert_eq!(undone.macro_label, "겹친 곳 지우기");
+        assert_eq!(undone.layer_fids.len(), 2);
+        assert_eq!(undo_stack.redo_depth(), 1);
+        let redone = undo_stack.redo().expect("macro redo");
+        assert_eq!(redone.macro_label, "겹친 곳 지우기");
     }
 }

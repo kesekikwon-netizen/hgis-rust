@@ -108,6 +108,27 @@ impl StrataAppState {
                     ui.label("• 지질(KIGAM): Qa 제4기 충적층 · Qr 하안단구층 · Ks 경상누층군 · Kgr 불국사화강암");
                     ui.separator();
                     ui.strong("조사구역 고지형·기본층서 판독 요약 및 근거");
+                    let auto_cls = strata_paleo::terrain_edt_tpi::classify_paleo_dem_polygon(
+                        "자연제방",
+                        &strata_paleo::terrain_edt_tpi::PaleoDemMetrics {
+                            has_dem: true,
+                            mean_elev_m: 38.4,
+                            local_relief_m: 3.2,
+                            mean_slope_deg: 2.1,
+                            river_dist_m: 145.0,
+                            has_borehole: true,
+                            borehole_code: "BH-02".to_owned(),
+                            alluvial_thickness_m: 3.6,
+                            weathered_depth_m: 4.8,
+                            deposit_env: "사질".to_owned(),
+                            dominant_uscs: "SM".to_owned(),
+                        },
+                    );
+                    ui.label(
+                        egui::RichText::new(&auto_cls.note)
+                            .size(11.5)
+                            .color(egui::Color32::from_rgb(107, 78, 61)),
+                    );
                     let mut summary = self
                         .paleo_3d
                         .last_paleo_output

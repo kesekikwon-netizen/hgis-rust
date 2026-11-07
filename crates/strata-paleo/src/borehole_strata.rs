@@ -341,6 +341,178 @@ pub fn evaluate_excavation_safety(
     })
 }
 
+/// 단면선 최대 허용 시추공 수직 이격 거리 (50.0m, C++ `HGIS_BOREHOLE_MAX_PERP_DIST_M`)
+pub const HGIS_BOREHOLE_MAX_PERP_DIST_M: f64 = 50.0;
+
+/// 단면선 상 시추공 정사영 결과 (C++ `KaPaleoCrossSectionWidget` 투영 레코드)
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoreholeSectionProjection {
+    pub hole_id: String,
+    pub proj_distance_m: f64,
+    pub perp_distance_m: f64,
+    pub within_tolerance: bool,
+}
+
+/// 시추공 좌표(`borehole_xy`)를 단면선(`line_a` -> `line_b`)에 정사영하여 투영 거리(`d_proj`)와 수직 이격 거리(`d_perp`) 산출
+/// (C++ `KaPaleoCrossSectionWidget::setCrossSectionData` 1:1 대응)
+#[must_use]
+pub fn project_borehole_onto_section_line(
+    hole_id: &str,
+    borehole_xy: [f64; 2],
+    line_a: [f64; 2],
+    line_b: [f64; 2],
+    max_perp_dist_m: f64,
+) -> BoreholeSectionProjection {
+    let vx = line_b[0] - line_a[0];
+    let vy = line_b[1] - line_a[1];
+    let len = vx.hypot(vy);
+    if len <= 1e-9 || !len.is_finite() {
+        return BoreholeSectionProjection {
+            hole_id: hole_id.to_owned(),
+            proj_distance_m: 0.0,
+            perp_distance_m: f64::INFINITY,
+            within_tolerance: false,
+        };
+    }
+    let dx = borehole_xy[0] - line_a[0];
+    let dy = borehole_xy[1] - line_a[1];
+    let d_proj = (dx * vx + dy * vy) / len;
+    let d_perp = (dx * vy - dy * vx).abs() / len;
+    let tol = if max_perp_dist_m.is_finite() && max_perp_dist_m > 0.0 {
+        max_perp_dist_m
+    } else {
+        HGIS_BOREHOLE_MAX_PERP_DIST_M
+    };
+    BoreholeSectionProjection {
+        hole_id: hole_id.to_owned(),
+        proj_distance_m: d_proj,
+        perp_distance_m: d_perp,
+        within_tolerance: (0.0..=len).contains(&d_proj) && d_perp <= tol,
+    }
+}
+
+/// 역전된 시추공 층위 심도(`depth_from_m > depth_to_m`)를 자동 교환하여 단면 뒤틀림 방지
+#[allow(clippy::manual_swap)]
+pub fn sanitize_borehole_strata_depths(strata: &mut [StratumLayer]) {
+    for s in strata {
+        if s.depth_from_m > s.depth_to_m {
+            std::mem::swap(&mut s.depth_from_m, &mut s.depth_to_m);
+        }
+    }
+}
+
+/// 주상도 기둥 기본 폭 (mm, C++ `HGIS_DEFAULT_COLUMN_WIDTH_MM`)
+pub const HGIS_DEFAULT_COLUMN_WIDTH_MM: f64 = 35.0;
+/// 1:20 기본 축척 (1cm -> 0.5mm, C++ `HGIS_DEFAULT_COLUMN_SCALE`)
+pub const HGIS_DEFAULT_COLUMN_SCALE: f64 = 0.05;
+/// 인출선 최소 상하 간격 (mm, C++ `HGIS_MIN_LEADER_LINE_SPACING_MM`)
+pub const HGIS_MIN_LEADER_LINE_SPACING_MM: f64 = 5.0;
+/// 파싱 실패 시 대체 회색 (C++ `HGIS_FALLBACK_SOIL_COLOR_HEX`)
+pub const HGIS_FALLBACK_SOIL_COLOR_HEX: &str = "#B4B4B4";
+
+/// 먼셀 토색첩 파싱 결과 (C++ `MunsellColorRecord`)
+#[derive(Debug, Clone, PartialEq)]
+pub struct MunsellColorRecord {
+    pub raw_notation: String,
+    pub hue: String,
+    pub value: f64,
+    pub chroma: f64,
+    pub srgb_color: [u8; 3],
+    pub korean_color_name: String,
+}
+
+/// 먼셀 기호 파싱 에러 (C++ `MunsellParseError`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MunsellParseError {
+    InvalidFormat,
+}
+
+/// 먼셀 토색 기호(`"10YR 4/6"`, `"2.5Y 5/3"`, `"5YR 3/4"`) 파싱 및 표준 한국어 토색명·sRGB 매핑
+/// (C++ `KaMunsellSoilColorParser::parseMunsellNotation` 1:1 대응)
+pub fn parse_munsell_notation(notation_str: &str) -> Result<MunsellColorRecord, MunsellParseError> {
+    let trimmed = notation_str.trim();
+    let mut parts = trimmed.split_whitespace();
+    let hue_part = parts.next().ok_or(MunsellParseError::InvalidFormat)?;
+    let vc_part = parts.next().ok_or(MunsellParseError::InvalidFormat)?;
+    if parts.next().is_some() {
+        return Err(MunsellParseError::InvalidFormat);
+    }
+    let has_digit = hue_part.chars().any(|c| c.is_ascii_digit());
+    let has_alpha = hue_part.chars().any(|c| c.is_ascii_uppercase());
+    if !has_digit || !has_alpha {
+        return Err(MunsellParseError::InvalidFormat);
+    }
+    let (val_str, chr_str) = vc_part
+        .split_once('/')
+        .ok_or(MunsellParseError::InvalidFormat)?;
+    let value: f64 = val_str
+        .parse()
+        .map_err(|_| MunsellParseError::InvalidFormat)?;
+    let chroma: f64 = chr_str
+        .parse()
+        .map_err(|_| MunsellParseError::InvalidFormat)?;
+    if !(0.0..=10.0).contains(&value) || !(0.0..=20.0).contains(&chroma) {
+        return Err(MunsellParseError::InvalidFormat);
+    }
+
+    let (korean_name, srgb) = match (
+        hue_part,
+        (value * 10.0).round() as i32,
+        (chroma * 10.0).round() as i32,
+    ) {
+        ("10YR", 40, 60) => ("황갈색", [156, 104, 36]),
+        ("2.5Y", 50, 30) => ("회황색", [148, 132, 92]),
+        ("5YR", 30, 40) => ("암갈색", [96, 58, 42]),
+        ("7.5YR", 40, 40) => ("갈색", [128, 86, 52]),
+        ("10YR", 30, 20) => ("흑갈색", [74, 62, 50]),
+        _ => ("(미분류 토색)", [180, 180, 180]),
+    };
+
+    Ok(MunsellColorRecord {
+        raw_notation: trimmed.to_owned(),
+        hue: hue_part.to_owned(),
+        value,
+        chroma,
+        srgb_color: srgb,
+        korean_color_name: korean_name.to_owned(),
+    })
+}
+
+/// 층위별 토색·토성·포함물·조밀도를 결합한 정형 학술 보고서 토층 주석 문장 생성
+/// (C++ `KaSoilDescriptionGenerator::generateSoilDescription` 1:1 대응)
+#[must_use]
+pub fn generate_soil_description(
+    color_label: &str,
+    soil_texture: &str,
+    inclusions: &str,
+    compactness: &str,
+) -> String {
+    format!(
+        "{color_label}의 {soil_texture}로서, {inclusions}이(가) 포함되어 있으며 층위 상태는 {compactness}함."
+    )
+}
+
+/// 트렌치 주상도 지표면 심도(`cm`) 및 절대 해발 표고(`EL. m`) 이중 눈금자 결과
+#[derive(Debug, Clone, PartialEq)]
+pub struct DoubleRulerTick {
+    pub depth_label: String,
+    pub elevation_label: String,
+    pub absolute_elevation_m: f64,
+}
+
+/// 지표면 해발 표고(`ground_elevation_m`)와 하향 심도(`depth_cm`)로부터 주상도 이중 눈금자 라벨 산출
+/// (C++ `KaStratigraphicColumnLog` & `KaDepthRulerItem` 1:1 대응)
+#[must_use]
+pub fn compute_double_ruler_tick(ground_elevation_m: f64, depth_cm: f64) -> DoubleRulerTick {
+    let d_cm = depth_cm.max(0.0);
+    let abs_el = ground_elevation_m - (d_cm / 100.0);
+    DoubleRulerTick {
+        depth_label: format!("{d_cm:.0} cm"),
+        elevation_label: format!("EL. {abs_el:.2} m"),
+        absolute_elevation_m: abs_el,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,117 +669,31 @@ mod tests {
         assert_eq!(tick.depth_label, "60 cm");
         assert_eq!(tick.elevation_label, "EL. 24.40 m");
         assert!((tick.absolute_elevation_m - 24.40).abs() < 1e-6);
-    }
-}
 
-/// 주상도 기둥 기본 폭 (mm, C++ `HGIS_DEFAULT_COLUMN_WIDTH_MM`)
-pub const HGIS_DEFAULT_COLUMN_WIDTH_MM: f64 = 35.0;
-/// 1:20 기본 축척 (1cm -> 0.5mm, C++ `HGIS_DEFAULT_COLUMN_SCALE`)
-pub const HGIS_DEFAULT_COLUMN_SCALE: f64 = 0.05;
-/// 인출선 최소 상하 간격 (mm, C++ `HGIS_MIN_LEADER_LINE_SPACING_MM`)
-pub const HGIS_MIN_LEADER_LINE_SPACING_MM: f64 = 5.0;
-/// 파싱 실패 시 대체 회색 (C++ `HGIS_FALLBACK_SOIL_COLOR_HEX`)
-pub const HGIS_FALLBACK_SOIL_COLOR_HEX: &str = "#B4B4B4";
+        // TestKaPaleoCrossSectionWidget::testBoreholePerpendicularDistance:
+        // Section line (0,0) -> (100,0), borehole at (50.0, 30.0) -> d_perp = 30.0m, d_proj = 50.0m
+        let proj = project_borehole_onto_section_line(
+            "BH-01",
+            [50.0, 30.0],
+            [0.0, 0.0],
+            [100.0, 0.0],
+            HGIS_BOREHOLE_MAX_PERP_DIST_M,
+        );
+        assert!((proj.perp_distance_m - 30.0).abs() <= 0.01);
+        assert!((proj.proj_distance_m - 50.0).abs() <= 0.01);
+        assert!(proj.within_tolerance);
 
-/// 먼셀 토색첩 파싱 결과 (C++ `MunsellColorRecord`)
-#[derive(Debug, Clone, PartialEq)]
-pub struct MunsellColorRecord {
-    pub raw_notation: String,
-    pub hue: String,
-    pub value: f64,
-    pub chroma: f64,
-    pub srgb_color: [u8; 3],
-    pub korean_color_name: String,
-}
-
-/// 먼셀 기호 파싱 에러 (C++ `MunsellParseError`)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MunsellParseError {
-    InvalidFormat,
-}
-
-/// 먼셀 토색 기호(`"10YR 4/6"`, `"2.5Y 5/3"`, `"5YR 3/4"`) 파싱 및 표준 한국어 토색명·sRGB 매핑
-/// (C++ `KaMunsellSoilColorParser::parseMunsellNotation` 1:1 대응)
-pub fn parse_munsell_notation(notation_str: &str) -> Result<MunsellColorRecord, MunsellParseError> {
-    let trimmed = notation_str.trim();
-    let mut parts = trimmed.split_whitespace();
-    let hue_part = parts.next().ok_or(MunsellParseError::InvalidFormat)?;
-    let vc_part = parts.next().ok_or(MunsellParseError::InvalidFormat)?;
-    if parts.next().is_some() {
-        return Err(MunsellParseError::InvalidFormat);
-    }
-    let has_digit = hue_part.chars().any(|c| c.is_ascii_digit());
-    let has_alpha = hue_part.chars().any(|c| c.is_ascii_uppercase());
-    if !has_digit || !has_alpha {
-        return Err(MunsellParseError::InvalidFormat);
-    }
-    let (val_str, chr_str) = vc_part
-        .split_once('/')
-        .ok_or(MunsellParseError::InvalidFormat)?;
-    let value: f64 = val_str
-        .parse()
-        .map_err(|_| MunsellParseError::InvalidFormat)?;
-    let chroma: f64 = chr_str
-        .parse()
-        .map_err(|_| MunsellParseError::InvalidFormat)?;
-    if !(0.0..=10.0).contains(&value) || !(0.0..=20.0).contains(&chroma) {
-        return Err(MunsellParseError::InvalidFormat);
-    }
-
-    let (korean_name, srgb) = match (
-        hue_part,
-        (value * 10.0).round() as i32,
-        (chroma * 10.0).round() as i32,
-    ) {
-        ("10YR", 40, 60) => ("황갈색", [156, 104, 36]),
-        ("2.5Y", 50, 30) => ("회황색", [148, 132, 92]),
-        ("5YR", 30, 40) => ("암갈색", [96, 58, 42]),
-        ("7.5YR", 40, 40) => ("갈색", [128, 86, 52]),
-        ("10YR", 30, 20) => ("흑갈색", [74, 62, 50]),
-        _ => ("(미분류 토색)", [180, 180, 180]),
-    };
-
-    Ok(MunsellColorRecord {
-        raw_notation: trimmed.to_owned(),
-        hue: hue_part.to_owned(),
-        value,
-        chroma,
-        srgb_color: srgb,
-        korean_color_name: korean_name.to_owned(),
-    })
-}
-
-/// 층위별 토색·토성·포함물·조밀도를 결합한 정형 학술 보고서 토층 주석 문장 생성
-/// (C++ `KaSoilDescriptionGenerator::generateSoilDescription` 1:1 대응)
-#[must_use]
-pub fn generate_soil_description(
-    color_label: &str,
-    soil_texture: &str,
-    inclusions: &str,
-    compactness: &str,
-) -> String {
-    format!(
-        "{color_label}의 {soil_texture}로서, {inclusions}이(가) 포함되어 있으며 층위 상태는 {compactness}함."
-    )
-}
-
-/// 트렌치 주상도 지표면 심도(`cm`) 및 절대 해발 표고(`EL. m`) 이중 눈금자 결과
-#[derive(Debug, Clone, PartialEq)]
-pub struct DoubleRulerTick {
-    pub depth_label: String,
-    pub elevation_label: String,
-    pub absolute_elevation_m: f64,
-}
-
-/// 지표면 해발 표고(`ground_elevation_m`)와 하향 심도(`depth_cm`)로부터 주상도 이중 눈금자 라벨 산출
-/// (C++ `KaStratigraphicColumnLog` & `KaDepthRulerItem` 1:1 대응)
-#[must_use]
-pub fn compute_double_ruler_tick(ground_elevation_m: f64, depth_cm: f64) -> DoubleRulerTick {
-    let d_cm = depth_cm.max(0.0);
-    let abs_el = ground_elevation_m - (d_cm / 100.0);
-    DoubleRulerTick {
-        depth_label: format!("{d_cm:.0} cm"),
-        elevation_label: format!("EL. {abs_el:.2} m"),
-        absolute_elevation_m: abs_el,
+        // Inverted stratum depth guard (top_depth_m > bottom_depth_m auto-swapped)
+        let mut inv = vec![StratumLayer {
+            depth_from_m: 4.5,
+            depth_to_m: 1.2,
+            layer_name: "충적층".to_owned(),
+            uscs_code: "SM".to_owned(),
+            description: "모래".to_owned(),
+            n_value: 10.0,
+        }];
+        sanitize_borehole_strata_depths(&mut inv);
+        assert!((inv[0].depth_from_m - 1.2).abs() < 1e-9);
+        assert!((inv[0].depth_to_m - 4.5).abs() < 1e-9);
     }
 }

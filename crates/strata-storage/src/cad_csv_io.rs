@@ -685,6 +685,156 @@ pub fn resolve_field_schema_mapping(source_field_names: &[&str]) -> FieldMapping
     }
 }
 
+/// 한국 평면직각 Easting 정상 하한 (`120,000.0 m`, C++ `HGIS_KOREA_EASTING_MIN_M`)
+pub const HGIS_KOREA_EASTING_MIN_M: f64 = 120_000.0;
+/// 한국 평면직각 Easting 정상 상한 (`380,000.0 m`, C++ `HGIS_KOREA_EASTING_MAX_M`)
+pub const HGIS_KOREA_EASTING_MAX_M: f64 = 380_000.0;
+/// 한국 평면직각 Northing 정상 하한 (`350,000.0 m`, C++ `HGIS_KOREA_NORTHING_MIN_M`)
+pub const HGIS_KOREA_NORTHING_MIN_M: f64 = 350_000.0;
+/// 한국 평면직각 Northing 정상 상한 (`750,000.0 m`, C++ `HGIS_KOREA_NORTHING_MAX_M`)
+pub const HGIS_KOREA_NORTHING_MAX_M: f64 = 750_000.0;
+/// 캐드 로컬 원점 의심 경계치 (`10,000.0 m`, C++ `HGIS_CAD_LOCAL_ORIGIN_THRESHOLD`)
+pub const HGIS_CAD_LOCAL_ORIGIN_THRESHOLD: f64 = 10_000.0;
+
+/// CAD 도면 레이어 고고학 역할 분류 (C++ `CadLayerRole`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CadLayerRole {
+    TrenchBoundary,
+    FeatureBoundary,
+    ContourLine,
+    SurveyPoint,
+    SectionProfile,
+    AnnotationText,
+    Unknown,
+}
+
+/// DXF/DWG 레이어명의 영문·한글 어휘 패턴을 분석하여 고고학 도면 역할 자동 분류
+/// (C++ `CadLayerClassifier::classifyLayerName` 1:1 대응)
+#[must_use]
+pub fn classify_cad_layer_name(raw_layer_name: &str) -> CadLayerRole {
+    let u = raw_layer_name.trim().to_uppercase();
+    if u.contains("SECTION") || u.contains("PROFILE") || u.contains("SEC_") || u.contains("단면")
+    {
+        CadLayerRole::SectionProfile
+    } else if u.contains("TBM")
+        || u.contains("POINT")
+        || u.starts_with("CP")
+        || u.contains("측점")
+        || u.contains("기준점")
+    {
+        CadLayerRole::SurveyPoint
+    } else if u.contains("CONT") || u.contains("ELEV") || u.contains("등고") || u.contains("지형")
+    {
+        CadLayerRole::ContourLine
+    } else if u.contains("TRENCH")
+        || u.starts_with("TR")
+        || u.starts_with("T_")
+        || u.contains("시굴")
+        || u.contains("트렌치")
+    {
+        CadLayerRole::TrenchBoundary
+    } else if u.contains("FEAT")
+        || u.contains("PIT")
+        || u.contains("DWELLING")
+        || u.contains("유구")
+        || u.contains("주거지")
+        || u.contains("수혈")
+    {
+        CadLayerRole::FeatureBoundary
+    } else if u.contains("TEXT") || u.contains("ANNO") || u.contains("주석") || u.contains("지번")
+    {
+        CadLayerRole::AnnotationText
+    } else {
+        CadLayerRole::Unknown
+    }
+}
+
+/// CAD 도면 BBOX(`[min_x, min_y, max_x, max_y]`)가 로컬 원점(`|x|, |y| < 10,000m`)이거나 밀리미터(`> 10,000,000`) 단위인지 감지
+/// (C++ `KaCadImportNotice` / `CadCrsGuess` 1:1 대응)
+#[must_use]
+pub fn detect_cad_local_origin_or_mm_warning(bbox: [f64; 4]) -> bool {
+    let max_abs = bbox.iter().copied().map(f64::abs).fold(0.0_f64, f64::max);
+    !(HGIS_CAD_LOCAL_ORIGIN_THRESHOLD..=10_000_000.0).contains(&max_abs)
+}
+
+/// CSV 기준점 입력 시 Northing(35만~75만)과 Easting(12만~38만)이 Y-X 순서로 전도된 경우 자동 교환
+/// (C++ `KaControlCsvBox` 좌표축 전도 방어 1:1 대응)
+#[must_use]
+pub fn normalize_csv_control_point_xy_order(col_a: f64, col_b: f64) -> (f64, f64, bool) {
+    let a_is_northing = (HGIS_KOREA_NORTHING_MIN_M..=HGIS_KOREA_NORTHING_MAX_M).contains(&col_a);
+    let b_is_easting = (HGIS_KOREA_EASTING_MIN_M..=HGIS_KOREA_EASTING_MAX_M).contains(&col_b);
+    if a_is_northing && b_is_easting {
+        (col_b, col_a, true)
+    } else {
+        (col_a, col_b, false)
+    }
+}
+
+/// 시·군·구 행정구역 카탈로그 레코드 (C++ `AdministrativeDistrict`)
+#[derive(Debug, Clone, PartialEq)]
+pub struct AdministrativeDistrict {
+    pub sido_code: String,
+    pub sido_name: String,
+    pub sigungu_code: String,
+    pub sigungu_name: String,
+    pub bbox: [f64; 4],
+}
+
+/// 시·군·구 5자리 코드(예: `"47110"`, `"47130"`, `"11110"`)로부터 시·도명, 시·군·구명 및 지상 BBOX 조회
+/// (C++ `KoreaRegionCatalog` 1:1 대응)
+#[must_use]
+pub fn resolve_korea_sigungu_code(sigungu_code: &str) -> Option<AdministrativeDistrict> {
+    match sigungu_code.trim() {
+        "47110" | "47130" => Some(AdministrativeDistrict {
+            sido_code: "47".to_owned(),
+            sido_name: "경상북도".to_owned(),
+            sigungu_code: sigungu_code.trim().to_owned(),
+            sigungu_name: "경주시".to_owned(),
+            bbox: [200_000.0, 345_000.0, 235_000.0, 380_000.0],
+        }),
+        "11110" => Some(AdministrativeDistrict {
+            sido_code: "11".to_owned(),
+            sido_name: "서울특별시".to_owned(),
+            sigungu_code: "11110".to_owned(),
+            sigungu_name: "종로구".to_owned(),
+            bbox: [195_000.0, 550_000.0, 202_000.0, 559_000.0],
+        }),
+        "41450" => Some(AdministrativeDistrict {
+            sido_code: "41".to_owned(),
+            sido_name: "경기도".to_owned(),
+            sigungu_code: "41450".to_owned(),
+            sigungu_name: "하남시".to_owned(),
+            bbox: [212_000.0, 542_000.0, 224_000.0, 554_000.0],
+        }),
+        _ => None,
+    }
+}
+
+/// 브이월드 지번 검색 결과의 19자리 PNU 코드가 요청한 산 여부(`is_mountain`), 본번(`main_no`), 부번(`sub_no`)과 정확히 일치하는지 검증
+/// (C++ `LocationSearch::handleVworld` PNU 대조 가드 1:1 대응)
+#[must_use]
+pub fn validate_vworld_parcel_pnu_19(
+    pnu: &str,
+    is_mountain: bool,
+    main_no: u32,
+    sub_no: u32,
+) -> bool {
+    if pnu.len() != 19 || !pnu.bytes().all(|b| b.is_ascii_digit()) {
+        return false;
+    }
+    let mt_digit = if is_mountain { "2" } else { "1" };
+    if &pnu[10..11] != mt_digit {
+        return false;
+    }
+    let Ok(parsed_main) = pnu[11..15].parse::<u32>() else {
+        return false;
+    };
+    let Ok(parsed_sub) = pnu[15..19].parse::<u32>() else {
+        return false;
+    };
+    parsed_main == main_no && parsed_sub == sub_no
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -803,5 +953,54 @@ mod tests {
             Some("ELEVATION")
         );
         assert_eq!(mapped.unmapped_source_fields, vec!["비고".to_string()]);
+
+        // TestCadLayerClassifier::testLayerRoleClassification
+        assert_eq!(
+            classify_cad_layer_name("TR-01_BOUNDARY"),
+            CadLayerRole::TrenchBoundary
+        );
+        assert_eq!(
+            classify_cad_layer_name("유구_주거지_선"),
+            CadLayerRole::FeatureBoundary
+        );
+        assert_eq!(
+            classify_cad_layer_name("CONT_1M"),
+            CadLayerRole::ContourLine
+        );
+        assert_eq!(
+            classify_cad_layer_name("TBM_POINT"),
+            CadLayerRole::SurveyPoint
+        );
+        assert_eq!(
+            classify_cad_layer_name("SECTION_A-B"),
+            CadLayerRole::SectionProfile
+        );
+
+        // TestKaCadImport::testLocalOriginWarningDetection: (0,0) ~ (500,300) -> requires_crs_shift_warning = true
+        assert!(detect_cad_local_origin_or_mm_warning([
+            0.0, 0.0, 500.0, 300.0
+        ]));
+        assert!(!detect_cad_local_origin_or_mm_warning([
+            200_000.0, 500_000.0, 200_500.0, 500_300.0
+        ]));
+
+        // TestKaControlCsvBox::testCoordinateAxisSwapping: (542100.25, 201300.50) -> swapped to (201300.50, 542100.25)
+        let (x_norm, y_norm, swapped) =
+            normalize_csv_control_point_xy_order(542_100.25, 201_300.50);
+        assert!(swapped);
+        assert!((x_norm - 201_300.50).abs() < 1e-6);
+        assert!((y_norm - 542_100.25).abs() < 1e-6);
+
+        // TestKoreaRegionCatalog::testGyeongjuCodeResolution & LocationSearch PNU validation
+        let dist = resolve_korea_sigungu_code("47110").expect("Gyeongju code 47110");
+        assert_eq!(dist.sido_name, "경상북도");
+        assert_eq!(dist.sigungu_name, "경주시");
+        assert!(dist.bbox[2] > dist.bbox[0] && dist.bbox[3] > dist.bbox[1]);
+        assert!(validate_vworld_parcel_pnu_19(
+            "4713010300100760000",
+            false,
+            76,
+            0
+        ));
     }
 }
