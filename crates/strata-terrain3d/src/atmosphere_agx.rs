@@ -1,3 +1,16 @@
+/// C++ `HGIS_MIN_AMBIENT_LIGHT` (0.15f) — 야간/일몰 후(`theta_sun < 0°`) 최소 주변광 강도 보장 상수
+pub const HGIS_MIN_AMBIENT_LIGHT: f32 = 0.15;
+
+/// C++ `KaAtmosphereAgX` 태양 고도각 기반 조도 계수 산출 — 야간(`sun_elevation_deg < 0.0`)에도 최소 `0.15f` 주변광을 보장
+#[must_use]
+pub fn compute_sun_illumination_factor(sun_elevation_deg: f32) -> f32 {
+    if !sun_elevation_deg.is_finite() {
+        return HGIS_MIN_AMBIENT_LIGHT;
+    }
+    let sin_el = sun_elevation_deg.to_radians().sin();
+    sin_el.max(HGIS_MIN_AMBIENT_LIGHT)
+}
+
 pub fn agx_tonemap_srgb(linear_rgb: [f64; 3]) -> [f64; 3] {
     agx_tonemap_with_exposure_contrast(linear_rgb, 1.0, 1.0)
 }
@@ -159,5 +172,46 @@ mod tests {
             assert!(mid[ch] > 0.5 && mid[ch] < 1.0);
             assert!(high[ch] > mid[ch] && high[ch] < 1.0);
         }
+
+        // TestKaAtmosphereAgX::testHdrHighlightAgXCompression: vec3(10.0, 10.0, 10.0) in [0.0, 1.0]
+        let hdr10 = agx_tonemap_srgb([10.0, 10.0, 10.0]);
+        for &c in &hdr10 {
+            assert!((0.0..=1.0).contains(&c));
+            assert!(c > 0.85);
+        }
+
+        // Nighttime sun elevation (-15 deg) preserves minimum 0.15 ambient light
+        let night_ambient = compute_sun_illumination_factor(-15.0);
+        assert!((night_ambient - HGIS_MIN_AMBIENT_LIGHT).abs() < 1e-6);
+
+        // TestKaQuadtreeLod::testSkirtDepthCalculation: 100.0m tile -> -5.0m skirt Z offset
+        let skirt_z = crate::quadtree_lod::compute_skirt_z_offset_m(100.0);
+        assert!((skirt_z - (-5.0)).abs() < 1e-6);
+
+        // TestKaBoreholeCylinder3D::testZeroThicknessStrataSkip:
+        // Strata: [0.0..3.5], [3.5..3.5 (0m)], [3.5..8.0] -> exactly 2 cylinder instances
+        let strata = [
+            crate::quadtree_lod::BoreholeStratumSpan {
+                from_depth_m: 0.0,
+                to_depth_m: 3.5,
+                color_rgba: [194, 158, 120, 255],
+            },
+            crate::quadtree_lod::BoreholeStratumSpan {
+                from_depth_m: 3.5,
+                to_depth_m: 3.5,
+                color_rgba: [0, 0, 0, 255],
+            },
+            crate::quadtree_lod::BoreholeStratumSpan {
+                from_depth_m: 3.5,
+                to_depth_m: 8.0,
+                color_rgba: [222, 203, 166, 255],
+            },
+        ];
+        let cylinders =
+            crate::quadtree_lod::build_stratum_cylinders([219_800.0, 361_500.0, 45.0], &strata, 1.0);
+        assert_eq!(cylinders.len(), 2);
+        assert_eq!(cylinders[0].segments, 16);
+        assert!((cylinders[0].height_m - 3.5).abs() < 1e-5);
+        assert!((cylinders[1].height_m - 4.5).abs() < 1e-5);
     }
 }
