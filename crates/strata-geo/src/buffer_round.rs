@@ -3,7 +3,7 @@ use geo::{Coord, Distance, Euclidean, LineString, MultiPolygon, Point, Polygon};
 use std::f64::consts::TAU;
 
 pub fn round_buffer_polygon(poly: &Polygon<f64>, radius_m: f64, segments: usize) -> Polygon<f64> {
-    if radius_m <= 0.0 {
+    if radius_m <= 0.0 || poly.exterior().0.len() < 4 {
         return poly.clone();
     }
     let segs = segments.max(16);
@@ -92,5 +92,18 @@ mod tests {
                 "corner distance {dist} deviated from 500m"
             );
         }
+    }
+
+    #[test]
+    fn test_buffer_round_500m_expands_100x100_survey_bbox_by_exact_500m_all_sides() {
+        use geo::BoundingRect;
+
+        let site = wkt!(POLYGON((1000.0 2000.0, 1100.0 2000.0, 1100.0 2100.0, 1000.0 2100.0, 1000.0 2000.0)));
+        let buffered = round_buffer_polygon(&site, 500.0, 64);
+        let bbox = buffered.bounding_rect().expect("buffered bbox must exist");
+        assert!((bbox.min().x - 500.0).abs() < 1e-3);
+        assert!((bbox.min().y - 1500.0).abs() < 1e-3);
+        assert!((bbox.max().x - 1600.0).abs() < 1e-3);
+        assert!((bbox.max().y - 2600.0).abs() < 1e-3);
     }
 }

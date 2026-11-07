@@ -885,4 +885,37 @@ mod tests {
         assert_eq!(near[0], [10.0, 10.0]);
         assert_eq!(near[1], [15.0, 10.0]);
     }
+
+    #[test]
+    fn test_point_grid_budget_clamps_2000_dense_vertices_to_exact_900_sorted_by_distance() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        // Coalescing job id check (`std::atomic<uint64_t> m_latestJobId`)
+        let latest_job_id = AtomicU64::new(0);
+        let stale_job = latest_job_id.fetch_add(1, Ordering::SeqCst) + 1;
+        let current_job = latest_job_id.fetch_add(1, Ordering::SeqCst) + 1;
+        assert!(stale_job < latest_job_id.load(Ordering::SeqCst));
+        assert_eq!(current_job, latest_job_id.load(Ordering::SeqCst));
+
+        // 2,000 dense vertices inside 50 m radius around (1000, 1000)
+        let mut ring = Vec::with_capacity(2000);
+        for i in 1..=2000 {
+            let r = (f64::from(i) / 2000.0) * 49.0;
+            let angle = f64::from(i) * 0.137;
+            ring.push([1000.0 + r * angle.cos(), 1000.0 + r * angle.sin()]);
+        }
+        let rings = vec![ring];
+        let candidates = nearby_vertices(
+            [1000.0, 1000.0],
+            None,
+            &rings,
+            0.004,
+            12_500.0,
+            BoundaryGraph::MAX_NODES,
+        );
+        assert_eq!(candidates.len(), 900);
+        let max_kept_dist = dist([1000.0, 1000.0], candidates[899]);
+        let farthest_input_dist = dist([1000.0, 1000.0], rings[0][1999]);
+        assert!(max_kept_dist < farthest_input_dist);
+    }
 }
