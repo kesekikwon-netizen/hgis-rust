@@ -74,6 +74,46 @@ pub fn point_within_euclidean_radius(site: &Polygon<f64>, pt: [f64; 2], radius_m
     Euclidean::distance(site, &Point::new(pt[0], pt[1])) <= radius_m
 }
 
+pub const HGIS_HERITAGE_BUFFER_URBAN_M: f64 = 300.0;
+pub const HGIS_HERITAGE_BUFFER_RURAL_M: f64 = 500.0;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HeritageBufferEvaluationResult {
+    pub min_distance_m: f64,
+    pub is_direct_intersect: bool,
+    pub is_within_300m: bool,
+    pub is_within_500m: bool,
+    pub highest_preservation_zone: u8,
+}
+
+/// C++ `KaHeritageBufferAnalyzer::evaluateHeritageImpact` — 최단 이격거리 기반 300m(도시)/500m(비도시) 반경 판정 및 역사문화환경 보존지역 1~4구역 최고 규제 등급 산출
+#[must_use]
+pub fn evaluate_heritage_impact_from_distance(
+    min_distance_m: f64,
+    overlapped_zone_numbers: &[u8],
+) -> HeritageBufferEvaluationResult {
+    let highest_zone = overlapped_zone_numbers
+        .iter()
+        .copied()
+        .filter(|&z| (1..=4).contains(&z))
+        .min()
+        .unwrap_or(0);
+    let d = if min_distance_m.is_finite() {
+        min_distance_m.max(0.0)
+    } else {
+        f64::INFINITY
+    };
+    let is_direct_intersect = d <= 1e-6 || highest_zone > 0;
+    let eff_d = if is_direct_intersect { 0.0 } else { d };
+    HeritageBufferEvaluationResult {
+        min_distance_m: eff_d,
+        is_direct_intersect,
+        is_within_300m: eff_d <= HGIS_HERITAGE_BUFFER_URBAN_M,
+        is_within_500m: eff_d <= HGIS_HERITAGE_BUFFER_RURAL_M,
+        highest_preservation_zone: highest_zone,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,5 +145,22 @@ mod tests {
         assert!((bbox.min().y - 1500.0).abs() < 1e-3);
         assert!((bbox.max().x - 1600.0).abs() < 1e-3);
         assert!((bbox.max().y - 2600.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_heritage_buffer_500m_and_300m_boundary_and_zone1_overlap() {
+        let res_a = evaluate_heritage_impact_from_distance(250.0, &[]);
+        assert!(res_a.is_within_300m);
+        assert!(res_a.is_within_500m);
+        assert!(!res_a.is_direct_intersect);
+
+        let res_b = evaluate_heritage_impact_from_distance(400.0, &[]);
+        assert!(!res_b.is_within_300m);
+        assert!(res_b.is_within_500m);
+
+        let res_c = evaluate_heritage_impact_from_distance(12.0, &[3, 1]);
+        assert_eq!(res_c.highest_preservation_zone, 1);
+        assert_eq!(res_c.min_distance_m, 0.0);
+        assert!(res_c.is_direct_intersect);
     }
 }

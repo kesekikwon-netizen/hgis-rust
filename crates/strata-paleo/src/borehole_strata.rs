@@ -283,6 +283,64 @@ pub fn normalize_polygons_to_multipolygon(rings: Vec<Vec<[f64; 2]>>) -> Vec<Vec<
     normalized
 }
 
+pub const HGIS_BOREHOLE_SEARCH_RADIUS_M: f64 = 100.0;
+pub const HGIS_WATER_TABLE_WARN_THRESH_M: f64 = 0.0;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ExcavationSafetyReport {
+    pub has_water_table_breach: bool,
+    pub max_breach_depth_m: f64,
+    pub min_excavation_elevation_m: f64,
+    pub interpolated_water_table_m: f64,
+}
+
+/// C++ `KaExcavationSafetyChecker::evaluateExcavationSafety` — 주변 시추공 지하수위 IDW 보간 및 굴착 계획 바닥 표고 지하수위 침범(`waterTableBreachM = Z_wt - Z_plan > 0.0`) 판정
+#[must_use]
+pub fn evaluate_excavation_safety(
+    target_xy: [f64; 2],
+    plan_bottom_elevation_m: f64,
+    boreholes: &[BoreholeRawInput],
+    search_radius_m: f64,
+) -> Option<ExcavationSafetyReport> {
+    if boreholes.is_empty() {
+        return None;
+    }
+    let r1 = if search_radius_m > 0.0 && search_radius_m.is_finite() {
+        search_radius_m
+    } else {
+        HGIS_BOREHOLE_SEARCH_RADIUS_M
+    };
+    let interpolate_within = |radius: f64| -> Option<f64> {
+        let mut sum_w = 0.0;
+        let mut sum_wv = 0.0;
+        for bh in boreholes {
+            let wt_el = bh.ground_elev_m - bh.water_depth_m;
+            let d = (target_xy[0] - bh.x).hypot(target_xy[1] - bh.y);
+            if d < 1e-6 {
+                return Some(wt_el);
+            }
+            if d <= radius {
+                let w = 1.0 / (d * d);
+                sum_w += w;
+                sum_wv += w * wt_el;
+            }
+        }
+        if sum_w > 0.0 {
+            Some(sum_wv / sum_w)
+        } else {
+            None
+        }
+    };
+    let wt_el = interpolate_within(r1).or_else(|| interpolate_within(500.0))?;
+    let breach = wt_el - plan_bottom_elevation_m;
+    Some(ExcavationSafetyReport {
+        has_water_table_breach: breach > HGIS_WATER_TABLE_WARN_THRESH_M,
+        max_breach_depth_m: breach.max(0.0),
+        min_excavation_elevation_m: plan_bottom_elevation_m,
+        interpolated_water_table_m: wt_el,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -394,5 +452,18 @@ mod tests {
             classify_uscs_to_4_paleo("SM", 50.0, 12.0),
             PaleoSedimentType::BedrockResidual
         );
+
+        let bh_wt = BoreholeRawInput {
+            hole_id: "BH-WT1".to_owned(),
+            x: 1000.0,
+            y: 2000.0,
+            ground_elev_m: 30.0,
+            water_depth_m: 2.0, // EL. 28.0m
+            strata: vec![],
+        };
+        let report = evaluate_excavation_safety([1000.0, 2000.0], 27.0, &[bh_wt], 100.0)
+            .expect("safety report");
+        assert!(report.has_water_table_breach);
+        assert!((report.max_breach_depth_m - 1.0).abs() < 1e-9);
     }
 }
