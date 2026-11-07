@@ -138,6 +138,104 @@ impl ChecklistEngine {
         }
         Ok(findings)
     }
+
+    /// C++ `ChecklistRules::evaluateRule` — R06 최소 면적(`#define HGIS_AREA_EPSILON 0.05` m² 미달 시 `Error`) 1:1
+    #[must_use]
+    pub fn check_r06_min_polygon_area(area_m2: f64) -> ChecklistSeverity {
+        const HGIS_AREA_EPSILON: f64 = 0.05;
+        if area_m2 < HGIS_AREA_EPSILON {
+            ChecklistSeverity::Error
+        } else {
+            ChecklistSeverity::Pass
+        }
+    }
+
+    /// C++ `ChecklistRules::evaluateRule` — R07 등경분할비 슬리버 비율(`4 * PI * Area / P^2 < 0.015` 시 `Warning`) 1:1
+    #[must_use]
+    pub fn check_r07_sliver_thinness(area_m2: f64, perimeter_m: f64) -> ChecklistSeverity {
+        const HGIS_SLIVER_THINNESS: f64 = 0.015;
+        if perimeter_m <= 1e-9 {
+            return ChecklistSeverity::Warning;
+        }
+        let ratio = (4.0 * std::f64::consts::PI * area_m2) / (perimeter_m * perimeter_m);
+        if ratio < HGIS_SLIVER_THINNESS {
+            ChecklistSeverity::Warning
+        } else {
+            ChecklistSeverity::Pass
+        }
+    }
+
+    /// C++ `ChecklistRules::evaluateRule` — R18 유구 번호 정규식(`^(주거|수혈|분묘|토광|수구|석축|구|기타)[0-9]+(-[0-9]+)?$`) 검증 1:1
+    #[must_use]
+    pub fn check_r18_feature_no_format(feature_no: &str) -> ChecklistSeverity {
+        let trimmed = feature_no.trim();
+        let prefixes = ["주거", "수혈", "분묘", "토광", "수구", "석축", "구", "기타"];
+        let Some(rest) = prefixes.iter().find_map(|p| trimmed.strip_prefix(p)) else {
+            return ChecklistSeverity::Error;
+        };
+        if rest.is_empty() {
+            return ChecklistSeverity::Error;
+        }
+        let valid_digits = if let Some((main_num, sub_num)) = rest.split_once('-') {
+            !main_num.is_empty()
+                && main_num.chars().all(|c| c.is_ascii_digit())
+                && !sub_num.is_empty()
+                && sub_num.chars().all(|c| c.is_ascii_digit())
+        } else {
+            rest.chars().all(|c| c.is_ascii_digit())
+        };
+        if valid_digits {
+            ChecklistSeverity::Pass
+        } else {
+            ChecklistSeverity::Error
+        }
+    }
+
+    /// C++ `ChecklistRules::evaluateRule` — R20 국가 표준 시대 코드 검증 1:1
+    #[must_use]
+    pub fn check_r20_period_code_valid(period: &str) -> ChecklistSeverity {
+        const VALID_PERIODS: [&str; 11] = [
+            "구석기",
+            "신석기",
+            "청동기",
+            "초기철기",
+            "원삼국",
+            "삼국",
+            "통일신라",
+            "고려",
+            "조선",
+            "근현대",
+            "미상",
+        ];
+        if VALID_PERIODS.contains(&period.trim()) {
+            ChecklistSeverity::Pass
+        } else {
+            ChecklistSeverity::Error
+        }
+    }
+
+    /// C++ `ChecklistRules::evaluateRule` — R22 조사 일자(`YYYY-MM-DD`) 형식 검증 (`Warning`) 1:1
+    #[must_use]
+    pub fn check_r22_date_format_valid(date_str: &str) -> ChecklistSeverity {
+        let parts: Vec<&str> = date_str.trim().split('-').collect();
+        if parts.len() != 3 || parts[0].len() != 4 || parts[1].len() != 2 || parts[2].len() != 2 {
+            return ChecklistSeverity::Warning;
+        }
+        let Ok(y) = parts[0].parse::<u32>() else {
+            return ChecklistSeverity::Warning;
+        };
+        let Ok(m) = parts[1].parse::<u32>() else {
+            return ChecklistSeverity::Warning;
+        };
+        let Ok(d) = parts[2].parse::<u32>() else {
+            return ChecklistSeverity::Warning;
+        };
+        if (1900..=2100).contains(&y) && (1..=12).contains(&m) && (1..=31).contains(&d) {
+            ChecklistSeverity::Pass
+        } else {
+            ChecklistSeverity::Warning
+        }
+    }
 }
 
 #[cfg(test)]
@@ -164,5 +262,58 @@ mod tests {
         .expect("topology checklist should complete");
         let (errors, warnings, passes) = ChecklistEngine::count_by_severity(&findings);
         assert_eq!((errors, warnings, passes), (1, 0, 25));
+    }
+
+    #[test]
+    fn test_r06_min_area_r07_sliver_r18_feature_no_r20_period_and_r22_date_thresholds() {
+        assert_eq!(
+            ChecklistEngine::check_r06_min_polygon_area(0.03),
+            ChecklistSeverity::Error
+        );
+        assert_eq!(
+            ChecklistEngine::check_r06_min_polygon_area(0.05),
+            ChecklistSeverity::Pass
+        );
+
+        // 10m x 0.01m needle sliver -> area = 0.1, perim = 20.02 -> thinness = 0.0031 < 0.015
+        assert_eq!(
+            ChecklistEngine::check_r07_sliver_thinness(0.10, 20.02),
+            ChecklistSeverity::Warning
+        );
+        assert_eq!(
+            ChecklistEngine::check_r07_sliver_thinness(100.0, 40.0),
+            ChecklistSeverity::Pass
+        );
+
+        assert_eq!(
+            ChecklistEngine::check_r18_feature_no_format("집자리_1호"),
+            ChecklistSeverity::Error
+        );
+        assert_eq!(
+            ChecklistEngine::check_r18_feature_no_format("주거1"),
+            ChecklistSeverity::Pass
+        );
+        assert_eq!(
+            ChecklistEngine::check_r18_feature_no_format("수혈12-1"),
+            ChecklistSeverity::Pass
+        );
+
+        assert_eq!(
+            ChecklistEngine::check_r20_period_code_valid("삼국"),
+            ChecklistSeverity::Pass
+        );
+        assert_eq!(
+            ChecklistEngine::check_r20_period_code_valid("철기시대"),
+            ChecklistSeverity::Error
+        );
+
+        assert_eq!(
+            ChecklistEngine::check_r22_date_format_valid("2026-11-07"),
+            ChecklistSeverity::Pass
+        );
+        assert_eq!(
+            ChecklistEngine::check_r22_date_format_valid("2026/11/07"),
+            ChecklistSeverity::Warning
+        );
     }
 }
