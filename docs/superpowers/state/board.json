@@ -12,13 +12,12 @@
     "D8",
     "D9",
     "D10",
-    "D11"
+    "D11",
+    "D12"
   ],
-  "last_commit": "f81f162",
-  "active_task": "D12",
-  "queued_tasks": [
-    "D13"
-  ],
+  "last_commit": "ec68371",
+  "active_task": "D13",
+  "queued_tasks": [],
   "require_live_5tab_screenshots_before_commit": true,
   "required_shots": [
     "target/shots/now-home.png",
