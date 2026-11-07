@@ -25,8 +25,13 @@ pub mod verify_harness;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let app = app_state::StrataAppState::new_startup();
-    if args.iter().any(|a| a == "--smoke-quit") {
+    if args.iter().any(|a| a == "--smoke-quit" || a == "--smoke") {
         println!("{}", app.smoke_summary());
+        let (ok, report) = verify_harness::run_cpp_smoke_suite_report();
+        println!("{report}");
+        if !ok {
+            std::process::exit(1);
+        }
         return;
     }
     if args.iter().any(|a| a == "--verify-all") {

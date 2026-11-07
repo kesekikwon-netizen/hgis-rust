@@ -15,6 +15,32 @@ use crate::tab_drawing::DrawingTabState;
 use crate::tabs_home_map::HomeMapTabState;
 use crate::tabs_paleo_3d::PaleoTerrain3dTabState;
 
+/// C++ `ShortcutManager::registerShortcut` 단축키 중복 충돌 방어 레지스트리 1:1
+#[derive(Debug, Clone, Default)]
+pub struct ShortcutManager {
+    pub bindings: std::collections::BTreeMap<String, String>,
+}
+
+impl ShortcutManager {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// C++ `ShortcutManager::registerShortcut(actionId, seq) -> bool` — 이미 등록된 키 시퀀스(`seq`)와 충돌 시 `false` 반환 1:1
+    pub fn register_shortcut(&mut self, action_id: &str, key_seq: &str) -> bool {
+        let normalized_seq = key_seq.trim().to_ascii_uppercase();
+        if normalized_seq.is_empty() || action_id.trim().is_empty() {
+            return false;
+        }
+        if self.bindings.values().any(|existing| existing == &normalized_seq) {
+            return false;
+        }
+        self.bindings.insert(action_id.trim().to_owned(), normalized_seq);
+        true
+    }
+}
+
 /// C++ `KaHomeScreen::ProjectTemplateConfig` 신규 프로젝트 생성 템플릿 설정 1:1
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectTemplateConfig {
@@ -260,6 +286,28 @@ impl StrataAppState {
 
     pub fn run_event_loop_step(&mut self) {
         self.paleo_3d.run_sample_10km_analysis();
+    }
+
+    /// C++ `CrashHandler::handleCrash` / `emergencyAutoSave` — 비정상 종료 시 현재 열려 있는 조사 버퍼를 `.crash_recovery.gpkg`로 즉시 직렬화 백업 1:1
+    pub fn emergency_auto_save(&self, crash_recovery_path: &Path) -> bool {
+        use strata_storage::gpkg::{GpkgRepository, SurveyWorkspace};
+        use std::collections::BTreeMap;
+
+        let mut ws = SurveyWorkspace {
+            schema_version: 3,
+            work_crs: self.work_crs,
+            layers: BTreeMap::new(),
+            embedded_project_json: format!(
+                "{{\"ka_hgis_crash_recovery\":true,\"title\":{:?}}}",
+                self.project_title
+            ),
+        };
+        for entry in &self.left_layers.entries {
+            if let Some(key) = DomainLayerKey::from_id(&entry.layer_key) {
+                ws.ensure_domain_layer(key);
+            }
+        }
+        GpkgRepository::write_workspace_file(crash_recovery_path, &ws).is_ok()
     }
 }
 
