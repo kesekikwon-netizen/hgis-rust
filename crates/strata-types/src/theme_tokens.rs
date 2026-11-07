@@ -18,7 +18,23 @@ pub struct DisplayOptions {
     pub color_theme: ColorTheme,
 }
 
+pub const HGIS_FONT_BASE_PT: u32 = 12;
+pub const HGIS_FONT_LARGE_RATIO: f64 = 1.25;
+pub const HGIS_FONT_LARGE_PT: u32 = 15;
+pub const HGIS_WCAG_AA_MIN_CONTRAST: f64 = 4.5;
+pub const HGIS_WCAG_AAA_MIN_CONTRAST: f64 = 7.0;
+
 impl DisplayOptions {
+    /// C++ `KaThemeManager::setLargeFontMode` — 기본 12pt 기준 1.25배(15pt) 포인트 크기 반환
+    #[must_use]
+    pub const fn font_point_size(&self) -> u32 {
+        if self.large_text {
+            HGIS_FONT_LARGE_PT
+        } else {
+            HGIS_FONT_BASE_PT
+        }
+    }
+
     pub const fn ui_font_size(&self) -> u32 {
         if self.large_text {
             15
@@ -247,8 +263,14 @@ impl ThemeTokens {
     }
 
     pub fn contrast_ratio(&self, first: [u8; 4], second: [u8; 4]) -> f64 {
-        let l1 = Self::relative_luminance(first);
-        let l2 = Self::relative_luminance(second);
+        Self::compute_wcag_contrast_ratio(first, second)
+    }
+
+    /// C++ `KaThemeManager::computeWcagContrastRatio` — sRGB 감마 해제 상대 휘도 기반 WCAG 2.1 명암비(1.0~21.0) 산출
+    #[must_use]
+    pub fn compute_wcag_contrast_ratio(fg: [u8; 4], bg: [u8; 4]) -> f64 {
+        let l1 = Self::relative_luminance(fg);
+        let l2 = Self::relative_luminance(bg);
         let (bright, dark) = if l1 >= l2 { (l1, l2) } else { (l2, l1) };
         (bright + 0.05) / (dark + 0.05)
     }
@@ -267,7 +289,30 @@ mod tests {
         let t = ThemeTokens::for_options(&opts);
         assert_eq!(t.accent, [0xB5, 0x57, 0x3A, 0xFF]);
         assert_eq!(t.dialog_ground, [0xFA, 0xF9, 0xF5, 0xFF]);
-        assert!(t.contrast_ratio(t.ink_muted, t.surface) >= 4.5);
-        assert!(t.contrast_ratio(t.primary_text, t.primary) >= 4.5);
+        assert!(t.contrast_ratio(t.ink_muted, t.surface) >= HGIS_WCAG_AA_MIN_CONTRAST);
+        assert!(t.contrast_ratio(t.primary_text, t.primary) >= HGIS_WCAG_AA_MIN_CONTRAST);
+    }
+
+    #[test]
+    fn test_large_font_mode_12pt_to_15pt_and_paper_bg_f5f3ed_fg_222222_wcag_13_72() {
+        let base_opts = DisplayOptions::default();
+        assert_eq!(base_opts.font_point_size(), 12);
+        let large_opts = DisplayOptions {
+            large_text: true,
+            ..Default::default()
+        };
+        assert_eq!(large_opts.font_point_size(), 15);
+        assert!(((f64::from(base_opts.font_point_size()) * HGIS_FONT_LARGE_RATIO) - 15.0).abs() < 1e-9);
+
+        let ratio = ThemeTokens::compute_wcag_contrast_ratio(
+            [0x22, 0x22, 0x22, 0xFF],
+            [0xF5, 0xF3, 0xED, 0xFF],
+        );
+        assert!(
+            ratio >= 13.7,
+            "expected >= 13.7 contrast ratio, got {ratio}"
+        );
+        assert!(ratio >= HGIS_WCAG_AA_MIN_CONTRAST);
+        assert!(ratio >= HGIS_WCAG_AAA_MIN_CONTRAST);
     }
 }
