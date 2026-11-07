@@ -172,6 +172,69 @@ impl AccountSettings {
     }
 }
 
+/// C++ `KaAccountModal::ApiServiceType` — 5대 외부 공공 서비스 구분
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApiServiceType {
+    VWorld,
+    KoreanHistoryDb,
+    NationalSpatialCadastral,
+    NgiiTopographic,
+    EHeritage,
+}
+
+impl ApiServiceType {
+    #[must_use]
+    pub const fn label_ko(self) -> &'static str {
+        match self {
+            Self::VWorld => "VWorld",
+            Self::KoreanHistoryDb => "역사지리DB",
+            Self::NationalSpatialCadastral => "국가공간정보(지적도)",
+            Self::NgiiTopographic => "국토정보플랫폼(수치지형도)",
+            Self::EHeritage => "국가유산청",
+        }
+    }
+
+    #[must_use]
+    pub const fn min_key_len(self) -> usize {
+        match self {
+            Self::VWorld => 32,
+            Self::KoreanHistoryDb
+            | Self::NationalSpatialCadastral
+            | Self::NgiiTopographic
+            | Self::EHeritage => 16,
+        }
+    }
+}
+
+/// C++ `KaAccountModal::AccountValidationResult`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccountValidationResult {
+    Ok,
+    InvalidKeyLength,
+}
+
+/// C++ `KaAccountModal::validateAndSaveCredentials` — 5대 공공 서비스 API 키 공백 제거 및 최소 길이(VWorld 32자, 기타 16자) 검증
+pub fn validate_service_credential_key(
+    service: ApiServiceType,
+    raw_key: &str,
+) -> Result<String, (AccountValidationResult, String)> {
+    let trimmed = raw_key.trim();
+    let cur_len = trimmed.chars().count();
+    let min_len = service.min_key_len();
+    if cur_len < min_len {
+        return Err((
+            AccountValidationResult::InvalidKeyLength,
+            format!(
+                "{} API 키는 최소 {}자 이상이어야 합니다 (현재: {}자)",
+                service.label_ko(),
+                min_len,
+                cur_len
+            ),
+        ));
+    }
+    Ok(trimmed.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +263,27 @@ mod tests {
         assert!(loaded.username.is_empty());
         assert!(loaded.password.is_empty());
         Ok(())
+    }
+
+    #[test]
+    fn test_validate_service_credential_key_vworld_32_and_ngii_16() {
+        let short_vw = validate_service_credential_key(ApiServiceType::VWorld, "1234567890");
+        assert!(short_vw.is_err());
+        let (code, msg) = short_vw.expect_err("short vworld key must fail");
+        assert_eq!(code, AccountValidationResult::InvalidKeyLength);
+        assert!(msg.contains("최소 32자"));
+        assert!(msg.contains("현재: 10자"));
+
+        let valid_vw = validate_service_credential_key(
+            ApiServiceType::VWorld,
+            "  0123456789abcdef0123456789abcdef  ",
+        )
+        .expect("32-char vworld key");
+        assert_eq!(valid_vw.len(), 32);
+
+        let valid_ngii =
+            validate_service_credential_key(ApiServiceType::NgiiTopographic, "0123456789abcdef")
+                .expect("16-char ngii key");
+        assert_eq!(valid_ngii.len(), 16);
     }
 }

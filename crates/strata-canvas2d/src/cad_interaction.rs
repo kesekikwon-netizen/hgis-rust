@@ -11,6 +11,56 @@ pub struct MeasureReadout {
     pub polygon_area_m2: f64,
 }
 
+pub const HGIS_METERS_TO_KM_THRESHOLD: f64 = 1000.0;
+pub const HGIS_SQMETERS_TO_HA_THRESHOLD: f64 = 10000.0;
+
+/// C++ `KaMeasureTool::SegmentMetrics` — 선분 거리(m) 및 북기준 시계방향 방위각(0° ~ 360°)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SegmentMetrics {
+    pub distance_m: f64,
+    pub azimuth_deg: f64,
+}
+
+/// C++ `KaMeasureTool::computeSegmentMetrics` — 북쪽 0.0°, 동쪽 90.0°, 남쪽 180.0°, 서쪽 270.0° 시계방향 방위각 계산
+#[must_use]
+pub fn compute_segment_metrics(start_pt: [f64; 2], end_pt: [f64; 2]) -> SegmentMetrics {
+    let dx = end_pt[0] - start_pt[0];
+    let dy = end_pt[1] - start_pt[1];
+    let distance_m = dx.hypot(dy);
+    if distance_m < 1e-12 {
+        return SegmentMetrics {
+            distance_m: 0.0,
+            azimuth_deg: 0.0,
+        };
+    }
+    let theta_deg = dy.atan2(dx).to_degrees();
+    let azimuth_deg = (90.0 - theta_deg).rem_euclid(360.0);
+    SegmentMetrics {
+        distance_m,
+        azimuth_deg,
+    }
+}
+
+/// C++ `KaMeasureTool` 거리 포맷 — `< 1000.0m`는 `"850.50 m"`, `>= 1000.0m`는 `"1.50 km"`
+#[must_use]
+pub fn format_measure_distance(distance_m: f64) -> String {
+    if distance_m >= HGIS_METERS_TO_KM_THRESHOLD {
+        format!("{:.2} km", distance_m / HGIS_METERS_TO_KM_THRESHOLD)
+    } else {
+        format!("{distance_m:.2} m")
+    }
+}
+
+/// C++ `KaMeasureTool` 면적 포맷 — `< 10000.0m²`는 `"200.00 ㎡"`, `>= 10000.0m²`는 `"2.50 ha"`
+#[must_use]
+pub fn format_measure_area(area_m2: f64) -> String {
+    if area_m2 >= HGIS_SQMETERS_TO_HA_THRESHOLD {
+        format!("{:.2} ha", area_m2 / HGIS_SQMETERS_TO_HA_THRESHOLD)
+    } else {
+        format!("{area_m2:.2} ㎡")
+    }
+}
+
 /// `SnapTraceGraph.h` — 마우스 이동 시 O(N^2) 비교를 피하기 위한 정사각 격자 해시
 #[derive(Debug, Clone, Default)]
 pub struct PointGrid {
@@ -917,5 +967,22 @@ mod tests {
         let max_kept_dist = dist([1000.0, 1000.0], candidates[899]);
         let farthest_input_dist = dist([1000.0, 1000.0], rings[0][1999]);
         assert!(max_kept_dist < farthest_input_dist);
+    }
+
+    #[test]
+    fn test_measure_tool_azimuth_0_90_270_and_unit_formatting_1500m_25000m2() {
+        let north = compute_segment_metrics([100.0, 100.0], [100.0, 200.0]);
+        assert!((north.azimuth_deg - 0.0).abs() < 1e-9);
+        assert!((north.distance_m - 100.0).abs() < 1e-9);
+
+        let east = compute_segment_metrics([100.0, 100.0], [200.0, 100.0]);
+        assert!((east.azimuth_deg - 90.0).abs() < 1e-9);
+
+        let west = compute_segment_metrics([100.0, 100.0], [0.0, 100.0]);
+        assert!((west.azimuth_deg - 270.0).abs() < 1e-9);
+
+        assert_eq!(format_measure_distance(850.5), "850.50 m");
+        assert_eq!(format_measure_distance(1500.0), "1.50 km");
+        assert_eq!(format_measure_area(25000.0), "2.50 ha");
     }
 }

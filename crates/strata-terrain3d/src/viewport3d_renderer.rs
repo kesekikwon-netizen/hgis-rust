@@ -1,5 +1,10 @@
 use crate::atmosphere_agx::{agx_tonemap_srgb, nishita_sky_zenith_horizon_rgb};
 
+pub const HGIS_Z_EXAG_MIN: f32 = 1.0;
+pub const HGIS_Z_EXAG_MAX: f32 = 5.0;
+pub const HGIS_Z_EXAG_DEFAULT: f32 = 1.5;
+pub const HGIS_DEM_NODATA_VAL: f32 = -9999.0;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OrbitCamera3D {
     pub yaw_deg: f32,
@@ -24,8 +29,79 @@ impl OrbitCamera3D {
     pub fn apply_orbit_drag(&mut self, delta_yaw_deg: f32, delta_pitch_deg: f32) {
         self.yaw_deg = (self.yaw_deg + delta_yaw_deg).rem_euclid(360.0);
         self.pitch_deg = (self.pitch_deg + delta_pitch_deg).clamp(-89.0, 89.0);
-        self.z_exaggeration = self.z_exaggeration.clamp(1.0, 5.0);
+        self.z_exaggeration = self.z_exaggeration.clamp(HGIS_Z_EXAG_MIN, HGIS_Z_EXAG_MAX);
     }
+
+    /// C++ `Terrain3dRenderer::setVerticalExaggeration` — 수직 과장 배율 `[1.0, 5.0]` 클램핑
+    pub fn set_vertical_exaggeration(&mut self, scale: f32) {
+        self.z_exaggeration = scale.clamp(HGIS_Z_EXAG_MIN, HGIS_Z_EXAG_MAX);
+    }
+}
+
+/// C++ `SectionProfileExtractor::sampleDemBilinear` — 2x2 인접 셀 쌍선형 보간 및 격자 바깥/NoData 방어
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn sample_dem_bilinear(
+    dem_grid: &[f32],
+    width: usize,
+    height: usize,
+    grid_min_x: f64,
+    grid_min_y: f64,
+    cell_size: f64,
+    target_x: f64,
+    target_y: f64,
+    strict_nodata: bool,
+) -> f32 {
+    if width < 2 || height < 2 || cell_size <= 0.0 || dem_grid.len() < width * height {
+        return HGIS_DEM_NODATA_VAL;
+    }
+    let gx = (target_x - grid_min_x) / cell_size;
+    let gy = (target_y - grid_min_y) / cell_size;
+    let max_x = (width - 1) as f64;
+    let max_y = (height - 1) as f64;
+    if gx < 0.0 || gy < 0.0 || gx > max_x || gy > max_y {
+        return HGIS_DEM_NODATA_VAL;
+    }
+    let c0 = (gx.floor() as usize).min(width - 2);
+    let r0 = (gy.floor() as usize).min(height - 2);
+    let c1 = c0 + 1;
+    let r1 = r0 + 1;
+    let tx = (gx - c0 as f64).clamp(0.0, 1.0) as f32;
+    let ty = (gy - r0 as f64).clamp(0.0, 1.0) as f32;
+
+    let z00 = dem_grid[r0 * width + c0];
+    let z10 = dem_grid[r0 * width + c1];
+    let z01 = dem_grid[r1 * width + c0];
+    let z11 = dem_grid[r1 * width + c1];
+    let corners = [z00, z10, z01, z11];
+    let is_valid = |v: f32| v.is_finite() && v > HGIS_DEM_NODATA_VAL + 1.0;
+
+    if strict_nodata {
+        if corners.iter().any(|&v| !is_valid(v)) {
+            return HGIS_DEM_NODATA_VAL;
+        }
+    } else {
+        let valid_vals: Vec<f32> = corners.iter().copied().filter(|&v| is_valid(v)).collect();
+        if valid_vals.len() < 2 {
+            return HGIS_DEM_NODATA_VAL;
+        }
+        if valid_vals.len() < 4 {
+            let fallback = valid_vals[0];
+            let f00 = if is_valid(z00) { z00 } else { fallback };
+            let f10 = if is_valid(z10) { z10 } else { fallback };
+            let f01 = if is_valid(z01) { z01 } else { fallback };
+            let f11 = if is_valid(z11) { z11 } else { fallback };
+            return f00 * (1.0 - tx) * (1.0 - ty)
+                + f10 * tx * (1.0 - ty)
+                + f01 * (1.0 - tx) * ty
+                + f11 * tx * ty;
+        }
+    }
+
+    z00 * (1.0 - tx) * (1.0 - ty)
+        + z10 * tx * (1.0 - ty)
+        + z01 * (1.0 - tx) * ty
+        + z11 * tx * ty
 }
 
 #[must_use]
@@ -97,5 +173,21 @@ mod tests {
         assert!((cam.pitch_deg - 89.0).abs() < 1e-5);
         cam.apply_orbit_drag(0.0, -300.0);
         assert!((cam.pitch_deg - (-89.0)).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_section_profile_bilinear_interpolation_center_10_20_30_40_yields_exact_25() {
+        let mut cam = OrbitCamera3D::default();
+        cam.set_vertical_exaggeration(12.0);
+        assert!((cam.z_exaggeration - 5.0).abs() < 1e-6);
+        cam.set_vertical_exaggeration(0.2);
+        assert!((cam.z_exaggeration - 1.0).abs() < 1e-6);
+
+        let grid = [10.0_f32, 20.0, 30.0, 40.0];
+        let z_center = sample_dem_bilinear(&grid, 2, 2, 0.0, 0.0, 10.0, 5.0, 5.0, true);
+        assert!((z_center - 25.0).abs() < 1e-6);
+
+        let z_outside = sample_dem_bilinear(&grid, 2, 2, 0.0, 0.0, 10.0, 25.0, 5.0, true);
+        assert_eq!(z_outside, HGIS_DEM_NODATA_VAL);
     }
 }
