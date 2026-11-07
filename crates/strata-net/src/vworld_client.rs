@@ -1,3 +1,10 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VworldError {
+    InvalidKey,
+    QuotaExceeded,
+    ServiceException,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct VworldClient;
 
@@ -36,15 +43,31 @@ impl VworldClient {
     }
 
     pub fn is_xml_error_tile(bytes: &[u8]) -> bool {
-        let prefix_len = bytes.len().min(256);
+        Self::classify_service_exception(bytes).is_some()
+    }
+
+    /// C++ `VWorldClient` & `TileFetcher` — HTTP 200 내 OGC `ServiceExceptionReport` XML 감지 및 `VWorldError` 분류 1:1
+    pub fn classify_service_exception(bytes: &[u8]) -> Option<VworldError> {
+        let prefix_len = bytes.len().min(512);
         let Ok(prefix) = std::str::from_utf8(&bytes[..prefix_len]) else {
-            return false;
+            return None;
         };
         let trimmed = prefix.trim_start();
-        trimmed.starts_with("<?xml")
-            || trimmed.contains("ServiceExceptionReport")
-            || trimmed.contains("<ServiceException")
-            || trimmed.contains("<ERROR")
+        if !trimmed.starts_with("<?xml")
+            && !trimmed.contains("ServiceExceptionReport")
+            && !trimmed.contains("<ServiceException")
+            && !trimmed.contains("<ERROR")
+        {
+            return None;
+        }
+        let upper = trimmed.to_uppercase();
+        if upper.contains("INCORRECT_KEY") || upper.contains("INVALID KEY") || upper.contains("INVALID_KEY") {
+            Some(VworldError::InvalidKey)
+        } else if upper.contains("QUOTA") || upper.contains("OVER_LIMIT") {
+            Some(VworldError::QuotaExceeded)
+        } else {
+            Some(VworldError::ServiceException)
+        }
     }
 }
 
@@ -64,5 +87,9 @@ mod tests {
         assert!(!url.to_lowercase().contains("domain="));
         let xml_body = b"<?xml version=\"1.0\"?><ServiceExceptionReport><ServiceException code=\"INCORRECT_KEY\">Invalid Key</ServiceException></ServiceExceptionReport>";
         assert!(VworldClient::is_xml_error_tile(xml_body));
+        assert_eq!(
+            VworldClient::classify_service_exception(xml_body),
+            Some(VworldError::InvalidKey)
+        );
     }
 }

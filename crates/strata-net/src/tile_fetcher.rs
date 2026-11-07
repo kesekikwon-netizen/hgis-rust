@@ -1,6 +1,60 @@
+use std::collections::VecDeque;
+
 use crate::heritage_intranet::HeritageIntranetFlow;
 use crate::ngii_topographic::NgiiTopographicClient;
 use crate::vworld_client::VworldClient;
+
+/// C++ `TileFetcher.cpp` 동시 HTTP 요청 상한 (`maxConcurrentRequests = 6`)
+pub const MAX_CONCURRENT_TILE_REQUESTS: usize = 6;
+
+/// C++ `ThreadSafeLruCache<Key, Value>` 메모리 타일 캐시 (LRU 퇴출) 1:1
+#[derive(Debug, Clone)]
+pub struct TileLruCache {
+    capacity: usize,
+    entries: VecDeque<(String, Vec<u8>)>,
+}
+
+impl TileLruCache {
+    #[must_use]
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            capacity: capacity.max(1),
+            entries: VecDeque::with_capacity(capacity.max(1)),
+        }
+    }
+
+    pub fn insert(&mut self, key: String, tile_bytes: Vec<u8>) {
+        if let Some(pos) = self.entries.iter().position(|(k, _)| *k == key) {
+            self.entries.remove(pos);
+        } else if self.entries.len() >= self.capacity {
+            self.entries.pop_front();
+        }
+        self.entries.push_back((key, tile_bytes));
+    }
+
+    pub fn get(&mut self, key: &str) -> Option<Vec<u8>> {
+        let pos = self.entries.iter().position(|(k, _)| k == key)?;
+        let (k, v) = self.entries.remove(pos)?;
+        let out = v.clone();
+        self.entries.push_back((k, v));
+        Some(out)
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    #[must_use]
+    pub fn keys(&self) -> Vec<String> {
+        self.entries.iter().map(|(k, _)| k.clone()).collect()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BasemapSource {
@@ -134,5 +188,20 @@ mod tests {
         );
         assert_eq!(plan.portal_url, "https://intranet.gis-heritage.go.kr/");
         assert!(plan.injected_scripts.len() >= 3);
+    }
+
+    #[test]
+    fn test_tile_cache_lru_eviction_capacity_5_evicts_1_to_5_and_retains_6_to_10() {
+        let mut cache = TileLruCache::new(5);
+        for idx in 1..=10 {
+            cache.insert(format!("tile_{idx}"), vec![idx as u8]);
+        }
+        assert_eq!(cache.len(), 5);
+        assert_eq!(
+            cache.keys(),
+            vec!["tile_6", "tile_7", "tile_8", "tile_9", "tile_10"]
+        );
+        assert!(cache.get("tile_1").is_none());
+        assert_eq!(cache.get("tile_6"), Some(vec![6]));
     }
 }

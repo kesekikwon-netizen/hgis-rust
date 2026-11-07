@@ -105,6 +105,26 @@ impl GpkgRepository {
         Ok(ws)
     }
 
+    /// C++ `LayerSchema::createSurveySchema(SurveyLayerType type, const QString &gpkgPath) -> bool` — 5개 고고학 표준 레이어(`SurveyArea`, `FeaturePoly`, `FeatureLine`, `TrialTrench`, `ArtifactPoint`)를 `gpkg_contents` 및 `gpkg_geometry_columns`에 WKB 타입으로 일괄 생성 1:1
+    pub fn create_survey_schema_5_layers(path: &Path, work_crs: WorkCrs) -> bool {
+        let mut ws = SurveyWorkspace {
+            schema_version: 3,
+            work_crs,
+            layers: BTreeMap::new(),
+            embedded_project_json: String::from("{\"ka_hgis_project\":true}"),
+        };
+        for key in [
+            DomainLayerKey::SurveyArea,
+            DomainLayerKey::FeaturePoly,
+            DomainLayerKey::FeatureLine,
+            DomainLayerKey::TrialTrench,
+            DomainLayerKey::ArtifactPoint,
+        ] {
+            ws.ensure_domain_layer(key);
+        }
+        Self::write_workspace_file(path, &ws).is_ok()
+    }
+
     pub fn open_read_only(path: &Path) -> StrataResult<SurveyWorkspace> {
         let bytes = std::fs::read(path)?;
         if bytes.len() < GPKG_MAGIC_HEADER.len() || &bytes[..16] != GPKG_MAGIC_HEADER {
@@ -174,16 +194,39 @@ impl GpkgRepository {
              );",
         )
         .map_err(|e| StrataError::Storage(format!("GPKG 스키마 초기화 실패: {e}")))?;
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS gpkg_geometry_columns (
+                 table_name TEXT NOT NULL PRIMARY KEY,
+                 column_name TEXT NOT NULL DEFAULT 'geom',
+                 geometry_type_name TEXT NOT NULL,
+                 srs_id INTEGER NOT NULL,
+                 z TINYINT NOT NULL DEFAULT 0,
+                 m TINYINT NOT NULL DEFAULT 0
+             );",
+        )
+        .map_err(|e| StrataError::Storage(format!("gpkg_geometry_columns 초기화 실패: {e}")))?;
 
         let srs_id = i64::from(ws.work_crs.epsg_code());
         for (layer_id, buf) in &ws.layers {
             let desc = buf.key.map_or("", DomainLayerKey::name_ko);
+            let geom_type_name = match buf.key {
+                Some(DomainLayerKey::SurveyArea | DomainLayerKey::FeaturePoly | DomainLayerKey::TrialTrench) => "MULTIPOLYGON",
+                Some(DomainLayerKey::FeatureLine | DomainLayerKey::SectionLine) => "MULTILINESTRING",
+                Some(DomainLayerKey::ControlPoints | DomainLayerKey::ArtifactPoint) => "POINT",
+                None => "GEOMETRY",
+            };
             conn.execute(
                 "INSERT INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
                  VALUES (?1, 'features', ?1, ?2, ?3)",
                 params![layer_id, desc, srs_id],
             )
             .map_err(|e| StrataError::Storage(format!("gpkg_contents 등록 실패: {e}")))?;
+            conn.execute(
+                "INSERT INTO gpkg_geometry_columns (table_name, column_name, geometry_type_name, srs_id, z, m)
+                 VALUES (?1, 'geom', ?2, ?3, 0, 0)",
+                params![layer_id, geom_type_name, srs_id],
+            )
+            .map_err(|e| StrataError::Storage(format!("gpkg_geometry_columns 등록 실패: {e}")))?;
         }
 
         let json_str = serde_json::to_string(ws)
@@ -249,6 +292,22 @@ mod tests {
             )
             .map_err(|e| StrataError::Storage(e.to_string()))?;
         assert_eq!(srs_count, 3);
+
+        let schema_path = dir.path().join("survey_schema_5_layers.gpkg");
+        assert!(GpkgRepository::create_survey_schema_5_layers(
+            &schema_path,
+            WorkCrs::Epsg5186
+        ));
+        let schema_conn = rusqlite::Connection::open(&schema_path)
+            .map_err(|e| StrataError::Storage(e.to_string()))?;
+        let geom_cols_count: i64 = schema_conn
+            .query_row(
+                "SELECT COUNT(*) FROM gpkg_geometry_columns WHERE geometry_type_name IN ('MULTIPOLYGON', 'MULTILINESTRING', 'POINT')",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(|e| StrataError::Storage(e.to_string()))?;
+        assert_eq!(geom_cols_count, 5);
         Ok(())
     }
 
