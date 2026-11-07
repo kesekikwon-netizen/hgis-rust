@@ -73,8 +73,10 @@ pub fn export_submission_package(
     for f in findings {
         let status = if f.passed {
             "통과"
+        } else if f.severity == ChecklistSeverity::Error {
+            "error"
         } else {
-            "안내(비차단)"
+            "warn"
         };
         readme.push_str(&format!("- [{}] {}: {}\n", status, f.rule_id, f.message_ko));
     }

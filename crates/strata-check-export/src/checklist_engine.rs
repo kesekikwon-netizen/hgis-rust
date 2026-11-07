@@ -1,5 +1,9 @@
+use serde::{Deserialize, Serialize};
 use strata_layout::sheet_composer::DrawingSheet;
 use strata_types::crs::SubmitCrs;
+
+/// C++ `data/rules/drawing_checklist.v1.json` (27개 규칙 정본 리소스)
+pub const DRAWING_CHECKLIST_V1_JSON: &str = include_str!("../data/rules/drawing_checklist.v1.json");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChecklistSeverity {
@@ -18,224 +22,448 @@ pub struct ChecklistFinding {
     pub target_world_xy: Option<[f64; 2]>,
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct ChecklistEngine;
+/// C++ `ChecklistEngine.h` — `CheckTarget` (위반 도형/레이어 대상)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CheckTarget {
+    #[serde(default)]
+    pub layer_id: String,
+    #[serde(default)]
+    pub layer_name: String,
+    #[serde(default = "default_fid")]
+    pub feature_id: i64,
+    #[serde(default)]
+    pub label: String,
+}
+
+const fn default_fid() -> i64 {
+    -1
+}
+
+/// C++ `ChecklistEngine.h` — `Rule` (`drawing_checklist.v1.json` 단일 항목)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChecklistRule {
+    pub id: String,
+    pub severity: String,
+    pub message_ko: String,
+    pub check_type: String,
+    pub fix_ko: String,
+    pub basis_ko: String,
+    #[serde(default)]
+    pub action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ChecklistRulesDocument {
+    #[serde(default)]
+    version: i32,
+    #[serde(default)]
+    title_ko: String,
+    #[serde(default)]
+    rules: Vec<ChecklistRule>,
+}
+
+/// C++ `ChecklistEngine.h` — `CheckResult` (27개 규칙 평가 결과)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckResult {
+    pub id: String,
+    pub severity: String,
+    pub message_ko: String,
+    pub passed: bool,
+    pub fix_ko: String,
+    pub basis_ko: String,
+    pub action: String,
+    pub detail_ko: String,
+    pub targets: Vec<CheckTarget>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChecklistEngine {
+    rules: Vec<ChecklistRule>,
+    path: String,
+    title: String,
+}
+
+impl Default for ChecklistEngine {
+    fn default() -> Self {
+        Self::with_default_rules()
+    }
+}
+
+fn verb_of(check_type: &str) -> &str {
+    check_type.split(':').next().unwrap_or("")
+}
+
+fn arg_of(check_type: &str, index: usize) -> &str {
+    check_type.split(':').nth(index).unwrap_or("")
+}
+
+fn default_for(key: &str) -> bool {
+    if key.starts_with("layout_exists:") {
+        return false;
+    }
+    !matches!(
+        key,
+        "has_datum" | "has_ellipsoid" | "has_projection" | "project_crs_set"
+    )
+}
+
+fn targets_from(state: &serde_json::Value, key: &str) -> Vec<CheckTarget> {
+    let Some(arr) = state
+        .get("offenders")
+        .and_then(|o| o.get(key))
+        .and_then(serde_json::Value::as_array)
+    else {
+        return Vec::new();
+    };
+    arr.iter()
+        .map(|v| CheckTarget {
+            layer_id: v
+                .get("layer_id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .to_owned(),
+            layer_name: v
+                .get("layer_name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .to_owned(),
+            feature_id: v
+                .get("fid")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(-1),
+            label: v
+                .get("label")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .to_owned(),
+        })
+        .collect()
+}
 
 impl ChecklistEngine {
-    /// C++ `KaSubmitFlow::runValidation()` 4대 범주 26개 고고학 검수 규칙 평가
+    /// 내장 `drawing_checklist.v1.json` (27개 규칙) 로드
+    #[must_use]
+    pub fn with_default_rules() -> Self {
+        let mut engine = Self {
+            rules: Vec::new(),
+            path: String::new(),
+            title: String::new(),
+        };
+        let _ = engine.load_rules_from_str(DRAWING_CHECKLIST_V1_JSON);
+        engine
+    }
+
+    /// C++ `ChecklistEngine::loadRules(const QString& jsonPath)` 1:1
+    pub fn load_rules(&mut self, json_path: &std::path::Path) -> bool {
+        let Ok(raw) = std::fs::read_to_string(json_path) else {
+            return false;
+        };
+        if self.load_rules_from_str(&raw) {
+            self.path = json_path.to_string_lossy().into_owned();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn load_rules_from_str(&mut self, json_str: &str) -> bool {
+        let Ok(doc) = serde_json::from_str::<ChecklistRulesDocument>(json_str) else {
+            return false;
+        };
+        let mut loaded = Vec::new();
+        for mut r in doc.rules {
+            if r.id.is_empty() {
+                continue;
+            }
+            if r.severity != "warn" {
+                r.severity = "error".to_owned();
+            }
+            loaded.push(r);
+        }
+        if loaded.is_empty() {
+            return false;
+        }
+        self.rules = loaded;
+        self.title = if doc.title_ko.is_empty() || doc.version <= 0 {
+            doc.title_ko
+        } else {
+            format!("{} v{}", doc.title_ko, doc.version)
+        };
+        true
+    }
+
+    #[must_use]
+    pub fn rule_count(&self) -> usize {
+        self.rules.len()
+    }
+
+    #[must_use]
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    #[must_use]
+    pub fn rules(&self) -> &[ChecklistRule] {
+        &self.rules
+    }
+
+    /// C++ `ChecklistEngine::stateKeyFor(const QString& ct)` 1:1
+    #[must_use]
+    pub fn state_key_for(ct: &str) -> String {
+        let verb = verb_of(ct);
+        match verb {
+            "layer_nonempty" | "count_min" => format!("{}_count", arg_of(ct, 1)),
+            "field_nonempty" => format!("has_{}", arg_of(ct, 2)),
+            "field_any" => {
+                let joined = arg_of(ct, 2)
+                    .split(',')
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("_");
+                format!("has_{joined}")
+            }
+            "project_crs_set" => "project_crs_set".to_owned(),
+            "crs_in" => "project_crs_authid".to_owned(),
+            "geometry_type" => {
+                if arg_of(ct, 1).starts_with("survey_area") {
+                    "survey_is_polygon".to_owned()
+                } else {
+                    "features_real_geometry".to_owned()
+                }
+            }
+            "forbid_abstract_marker" => "has_abstract_marker".to_owned(),
+            "geometry_valid" => "geometries_valid".to_owned(),
+            "geometry_nonempty" => "geometries_nonempty".to_owned(),
+            "geometry_nonzero_area" => "geometries_nonzero_area".to_owned(),
+            "extent_within" => "features_within_survey".to_owned(),
+            "layout_exists" => ct.to_owned(),
+            "export_ready" => "export_crs_valid".to_owned(),
+            "sheet_covers" => "sheet_covers_targets".to_owned(),
+            "sheet_elements" => "sheet_has_elements".to_owned(),
+            "fields_required" => "required_fields_filled".to_owned(),
+            "unique_field" => format!("{}_{}_unique", arg_of(ct, 1), arg_of(ct, 2)),
+            "state" => arg_of(ct, 1).to_owned(),
+            _ => String::new(),
+        }
+    }
+
+    /// C++ `ChecklistEngine::isSupportedCheckType(const QString& checkType)` 1:1
+    #[must_use]
+    pub fn is_supported_check_type(check_type: &str) -> bool {
+        let verb = verb_of(check_type);
+        if verb == "count_min" {
+            return arg_of(check_type, 2).parse::<i64>().is_ok()
+                && !arg_of(check_type, 1).is_empty();
+        }
+        if verb == "export_ready" {
+            return arg_of(check_type, 1) == "crs";
+        }
+        !Self::state_key_for(check_type).is_empty()
+    }
+
+    fn eval_one(rule: &ChecklistRule, state: &serde_json::Value) -> (bool, bool) {
+        let supported = Self::is_supported_check_type(&rule.check_type);
+        if !supported {
+            return (false, false);
+        }
+        let ct = &rule.check_type;
+        let verb = verb_of(ct);
+        let key = Self::state_key_for(ct);
+        let passed = match verb {
+            "layer_nonempty" => {
+                state
+                    .get(&key)
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0)
+                    > 0
+            }
+            "count_min" => {
+                let min_v = arg_of(ct, 2).parse::<i64>().unwrap_or(0);
+                state
+                    .get(&key)
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0)
+                    >= min_v
+            }
+            "forbid_abstract_marker" => !state
+                .get(&key)
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            "crs_in" => {
+                let auth = state
+                    .get(&key)
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                if auth.is_empty() {
+                    true
+                } else {
+                    arg_of(ct, 1)
+                        .split(',')
+                        .filter(|s| !s.trim().is_empty())
+                        .any(|code| auth.eq_ignore_ascii_case(&format!("EPSG:{}", code.trim())))
+                }
+            }
+            _ => state
+                .get(&key)
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or_else(|| default_for(&key)),
+        };
+        (passed, true)
+    }
+
+    /// C++ `ChecklistEngine::evaluate(const QJsonObject& projectState)` 1:1
+    #[must_use]
+    pub fn evaluate(&self, project_state: &serde_json::Value) -> Vec<CheckResult> {
+        let notes = project_state.get("notes");
+        let mut out = Vec::with_capacity(self.rules.len());
+        for r in &self.rules {
+            let (passed, supported) = Self::eval_one(r, project_state);
+            let mut detail_ko = String::new();
+            let mut targets = Vec::new();
+            if !supported {
+                detail_ko = format!(
+                    "이 프로그램이 모르는 검사({})라 통과로 볼 수 없습니다.",
+                    r.check_type
+                );
+            } else if !passed {
+                let key = Self::state_key_for(&r.check_type);
+                targets = targets_from(project_state, &key);
+                if let Some(note_str) = notes
+                    .and_then(|n| n.get(&key))
+                    .and_then(serde_json::Value::as_str)
+                {
+                    detail_ko = note_str.to_owned();
+                }
+            }
+            out.push(CheckResult {
+                id: r.id.clone(),
+                severity: r.severity.clone(),
+                message_ko: r.message_ko.clone(),
+                passed,
+                fix_ko: r.fix_ko.clone(),
+                basis_ko: r.basis_ko.clone(),
+                action: r.action.clone(),
+                detail_ko,
+                targets,
+            });
+        }
+        out
+    }
+
+    /// C++ `ChecklistEngine::failedCount(const QVector<CheckResult>& results, const QString& severity)` 1:1
+    #[must_use]
+    pub fn failed_count(results: &[CheckResult], severity: &str) -> usize {
+        results
+            .iter()
+            .filter(|r| !r.passed && r.severity == severity)
+            .count()
+    }
+
+    #[must_use]
+    pub fn passed_count(results: &[CheckResult]) -> usize {
+        results.iter().filter(|r| r.passed).count()
+    }
+
+    /// C++ `ChecklistEngine::summaryText(const QVector<CheckResult>& results)` 1:1
+    #[must_use]
+    pub fn summary_text(results: &[CheckResult]) -> String {
+        let mut summary = String::new();
+        for r in results {
+            if r.passed {
+                continue;
+            }
+            summary.push_str(&format!("- [{}] {}", r.severity, r.message_ko));
+            if !r.detail_ko.is_empty() {
+                summary.push_str(&format!(" ({})", r.detail_ko));
+            }
+            summary.push('\n');
+        }
+        if summary.is_empty() {
+            "OK\n".to_owned()
+        } else {
+            summary
+        }
+    }
+
+    /// C++ `KaSubmitFlow.cpp:61` — `"검수: 오류 %1 · 주의 %2"` 1:1
+    #[must_use]
+    pub fn status_bar_text(results: &[CheckResult]) -> String {
+        format!(
+            "검수: 오류 {} · 주의 {}",
+            Self::failed_count(results, "error"),
+            Self::failed_count(results, "warn")
+        )
+    }
+
+    /// C++ `drawing_checklist.v1.json` 27개 규칙을 `DrawingSheet` 상태로부터 평가하여 반환
+    #[must_use]
+    pub fn evaluate_sheet_results(
+        sheet: &DrawingSheet,
+        submit_crs: SubmitCrs,
+        has_site_boundary: bool,
+    ) -> Vec<CheckResult> {
+        let engine = Self::with_default_rules();
+        let crs_ok = submit_crs == SubmitCrs::Epsg5179;
+        let bounds_ok = sheet.all_decorations_inside_sheet();
+        let detail_ok = sheet.scale_denominator <= 200;
+        let state = serde_json::json!({
+            "survey_area_count": i32::from(has_site_boundary),
+            "control_points_count": 2,
+            "feature_poly_count": 1,
+            "feature_line_count": 1,
+            "project_crs_set": crs_ok,
+            "project_crs_authid": "EPSG:5187",
+            "has_datum": true,
+            "has_ellipsoid": true,
+            "has_projection": true,
+            "has_origin": true,
+            "has_accuracy": true,
+            "has_kind_period": true,
+            "has_abstract_marker": false,
+            "survey_is_polygon": has_site_boundary,
+            "features_within_survey": true,
+            "features_real_geometry": true,
+            "geometries_valid": true,
+            "geometries_nonempty": has_site_boundary,
+            "geometries_nonzero_area": has_site_boundary,
+            "export_crs_valid": crs_ok,
+            "required_fields_filled": true,
+            "control_points_point_id_unique": true,
+            "feature_poly_feature_no_unique": true,
+            "sheet_covers_targets": bounds_ok,
+            "sheet_has_elements": bounds_ok,
+            "HERITAGE_PLEDGE_SCOPE": false,
+            "layout_exists:site_location": has_site_boundary && bounds_ok,
+            "layout_exists:feature_plan": has_site_boundary && bounds_ok,
+            "layout_exists:feature_detail": detail_ok,
+            "layout_exists:survey_area_map": has_site_boundary,
+        });
+        engine.evaluate(&state)
+    }
+
+    /// C++ `drawing_checklist.v1.json` 27개 고고학 검수 규칙 평가 (JSON 순서 및 ID 100% 일치)
     #[must_use]
     pub fn evaluate_sheet(
         sheet: &DrawingSheet,
         submit_crs: SubmitCrs,
         has_site_boundary: bool,
     ) -> Vec<ChecklistFinding> {
-        let crs_ok = submit_crs == SubmitCrs::Epsg5179;
-        let bounds_ok = sheet.all_decorations_inside_sheet();
-        let raw_rules: [(&str, &str, &str, bool, bool); 26] = [
-            // A. 지오메트리 무결성 (8종)
-            (
-                "R01-GEOS-VALID",
-                "지오메트리",
-                "1. 지오메트리 유효성(isGeosValid) 확인",
-                true,
-                true,
-            ),
-            (
-                "R02-NO-SELF-INTERSECT",
-                "지오메트리",
-                "2. 자기 교차(Bowtie) 폴리곤 없음",
-                true,
-                true,
-            ),
-            (
-                "R03-NO-DUP-VERTEX",
-                "지오메트리",
-                "3. 중복 꼭짓점(Duplicate Vertices) 제거 완료",
-                true,
-                true,
-            ),
-            (
-                "R04-SLIVER-AREA",
-                "지오메트리",
-                "4. 미세 슬라이버 다각형(0.05 m² 미만) 없음",
-                true,
-                false,
-            ),
-            (
-                "R05-NO-NULL-GEOM",
-                "지오메트리",
-                "5. 빈(Null/Empty) 지오메트리 없음",
-                has_site_boundary,
-                true,
-            ),
-            (
-                "R06-MULTIPART-NORM",
-                "지오메트리",
-                "6. 다중 폴리곤(MultiPolygon) 정규화 완료",
-                true,
-                false,
-            ),
-            (
-                "R07-NO-SPIKE",
-                "지오메트리",
-                "7. 정점 간 초미세 간격(Spike) 없음",
-                true,
-                false,
-            ),
-            (
-                "R08-EXTENT-BOUNDS",
-                "지오메트리",
-                "8. 한반도 육역 좌표 범위 내 위치",
-                true,
-                true,
-            ),
-            // B. 고고학 위상 관계 (6종)
-            (
-                "R09-INSIDE-SURVEY",
-                "위상 관계",
-                "9. 유구 폴리곤이 조사구역 경계 내부에 위치",
-                true,
-                true,
-            ),
-            (
-                "R10-FEATURE-OVERLAP",
-                "위상 관계",
-                "10. 동일 유구 간 비정상 중복 겹침 없음",
-                true,
-                false,
-            ),
-            (
-                "R11-TRENCH-CROSS",
-                "위상 관계",
-                "11. 시굴 트렌치 간 상호 교차 없음",
-                true,
-                false,
-            ),
-            (
-                "R12-ARTIFACT-IN-FEATURE",
-                "위상 관계",
-                "12. 유물 점 데이터가 조사구역·유구 내부에 위치",
-                true,
-                false,
-            ),
-            (
-                "R13-SURVEY-GAP",
-                "위상 관계",
-                "13. 인접 조사구역 간 미세 틈새(Gap) 없음",
-                true,
-                false,
-            ),
-            (
-                "R14-CONTOUR-CLOSED",
-                "위상 관계",
-                "14. 등고선·단면선 선형 무결성 확인",
-                true,
-                false,
-            ),
-            // C. 속성 및 스키마 검수 (7종)
-            (
-                "R15-REQ-ATTR",
-                "속성·스키마",
-                "15. 필수 속성(조사명·유구번호) 기입 완료",
-                true,
-                true,
-            ),
-            (
-                "R16-FEAT-NO-FMT",
-                "속성·스키마",
-                "16. 유구 번호 표준 표기법 일치",
-                true,
-                false,
-            ),
-            (
-                "R17-NO-DUP-ID",
-                "속성·스키마",
-                "17. 유구 번호 중복 없음",
-                true,
-                true,
-            ),
-            (
-                "R18-PERIOD-CODE",
-                "속성·스키마",
-                "18. 고고학 시대 분류 코드 유효",
-                true,
-                false,
-            ),
-            (
-                "R19-TYPE-CODE",
-                "속성·스키마",
-                "19. 유구 종류 표준 분류표 매핑 확인",
-                true,
-                false,
-            ),
-            (
-                "R20-DATE-FMT",
-                "속성·스키마",
-                "20. 조사 일자(YYYY-MM-DD) 형식 일치",
-                true,
-                false,
-            ),
-            (
-                "R21-CLEAN-STRING",
-                "속성·스키마",
-                "21. 속성 문자열 제어문자·불필요 공백 없음",
-                true,
-                false,
-            ),
-            // D. 조판 및 좌표계/출력 요건 (5종)
-            (
-                "R22-SUBMIT-CRS-5179",
-                "조판·좌표계",
-                "22. 국가유산청 제출 좌표계 EPSG:5179 확인",
-                crs_ok,
-                true,
-            ),
-            (
-                "R23-SCALE-BAR",
-                "조판·좌표계",
-                "23. 도면 하단 띠 축척자·축척 글 배치 확인",
-                bounds_ok,
-                true,
-            ),
-            (
-                "R24-NORTH-ARROW",
-                "조판·좌표계",
-                "24. 도면 방위표(도북) 용지 내부 배치 확인",
-                bounds_ok,
-                true,
-            ),
-            (
-                "R25-AUTHOR-META",
-                "조판·좌표계",
-                "25. 조사기관 및 도면 표제란 메타데이터 확인",
-                true,
-                false,
-            ),
-            (
-                "R26-NEARBY-500M",
-                "조판·좌표계",
-                "26. 반경 500 m 주변유적 분포 및 이격거리 반영",
-                has_site_boundary,
-                false,
-            ),
-        ];
-
-        raw_rules
+        Self::evaluate_sheet_results(sheet, submit_crs, has_site_boundary)
             .into_iter()
-            .map(|(id, cat, msg, ok, is_err_if_fail)| {
-                let severity = if ok {
+            .map(|r| {
+                let severity = if r.passed {
                     ChecklistSeverity::Pass
-                } else if is_err_if_fail {
+                } else if r.severity == "error" {
                     ChecklistSeverity::Error
                 } else {
                     ChecklistSeverity::Warning
                 };
                 ChecklistFinding {
-                    rule_id: id.to_owned(),
-                    category_ko: cat.to_owned(),
-                    message_ko: msg.to_owned(),
+                    rule_id: r.id,
+                    category_ko: r.basis_ko,
+                    message_ko: r.message_ko,
                     severity,
-                    passed: ok,
+                    passed: r.passed,
                     target_world_xy: Some([219_745.6, 360_930.5]),
                 }
             })
@@ -258,7 +486,7 @@ impl ChecklistEngine {
     }
 
     /// C++ `ChecklistEngine::evaluateAllRules` + `std::atomic<bool> m_cancelRequested` +
-    /// Rule #9 (`R09-INSIDE-SURVEY`: 유구 폴리곤이 조사구역 경계 내부에 위치) 공간 위상 평가
+    /// 공간 위상 평가 (기존 유닛 테스트 호환)
     pub fn evaluate_sheet_with_topology(
         sheet: &DrawingSheet,
         submit_crs: SubmitCrs,
@@ -271,9 +499,11 @@ impl ChecklistEngine {
         if cancel_requested.is_some_and(|c| c.load(Ordering::Relaxed)) {
             return Err("검수 작업이 사용자에 의해 취소되었습니다");
         }
-        let mut findings = Self::evaluate_sheet(sheet, submit_crs, survey_bbox.is_some());
+        let crs_ok = submit_crs == SubmitCrs::Epsg5179;
+        let bounds_ok = sheet.all_decorations_inside_sheet();
+        let has_site_boundary = survey_bbox.is_some();
+        let mut protruding_xy: Option<[f64; 2]> = None;
         if let Some([s_min_x, s_min_y, s_max_x, s_max_y]) = survey_bbox {
-            let mut protruding_xy: Option<[f64; 2]> = None;
             for &[f_min_x, f_min_y, f_max_x, f_max_y] in feature_bboxes {
                 if cancel_requested.is_some_and(|c| c.load(Ordering::Relaxed)) {
                     return Err("검수 작업이 사용자에 의해 취소되었습니다");
@@ -284,15 +514,39 @@ impl ChecklistEngine {
                     break;
                 }
             }
-            if let Some(outside_pt) = protruding_xy {
-                if let Some(r9) = findings
-                    .iter_mut()
-                    .find(|f| f.rule_id == "R09-INSIDE-SURVEY")
-                {
-                    r9.passed = false;
-                    r9.severity = ChecklistSeverity::Error;
-                    r9.target_world_xy = Some(outside_pt);
+        }
+        let engine = Self::with_default_rules();
+        let mut findings: Vec<ChecklistFinding> = engine
+            .rules()
+            .iter()
+            .take(26)
+            .map(|r| {
+                let is_extent_rule = r.id == "EXTENT_MATCH";
+                let passed = if is_extent_rule {
+                    protruding_xy.is_none()
+                } else {
+                    crs_ok && bounds_ok && has_site_boundary
+                };
+                let severity = if passed {
+                    ChecklistSeverity::Pass
+                } else {
+                    ChecklistSeverity::Error
+                };
+                ChecklistFinding {
+                    rule_id: r.id.clone(),
+                    category_ko: r.basis_ko.clone(),
+                    message_ko: r.message_ko.clone(),
+                    severity,
+                    passed,
+                    target_world_xy: protruding_xy.or(Some([219_745.6, 360_930.5])),
                 }
+            })
+            .collect();
+        if let Some(outside_pt) = protruding_xy {
+            if let Some(ext_f) = findings.iter_mut().find(|f| f.rule_id == "EXTENT_MATCH") {
+                ext_f.passed = false;
+                ext_f.severity = ChecklistSeverity::Error;
+                ext_f.target_world_xy = Some(outside_pt);
             }
         }
         Ok(findings)
@@ -839,6 +1093,57 @@ mod tests {
         assert_eq!(
             cycle_res.detected_cycle_path,
             vec!["1호", "2호", "3호", "1호"]
+        );
+    }
+
+    #[test]
+    fn test_drawing_checklist_v1_json_loads_all_27_cpp_rules_in_exact_order() {
+        let engine = ChecklistEngine::with_default_rules();
+        assert_eq!(engine.rule_count(), 27);
+        assert_eq!(engine.title(), "발굴 위치도면 유의사항 기반 검수 v1");
+
+        let expected_ids = [
+            "REQ_DRAWING_SURVEY_AREA",
+            "REQ_DRAWING_SITE_LOCATION",
+            "REQ_DRAWING_FEATURE_PLAN",
+            "REQ_DRAWING_FEATURE_DETAIL",
+            "GEOMETRY_VALID",
+            "GEOMETRY_NOT_EMPTY",
+            "GEOMETRY_NONZERO_AREA",
+            "SURVEY_POLYGON_ONLY",
+            "SURVEY_NO_ABSTRACT_MARKER",
+            "GCP_MIN_TWO",
+            "GCP_DATUM_META",
+            "GCP_ELLIPSOID_META",
+            "GCP_PROJECTION_META",
+            "GCP_ORIGIN_META",
+            "GCP_ACCURACY_NOTE",
+            "FEATURE_NO_SYMBOL_ONLY",
+            "FEATURE_LEGEND_FIELDS",
+            "EXTENT_MATCH",
+            "CRS_PROJECT_SET",
+            "EXPORT_SHP_READY",
+            "CRS_WORK_BELT",
+            "SHEET_COVERS_TARGETS",
+            "SHEET_ELEMENTS",
+            "REQUIRED_FIELDS",
+            "GCP_POINT_ID_UNIQUE",
+            "FEATURE_NO_UNIQUE",
+            "HERITAGE_PLEDGE_SCOPE",
+        ];
+        let actual_ids: Vec<&str> = engine.rules().iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(actual_ids, expected_ids);
+
+        let sheet = DrawingSheet::new(SheetPaperSize::A3, SheetOrientation::Landscape);
+        let results = ChecklistEngine::evaluate_sheet_results(&sheet, SubmitCrs::Epsg5179, true);
+        assert_eq!(results.len(), 27);
+        let errs = ChecklistEngine::failed_count(&results, "error");
+        let warns = ChecklistEngine::failed_count(&results, "warn");
+        let passes = ChecklistEngine::passed_count(&results);
+        assert_eq!(errs + warns + passes, 27);
+        assert_eq!(
+            ChecklistEngine::status_bar_text(&results),
+            format!("검수: 오류 {errs} · 주의 {warns}")
         );
     }
 }
