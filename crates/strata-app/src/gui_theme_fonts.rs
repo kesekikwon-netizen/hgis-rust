@@ -2,7 +2,11 @@ use eframe::egui;
 use strata_types::theme_tokens::ThemeTokens;
 
 pub fn configure_korean_fonts_and_theme(ctx: &egui::Context, tokens: &ThemeTokens) {
-    ctx.set_pixels_per_point(1.0);
+    // Keep the OS DPI scale. Forcing 1.0 here made the 150% monitor show a
+    // window whose content only filled 2/3 of the client area (Task D1/D5).
+    if let Some(native_ppp) = ctx.native_pixels_per_point() {
+        ctx.set_pixels_per_point(native_ppp);
+    }
     let mut fonts = egui::FontDefinitions::default();
     let candidate_paths = [
         r"C:\Windows\Fonts\malgun.ttf",

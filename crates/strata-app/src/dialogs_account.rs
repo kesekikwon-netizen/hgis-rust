@@ -19,6 +19,8 @@ pub struct AccountDialogState {
     pub heritage_configured: bool,
     pub status_summary_ko: String,
     pub show_passwords: bool,
+    /// Set by `validate_credentials` when a site account has only one of ID/PW.
+    pub validation_error: Option<String>,
 }
 
 impl AccountDialogState {
@@ -59,9 +61,31 @@ impl AccountDialogState {
             heritage_configured: false,
             status_summary_ko: String::new(),
             show_passwords: false,
+            validation_error: None,
         };
         st.recompute_flags();
         st
+    }
+
+    /// C++ KaTopographicAccountDialog.cpp:60-61 — a site account must have both
+    /// ID and password, or neither. Only one filled in is a user mistake worth
+    /// stopping on, because storing it would look "configured" while failing
+    /// to log in later.
+    pub fn validate_credentials(&mut self) -> bool {
+        for creds in [
+            &self.cadastral_creds,
+            &self.ngii_creds,
+            &self.heritage_creds,
+        ] {
+            if creds.username.trim().is_empty() != creds.password.is_empty() {
+                self.validation_error = Some(
+                    "아이디와 비밀번호를 모두 입력하거나 두 항목을 모두 비워 주세요.".to_owned(),
+                );
+                return false;
+            }
+        }
+        self.validation_error = None;
+        true
     }
 
     pub fn recompute_flags(&mut self) {

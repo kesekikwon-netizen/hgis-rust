@@ -437,16 +437,36 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                         .spacing([12.0, 8.0])
                         .show(ui, |ui| {
                             ui.label("VWorld API 키:");
-                            ui.add(
-                                egui::TextEdit::singleline(&mut app.accounts.vworld_key)
-                                    .desired_width(340.0),
-                            );
+                            ui.vertical(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut app.accounts.vworld_key)
+                                        .hint_text("vworld.kr 인증키")
+                                        .desired_width(340.0),
+                                );
+                                ui.label(
+                                    egui::RichText::new("위성 · 지적 · 주소 찾기에 함께 씁니다.")
+                                        .size(11.5)
+                                        .color(Color32::from_rgb(95, 94, 88)),
+                                );
+                            });
                             ui.end_row();
                             ui.label("역사지리정보DB 키:");
-                            ui.add(
-                                egui::TextEdit::singleline(&mut app.accounts.history_gis_key)
+                            ui.vertical(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut app.accounts.history_gis_key,
+                                    )
+                                    .hint_text("hgis.history.go.kr 인증키")
                                     .desired_width(340.0),
-                            );
+                                );
+                                ui.label(
+                                    egui::RichText::new(
+                                        "1919 조선지형도 전용. VWorld 키로는 인증되지 않습니다.",
+                                    )
+                                    .size(11.5)
+                                    .color(Color32::from_rgb(95, 94, 88)),
+                                );
+                            });
                             ui.end_row();
                             ui.label("VWorld 지적도 ID / PW:");
                             ui.horizontal(|ui| {
@@ -501,6 +521,19 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                             ui.end_row();
                         });
                     ui.add_space(6.0);
+                    // C++ KaTopographicAccountDialog.cpp:25 description
+                    ui.label(
+                        egui::RichText::new(
+                            "국토지리정보원 계정을 이 PC에 저장하면 수치지형도를 받을 때 자동 로그인에 사용합니다. 두 항목을 모두 비우고 저장하면 저장된 자동로그인 계정을 해제합니다.",
+                        )
+                        .size(11.5)
+                        .color(Color32::from_rgb(95, 94, 88)),
+                    );
+                    // C++ KaTopographicAccountDialog.cpp:60-63 — half-filled account
+                    if let Some(err) = &app.accounts.validation_error {
+                        ui.colored_label(Color32::from_rgb(185, 28, 28), err);
+                    }
+                    ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut app.accounts.show_passwords, "비밀번호 표시");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -514,11 +547,14 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                             .corner_radius(6.0)
                             .min_size(Vec2::new(78.0, 30.0));
                             if ui.add(save_b).clicked() {
-                                app.accounts.save_all_to_disk();
-                                app.home_map.draw_guide_message = Some(
-                                    "API 키와 사이트 계정(DPAPI 암호화)을 저장했습니다.".to_owned(),
-                                );
-                                app.modals.active = None;
+                                if app.accounts.validate_credentials() {
+                                    app.accounts.save_all_to_disk();
+                                    app.home_map.draw_guide_message = Some(
+                                        "API 키와 사이트 계정(DPAPI 암호화)을 저장했습니다."
+                                            .to_owned(),
+                                    );
+                                    app.modals.active = None;
+                                }
                             }
                         });
                     });
@@ -594,15 +630,9 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         }
         ActiveModalDialog::ExportSubmitPackage => {
             let full = ctx.screen_rect();
-            let native_ppp = ctx.native_pixels_per_point().unwrap_or(1.0);
-            let (vis_w, vis_h) = if native_ppp > 1.05 {
-                (
-                    (full.width() / native_ppp - 8.0).max(640.0),
-                    (full.height() / native_ppp - 16.0).max(420.0),
-                )
-            } else {
-                (full.width(), full.height())
-            };
+            // screen_rect is already in logical points, so dividing by the native
+            // scale again shrank the modal on 150% displays (Task D5).
+            let (vis_w, vis_h) = (full.width(), full.height());
             let modal_w = 820.0_f32.min((vis_w - 40.0).max(640.0));
             let modal_h = 540.0_f32.min((vis_h - 60.0).max(420.0));
             let modal_pos = Pos2::new(
@@ -2214,6 +2244,40 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // D5 KaTopographicAccountDialog.cpp:60-61 — an account with only one of
+    // ID/PW must block the save; both-empty and both-filled are fine.
+    #[test]
+    fn test_d5_account_dialog_half_filled_validation() {
+        let mut st = crate::dialogs_account::AccountDialogState::default();
+
+        // half filled (ID only) -> blocked
+        st.ngii_creds.username = "user1".to_owned();
+        st.ngii_creds.password = String::new();
+        assert!(!st.validate_credentials());
+        assert_eq!(
+            st.validation_error.as_deref(),
+            Some("아이디와 비밀번호를 모두 입력하거나 두 항목을 모두 비워 주세요.")
+        );
+
+        // password only also blocked
+        st.ngii_creds.username = String::new();
+        st.ngii_creds.password = "secret".to_owned();
+        assert!(!st.validate_credentials());
+        assert!(st.validation_error.is_some());
+
+        // both empty -> allowed
+        st.ngii_creds.username = String::new();
+        st.ngii_creds.password = String::new();
+        assert!(st.validate_credentials());
+        assert_eq!(st.validation_error, None);
+
+        // both filled -> allowed
+        st.ngii_creds.username = "user1".to_owned();
+        st.ngii_creds.password = "secret".to_owned();
+        assert!(st.validate_credentials());
+        assert_eq!(st.validation_error, None);
+    }
 
     // D4 KaTopographicBrowser: compact/expanded toggle, 6-stage progression,
     // and fallback to the coordinate-confirm import dialog.

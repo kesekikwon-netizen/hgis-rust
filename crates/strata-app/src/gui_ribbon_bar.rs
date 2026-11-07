@@ -577,10 +577,13 @@ impl StrataAppState {
                                         .changed()
                                     {
                                         self.large_font_mode = self.display_options.large_text;
+                                        // Scale relative to the OS DPI, not an absolute 1.0/1.15.
+                                        let base_ppp =
+                                            ctx.native_pixels_per_point().unwrap_or(1.0);
                                         ctx.set_pixels_per_point(if self.large_font_mode {
-                                            1.15
+                                            base_ppp * 1.15
                                         } else {
-                                            1.0
+                                            base_ppp
                                         });
                                     }
                                 });
