@@ -113,6 +113,38 @@ pub fn nishita_sky_zenith_horizon_rgb(sun_elevation_deg: f64) -> ([u8; 3], [u8; 
     (zenith, horizon)
 }
 
+/// C++ `KaTerrain3dView` + `KaAtmosphereAgX` — 표면 알베도·법선 조도·깊이 안개(Nishita 대기 산란)를 결합해 AgX sRGB 픽셀 산출
+#[must_use]
+pub fn apply_nishita_aerial_perspective_agx(
+    albedo_linear: [f64; 3],
+    diffuse_shade: f64,
+    specular: f64,
+    depth_haze_t: f64,
+    sun_elevation_deg: f32,
+) -> [u8; 4] {
+    let sun_factor = f64::from(compute_sun_illumination_factor(sun_elevation_deg));
+    let shade = (diffuse_shade * (0.25 + 0.75 * sun_factor)).clamp(0.03, 3.5);
+    let (_, horizon) = nishita_sky_zenith_horizon_rgb(f64::from(sun_elevation_deg));
+    let haze_lin = [
+        (f64::from(horizon[0]) / 255.0).powf(2.4) * 0.55,
+        (f64::from(horizon[1]) / 255.0).powf(2.4) * 0.62,
+        (f64::from(horizon[2]) / 255.0).powf(2.4) * 0.78,
+    ];
+    let haze = depth_haze_t.clamp(0.0, 0.16);
+    let lit = [
+        (albedo_linear[0] * shade + specular) * (1.0 - haze) + haze_lin[0] * haze,
+        (albedo_linear[1] * shade + specular) * (1.0 - haze) + haze_lin[1] * haze,
+        (albedo_linear[2] * shade + specular * 0.9) * (1.0 - haze) + haze_lin[2] * haze,
+    ];
+    let srgb = agx_tonemap_with_exposure_contrast(lit, 1.15, 1.65);
+    [
+        (srgb[0] * 255.0).round().clamp(0.0, 255.0) as u8,
+        (srgb[1] * 255.0).round().clamp(0.0, 255.0) as u8,
+        (srgb[2] * 255.0).round().clamp(0.0, 255.0) as u8,
+        255,
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
