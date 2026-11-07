@@ -13,10 +13,11 @@
     "D9",
     "D10",
     "D11",
-    "D12"
+    "D12",
+    "D13"
   ],
-  "last_commit": "ec68371",
-  "active_task": "D13",
+  "last_commit": "fa8a12c",
+  "active_task": null,
   "queued_tasks": [],
   "require_live_5tab_screenshots_before_commit": true,
   "required_shots": [
@@ -25,5 +26,6 @@
     "target/shots/now-drawing.png",
     "target/shots/now-paleo.png",
     "target/shots/now-terrain3d.png"
-  ]
+  ],
+  "required_shots_refreshed_at": "2026-11-08 08:21 KST (1600x900, SetProcessDPIAware)"
 }
