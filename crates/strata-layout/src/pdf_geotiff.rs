@@ -2,15 +2,27 @@ use strata_types::error::StrataResult;
 
 use crate::sheet_composer::{DrawingSheet, SheetRectMm};
 
+pub const HGIS_MM_PER_INCH: f64 = 25.4;
+pub const HGIS_POINTS_PER_INCH: f64 = 72.0;
+pub const HGIS_TIFFTAG_MODELPIXELSCALE: u16 = 33550;
+pub const HGIS_TIFFTAG_MODELTIEPOINT: u16 = 33922;
+pub const HGIS_TIFFTAG_GEOKEYDIRECTORY: u16 = 34735;
+pub const HGIS_GEOKEY_PROJECTED_CS_TYPE: u16 = 3072;
+
+/// C++ `KaPdfExporter` — 밀리미터(mm) 단위를 PostScript/PDF 포인트(`mm * 72.0 / 25.4`)로 변환
+#[must_use]
+pub fn mm_to_pdf_points(mm: f64) -> f64 {
+    mm * HGIS_POINTS_PER_INCH / HGIS_MM_PER_INCH
+}
+
 pub fn render_sheet_pdf_bytes(sheet: &DrawingSheet, title: &str) -> StrataResult<Vec<u8>> {
-    const MM_TO_PT: f64 = 2.834_645_67;
-    let pt_w = sheet.width_mm * MM_TO_PT;
-    let pt_h = sheet.height_mm * MM_TO_PT;
+    let pt_w = mm_to_pdf_points(sheet.width_mm);
+    let pt_h = mm_to_pdf_points(sheet.height_mm);
     let rect_cmd = |r: &SheetRectMm| -> String {
-        let x = r.x_mm * MM_TO_PT;
-        let y = (sheet.height_mm - r.y_mm - r.height_mm) * MM_TO_PT;
-        let w = r.width_mm * MM_TO_PT;
-        let h = r.height_mm * MM_TO_PT;
+        let x = mm_to_pdf_points(r.x_mm);
+        let y = mm_to_pdf_points(sheet.height_mm - r.y_mm - r.height_mm);
+        let w = mm_to_pdf_points(r.width_mm);
+        let h = mm_to_pdf_points(r.height_mm);
         format!("{x:.2} {y:.2} {w:.2} {h:.2} re S\n")
     };
     let mut stream = String::from("0.8 w 0.14 0.13 0.11 RG\n");
@@ -99,6 +111,30 @@ pub fn export_geotiff_with_cancel(
     })
 }
 
+/// C++ `KaPdfExporter::exportLayoutToPdf` & `cleanupPartialFile` — 쓰기 실패 또는 디스크 용량 부족 시 불완전 `.pdf` / `.pdf.tmp` 즉시 삭제
+pub fn export_sheet_pdf_atomic(
+    sheet: &DrawingSheet,
+    title: &str,
+    out_pdf_path: &std::path::Path,
+    simulate_disk_full: bool,
+) -> Result<(), &'static str> {
+    let tmp_path = out_pdf_path.with_extension("pdf.tmp");
+    let bytes = render_sheet_pdf_bytes(sheet, title).map_err(|_| "PDF 스트림 생성 실패")?;
+    if std::fs::write(&tmp_path, &bytes).is_err() {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err("PDF 임시 파일 쓰기 실패");
+    }
+    if simulate_disk_full {
+        let _ = std::fs::remove_file(&tmp_path);
+        let _ = std::fs::remove_file(out_pdf_path);
+        return Err("디스크 용량 부족으로 불완전 PDF 파일을 삭제했습니다");
+    }
+    std::fs::rename(&tmp_path, out_pdf_path).map_err(|_| {
+        let _ = std::fs::remove_file(&tmp_path);
+        "PDF 최종 파일 교체 실패"
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,6 +180,33 @@ mod tests {
         assert!(export_geotiff_with_cancel(&cancel_tif, 2480, 3508, 5186, Some(&cancelled)).is_err());
         assert!(!cancel_tif.exists());
         assert!(!cancel_tif.with_extension("tif.tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
+    #[test]
+    fn test_a4_landscape_mediabox_84189_59528_epsg5187_geokey_and_cleanup_on_disk_full(
+    ) -> StrataResult<()> {
+        let sheet = DrawingSheet::new(SheetPaperSize::A4, SheetOrientation::Landscape);
+        assert!((mm_to_pdf_points(sheet.width_mm) - 841.89).abs() <= 0.01);
+        assert!((mm_to_pdf_points(sheet.height_mm) - 595.28).abs() <= 0.01);
+
+        let pdf = render_sheet_pdf_bytes(&sheet, "A4 가로 도면")?;
+        let pdf_str = String::from_utf8_lossy(&pdf);
+        assert!(pdf_str.contains("/MediaBox [0 0 841.89 595.28]"));
+
+        // EPSG:5187 (0x1443) GeoKey 3072 (0x0C00) 인코딩 검증
+        let tiff_5187 = render_geotiff_header_bytes(512, 512, 5187);
+        assert!(tiff_5187
+            .windows(8)
+            .any(|w| w == [0x00, 0x0C, 0x00, 0x00, 0x01, 0x00, 0x43, 0x14]));
+
+        let dir = std::env::temp_dir().join(format!("ka_pdf_cleanup_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        let target_pdf = dir.join("partial_test.pdf");
+        assert!(export_sheet_pdf_atomic(&sheet, "테스트", &target_pdf, true).is_err());
+        assert!(!target_pdf.exists());
+        assert!(!target_pdf.with_extension("pdf.tmp").exists());
         let _ = std::fs::remove_dir_all(&dir);
         Ok(())
     }

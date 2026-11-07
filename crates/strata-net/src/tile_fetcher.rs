@@ -7,6 +7,34 @@ use crate::vworld_client::VworldClient;
 /// C++ `TileFetcher.cpp` 동시 HTTP 요청 상한 (`maxConcurrentRequests = 6`)
 pub const MAX_CONCURRENT_TILE_REQUESTS: usize = 6;
 
+pub const HGIS_WEB_MERCATOR_MAX_LAT: f64 = 85.051_128_78;
+pub const HGIS_TILE_MEM_CACHE_MAX_COUNT: usize = 256;
+pub const HGIS_TILE_DISK_CACHE_MAX_BYTES: u64 = 524_288_000;
+pub const HGIS_TILE_MAX_RETRIES: u32 = 3;
+pub const HGIS_TILE_BACKOFF_BASE_MS: u64 = 1000;
+
+/// C++ `KaTileFetcher::lonLatToTileIndex` — 위도 `[-85.05112878°, +85.05112878°]` 클램핑 및 Web Mercator 슬리피 타일 인덱스 `(tx, ty)` 산출
+#[must_use]
+pub fn lon_lat_to_tile_index(lon_deg: f64, lat_deg: f64, zoom: u8) -> (u32, u32) {
+    let z = zoom.min(19);
+    let n = f64::from(1_u32 << z);
+    let clamped_lat = lat_deg.clamp(-HGIS_WEB_MERCATOR_MAX_LAT, HGIS_WEB_MERCATOR_MAX_LAT);
+    let lat_rad = clamped_lat.to_radians();
+    let tx = (((lon_deg + 180.0) / 360.0) * n).floor().clamp(0.0, n - 1.0) as u32;
+    let ty_f = ((1.0 - (lat_rad.tan() + 1.0 / lat_rad.cos()).ln() / std::f64::consts::PI) / 2.0) * n;
+    let ty = ty_f.floor().clamp(0.0, n - 1.0) as u32;
+    (tx, ty)
+}
+
+/// C++ `KaTileFetcher` HTTP 429/503 지수 백오프 재시도 대기 시간(`1000ms -> 2000ms -> 4000ms`, 최대 3회)
+#[must_use]
+pub const fn compute_tile_exponential_backoff_ms(retry_attempt: u32) -> Option<u64> {
+    if retry_attempt >= HGIS_TILE_MAX_RETRIES {
+        return None;
+    }
+    Some(HGIS_TILE_BACKOFF_BASE_MS << retry_attempt)
+}
+
 /// C++ `ThreadSafeLruCache<Key, Value>` 메모리 타일 캐시 (LRU 퇴출) 1:1
 #[derive(Debug, Clone)]
 pub struct TileLruCache {
@@ -203,5 +231,16 @@ mod tests {
         );
         assert!(cache.get("tile_1").is_none());
         assert_eq!(cache.get("tile_6"), Some(vec![6]));
+    }
+
+    #[test]
+    fn test_gyeongju_cheomseongdae_tile_index_28145_12886_and_exponential_backoff_1000_2000_4000() {
+        let (tx, ty) = lon_lat_to_tile_index(129.2190, 35.8347, 15);
+        assert_eq!((tx, ty), (28145, 12886));
+
+        assert_eq!(compute_tile_exponential_backoff_ms(0), Some(1000));
+        assert_eq!(compute_tile_exponential_backoff_ms(1), Some(2000));
+        assert_eq!(compute_tile_exponential_backoff_ms(2), Some(4000));
+        assert_eq!(compute_tile_exponential_backoff_ms(3), None);
     }
 }

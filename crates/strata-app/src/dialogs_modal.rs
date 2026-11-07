@@ -65,6 +65,31 @@ impl Default for ModalDialogController {
     }
 }
 
+impl ModalDialogController {
+    /// C++ `KaModalDialogController::showExclusiveModal` — 이미 활성화된 모달이 존재할 때 중복 모달 팝업을 차단하는 단일 가드
+    pub fn show_exclusive_modal(&mut self, dialog: ActiveModalDialog) -> bool {
+        if self.active.is_some() {
+            return false;
+        }
+        self.active = Some(dialog);
+        true
+    }
+
+    /// C++ `KaModalDialogController` ESC 취소 및 미저장 입력값 존재 시 닫기 확인(`"저장되지 않은 변경사항이 있습니다. 닫으시겠습니까?"`)
+    pub fn try_reject_active_modal(
+        &mut self,
+        confirm_on_dirty: bool,
+        is_form_dirty: bool,
+        user_confirmed_discard: bool,
+    ) -> Result<(), &'static str> {
+        if confirm_on_dirty && is_form_dirty && !user_confirmed_discard {
+            return Err("저장되지 않은 변경사항이 있습니다. 닫으시겠습니까?");
+        }
+        self.active = None;
+        Ok(())
+    }
+}
+
 pub fn render_strata_modal_header(ui: &mut egui::Ui, title: &str, open: &mut bool) {
     ui.horizontal(|ui| {
         let (logo_r, _) = ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::hover());
@@ -424,4 +449,31 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         other => render_download_and_print_dialogs(app, ctx, other, &mut open),
     }
     if !open { app.modals.active = None; }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_modal_exclusive_guard_blocks_duplicate_popup_and_dirty_reject_confirmation() {
+        let mut ctrl = ModalDialogController::default();
+        assert!(ctrl.show_exclusive_modal(ActiveModalDialog::PaperSetup));
+        assert_eq!(ctrl.active, Some(ActiveModalDialog::PaperSetup));
+
+        // 이미 모달이 떠 있는 상태에서 다른 모달 실행 시 차단
+        assert!(!ctrl.show_exclusive_modal(ActiveModalDialog::DemDownload));
+        assert_eq!(ctrl.active, Some(ActiveModalDialog::PaperSetup));
+
+        // 미저장 변경사항이 있고 사용자가 아직 확인하지 않은 경우 닫기 거부
+        let err = ctrl
+            .try_reject_active_modal(true, true, false)
+            .expect_err("dirty modal must ask confirmation");
+        assert_eq!(err, "저장되지 않은 변경사항이 있습니다. 닫으시겠습니까?");
+        assert_eq!(ctrl.active, Some(ActiveModalDialog::PaperSetup));
+
+        // 사용자가 닫기 확인 시 정상 종료
+        assert!(ctrl.try_reject_active_modal(true, true, true).is_ok());
+        assert_eq!(ctrl.active, None);
+    }
 }
