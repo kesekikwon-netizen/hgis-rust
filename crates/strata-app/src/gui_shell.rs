@@ -137,8 +137,8 @@ impl StrataAppState {
         let native_ppp = ctx.native_pixels_per_point().unwrap_or(1.0);
         if native_ppp > 1.05 {
             let full = ctx.screen_rect();
-            let vis_w = (full.width() / native_ppp - 8.0).max(960.0);
-            let vis_h = (full.height() / native_ppp - 16.0).max(600.0);
+            let vis_w = (full.width() / native_ppp - 8.0).max(320.0);
+            let vis_h = (full.height() / native_ppp - 16.0).max(240.0);
             let pad_b = (full.height() - vis_h).max(0.0);
             let pad_r = (full.width() - vis_w).max(0.0);
             if pad_b > 0.5 {

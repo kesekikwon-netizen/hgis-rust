@@ -333,17 +333,27 @@ impl StrataAppState {
             // 1. 용지(mm) 비율에 맞춘 화면 용지 사각형 (상단 힌트 알약과 하단 7버튼 툴바 사이에 100% 수용)
             let paper_w_mm = (self.drawing.sheet.width_mm.max(100.0)) as f32;
             let paper_h_mm = (self.drawing.sheet.height_mm.max(100.0)) as f32;
-            let top_bound = rect.top() + 50.0;
-            let bottom_bound = (rect.bottom() - 54.0).max(top_bound + 180.0);
-            let avail_w = (rect.width() - 48.0).max(200.0);
-            let avail_h = (bottom_bound - top_bound).max(180.0);
-            let px_per_mm = (avail_w / paper_w_mm).min(avail_h / paper_h_mm).clamp(0.75, 3.2);
+            let compact_v = rect.height() < 460.0;
+            let top_bound = if compact_v {
+                rect.top() + 8.0
+            } else {
+                rect.top() + 48.0
+            };
+            let bottom_bound = if compact_v {
+                (rect.bottom() - 42.0).max(top_bound + 80.0)
+            } else {
+                (rect.bottom() - 52.0).max(top_bound + 120.0)
+            };
+            let avail_w = (rect.width() - 28.0).max(80.0);
+            let avail_h = (bottom_bound - top_bound).max(80.0);
+            let px_per_mm = (avail_w / paper_w_mm).min(avail_h / paper_h_mm).clamp(0.25, 3.2);
             let sheet_w = paper_w_mm * px_per_mm;
             let sheet_h = paper_h_mm * px_per_mm;
-            let sheet_rect = Rect::from_center_size(
+            let raw_sheet_rect = Rect::from_center_size(
                 Pos2::new(rect.center().x, 0.5 * (top_bound + bottom_bound)),
                 Vec2::new(sheet_w, sheet_h),
             );
+            let sheet_rect = raw_sheet_rect.intersect(rect);
             p.rect_filled(
                 sheet_rect.translate(Vec2::new(4.0, 5.0)),
                 1.0,
@@ -786,14 +796,15 @@ impl StrataAppState {
                     ));
                 }
 
+                let s = (px_per_mm / 1.65).clamp(0.42, 1.3);
                 let base_leg_r = mm_to_rect(self.drawing.sheet.legend_rect);
-                let row_h = 12.5_f32;
-                let leg_w = base_leg_r.width().clamp(78.0, map_rect.width() * 0.42);
-                let leg_h = (22.0 + (legend_items.len() as f32) * row_h)
-                    .clamp(36.0, base_leg_r.height().max(72.0));
+                let row_h = 12.0 * s;
+                let leg_w = base_leg_r.width().clamp(42.0 * s, map_rect.width() * 0.42);
+                let leg_h = (20.0 * s + (legend_items.len() as f32) * row_h)
+                    .clamp(24.0 * s, base_leg_r.height().max(68.0 * s));
                 let leg_r = Rect::from_min_size(
                     Pos2::new(
-                        (map_rect.right() - leg_w - 6.0).max(map_rect.left() + 4.0),
+                        (map_rect.right() - leg_w - 5.0 * s).max(map_rect.left() + 4.0),
                         base_leg_r.top(),
                     ),
                     Vec2::new(leg_w, leg_h),
@@ -804,9 +815,9 @@ impl StrataAppState {
                     Color32::from_rgba_unmultiplied(255, 255, 255, 245),
                 );
                 sheet_p.rect_stroke(leg_r, 1.0, Stroke::new(0.9, ink), egui::StrokeKind::Middle);
-                let title_pt = (self.drawing.sheet.legend_font_pt as f32).clamp(8.0, 11.5);
+                let title_pt = ((self.drawing.sheet.legend_font_pt as f32) * s).clamp(4.5, 11.5);
                 sheet_p.text(
-                    Pos2::new(leg_r.left() + 6.0, leg_r.top() + 10.0),
+                    Pos2::new(leg_r.left() + 5.0 * s, leg_r.top() + 9.0 * s),
                     egui::Align2::LEFT_CENTER,
                     &self.drawing.sheet.legend_title,
                     egui::FontId::proportional(title_pt),
@@ -814,19 +825,19 @@ impl StrataAppState {
                 );
                 sheet_p.line_segment(
                     [
-                        Pos2::new(leg_r.left() + 4.0, leg_r.top() + 18.0),
-                        Pos2::new(leg_r.right() - 4.0, leg_r.top() + 18.0),
+                        Pos2::new(leg_r.left() + 3.5 * s, leg_r.top() + 16.5 * s),
+                        Pos2::new(leg_r.right() - 3.5 * s, leg_r.top() + 16.5 * s),
                     ],
                     Stroke::new(0.5, Color32::from_rgb(200, 198, 190)),
                 );
                 for (idx, (fill_c, stroke_c, name)) in legend_items.into_iter().enumerate() {
-                    let ry = leg_r.top() + 25.5 + (idx as f32) * row_h;
-                    if ry + 4.0 > leg_r.bottom() {
+                    let ry = leg_r.top() + 23.5 * s + (idx as f32) * row_h;
+                    if ry + 3.0 * s > leg_r.bottom() {
                         break;
                     }
                     let sw_r = Rect::from_min_size(
-                        Pos2::new(leg_r.left() + 6.0, ry - 4.0),
-                        Vec2::new(11.0, 7.5),
+                        Pos2::new(leg_r.left() + 5.0 * s, ry - 3.5 * s),
+                        Vec2::new(10.0 * s, 7.0 * s),
                     );
                     if fill_c != Color32::TRANSPARENT {
                         sheet_p.rect_filled(sw_r, 1.0, fill_c);
@@ -838,24 +849,25 @@ impl StrataAppState {
                         egui::StrokeKind::Middle,
                     );
                     sheet_p.text(
-                        Pos2::new(sw_r.right() + 5.0, ry),
+                        Pos2::new(sw_r.right() + 4.0 * s, ry),
                         egui::Align2::LEFT_CENTER,
                         name,
-                        egui::FontId::proportional((title_pt - 1.5).max(7.2)),
+                        egui::FontId::proportional((title_pt - 1.2 * s).max(4.0)),
                         ink,
                     );
                 }
             }
 
             // (2) 하단 장식띠: LayoutService::standardSheetChrome 사각형 (scale_bar, scale_label, crs, north) 및 KaTitleBlock::defaultRect
+            let s = (px_per_mm / 1.65).clamp(0.42, 1.3);
             let chrome_north_r = mm_to_rect(chrome.north);
             let size_scale = (self.drawing.sheet.north_arrow_size_mm as f32 / 28.0).clamp(0.8, 1.35);
-            let north_sz = (chrome_north_r.width() * size_scale)
-                .clamp(28.0, (sheet_rect.bottom() - chrome_north_r.top() - 4.0).max(28.0));
+            let max_north_h = (sheet_rect.bottom() - chrome_north_r.top() - 2.0).max(12.0);
+            let north_sz = (chrome_north_r.width() * size_scale).clamp(12.0, max_north_h.min(36.0));
             let north_rect = Rect::from_min_size(
                 Pos2::new(
-                    (chrome_north_r.right() - north_sz).max(sheet_rect.left() + 4.0),
-                    chrome_north_r.top().max(map_rect.bottom() + 6.0),
+                    (chrome_north_r.right() - north_sz).max(sheet_rect.left() + 3.0),
+                    chrome_north_r.top().max(map_rect.bottom() + 3.5 * px_per_mm),
                 ),
                 Vec2::new(north_sz, north_sz),
             );
@@ -867,17 +879,23 @@ impl StrataAppState {
             // 도면명 / 조사명 / 유적명 / 축  척 / 작성일 (빈 값은 ―, 위치는 chrome.crs 아래 1.5mm 또는 지도 우하단)
             if self.drawing.sheet.title_block_visible {
                 let raw_tb_r = mm_to_rect(self.drawing.sheet.default_title_block_rect());
-                let tb_top = (map_rect.bottom() + 14.0).min(raw_tb_r.top());
-                let tb_bottom = (sheet_rect.bottom() - 3.0).max(tb_top + 44.0);
-                let tb_right = (north_rect.left() - 5.0).max(raw_tb_r.right());
-                let tb_w = (tb_right - raw_tb_r.left()).clamp(112.0, 168.0);
-                let tb_x = (tb_right - tb_w).clamp(sheet_rect.left() + 4.0, (sheet_rect.right() - tb_w - 4.0).max(sheet_rect.left() + 4.0));
-                let tb_h = (tb_bottom - tb_top).clamp(44.0, 62.0);
-                let tb_y = tb_top.clamp(sheet_rect.top() + 4.0, (sheet_rect.bottom() - tb_h - 2.5).max(sheet_rect.top() + 4.0));
+                let tb_top = map_rect.bottom() + 8.2 * px_per_mm;
+                let tb_bottom = (sheet_rect.bottom() - 2.0 * px_per_mm).max(tb_top + 16.0);
+                let tb_right = north_rect.left() - 2.8 * px_per_mm;
+                let tb_w = (tb_right - raw_tb_r.left()).max(64.0 * s);
+                let tb_x = (tb_right - tb_w).clamp(
+                    sheet_rect.left() + 3.0,
+                    (sheet_rect.right() - tb_w - 3.0).max(sheet_rect.left() + 3.0),
+                );
+                let tb_h = (tb_bottom - tb_top).max(16.0);
+                let tb_y = tb_top.clamp(
+                    map_rect.bottom() + 2.0,
+                    (sheet_rect.bottom() - tb_h - 1.5).max(map_rect.bottom() + 2.0),
+                );
                 let tb_r = Rect::from_min_size(Pos2::new(tb_x, tb_y), Vec2::new(tb_w, tb_h));
                 sheet_p.rect_filled(tb_r, 0.0, Color32::WHITE);
                 sheet_p.rect_stroke(tb_r, 0.0, Stroke::new(0.9, ink), egui::StrokeKind::Middle);
-                let tb_p = sheet_p.with_clip_rect(tb_r.shrink(1.5));
+                let tb_p = sheet_p.with_clip_rect(tb_r.shrink(1.0));
                 let tb_lines = format_title_block_lines(
                     &self.drawing.title_ko,
                     &rs.survey_name,
@@ -885,14 +903,15 @@ impl StrataAppState {
                     self.drawing.sheet.scale_denominator,
                     "2026-11-08",
                 );
-                let line_step = (tb_r.height() - 4.0) / 5.0;
+                let tb_font_sz = (4.5 * px_per_mm).clamp(3.8, 7.6);
+                let line_step = (tb_r.height() - 2.4 * s) / 5.0;
                 for (li, line) in tb_lines.iter().enumerate() {
-                    let ly = tb_r.top() + 2.0 + ((li as f32) + 0.5) * line_step;
+                    let ly = tb_r.top() + 1.2 * s + ((li as f32) + 0.5) * line_step;
                     tb_p.text(
-                        Pos2::new(tb_r.left() + 4.5, ly),
+                        Pos2::new(tb_r.left() + 3.5 * s, ly),
                         egui::Align2::LEFT_CENTER,
                         line,
-                        egui::FontId::proportional(7.5),
+                        egui::FontId::proportional(tb_font_sz),
                         ink,
                     );
                 }
@@ -904,13 +923,13 @@ impl StrataAppState {
                 4,
             );
             let seg_count = 4usize;
-            let max_bar_w = (chrome_crs_r.left() - chrome_bar_r.left() - 10.0).max(76.0);
+            let max_bar_w = (chrome_crs_r.left() - chrome_bar_r.left() - 6.0 * px_per_mm).max(36.0 * s);
             let raw_bar_w = ((seg_m * (seg_count as f64) * px_per_meter) as f32)
-                .clamp(76.0, max_bar_w.min(chrome_bar_r.width().max(116.0)));
+                .clamp(38.0 * s, max_bar_w.min(chrome_bar_r.width().max(68.0 * s)));
             let seg_w = raw_bar_w / (seg_count as f32);
             let bar_x0 = chrome_bar_r.left();
-            let bar_y0 = (map_rect.bottom() + 16.0).max(chrome_bar_r.top() + 6.0);
-            let bar_h = 6.5_f32;
+            let bar_y0 = map_rect.bottom() + 9.5 * px_per_mm;
+            let bar_h = (4.0 * px_per_mm).clamp(2.8, 7.2);
 
             match self.drawing.sheet.scale_bar_style {
                 ScaleBarStyle::DoubleBox => {
@@ -973,6 +992,7 @@ impl StrataAppState {
                     }
                 }
             }
+            let dist_font_sz = (4.2 * px_per_mm).clamp(3.6, 7.0);
             for i in [0usize, 2, seg_count] {
                 let tx = bar_x0 + (i as f32) * seg_w;
                 let dist_val = seg_m * (i as f64);
@@ -988,30 +1008,35 @@ impl StrataAppState {
                     format!("{dist_val:.1}")
                 };
                 sheet_p.text(
-                    Pos2::new(tx, bar_y0 - 4.0),
+                    Pos2::new(tx, bar_y0 - 2.6 * px_per_mm),
                     egui::Align2::CENTER_CENTER,
                     dist_lbl,
-                    egui::FontId::proportional(6.8),
+                    egui::FontId::proportional(dist_font_sz),
                     ink,
                 );
             }
+            let scale_font_sz = (4.8 * px_per_mm).clamp(4.0, 8.2);
             sheet_p.text(
-                Pos2::new(bar_x0 + raw_bar_w * 0.5, chrome_lbl_r.center().y.max(bar_y0 + bar_h + 7.0)),
+                Pos2::new(
+                    bar_x0 + raw_bar_w * 0.5,
+                    chrome_lbl_r.center().y.max(bar_y0 + bar_h + 4.5 * px_per_mm),
+                ),
                 egui::Align2::CENTER_CENTER,
                 format!(
                     "축척 1 : {}",
                     format_scale_denominator(f64::from(self.drawing.sheet.scale_denominator))
                 ),
-                egui::FontId::proportional(8.0),
+                egui::FontId::proportional(scale_font_sz),
                 ink,
             );
 
             // 좌표계 라벨 (chrome.crs)
+            let crs_font_sz = (4.5 * px_per_mm).clamp(3.8, 7.5);
             sheet_p.text(
-                Pos2::new(north_rect.left() - 6.0, map_rect.bottom() + 7.5),
+                Pos2::new(north_rect.left() - 3.0 * px_per_mm, map_rect.bottom() + 4.5 * px_per_mm),
                 egui::Align2::RIGHT_CENTER,
                 "동부원점(GRS80) · EPSG:5187",
-                egui::FontId::proportional(7.5),
+                egui::FontId::proportional(crs_font_sz),
                 ink,
             );
 
@@ -1036,15 +1061,15 @@ impl StrataAppState {
                 }
                 NorthArrowStyle::SingleArrow => {
                     sheet_p.text(
-                        Pos2::new(nc.x, north_rect.top() + 4.5),
+                        Pos2::new(nc.x, north_rect.top() + north_rect.height() * 0.16),
                         egui::Align2::CENTER_CENTER,
                         "N",
-                        egui::FontId::proportional(8.5),
+                        egui::FontId::proportional((8.5 * s).clamp(4.8, 9.5)),
                         ink,
                     );
-                    let tip = Pos2::new(nc.x, north_rect.top() + 9.5);
-                    let tail = Pos2::new(nc.x, north_rect.bottom() - 4.0);
-                    let wing_y = north_rect.bottom() - 1.5;
+                    let tip = Pos2::new(nc.x, north_rect.top() + north_rect.height() * 0.34);
+                    let tail = Pos2::new(nc.x, north_rect.bottom() - north_rect.height() * 0.14);
+                    let wing_y = north_rect.bottom() - north_rect.height() * 0.05;
                     let hw = nr * 0.42;
                     let left_half = vec![tip, Pos2::new(nc.x - hw, wing_y), tail];
                     let right_half = vec![tip, tail, Pos2::new(nc.x + hw, wing_y)];
@@ -1106,8 +1131,10 @@ impl StrataAppState {
                 }
             }
 
-            let bar_w = 504.0;
-            let bar_r = Rect::from_center_size(Pos2::new(rect.center().x, rect.bottom() - 26.0), Vec2::new(bar_w, 42.0));
+            let bar_w = 504.0_f32.min((rect.width() - 12.0).max(210.0));
+            let bar_h_px = if compact_v { 34.0 } else { 42.0 };
+            let bar_cy = rect.bottom() - bar_h_px * 0.5 - 4.0;
+            let bar_r = Rect::from_center_size(Pos2::new(rect.center().x, bar_cy), Vec2::new(bar_w, bar_h_px));
             p.rect_filled(bar_r, 6.0, Color32::WHITE);
             p.rect_stroke(bar_r, 6.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
             let btns = [("■", "좌표점"), ("◎", "레이어를 가운데"), ("□", "지도 조정"), ("▣", "화면 맞춤"), ("✥", "항목 이동"), ("▯", "용지/방향"), ("≡", "도면 목록")];
@@ -1117,9 +1144,9 @@ impl StrataAppState {
                 if i > 0 {
                     p.line_segment([Pos2::new(x0, bar_r.top() + 4.0), Pos2::new(x0, bar_r.bottom() - 4.0)], Stroke::new(1.0, Color32::from_rgb(222, 220, 210)));
                 }
-                let cell_r = Rect::from_min_size(Pos2::new(x0, bar_r.top()), Vec2::new(bw, 42.0));
-                p.text(Pos2::new(cell_r.center().x, cell_r.top() + 13.0), egui::Align2::CENTER_CENTER, *ico, egui::FontId::proportional(11.0), Color32::from_rgb(55, 54, 50));
-                p.text(Pos2::new(cell_r.center().x, cell_r.bottom() - 10.0), egui::Align2::CENTER_CENTER, *lbl, egui::FontId::proportional(10.0), Color32::from_rgb(55, 54, 50));
+                let cell_r = Rect::from_min_size(Pos2::new(x0, bar_r.top()), Vec2::new(bw, bar_h_px));
+                p.text(Pos2::new(cell_r.center().x, cell_r.top() + bar_h_px * 0.32), egui::Align2::CENTER_CENTER, *ico, egui::FontId::proportional(if compact_v { 9.5 } else { 11.0 }), Color32::from_rgb(55, 54, 50));
+                p.text(Pos2::new(cell_r.center().x, cell_r.bottom() - bar_h_px * 0.24), egui::Align2::CENTER_CENTER, *lbl, egui::FontId::proportional(if compact_v { 8.0 } else { 10.0 }), Color32::from_rgb(55, 54, 50));
                 if ui.interact(cell_r, ui.id().with(("drawing_toolbar_btn", i)), egui::Sense::click()).clicked() {
                     match i {
                         0 => {
