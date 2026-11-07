@@ -2,7 +2,8 @@ use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use strata_geo::trench_grid::{TrenchShapeKind, TrenchStandardLength};
 use strata_layout::sheet_composer::SheetPaperSize;
 use strata_layout::tile_print::{
-    compute_tile_print_plan, format_print_dispatched_message, verify_requested_device_paper,
+    compute_tile_print_plan_with_overlap, format_print_dispatched_message,
+    verify_requested_device_paper,
 };
 use strata_storage::gpkg::{validate_survey_name_ko, KA_LONGITUDE_RULER_CITIES};
 use strata_types::crs::WorkCrs;
@@ -355,7 +356,7 @@ pub fn render_download_and_print_dialogs(
                         cp.circle_filled(cr.center(), 2.0, Color32::BLACK);
                         let turn = app.modals.trench_azimuth_deg.rem_euclid(360.0);
                         let dial_note = if turn < 0.5 || (360.0 - turn) < 0.5 {
-                            "위가 북쪽���니다".to_owned()
+                            "위가 북쪽입니다".to_owned()
                         } else {
                             format!("북에서 시계 방향 {turn:.0}°")
                         };
@@ -568,6 +569,21 @@ pub fn render_download_and_print_dialogs(
                                     app.modals.print_paper = sz;
                                 }
                             }
+                            // KaPrintDialog.cpp:126-137 — 나눠 찍을 때만 이웃 장과 겹치는 폭을 고른다
+                            if !app.modals.print_single_sheet {
+                                ui.add_space(12.0);
+                                ui.label("겹침");
+                                ui.add(
+                                    egui::DragValue::new(&mut app.modals.print_overlap_mm)
+                                        .range(0.0..=30.0)
+                                        .speed(1.0)
+                                        .fixed_decimals(0)
+                                        .suffix(" mm"),
+                                )
+                                .on_hover_text(
+                                    "이웃 장과 같은 그림이 겹치는 폭입니다. 붙일 때 맞추기 쉽습니다.",
+                                );
+                            }
                         });
                         cols[0].add_space(8.0);
                         cols[0].horizontal(|ui| {
@@ -594,9 +610,29 @@ pub fn render_download_and_print_dialogs(
                                 };
                             }
                         });
+                        // KaPrintDialog.cpp:157-166 — 자름 표시와 순서 안내는 나눠 찍을 때만 쓴다
+                        if !app.modals.print_single_sheet {
+                            cols[0].horizontal(|ui| {
+                                ui.add_space(74.0);
+                                ui.vertical(|ui| {
+                                    ui.checkbox(
+                                        &mut app.modals.print_marks,
+                                        "자르는 점선·장 번호·5 cm 확인선 넣기",
+                                    );
+                                    ui.checkbox(
+                                        &mut app.modals.print_overview,
+                                        "맨 앞에 붙이는 순서 안내 한 장 넣기",
+                                    );
+                                });
+                            });
+                        }
                         cols[0].add_space(126.0);
                         let tile_plan =
-                            compute_tile_print_plan(&app.drawing.sheet, app.modals.print_paper);
+                            compute_tile_print_plan_with_overlap(
+                                &app.drawing.sheet,
+                                app.modals.print_paper,
+                                app.modals.print_overlap_mm,
+                            );
                         let page_cnt = if app.modals.print_single_sheet {
                             1
                         } else {
@@ -748,48 +784,78 @@ pub fn render_download_and_print_dialogs(
                         );
                     });
                     let tile_plan =
-                        compute_tile_print_plan(&app.drawing.sheet, app.modals.print_paper);
+                        compute_tile_print_plan_with_overlap(
+                                &app.drawing.sheet,
+                                app.modals.print_paper,
+                                app.modals.print_overlap_mm,
+                            );
                     let page_cnt = if app.modals.print_single_sheet {
                         1
                     } else {
                         (tile_plan.rows * tile_plan.cols).max(2)
                     };
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let close_b = egui::Button::new("닫기")
-                            .fill(Color32::WHITE)
-                            .stroke(Stroke::new(1.0, Color32::from_rgb(155, 152, 142)))
-                            .corner_radius(6.0)
-                            .min_size(Vec2::new(58.0, 34.0));
-                        if ui.add(close_b).clicked() {
-                            app.modals.active = None;
-                        }
-                        let prt = egui::Button::new(
-                            egui::RichText::new(format!("인쇄 · {page_cnt}장"))
-                                .color(Color32::WHITE)
-                                .strong(),
-                        )
-                        .fill(Color32::from_rgb(181, 87, 58))
-                        .corner_radius(6.0)
-                        .min_size(Vec2::new(96.0, 34.0));
-                        if ui.add(prt).clicked() {
-                            let ori = app.drawing.sheet.orientation;
-                            if verify_requested_device_paper(
-                                app.modals.print_paper,
-                                ori,
-                                app.modals.print_paper,
-                                ori,
+                    // KaPrintDialog.cpp:193-204 — 「나눈 장을 PDF로 저장…」은 왼쪽, 인쇄·닫기는 오른쪽
+                    ui.horizontal(|ui| {
+                        let save_pdf =
+                            egui::Button::new(egui::RichText::new("나눈 장을 PDF로 저장…").size(12.5))
+                                .fill(Color32::WHITE)
+                                .stroke(Stroke::new(1.0, Color32::from_rgb(155, 152, 142)))
+                                .corner_radius(6.0)
+                                .min_size(Vec2::new(150.0, 34.0));
+                        if ui
+                            .add(save_pdf)
+                            .on_hover_text(
+                                "프린터가 없는 PC나 출력소에서 찍을 수 있게 한 장이 한 쪽인 PDF로 저장합니다.",
                             )
-                            .is_ok()
-                            {
-                                app.home_map.draw_guide_message =
-                                    Some(format_print_dispatched_message(
+                            .clicked()
+                        {
+                            if let Ok(path) = app.drawing.export_pdf_to_temp() {
+                                app.home_map.draw_guide_message = Some(format!(
+                                    "나눈 장을 PDF로 저장했습니다: {}",
+                                    path.display()
+                                ));
+                            }
+                        }
+                        ui.with_layout(
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                let close_b = egui::Button::new("닫기")
+                                    .fill(Color32::WHITE)
+                                    .stroke(Stroke::new(1.0, Color32::from_rgb(155, 152, 142)))
+                                    .corner_radius(6.0)
+                                    .min_size(Vec2::new(58.0, 34.0));
+                                if ui.add(close_b).clicked() {
+                                    app.modals.active = None;
+                                }
+                                let prt = egui::Button::new(
+                                    egui::RichText::new(format!("인쇄 · {page_cnt}장"))
+                                        .color(Color32::WHITE)
+                                        .strong(),
+                                )
+                                .fill(Color32::from_rgb(181, 87, 58))
+                                .corner_radius(6.0)
+                                .min_size(Vec2::new(96.0, 34.0));
+                                if ui.add(prt).clicked() {
+                                    let ori = app.drawing.sheet.orientation;
+                                    if verify_requested_device_paper(
                                         app.modals.print_paper,
                                         ori,
-                                        page_cnt,
-                                    ));
-                            }
-                            app.modals.active = None;
-                        }
+                                        app.modals.print_paper,
+                                        ori,
+                                    )
+                                    .is_ok()
+                                    {
+                                        app.home_map.draw_guide_message =
+                                            Some(format_print_dispatched_message(
+                                                app.modals.print_paper,
+                                                ori,
+                                                page_cnt,
+                                            ));
+                                    }
+                                    app.modals.active = None;
+                                }
+                            },
+                        );
                     });
                 });
         }
@@ -1235,21 +1301,10 @@ pub fn render_download_and_print_dialogs(
         }
         ActiveModalDialog::HeritageBrowser => {
             // KaHeritageBrowser.cpp:203-295, KaHeritageSetupDialogs.cpp:81-200, HeritagePledge.cpp:41-73
+            // 창 크기를 정할 때 이미 DPI를 반영한 논리 픽셀을 쓴다. 여기서 다시 나누면
+            // 150% 화면에서 대화상자가 2/3 크기로 줄어 글자가 넘친다.
             let full = ctx.screen_rect();
-            let native_ppp = ctx
-                .input(|i| i.viewport().native_pixels_per_point)
-                .unwrap_or(1.5)
-                .clamp(1.0, 2.5);
-            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
-                (full.width() / native_ppp - 8.0).max(800.0)
-            } else {
-                full.width()
-            };
-            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
-                (full.height() / native_ppp - 16.0).max(520.0)
-            } else {
-                full.height()
-            };
+            let (vis_w, vis_h) = (full.width(), full.height());
             let modal_w = 940.0_f32.min(vis_w - 32.0);
             let modal_h = 620.0_f32.min(vis_h - 32.0);
             let modal_pos = Pos2::new(
@@ -1776,21 +1831,10 @@ pub fn render_download_and_print_dialogs(
         }
         ActiveModalDialog::TopographicImport => {
             // KaTopographicImportDialog.cpp:243-560 — "수치지형도 — 좌표계 확인과 지도 추가"
+            // 창 크기를 정할 때 이미 DPI를 반영한 논리 픽셀을 쓴다. 여기서 다시 나누면
+            // 150% 화면에서 대화상자가 2/3 크기로 줄어 글자가 넘친다.
             let full = ctx.screen_rect();
-            let native_ppp = ctx
-                .input(|i| i.viewport().native_pixels_per_point)
-                .unwrap_or(1.5)
-                .clamp(1.0, 2.5);
-            let vis_w = if full.width() > 1600.0 && native_ppp > 1.05 {
-                (full.width() / native_ppp - 8.0).max(800.0)
-            } else {
-                full.width()
-            };
-            let vis_h = if full.height() > 900.0 && native_ppp > 1.05 {
-                (full.height() / native_ppp - 16.0).max(520.0)
-            } else {
-                full.height()
-            };
+            let (vis_w, vis_h) = (full.width(), full.height());
             let modal_w = 960.0_f32.min(vis_w - 32.0);
             let modal_h = 620.0_f32.min(vis_h - 32.0);
             let modal_pos = Pos2::new(

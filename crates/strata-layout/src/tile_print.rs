@@ -64,8 +64,18 @@ pub fn compute_tile_print_plan(
     sheet: &DrawingSheet,
     printer_paper: SheetPaperSize,
 ) -> TilePrintPlan {
+    compute_tile_print_plan_with_overlap(sheet, printer_paper, HGIS_PRINT_OVERLAP_DEFAULT_MM)
+}
+
+/// `KaPrintDialog.cpp:131-134` — 같은 분할 계산에 「겹침」 칸에서 고른 폭(`0..=30 mm`)을 쓴다
+#[must_use]
+pub fn compute_tile_print_plan_with_overlap(
+    sheet: &DrawingSheet,
+    printer_paper: SheetPaperSize,
+    overlap_mm: f64,
+) -> TilePrintPlan {
     let (pw, ph) = printer_paper.portrait_dimensions_mm();
-    let overlap_mm = 10.0;
+    let overlap_mm = overlap_mm.clamp(0.0, 30.0);
     let eff_w = (pw - overlap_mm).max(50.0);
     let eff_h = (ph - overlap_mm).max(50.0);
     let cols = (sheet.width_mm / eff_w).ceil().max(1.0) as u32;

@@ -3,6 +3,7 @@ use strata_check_export::checklist_engine::ChecklistEngine;
 use strata_check_export::submit_package::export_submission_package;
 use strata_geo::trench_grid::{TrenchShapeKind, TrenchStandardLength};
 use strata_layout::sheet_composer::{SheetOrientation, SheetPaperSize};
+use strata_layout::tile_print::HGIS_PRINT_OVERLAP_DEFAULT_MM;
 use strata_types::crs::WorkCrs;
 
 use crate::app_state::{MainTab, StrataAppState};
@@ -76,6 +77,10 @@ pub struct ModalDialogController {
     pub print_single_sheet: bool,
     pub print_paper: SheetPaperSize,
     pub print_dpi: u32,
+    // D11 KaPrintDialog.cpp:126-166 — 나눠 찍기 겹침 폭·자름 표시·순서 안내
+    pub print_overlap_mm: f64,
+    pub print_marks: bool,
+    pub print_overview: bool,
     // T6 (1) KaControlPointDialog 상태
     pub cp_id: String,
     pub cp_x: String,
@@ -185,6 +190,9 @@ impl Default for ModalDialogController {
             print_single_sheet: true,
             print_paper: SheetPaperSize::A3,
             print_dpi: 300,
+            print_overlap_mm: HGIS_PRINT_OVERLAP_DEFAULT_MM,
+            print_marks: true,
+            print_overview: true,
             cp_id: "GCP-01".to_owned(),
             cp_x: "219748.608".to_owned(),
             cp_y: "361019.219".to_owned(),
@@ -290,6 +298,30 @@ impl ModalDialogController {
             "저장하지 않은 작업이 있습니다.".to_owned()
         };
         (heading, body)
+    }
+
+    /// C++ `KaPaperDialog.cpp:149-153` `paperScaleNote` — A4 가로만 현장 용지를 쓴다는 안내
+    #[must_use]
+    pub fn paper_scale_note(
+        paper: SheetPaperSize,
+        orientation: SheetOrientation,
+    ) -> &'static str {
+        // The field sheet is larger than A4 on purpose. Say so where it is chosen:
+        // printed on one A4 sheet it shrinks and the written 1:N no longer holds on paper.
+        if paper == SheetPaperSize::A4 && orientation == SheetOrientation::Landscape {
+            "A4 가로는 좌·우·위 1cm를 더 준 현장 용지(317×220mm)입니다. A4 종이 한 장에 찍으면 약 90%로 줄어 종이 위 축척이 달라집니다. 축척대로 찍으려면 인쇄 창에서 A3 또는 여러 장 나눠 찍기를 고르세요."
+        } else {
+            "기본은 A4 세로입니다. A4 가로는 좌·우·위 1cm를 더 줍니다."
+        }
+    }
+
+    /// C++ `KaPaperDialog.cpp:39` `plain(mm)` — `297`, not `297.0`
+    #[must_use]
+    pub fn plain_mm(mm: f64) -> String {
+        format!("{mm:.6}")
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_owned()
     }
 
     /// C++ `KaModalDialogController::showExclusiveModal` — 이미 활성화된 모달이 존재할 때 중복 모달 팝업을 차단하는 단일 가드
@@ -399,18 +431,43 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                         }
                     });
                     ui.add_space(12.0);
-                    for (dim_label, val_mm) in [("가로", app.drawing.sheet.width_mm as i32), ("세로", app.drawing.sheet.height_mm as i32)] {
+                    // KaPaperDialog.cpp:90-134 — 새 모양: the size that follows from the paper is a
+                    // reading line on a dotted leader; the entry field stands in the same place and
+                    // shows only under 「직접 입력」.
+                    for (dim_label, is_width) in [("가로", true), ("세로", false)] {
                         ui.horizontal(|ui| {
                             ui.label(egui::RichText::new(dim_label).size(16.0));
-                            ui.label(egui::RichText::new("........................................................................").color(Color32::from_rgb(150, 148, 140)));
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(egui::RichText::new("mm").size(15.0).color(Color32::from_rgb(94, 93, 89)));
-                                ui.label(egui::RichText::new(format!("{val_mm}")).strong().size(15.0));
-                            });
+                            if app.modals.custom_paper_mode {
+                                let spin = if is_width {
+                                    egui::DragValue::new(&mut app.drawing.sheet.width_mm)
+                                } else {
+                                    egui::DragValue::new(&mut app.drawing.sheet.height_mm)
+                                };
+                                let _ = ui.add(
+                                    spin.range(50.0..=2000.0)
+                                        .speed(1.0)
+                                        .fixed_decimals(1)
+                                        .suffix(" mm"),
+                                );
+                            } else {
+                                ui.label(egui::RichText::new("........................................................................").color(Color32::from_rgb(150, 148, 140)));
+                                let val_mm = if is_width {
+                                    app.drawing.sheet.width_mm
+                                } else {
+                                    app.drawing.sheet.height_mm
+                                };
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.label(egui::RichText::new("mm").size(15.0).color(Color32::from_rgb(94, 93, 89)));
+                                    ui.label(egui::RichText::new(ModalDialogController::plain_mm(val_mm)).strong().size(15.0));
+                                });
+                            }
                         });
                         ui.add_space(8.0);
                     }
-                    ui.label(egui::RichText::new("기본은 A4 세로입니다. A4 가로는 좌·우·위 1cm를 더 줍니다.").size(14.5).color(Color32::from_rgb(38, 37, 34)));
+                    ui.label(egui::RichText::new(ModalDialogController::paper_scale_note(
+                        app.drawing.sheet.paper_size,
+                        app.drawing.sheet.orientation,
+                    )).size(14.5).color(Color32::from_rgb(38, 37, 34)));
                     ui.add_space(12.0);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let cancel_btn = egui::Button::new(egui::RichText::new("취소").size(14.5)).fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(140, 138, 130))).corner_radius(6.0).min_size(Vec2::new(76.0, 38.0));
@@ -2469,6 +2526,35 @@ mod tests {
         // 사용자가 닫기 확인 시 정상 종료
         assert!(ctrl.try_reject_active_modal(true, true, true).is_ok());
         assert_eq!(ctrl.active, None);
+    }
+
+    // D11 KaPaperDialog.cpp:90-186 + KaPrintDialog.cpp:126-208
+    #[test]
+    fn test_d11_paper_dialog_scale_note_and_print_tile_options() {
+        let ctrl = ModalDialogController::default();
+        assert!((ctrl.print_overlap_mm - 10.0).abs() < 1e-9);
+        assert!(ctrl.print_marks);
+        assert!(ctrl.print_overview);
+
+        // 「직접 입력」 only swaps the reading line for an entry field; the other presets
+        // take their size from the paper (KaPaperDialog.cpp:161-175).
+        let mut app = StrataAppState::new_startup();
+        app.drawing
+            .set_paper_and_orientation(SheetPaperSize::A4, SheetOrientation::Landscape);
+        assert!(!app.modals.custom_paper_mode);
+        app.modals.custom_paper_mode = true;
+        app.drawing.sheet.width_mm = 317.0;
+        app.drawing.sheet.height_mm = 220.0;
+        assert!((app.drawing.sheet.width_mm - 317.0).abs() < 1e-9);
+        assert!((app.drawing.sheet.height_mm - 220.0).abs() < 1e-9);
+        assert_eq!(
+            ModalDialogController::paper_scale_note(SheetPaperSize::A4, SheetOrientation::Landscape),
+            "A4 가로는 좌·우·위 1cm를 더 준 현장 용지(317×220mm)입니다. A4 종이 한 장에 찍으면 약 90%로 줄어 종이 위 축척이 달라집니다. 축척대로 찍으려면 인쇄 창에서 A3 또는 여러 장 나눠 찍기를 고르세요."
+        );
+        assert_eq!(
+            ModalDialogController::paper_scale_note(SheetPaperSize::A3, SheetOrientation::Landscape),
+            "기본은 A4 세로입니다. A4 가로는 좌·우·위 1cm를 더 줍니다."
+        );
     }
 
     #[test]
