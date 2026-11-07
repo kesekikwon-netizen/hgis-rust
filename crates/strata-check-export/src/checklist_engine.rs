@@ -238,6 +238,11 @@ impl ChecklistEngine {
     }
 
     pub const HGIS_MIN_ERROR_ZOOM_MARGIN: f64 = 20.0;
+    pub const HGIS_RING_CLOSE_EPSILON: f64 = 1.0e-6;
+    pub const HGIS_DUPLICATE_DIST_EPSILON: f64 = 0.001;
+    pub const HGIS_DUPLICATE_AREA_EPSILON: f64 = 0.001;
+    pub const HGIS_SPIKE_MIN_ANGLE_DEG: f64 = 2.0;
+    pub const HGIS_MIN_CONTROL_POINTS: usize = 2;
 
     /// C++ `KaSubmitFlow::zoomToErrorLocation` — 점/미세 슬리버 오류로 이동 시 최소 20.0m 여백 BBOX(`40m x 40m`) 확장 공식 1:1
     #[must_use]
@@ -247,6 +252,176 @@ impl ChecklistEngine {
         let half_w = ((max_x - min_x).abs() * 0.5 * 1.5).max(Self::HGIS_MIN_ERROR_ZOOM_MARGIN);
         let half_h = ((max_y - min_y).abs() * 0.5 * 1.5).max(Self::HGIS_MIN_ERROR_ZOOM_MARGIN);
         [cx - half_w, cy - half_h, cx + half_w, cy + half_h]
+    }
+
+    /// C++ `TopologyChecklistEngine` — R04 폐합 링 시작점=끝점 일치 검사 (`d > 1e-6` 시 `Error`) 1:1
+    #[must_use]
+    pub fn check_r04_ring_closure(
+        ring: &[[f64; 2]],
+    ) -> (ChecklistSeverity, Option<[f64; 2]>, String) {
+        if ring.len() < 4 {
+            return (
+                ChecklistSeverity::Error,
+                ring.last().copied(),
+                "폴리곤 링 정점 수가 최소 4개 미만입니다.".to_owned(),
+            );
+        }
+        let first = ring[0];
+        let last = ring[ring.len() - 1];
+        let d = (last[0] - first[0]).hypot(last[1] - first[1]);
+        if d > Self::HGIS_RING_CLOSE_EPSILON {
+            (
+                ChecklistSeverity::Error,
+                Some(last),
+                format!(
+                    "폴리곤 링이 폐합되지 않았습니다 (시작점-끝점 이격 거리: {:.2} mm)",
+                    d * 1000.0
+                ),
+            )
+        } else {
+            (ChecklistSeverity::Pass, None, String::new())
+        }
+    }
+
+    /// C++ `TopologyChecklistEngine` — R08 자가교차(Self-Intersection) 검출 및 교차점 좌표 반환 1:1
+    #[must_use]
+    pub fn check_r08_self_intersection(
+        ring: &[[f64; 2]],
+    ) -> (ChecklistSeverity, Option<[f64; 2]>, String) {
+        if ring.len() < 4 {
+            return (ChecklistSeverity::Pass, None, String::new());
+        }
+        let seg_count = ring.len() - 1;
+        for i in 0..seg_count {
+            let a = ring[i];
+            let b = ring[i + 1];
+            for j in (i + 2)..seg_count {
+                // 폐합 링의 첫 선분과 마지막 선분은 시작점=끝점을 공유하므로 제외
+                if i == 0 && j + 1 == seg_count {
+                    continue;
+                }
+                let c = ring[j];
+                let d = ring[j + 1];
+                if let Some(ix) = Self::segment_proper_intersection(a, b, c, d) {
+                    return (
+                        ChecklistSeverity::Error,
+                        Some(ix),
+                        "폴리곤 경계선이 자가교차(Self-intersection)합니다.".to_owned(),
+                    );
+                }
+            }
+        }
+        (ChecklistSeverity::Pass, None, String::new())
+    }
+
+    fn segment_proper_intersection(
+        a: [f64; 2],
+        b: [f64; 2],
+        c: [f64; 2],
+        d: [f64; 2],
+    ) -> Option<[f64; 2]> {
+        let r = [b[0] - a[0], b[1] - a[1]];
+        let s = [d[0] - c[0], d[1] - c[1]];
+        let denom = r[0] * s[1] - r[1] * s[0];
+        if denom.abs() < 1e-12 {
+            return None;
+        }
+        let qp = [c[0] - a[0], c[1] - a[1]];
+        let t = (qp[0] * s[1] - qp[1] * s[0]) / denom;
+        let u = (qp[0] * r[1] - qp[1] * r[0]) / denom;
+        if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
+            Some([a[0] + t * r[0], a[1] + t * r[1]])
+        } else {
+            None
+        }
+    }
+
+    /// C++ `TopologyChecklistEngine` — R10 중복 피처(중심점 거리 `< 1mm` & 면적 차이 `< 0.001 m²`) 검출 1:1
+    #[must_use]
+    pub fn check_r10_duplicate_feature(
+        centroid_a: [f64; 2],
+        area_a: f64,
+        centroid_b: [f64; 2],
+        area_b: f64,
+        matched_fid: u64,
+    ) -> (ChecklistSeverity, Option<[f64; 2]>, String) {
+        let dist = (centroid_a[0] - centroid_b[0]).hypot(centroid_a[1] - centroid_b[1]);
+        let area_diff = (area_a - area_b).abs();
+        if dist < Self::HGIS_DUPLICATE_DIST_EPSILON && area_diff < Self::HGIS_DUPLICATE_AREA_EPSILON
+        {
+            (
+                ChecklistSeverity::Error,
+                Some(centroid_a),
+                format!(
+                    "피처 FID {matched_fid}과(와) 형상 및 위치가 완전히 일치하는 중복 피처입니다."
+                ),
+            )
+        } else {
+            (ChecklistSeverity::Pass, None, String::new())
+        }
+    }
+
+    /// C++ `TopologyChecklistEngine` — R11 뾰족점(Spike, 내각 `< 2.0°`) 검출 및 `acos` 클램핑(`[-1.0, 1.0]`) 1:1
+    #[must_use]
+    pub fn check_r11_spike_vertex(
+        ring: &[[f64; 2]],
+    ) -> (ChecklistSeverity, Option<[f64; 2]>, String) {
+        let is_closed = ring.len() >= 4
+            && (ring[0][0] - ring[ring.len() - 1][0]).hypot(ring[0][1] - ring[ring.len() - 1][1])
+                <= Self::HGIS_RING_CLOSE_EPSILON;
+        let unique_len = if is_closed {
+            ring.len() - 1
+        } else {
+            ring.len()
+        };
+        if unique_len < 3 {
+            return (ChecklistSeverity::Pass, None, String::new());
+        }
+        for i in 0..unique_len {
+            let prev = ring[(i + unique_len - 1) % unique_len];
+            let curr = ring[i];
+            let next = ring[(i + 1) % unique_len];
+            let v1x = prev[0] - curr[0];
+            let v1y = prev[1] - curr[1];
+            let v2x = next[0] - curr[0];
+            let v2y = next[1] - curr[1];
+            let len1 = v1x.hypot(v1y);
+            let len2 = v2x.hypot(v2y);
+            if len1 < 1e-9 || len2 < 1e-9 {
+                continue;
+            }
+            let dot = ((v1x * v2x + v1y * v2y) / (len1 * len2)).clamp(-1.0, 1.0);
+            let angle_deg = dot.acos().to_degrees();
+            if angle_deg < Self::HGIS_SPIKE_MIN_ANGLE_DEG {
+                return (
+                    ChecklistSeverity::Warning,
+                    Some(curr),
+                    format!("정점 {i}번의 사잇각이 {angle_deg:.2}도로 침상형(Spike) 돌출입니다."),
+                );
+            }
+        }
+        (ChecklistSeverity::Pass, None, String::new())
+    }
+
+    /// C++ `TopologyChecklistEngine` — R21 기준점(ControlPoints) 최소 2개 이상 존재 검사 1:1
+    #[must_use]
+    pub fn check_r21_control_points_count(
+        gcp_points: &[[f64; 2]],
+        survey_centroid: [f64; 2],
+    ) -> (ChecklistSeverity, Option<[f64; 2]>, String) {
+        if gcp_points.len() < Self::HGIS_MIN_CONTROL_POINTS {
+            let target = gcp_points.first().copied().unwrap_or(survey_centroid);
+            (
+                ChecklistSeverity::Error,
+                Some(target),
+                format!(
+                    "도면 정합 기준점이 최소 2개 이상 필요합니다 (현재: {}개)",
+                    gcp_points.len()
+                ),
+            )
+        } else {
+            (ChecklistSeverity::Pass, None, String::new())
+        }
     }
 }
 
@@ -332,5 +507,55 @@ mod tests {
         assert_eq!(bbox, [199_980.0, 499_980.0, 200_020.0, 500_020.0]);
         assert!((bbox[2] - bbox[0] - 40.0).abs() < 1e-9);
         assert!((bbox[3] - bbox[1] - 40.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_r04_ring_close_r08_bowtie_5_5_r10_duplicate_r11_spike_057deg_and_r21_gcp_count() {
+        // R04 unclosed ring
+        let unclosed = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 0.01]];
+        let (r04_sev, r04_pt, r04_msg) = ChecklistEngine::check_r04_ring_closure(&unclosed);
+        assert_eq!(r04_sev, ChecklistSeverity::Error);
+        assert_eq!(r04_pt, Some([0.0, 0.01]));
+        assert!(r04_msg.contains("10.00 mm"));
+
+        // R08 Bowtie self-intersection at (5.0, 5.0)
+        let bowtie = [
+            [0.0, 0.0],
+            [10.0, 10.0],
+            [0.0, 10.0],
+            [10.0, 0.0],
+            [0.0, 0.0],
+        ];
+        let (r08_sev, r08_pt, _) = ChecklistEngine::check_r08_self_intersection(&bowtie);
+        assert_eq!(r08_sev, ChecklistSeverity::Error);
+        let ix = r08_pt.expect("intersection point");
+        assert!((ix[0] - 5.0).abs() < 1e-6);
+        assert!((ix[1] - 5.0).abs() < 1e-6);
+
+        // R10 duplicate feature
+        let (r10_sev, r10_pt, r10_msg) = ChecklistEngine::check_r10_duplicate_feature(
+            [100.0, 200.0],
+            50.0,
+            [100.0005, 200.0],
+            50.0002,
+            42,
+        );
+        assert_eq!(r10_sev, ChecklistSeverity::Error);
+        assert_eq!(r10_pt, Some([100.0, 200.0]));
+        assert!(r10_msg.contains("FID 42"));
+
+        // R11 needle spike at P1(100.0, 0.5) with angle ~0.57 deg < 2.0 deg
+        let needle = [[0.0, 0.0], [100.0, 0.5], [0.0, 1.0], [0.0, 0.0]];
+        let (r11_sev, r11_pt, r11_msg) = ChecklistEngine::check_r11_spike_vertex(&needle);
+        assert_eq!(r11_sev, ChecklistSeverity::Warning);
+        assert_eq!(r11_pt, Some([100.0, 0.5]));
+        assert!(r11_msg.contains("0.57도"));
+
+        // R21 control points count < 2
+        let (r21_sev, r21_pt, r21_msg) =
+            ChecklistEngine::check_r21_control_points_count(&[[200_010.0, 500_020.0]], [200_000.0, 500_000.0]);
+        assert_eq!(r21_sev, ChecklistSeverity::Error);
+        assert_eq!(r21_pt, Some([200_010.0, 500_020.0]));
+        assert!(r21_msg.contains("현재: 1개"));
     }
 }
