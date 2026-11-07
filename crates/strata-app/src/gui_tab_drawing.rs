@@ -15,9 +15,8 @@ impl StrataAppState {
         self.render_cpp_left_layer_panel(ui, true);
 
         egui::SidePanel::right("ka_drawing_right_panel")
-            .resizable(true)
-            .default_width(268.0)
-            .width_range(245.0..=320.0)
+            .resizable(false)
+            .exact_width(268.0)
             .show_inside(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.add_space(4.0);
@@ -339,21 +338,33 @@ impl StrataAppState {
             } else {
                 rect.top() + 48.0
             };
-            let bottom_bound = if compact_v {
-                (rect.bottom() - 42.0).max(top_bound + 80.0)
-            } else {
-                (rect.bottom() - 52.0).max(top_bound + 120.0)
-            };
+            // 하단 7버튼 툴바는 bar_cy = rect.bottom() - bar_h/2 - 4 에 그려지므로
+            // 그 위쪽(bottom_bound)까지만 용지를 쓴다. 예전 값 -52 는 툴바 높이(42)
+            // 보다 작아서 용지 하단이 툴바를 덮었다 (실화면 확인).
+            let toolbar_h = if compact_v { 34.0 } else { 42.0 };
+            let bottom_bound = (rect.bottom() - toolbar_h - 16.0).max(top_bound + 120.0);
             let avail_w = (rect.width() - 28.0).max(80.0);
             let avail_h = (bottom_bound - top_bound).max(80.0);
             let px_per_mm = (avail_w / paper_w_mm).min(avail_h / paper_h_mm).clamp(0.25, 3.2);
             let sheet_w = paper_w_mm * px_per_mm;
             let sheet_h = paper_h_mm * px_per_mm;
+            // 용지는 이 CentralPanel 안에서만 그린다. rect 는 이미 좌우 패널이
+            // 빠진 영역이지만, 종이 비율 때문에 세로가 먼저 차면 가로가 남는다.
+            // 넘칠 때 화면 밖으로 나가지 않도록 rect 로 자른다.
             let raw_sheet_rect = Rect::from_center_size(
                 Pos2::new(rect.center().x, 0.5 * (top_bound + bottom_bound)),
                 Vec2::new(sheet_w, sheet_h),
             );
-            let sheet_rect = raw_sheet_rect.intersect(rect);
+            let sheet_rect = Rect::from_min_max(
+                Pos2::new(
+                    raw_sheet_rect.left().max(rect.left()),
+                    raw_sheet_rect.top().max(rect.top()),
+                ),
+                Pos2::new(
+                    raw_sheet_rect.right().min(rect.right()),
+                    raw_sheet_rect.bottom().min(bottom_bound.min(rect.bottom())),
+                ),
+            );
             p.rect_filled(
                 sheet_rect.translate(Vec2::new(4.0, 5.0)),
                 1.0,

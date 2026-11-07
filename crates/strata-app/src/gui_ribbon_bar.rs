@@ -577,13 +577,13 @@ impl StrataAppState {
                                         .changed()
                                     {
                                         self.large_font_mode = self.display_options.large_text;
-                                        // Scale relative to the OS DPI, not an absolute 1.0/1.15.
-                                        let base_ppp =
-                                            ctx.native_pixels_per_point().unwrap_or(1.0);
+                                        // 1.0 is the base layout scale (see
+                                        // gui_theme_fonts::configure_korean_fonts_and_theme);
+                                        // large text multiplies that base.
                                         ctx.set_pixels_per_point(if self.large_font_mode {
-                                            base_ppp * 1.15
+                                            1.15
                                         } else {
-                                            base_ppp
+                                            1.0
                                         });
                                     }
                                 });

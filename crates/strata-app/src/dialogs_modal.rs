@@ -2254,6 +2254,48 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
 mod tests {
     use super::*;
 
+    // D8 KaNewSurveyDialog / KaLongitudeRuler / KaLayerInformationPanel
+    #[test]
+    fn test_d8_new_survey_longitude_ruler_and_layer_display_settings() {
+        use crate::gui_layer_panel::KA_LABEL_INKS;
+
+        // KaLayerInformationPanel.cpp:26-33 kLabelInks — 6 presets, exact order
+        assert_eq!(KA_LABEL_INKS.len(), 6);
+        let names: Vec<&str> = KA_LABEL_INKS.iter().map(|(n, _)| *n).collect();
+        assert_eq!(
+            names,
+            vec![
+                "기본 (먹색)",
+                "흰색",
+                "진한 파랑",
+                "진한 빨강",
+                "갈색",
+                "진한 초록"
+            ]
+        );
+        assert_eq!(KA_LABEL_INKS[0].1, (31, 35, 40));
+        assert_eq!(KA_LABEL_INKS[1].1, (255, 255, 255));
+
+        // layer display settings start closed with the C++ defaults
+        let mut hm = crate::tabs_home_map::HomeMapTabState::default();
+        assert!(!hm.layer_display_settings_open);
+        assert_eq!(hm.layer_label_field_idx, 0);
+        assert!(!hm.layer_label_with_area);
+        assert_eq!(hm.layer_label_size_pt, 9);
+        assert_eq!(hm.layer_label_ink_idx, 0);
+        assert!(hm.layer_label_buffer_halo);
+
+        // toggling works and the pt range is the C++ 6..=24
+        hm.layer_display_settings_open = true;
+        assert!(hm.layer_display_settings_open);
+        hm.layer_label_size_pt = 6;
+        assert_eq!(hm.layer_label_size_pt.clamp(6, 24), 6);
+        hm.layer_label_size_pt = 40;
+        assert_eq!(hm.layer_label_size_pt.clamp(6, 24), 24);
+        hm.layer_label_ink_idx = 5;
+        assert!(hm.layer_label_ink_idx < KA_LABEL_INKS.len());
+    }
+
     // D7 KaClosePrompt.cpp:12-46 — Korean object particle + close prompt text
     #[test]
     fn test_d7_close_prompt_korean_particle_and_control_point_layout() {

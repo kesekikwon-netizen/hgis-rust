@@ -316,6 +316,16 @@ impl StrataAppState {
 
 impl eframe::App for StrataAppState {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // eframe re-applies the OS DPI every frame, so anchor the scale here as
+        // well (not only in the startup hook). Without this the logical canvas
+        // stays at ~2/3 of the window on a 150% display and wide layouts clip
+        // their right column and the bottom of tall content.
+        if !self.large_font_mode {
+            let want = 1.0;
+            if (ctx.pixels_per_point() - want).abs() > 0.001 {
+                ctx.set_pixels_per_point(want);
+            }
+        }
         let _ = self.render_workspace_egui(ctx);
     }
 }

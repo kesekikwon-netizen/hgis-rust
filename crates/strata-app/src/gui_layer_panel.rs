@@ -8,6 +8,16 @@ pub const UX_LEFT_PANEL_WIDTH: f32 = 351.0;
 pub const UX_LAYER_CARD_HEIGHT: f32 = 507.0;
 pub const UX_FILE_DRAWER_HEIGHT: f32 = 168.0;
 
+/// KaLayerInformationPanel.cpp:26-33 `kLabelInks` — 6 label ink presets.
+pub const KA_LABEL_INKS: [(&str, (u8, u8, u8)); 6] = [
+    ("기본 (먹색)", (31, 35, 40)),
+    ("흰색", (255, 255, 255)),
+    ("진한 파랑", (30, 58, 138)),
+    ("진한 빨강", (153, 27, 27)),
+    ("갈색", (124, 45, 18)),
+    ("진한 초록", (20, 83, 45)),
+];
+
 #[derive(Clone, Copy)]
 enum SwatchKind {
     CadastralOutline,
@@ -651,11 +661,78 @@ impl StrataAppState {
                         });
 
                     ui.add_space(2.0);
-                    ui.label(
-                        egui::RichText::new("▶ 표시 설정")
-                            .size(11.5)
-                            .color(Color32::from_rgb(80, 79, 74)),
+                    // KaLayerInformationPanel.cpp:54,132 — clickable collapsible header
+                    let open = self.home_map.layer_display_settings_open;
+                    let header = if open { "▾ 표시 설정" } else { "▸ 표시 설정" };
+                    let resp = ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(header)
+                                .size(11.5)
+                                .color(Color32::from_rgb(80, 79, 74)),
+                        )
+                        .sense(egui::Sense::click()),
                     );
+                    if resp.clicked() {
+                        self.home_map.layer_display_settings_open = !open;
+                    }
+                    if self.home_map.layer_display_settings_open {
+                        ui.add_space(2.0);
+                        // KaLayerInformationPanel.cpp:62-97 compact form
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("내용").size(11.0));
+                            const FIELDS: [&str; 3] = ["이름 (name)", "지번 (jibun)", "번호 (id)"];
+                            let idx = self.home_map.layer_label_field_idx.min(2);
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        egui::RichText::new(format!("{}  ▼", FIELDS[idx]))
+                                            .size(11.0),
+                                    )
+                                    .min_size(Vec2::new(96.0, 20.0)),
+                                )
+                                .clicked()
+                            {
+                                self.home_map.layer_label_field_idx = (idx + 1) % 3;
+                            }
+                            ui.checkbox(
+                                &mut self.home_map.layer_label_with_area,
+                                egui::RichText::new("면적(㎡) 함께 표시").size(11.0),
+                            );
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("크기").size(11.0));
+                            ui.add(
+                                egui::DragValue::new(&mut self.home_map.layer_label_size_pt)
+                                    .range(6..=24)
+                                    .speed(0.2)
+                                    .suffix(" pt"),
+                            );
+                            ui.label(egui::RichText::new("글자 색").size(11.0));
+                            let ink_idx = self.home_map.layer_label_ink_idx.min(5);
+                            let (ink_name, ink_rgb) = KA_LABEL_INKS[ink_idx];
+                            let mut btn = egui::Button::new(
+                                egui::RichText::new(format!("{ink_name}  ▼")).size(11.0),
+                            )
+                            .min_size(Vec2::new(96.0, 20.0));
+                            if ink_idx != 0 {
+                                btn = btn.fill(Color32::from_rgb(ink_rgb.0, ink_rgb.1, ink_rgb.2));
+                            }
+                            if ui.add(btn).clicked() {
+                                self.home_map.layer_label_ink_idx = (ink_idx + 1) % 6;
+                            }
+                            let swatch = ui
+                                .allocate_exact_size(Vec2::new(14.0, 12.0), egui::Sense::hover());
+                            ui.painter().rect_filled(
+                                swatch.0,
+                                2.0,
+                                Color32::from_rgb(ink_rgb.0, ink_rgb.1, ink_rgb.2),
+                            );
+                        });
+                        ui.checkbox(
+                            &mut self.home_map.layer_label_buffer_halo,
+                            egui::RichText::new("흰 테두리 (위성·지적 위에서 읽기)").size(11.0),
+                        );
+                    }
                 });
 
                 let (div_r, _) =

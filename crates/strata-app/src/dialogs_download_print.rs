@@ -798,14 +798,14 @@ pub fn render_download_and_print_dialogs(
                 .title_bar(false)
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .fixed_size([460.0, 310.0])
+                .fixed_size([460.0, 440.0])
                 .show(ctx, |ui| {
-                    render_strata_modal_header(ui, "새 조사 시작 - Strata", open);
-                    ui.label(egui::RichText::new("조사 이름").strong().size(13.0));
+                    render_strata_modal_header(ui, "새 조사 - Strata", open);
+                    ui.label(egui::RichText::new("조사명").strong().size(13.0));
                     ui.add_sized(
                         [440.0, 28.0],
                         egui::TextEdit::singleline(&mut app.modals.new_survey_name)
-                            .hint_text("예: 경주 구정동 유적 시굴조사"),
+                            .hint_text("예: 병산동"),
                     );
                     if let Err(err_msg) = validate_survey_name_ko(&app.modals.new_survey_name) {
                         ui.label(
@@ -824,7 +824,16 @@ pub fn render_download_and_print_dialogs(
                         let _ = ui.add_sized([76.0, 28.0], egui::Button::new("폴더 선택..."));
                     });
                     ui.add_space(6.0);
-                    ui.label(egui::RichText::new("좌표계 (GRS80)").strong().size(13.0));
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("작업 좌표계").strong().size(13.0));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(
+                                egui::RichText::new("동경 128°를 경계로 나뉩니다")
+                                    .size(11.0)
+                                    .color(Color32::from_rgb(107, 114, 128)),
+                            );
+                        });
+                    });
                     // C++ KaLongitudeRuler (126°~130°, 128° 중부|동부 경계 + 8개 도시 눈금)
                     let (ruler_r, _) =
                         ui.allocate_exact_size(Vec2::new(440.0, 62.0), egui::Sense::hover());
@@ -874,6 +883,57 @@ pub fn render_download_and_print_dialogs(
                             Color32::from_rgb(90, 85, 76),
                         );
                     }
+                    // KaLongitudeRuler.cpp:40-107 — 0.1° 눈금. 정수(7px, 진함),
+                    // 반(5px, 옅음), 나머지(3px, 옅음)로 높이와 색을 나눈다.
+                    for d10 in 1260..=1300 {
+                        let deg = f64::from(d10) / 10.0;
+                        let is_whole = d10 % 10 == 0;
+                        let is_half = d10 % 5 == 0;
+                        let tick_h = if is_whole {
+                            7.0
+                        } else if is_half {
+                            5.0
+                        } else {
+                            3.0
+                        };
+                        let tick_c = if is_whole {
+                            Color32::from_rgb(31, 35, 40)
+                        } else {
+                            Color32::from_rgb(209, 205, 197)
+                        };
+                        let tx = x_of(deg);
+                        rp.line_segment(
+                            [Pos2::new(tx, bar_y - tick_h), Pos2::new(tx, bar_y)],
+                            Stroke::new(if is_whole { 1.2 } else { 1.0 }, tick_c),
+                        );
+                    }
+                    // KaLongitudeRuler.cpp:92-106 — 지도 중심(동경 129.2°) 클레이 마커
+                    let center_lon = 129.2_f64;
+                    let cx = x_of(center_lon);
+                    let clay = Color32::from_rgb(181, 87, 58);
+                    rp.line_segment(
+                        [
+                            Pos2::new(cx, ruler_r.top() + 2.0),
+                            Pos2::new(cx, bar_y + 2.0),
+                        ],
+                        Stroke::new(1.5, clay),
+                    );
+                    rp.add(egui::Shape::convex_polygon(
+                        vec![
+                            Pos2::new(cx, bar_y + 1.0),
+                            Pos2::new(cx - 4.0, bar_y - 6.0),
+                            Pos2::new(cx + 4.0, bar_y - 6.0),
+                        ],
+                        clay,
+                        Stroke::NONE,
+                    ));
+                    rp.text(
+                        Pos2::new(cx + 6.0, bar_y - 10.0),
+                        egui::Align2::LEFT_CENTER,
+                        "129.2°",
+                        egui::FontId::proportional(10.0),
+                        clay,
+                    );
                     for (city, lon) in KA_LONGITUDE_RULER_CITIES {
                         let cx = x_of(lon);
                         let col = if lon < 128.0 {
@@ -932,6 +992,30 @@ pub fn render_download_and_print_dialogs(
                             }
                         }
                     });
+                    // KaNewSurveyDialog.cpp:100-124 — 3 안내문
+                    ui.add_space(4.0);
+                    ui.label(
+                        egui::RichText::new(
+                            "지금 지도 중심(동경 129.2°)은 동부원점(5187) 구역입니다.",
+                        )
+                        .size(11.5)
+                        .strong()
+                        .color(Color32::from_rgb(31, 35, 40)),
+                    );
+                    ui.label(
+                        egui::RichText::new(
+                            "경계 가까운 곳은 발주처·측량 성과의 원점을 따르세요.",
+                        )
+                        .size(11.0)
+                        .color(Color32::from_rgb(107, 114, 128)),
+                    );
+                    ui.label(
+                        egui::RichText::new(
+                            "작업 좌표계는 나중에 화면 아래에서 바꿀 수 있습니다. 제출 파일은 언제나 5179로 바뀝니다.",
+                        )
+                        .size(11.0)
+                        .color(Color32::from_rgb(107, 114, 128)),
+                    );
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         let folder_preview = format!(
@@ -954,7 +1038,7 @@ pub fn render_download_and_print_dialogs(
                             let valid =
                                 validate_survey_name_ko(&app.modals.new_survey_name).is_ok();
                             let start_btn = egui::Button::new(
-                                egui::RichText::new("새 조사 시작")
+                                egui::RichText::new("다음")
                                     .color(Color32::WHITE)
                                     .strong(),
                             )

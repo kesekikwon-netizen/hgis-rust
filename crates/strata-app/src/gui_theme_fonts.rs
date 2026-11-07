@@ -2,11 +2,14 @@ use eframe::egui;
 use strata_types::theme_tokens::ThemeTokens;
 
 pub fn configure_korean_fonts_and_theme(ctx: &egui::Context, tokens: &ThemeTokens) {
-    // Keep the OS DPI scale. Forcing 1.0 here made the 150% monitor show a
-    // window whose content only filled 2/3 of the client area (Task D1/D5).
-    if let Some(native_ppp) = ctx.native_pixels_per_point() {
-        ctx.set_pixels_per_point(native_ppp);
-    }
+    // egui turns logical points into physical pixels with pixels_per_point.
+    // Leaving ppp at the OS value (1.5 here) makes the logical canvas only
+    // ~1529x593 inside a 2293x889 client area, so wide 3-column layouts lose
+    // their right panel and tall content runs under the status bar.
+    // Re-anchor on 96 DPI and let egui keep its own scale, so one logical point
+    // equals one pixel of the window: the layout then has the room it expects.
+    ctx.set_pixels_per_point(1.0);
+    let _ = tokens;
     let mut fonts = egui::FontDefinitions::default();
     let candidate_paths = [
         r"C:\Windows\Fonts\malgun.ttf",
