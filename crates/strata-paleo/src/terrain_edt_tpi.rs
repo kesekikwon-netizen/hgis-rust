@@ -145,6 +145,40 @@ impl GridTransform {
     }
 }
 
+pub const HGIS_IDW_DEFAULT_POWER: f64 = 2.0;
+pub const HGIS_IDW_DIST_EPSILON: f64 = 1.0e-6;
+
+/// C++ `IdwInterpolator::computeIdwPoint` — 거리 0 입실론(`d < 1e-6`) 시 루프 즉시 중단 후 관측점 원본 표고 100% 보존 및 탐색 반경 제한
+#[must_use]
+pub fn compute_idw_point_with_radius(
+    wx: f64,
+    wy: f64,
+    pts_xyv: &[[f64; 3]],
+    power: f64,
+    search_radius: f64,
+) -> f64 {
+    let mut sum_w = 0.0;
+    let mut sum_wv = 0.0;
+    let use_radius = search_radius > 0.0 && search_radius.is_finite();
+    for &[px, py, val] in pts_xyv {
+        let d = (wx - px).hypot(wy - py);
+        if d < HGIS_IDW_DIST_EPSILON {
+            return val;
+        }
+        if use_radius && d > search_radius {
+            continue;
+        }
+        let w = 1.0 / d.powf(power);
+        sum_w += w;
+        sum_wv += w * val;
+    }
+    if sum_w > 0.0 {
+        sum_wv / sum_w
+    } else {
+        HGIS_NODATA_FLOAT
+    }
+}
+
 pub fn idw_interpolate_grid(
     tf: &GridTransform,
     pts_xyv: &[[f64; 3]],
@@ -442,5 +476,17 @@ mod tests {
             classify_to_7_paleo(12.0, 0.5, 22.0),
             PaleoLandformType::Hillslope
         );
+    }
+
+    #[test]
+    fn test_idw_exact_point_hit_100_200_returns_35_5_with_zero_error() {
+        let pts = [
+            [100.0_f64, 200.0, 35.5],
+            [150.0, 200.0, 12.0],
+            [100.0, 250.0, 48.0],
+        ];
+        let val = compute_idw_point_with_radius(100.0, 200.0, &pts, HGIS_IDW_DEFAULT_POWER, 500.0);
+        assert_eq!(val, 35.5);
+        assert_eq!((val - 35.5).abs(), 0.0);
     }
 }

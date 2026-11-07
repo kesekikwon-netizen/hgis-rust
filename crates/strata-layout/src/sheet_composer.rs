@@ -286,6 +286,56 @@ pub fn apply_polygon_alpha_mask_rgba(
     }
 }
 
+/// C++ `NorthArrowRenderer::computeGridConvergenceAngle` — TM 투영계 중심 경위도 기준 도북-진북 자오선 수렴각(도 단위) 계산
+#[must_use]
+pub fn compute_grid_convergence_angle_deg(
+    lon_deg: f64,
+    lat_deg: f64,
+    central_meridian_deg: f64,
+) -> f64 {
+    let dlon_rad = (lon_deg - central_meridian_deg).to_radians();
+    let lat_rad = lat_deg.to_radians();
+    let sin_lat = lat_rad.sin();
+    let cos_lat = lat_rad.cos();
+    // GRS80 제2이심률 제곱 e'^2 ≈ 0.006739496742
+    let eta2 = 0.006_739_496_742 * cos_lat * cos_lat;
+    let gamma_rad = dlon_rad * sin_lat
+        + (dlon_rad.powi(3) / 3.0) * sin_lat * cos_lat * cos_lat * (1.0 + 3.0 * eta2);
+    gamma_rad.to_degrees()
+}
+
+/// C++ `LegendBoxComposer` — 고고학 도면 표준 범례 레이어 정렬 순서(1. 유물 점 -> 2. 기준점 -> 3. 단면선 -> 4. 유구 선 -> 5. 유구 면 -> 6. 트렌치 -> 7. 조사구역)
+pub fn sort_legend_layers_canonical(layers: &mut [strata_types::schema::DomainLayerKey]) {
+    use strata_types::schema::DomainLayerKey;
+    let rank = |k: DomainLayerKey| -> u8 {
+        match k {
+            DomainLayerKey::ArtifactPoint => 1,
+            DomainLayerKey::ControlPoints => 2,
+            DomainLayerKey::SectionLine => 3,
+            DomainLayerKey::FeatureLine => 4,
+            DomainLayerKey::FeaturePoly => 5,
+            DomainLayerKey::TrialTrench => 6,
+            DomainLayerKey::SurveyArea => 7,
+        }
+    };
+    layers.sort_by_key(|&k| rank(k));
+}
+
+/// C++ `TitleBlockComposer` (`QFontMetrics::elidedText(..., Qt::ElideRight)`) — 표제란 텍스트 우측 말줄임 처리
+#[must_use]
+pub fn elide_title_block_text_right(raw_text: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let char_count = raw_text.chars().count();
+    if char_count <= max_chars {
+        return raw_text.to_owned();
+    }
+    let keep = max_chars.saturating_sub(1);
+    let prefix: String = raw_text.chars().take(keep).collect();
+    format!("{prefix}…")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,5 +398,39 @@ mod tests {
         assert_eq!(rgba[3], 255);
         assert_eq!(rgba[7], 76);
         assert_eq!(rgba[11], 76);
+    }
+
+    #[test]
+    fn test_north_arrow_grid_convergence_and_legend_sort_and_title_block_elide() {
+        use strata_types::schema::DomainLayerKey;
+
+        // 중부원점(127.0E) 정중앙에서는 수렴각 0.0도, 128.0E(위도 36.0N)에서는 양(+)의 수렴각
+        let zero_conv = compute_grid_convergence_angle_deg(127.0, 36.0, 127.0);
+        assert!(zero_conv.abs() < 1e-9);
+        let east_conv = compute_grid_convergence_angle_deg(128.0, 36.0, 127.0);
+        assert!((east_conv - 36.0_f64.to_radians().sin()).abs() < 1e-3);
+
+        let mut layers = vec![
+            DomainLayerKey::SurveyArea,
+            DomainLayerKey::FeaturePoly,
+            DomainLayerKey::ArtifactPoint,
+            DomainLayerKey::TrialTrench,
+            DomainLayerKey::FeatureLine,
+        ];
+        sort_legend_layers_canonical(&mut layers);
+        assert_eq!(
+            layers,
+            vec![
+                DomainLayerKey::ArtifactPoint,
+                DomainLayerKey::FeatureLine,
+                DomainLayerKey::FeaturePoly,
+                DomainLayerKey::TrialTrench,
+                DomainLayerKey::SurveyArea,
+            ]
+        );
+
+        let elided = elide_title_block_text_right("경주 월성 발굴조사 지구 종합현황도", 10);
+        assert_eq!(elided.chars().count(), 10);
+        assert!(elided.ends_with('…'));
     }
 }
