@@ -1,31 +1,35 @@
-{
-  "protocol": "YAML_SPEC_V1_BOARD",
-  "completed_tasks": [
-    "U1",
-    "D1",
-    "D2",
-    "D3",
-    "D4",
-    "D5",
-    "D6",
-    "D7",
-    "D8",
-    "D9",
-    "D10",
-    "D11",
-    "D12",
-    "D13"
-  ],
-  "last_commit": "fa8a12c",
-  "active_task": null,
-  "queued_tasks": [],
-  "require_live_5tab_screenshots_before_commit": true,
-  "required_shots": [
-    "target/shots/now-home.png",
-    "target/shots/now-map.png",
-    "target/shots/now-drawing.png",
-    "target/shots/now-paleo.png",
-    "target/shots/now-terrain3d.png"
-  ],
-  "required_shots_refreshed_at": "2026-11-08 08:21 KST (1600x900, SetProcessDPIAware)"
+﻿{
+    "protocol":  "YAML_SPEC_V1_BOARD",
+    "completed_tasks":  [
+                            "U1",
+                            "D1",
+                            "D2",
+                            "D3",
+                            "D4",
+                            "D5",
+                            "D6",
+                            "D7",
+                            "D8",
+                            "D9",
+                            "D10",
+                            "D11",
+                            "D12",
+                            "D13",
+                            "D14",
+                            "D15"
+                        ],
+    "last_commit":  "7aa6370",
+    "active_task":  "NONE",
+    "queued_tasks":  [
+
+                     ],
+    "require_live_5tab_screenshots_before_commit":  true,
+    "required_shots":  [
+                           "target/shots/now-home.png",
+                           "target/shots/now-map.png",
+                           "target/shots/now-drawing.png",
+                           "target/shots/now-paleo.png",
+                           "target/shots/now-terrain3d.png"
+                       ],
+    "required_shots_refreshed_at":  "2026-11-08T08:40+09:00 (D14+D15, 1600x900 DPI-aware)"
 }
