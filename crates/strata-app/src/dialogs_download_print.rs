@@ -214,112 +214,237 @@ pub fn render_download_and_print_dialogs(
                 });
         }
         ActiveModalDialog::TrenchGenerator => {
-            egui::Window::new("ka_modal_trench").title_bar(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [60.0, 20.0]).default_width(360.0).show(ctx, |ui| {
-                render_strata_modal_header(ui, "시굴격자 속성 - Strata", open);
-                ui.checkbox(&mut app.modals.trench_auto_place, egui::RichText::new("지금 그린(또는 선택한) 조사구역에 자동 배치").size(13.0));
-                ui.horizontal(|ui| { ui.label(egui::RichText::new("조사 종류").size(13.0)); let _ = ui.add_sized([260.0, 28.0], egui::Button::new("시굴조사 — 전체 면적의 10%             ▼")); });
-                let mut slope_align = false;
-                ui.checkbox(&mut slope_align, egui::RichText::new("지형 사면 방향으로 넣기(등고선 직교)").size(13.0).color(Color32::from_rgb(130, 128, 120)));
-                ui.label(egui::RichText::new("평지(평균 경사 0.4%)라 남북으로 깝니다. 방위 칸에 다른").size(11.5).color(Color32::from_rgb(95, 94, 88)));
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("모양").size(13.0));
-                    let shape_lbl = format!("{}  ▼", app.modals.trench_shape.label_ko());
-                    if ui.add_sized([286.0, 28.0], egui::Button::new(shape_lbl)).clicked() {
-                        let idx = TrenchShapeKind::ALL.iter().position(|&k| k == app.modals.trench_shape).unwrap_or(0);
-                        app.modals.trench_shape = TrenchShapeKind::ALL[(idx + 1) % TrenchShapeKind::ALL.len()];
-                    }
-                });
-                if app.modals.trench_shape == TrenchShapeKind::Straight {
+            egui::Window::new("ka_modal_trench")
+                .title_bar(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [60.0, 20.0])
+                .default_width(380.0)
+                .show(ctx, |ui| {
+                    render_strata_modal_header(ui, "시굴격자 속성 - Strata", open);
+                    ui.checkbox(
+                        &mut app.modals.trench_auto_place,
+                        egui::RichText::new("지금 그린(또는 선택한) 조사구역에 자동 배치").size(13.0),
+                    );
+
+                    // KaTrenchDialog.cpp:27-155 조사 종류 3단 순환
+                    const KIND_LABELS: [&str; 3] = [
+                        "시굴조사 — 전체 면적의 10%",
+                        "표본조사 — 전체 면적의 2%",
+                        "직접 지정 — 규격·둑을 내가 정함",
+                    ];
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("트렌치 길이").size(13.0));
-                        for len_opt in [TrenchStandardLength::M20, TrenchStandardLength::M15, TrenchStandardLength::M10] {
-                            ui.radio_value(&mut app.modals.trench_length, len_opt, egui::RichText::new(len_opt.label_ko()).size(13.0));
+                        ui.label(egui::RichText::new("조사 종류").size(13.0));
+                        if ui
+                            .add_sized(
+                                [260.0, 28.0],
+                                egui::Button::new(format!(
+                                    "{}  ▼",
+                                    KIND_LABELS[app.modals.trench_survey_kind_idx.min(2)]
+                                )),
+                            )
+                            .clicked()
+                        {
+                            app.modals.trench_survey_kind_idx =
+                                (app.modals.trench_survey_kind_idx + 1) % 3;
                         }
                     });
-                }
-                ui.checkbox(&mut app.modals.trench_grid_snap, egui::RichText::new("좌표격자에 맞추기").size(13.0));
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("회전(방위)").size(13.0));
-                    let _ = ui.add_sized([110.0, 28.0], egui::Button::new(format!("{:.2} °             ↕", app.modals.trench_azimuth_deg)));
-                    let (cr, _) = ui.allocate_exact_size(Vec2::new(22.0, 22.0), egui::Sense::hover());
-                    let cp = ui.painter_at(cr);
-                    cp.circle_stroke(cr.center(), 9.0, Stroke::new(1.2, Color32::from_rgb(120, 118, 110)));
-                    cp.line_segment([cr.center(), Pos2::new(cr.center().x, cr.top() + 2.0)], Stroke::new(1.8, Color32::BLACK));
-                    cp.circle_filled(cr.center(), 2.0, Color32::BLACK);
-                    ui.label(egui::RichText::new("위가 북쪽입니다").size(12.0).color(Color32::from_rgb(95, 94, 88)));
-                });
-                ui.add_space(6.0);
-                let trench_count = app.home_map.real_survey.trenches.len().max(1);
-                let total_trench_area: f64 = app.home_map.real_survey.trenches.iter().map(|t| t.area_m2).sum();
-                let survey_area: f64 = app.home_map.real_survey.survey_area_m2.max(1.0);
-                let ratio_pct = (total_trench_area / survey_area * 100.0).clamp(0.0, 100.0);
-                let shape_desc = if app.modals.trench_shape.arm_bend().is_some() {
-                    format!("{} {}개", app.modals.trench_shape.label_ko(), trench_count)
-                } else {
-                    format!("{} 트렌치 {}개", app.modals.trench_length.label_ko(), trench_count)
-                };
-                let summary_text = format!(
-                    "시굴조사 · {shape_desc} · 폭 2 m · 둑 10 m ·\n총 {total_trench_area:.2}㎡ · 비율 {ratio_pct:.1}% (목표 10%) · 방위 {:.0}°",
-                    app.modals.trench_azimuth_deg
-                );
-                egui::Frame::NONE.fill(Color32::from_rgb(225, 240, 218)).stroke(Stroke::new(1.0, Color32::from_rgb(155, 195, 145))).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 8)).show(ui, |ui| {
-                    ui.label(egui::RichText::new(summary_text).size(12.5).strong().color(Color32::from_rgb(28, 72, 32)));
-                });
-                ui.add_space(4.0);
-                let (bar_r, _) = ui.allocate_exact_size(Vec2::new(340.0, 6.0), egui::Sense::hover());
-                ui.painter().rect_filled(bar_r, 3.0, Color32::from_rgb(222, 220, 210));
-                let fill_w = (340.0_f32 * (ratio_pct as f32 / 20.0_f32)).clamp(12.0_f32, 340.0_f32);
-                ui.painter().rect_filled(Rect::from_min_size(bar_r.min, Vec2::new(fill_w, 6.0)), 3.0, Color32::from_rgb(35, 35, 32));
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("0").size(10.5));
-                    ui.add_space(130.0);
-                    ui.label(egui::RichText::new("목표 10%").size(11.0));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| { ui.label(egui::RichText::new("20%").size(10.5)); });
-                });
-                ui.label(egui::RichText::new("깐 격자는 맵에서 끌고 옮깁니다. 개별 편집은 트렌치 하나\n이동·삭제입니다").size(11.5).color(Color32::from_rgb(95, 94, 88)));
-                ui.horizontal(|ui| {
-                    if ui.add_sized([88.0, 28.0], egui::Button::new("개별 편집")).clicked() {
-                        app.active_tool = strata_canvas2d::map_tools::MapToolKind::Select;
-                        app.home_map.draw_guide_message = Some(
-                            "트렌치 개별 편집 — 맵에서 트렌치를 클릭해 선택하고 화살표 키(Shift: 1m)나 끌기로 옮기세요".to_string(),
-                        );
-                        app.modals.active = None;
-                    }
-                    if ui.add_sized([88.0, 28.0], egui::Button::new("전체 이동")).clicked() {
-                        let snap = if app.modals.trench_grid_snap { Some(5.0) } else { None };
-                        app.home_map.real_survey.translate_all_trenches(5.0, 0.0, snap);
-                        app.is_dirty = true;
-                    }
-                });
-                ui.horizontal(|ui| {
-                    let b1 = egui::Button::new(egui::RichText::new("구역에 깔기").color(Color32::WHITE).strong()).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(104.0, 32.0));
-                    if ui.add(b1).clicked() {
-                        let (count, _, _) = app.home_map.real_survey.apply_trench_plan(
-                            app.modals.trench_length,
-                            app.modals.trench_shape,
-                            app.modals.trench_grid_snap,
-                        );
-                        app.home_map.draw_guide_message = Some(format!(
-                            "시굴격자 {}개를 배치했습니다 ({})",
-                            count,
-                            app.modals.trench_shape.label_ko()
-                        ));
-                        app.is_dirty = true;
-                        app.modals.active = None;
-                    }
-                    if ui.add_sized([88.0, 32.0], egui::Button::new("맵에 찍기")).clicked() {
-                        app.active_tool = strata_canvas2d::map_tools::MapToolKind::TrenchPlace;
-                        app.home_map.draw_guide_message = Some(format!(
-                            "트렌치 찍기 모드 — 지도에서 원하는 위치를 클릭하면 {} 시굴격자를 놓습니다",
-                            app.modals.trench_length.label_ko()
-                        ));
-                        app.modals.active = None;
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add_sized([58.0, 32.0], egui::Button::new("닫기")).clicked() { app.modals.active = None; }
+
+                    ui.checkbox(
+                        &mut app.modals.trench_slope_align,
+                        egui::RichText::new("지형 사면 방향으로 넣기(등고선 직교)").size(13.0),
+                    );
+
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("모양").size(13.0));
+                        let shape_lbl = format!("{}  ▼", app.modals.trench_shape.label_ko());
+                        if ui
+                            .add_sized([286.0, 28.0], egui::Button::new(shape_lbl))
+                            .clicked()
+                        {
+                            let idx = TrenchShapeKind::ALL
+                                .iter()
+                                .position(|&k| k == app.modals.trench_shape)
+                                .unwrap_or(0);
+                            app.modals.trench_shape =
+                                TrenchShapeKind::ALL[(idx + 1) % TrenchShapeKind::ALL.len()];
+                        }
                     });
+                    if app.modals.trench_shape == TrenchShapeKind::Straight {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("트렌치 길이").size(13.0));
+                            for len_opt in [
+                                TrenchStandardLength::M20,
+                                TrenchStandardLength::M15,
+                                TrenchStandardLength::M10,
+                            ] {
+                                ui.radio_value(
+                                    &mut app.modals.trench_length,
+                                    len_opt,
+                                    egui::RichText::new(len_opt.label_ko()).size(13.0),
+                                );
+                            }
+                        });
+                    }
+                    ui.checkbox(
+                        &mut app.modals.trench_grid_snap,
+                        egui::RichText::new("좌표격자에 맞추기").size(13.0),
+                    );
+
+                    // KaTrenchDialogPlan.cpp:80-92 행/열 은 수동 배치에서만, 둑/접두 는
+                    // 수동 배치이거나 '직접 지정'(idx 2)일 때 보인다.
+                    let manual = !app.modals.trench_auto_place;
+                    let kind = app.modals.trench_survey_kind_idx.min(2);
+                    if manual {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("행").size(13.0));
+                            ui.add(
+                                egui::DragValue::new(&mut app.modals.trench_rows)
+                                    .range(1..=200)
+                                    .speed(0.2),
+                            );
+                            ui.add_space(10.0);
+                            ui.label(egui::RichText::new("열").size(13.0));
+                            ui.add(
+                                egui::DragValue::new(&mut app.modals.trench_cols)
+                                    .range(1..=200)
+                                    .speed(0.2),
+                            );
+                        });
+                    }
+                    if manual || kind == 2 {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("둑(간격)").size(13.0));
+                            ui.add(
+                                egui::DragValue::new(&mut app.modals.trench_balk_m)
+                                    .range(0.0..=200.0)
+                                    .speed(0.5)
+                                    .suffix(" m"),
+                            );
+                            ui.add_space(10.0);
+                            ui.label(egui::RichText::new("이름 prefix").size(13.0));
+                            ui.add(
+                                egui::TextEdit::singleline(&mut app.modals.trench_prefix)
+                                    .desired_width(90.0),
+                            );
+                        });
+                    }
+
+                    // KaAzimuthDial.cpp:24-49 회전(방위) 다이얼
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("회전(방위)").size(13.0));
+                        ui.add(
+                            egui::DragValue::new(&mut app.modals.trench_azimuth_deg)
+                                .range(0.0..=360.0)
+                                .speed(1.0)
+                                .suffix(" °"),
+                        );
+                        let (cr, _) =
+                            ui.allocate_exact_size(Vec2::new(22.0, 22.0), egui::Sense::hover());
+                        let cp = ui.painter_at(cr);
+                        cp.circle_stroke(
+                            cr.center(),
+                            9.0,
+                            Stroke::new(1.2, Color32::from_rgb(120, 118, 110)),
+                        );
+                        let rad = (app.modals.trench_azimuth_deg as f32).to_radians();
+                        let tip = Pos2::new(
+                            cr.center().x + rad.sin() * 8.0,
+                            cr.center().y - rad.cos() * 8.0,
+                        );
+                        cp.line_segment([cr.center(), tip], Stroke::new(1.8, Color32::BLACK));
+                        cp.circle_filled(cr.center(), 2.0, Color32::BLACK);
+                        let turn = app.modals.trench_azimuth_deg.rem_euclid(360.0);
+                        let dial_note = if turn < 0.5 || (360.0 - turn) < 0.5 {
+                            "위가 북쪽���니다".to_owned()
+                        } else {
+                            format!("북에서 시계 방향 {turn:.0}°")
+                        };
+                        ui.label(
+                            egui::RichText::new(dial_note)
+                                .size(12.0)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                    });
+
+                    ui.add_space(6.0);
+                    // KaTrenchDialogPlan.cpp:110-120 요약 + KaTargetMeter.cpp:36-59
+                    if manual {
+                        let count = app.modals.trench_rows * app.modals.trench_cols;
+                        let summary = format!(
+                            "수동 배치: {count}개 · 총 {:.0}㎡ — 「맵에 찍기」로 맵에서 위치를 정하세요.",
+                            count as f64 * 40.0
+                        );
+                        egui::Frame::NONE
+                            .fill(Color32::from_rgb(225, 240, 218))
+                            .stroke(Stroke::new(1.0, Color32::from_rgb(155, 195, 145)))
+                            .corner_radius(6.0)
+                            .inner_margin(egui::Margin::symmetric(10, 8))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    egui::RichText::new(summary)
+                                        .size(12.5)
+                                        .strong()
+                                        .color(Color32::from_rgb(28, 72, 32)),
+                                );
+                            });
+                    } else {
+                        let trench_count = app.home_map.real_survey.trenches.len().max(1);
+                        let total_trench_area: f64 =
+                            app.home_map.real_survey.trenches.iter().map(|t| t.area_m2).sum();
+                        let survey_area: f64 =
+                            app.home_map.real_survey.survey_area_m2.max(1.0);
+                        let ratio_pct =
+                            (total_trench_area / survey_area * 100.0).clamp(0.0, 100.0);
+                        let shape_desc = if app.modals.trench_shape.arm_bend().is_some() {
+                            format!("{} {}개", app.modals.trench_shape.label_ko(), trench_count)
+                        } else {
+                            format!(
+                                "{} 트렌치 {}개",
+                                app.modals.trench_length.label_ko(),
+                                trench_count
+                            )
+                        };
+                        let target = if kind == 1 { 2.0_f64 } else { 10.0_f64 };
+                        let summary_text = format!(
+                            "{} · {shape_desc} · 폭 2 m · 둑 {:.0} m ·\n총 {total_trench_area:.2}㎡ · 비율 {ratio_pct:.1}% (목표 {target:.0}%) · 방위 {:.0}°",
+                            KIND_LABELS[kind],
+                            app.modals.trench_balk_m,
+                            app.modals.trench_azimuth_deg
+                        );
+                        egui::Frame::NONE
+                            .fill(Color32::from_rgb(225, 240, 218))
+                            .stroke(Stroke::new(1.0, Color32::from_rgb(155, 195, 145)))
+                            .corner_radius(6.0)
+                            .inner_margin(egui::Margin::symmetric(10, 8))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    egui::RichText::new(summary_text)
+                                        .size(12.5)
+                                        .strong()
+                                        .color(Color32::from_rgb(28, 72, 32)),
+                                );
+                            });
+                        // 목표 눈금 막대: 0 .. target*2
+                        ui.add_space(4.0);
+                        let (bar_r, _) = ui
+                            .allocate_exact_size(Vec2::new(340.0, 6.0), egui::Sense::hover());
+                        ui.painter()
+                            .rect_filled(bar_r, 3.0, Color32::from_rgb(222, 220, 210));
+                        let top = target * 2.0;
+                        let fill_w = (340.0_f32 * (ratio_pct as f32 / top as f32))
+                            .clamp(12.0_f32, 340.0_f32);
+                        ui.painter().rect_filled(
+                            Rect::from_min_size(bar_r.min, Vec2::new(fill_w, 6.0)),
+                            3.0,
+                            Color32::from_rgb(35, 35, 32),
+                        );
+                        ui.label(
+                            egui::RichText::new(format!("목표 {target:.0}%"))
+                                .size(11.5)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                    }
                 });
-            });
         }
         ActiveModalDialog::PdfPreparing => {
             egui::Window::new("ka_modal_pdf_prep")
@@ -858,7 +983,7 @@ pub fn render_download_and_print_dialogs(
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .fixed_size([440.0, 290.0])
                 .show(ctx, |ui| {
-                    render_strata_modal_header(ui, "측량점 등고선 - Strata", open);
+                    render_strata_modal_header(ui, "측량 등고선 - Strata", open);
                     ui.label(
                         egui::RichText::new(
                             "엑셀·CSV·DXF의 측량 좌표(X, Y, Z)로 등고선과 표고점 레이어를 만듭니다.",
@@ -873,7 +998,7 @@ pub fn render_download_and_print_dialogs(
                             [264.0, 26.0],
                             egui::TextEdit::singleline(&mut app.modals.contour_file_path),
                         );
-                        let _ = ui.add_sized([74.0, 26.0], egui::Button::new("파일 선택..."));
+                        let _ = ui.add_sized([74.0, 26.0], egui::Button::new("찾기…"));
                     });
                     ui.horizontal(|ui| {
                         ui.add_sized([74.0, 26.0], egui::Label::new("등고선 간격"));
@@ -890,17 +1015,93 @@ pub fn render_download_and_print_dialogs(
                         );
                     });
                     ui.add_space(4.0);
-                    ui.checkbox(
-                        &mut app.modals.contour_swap_axes,
-                        "X를 북쪽, Y를 동쪽으로 읽기 (측량 성과표 순서)",
-                    );
-                    ui.checkbox(
-                        &mut app.modals.contour_exclude_suspicious,
-                        "의심점 빼기 (중복 좌표·고도 튀는 점 제외)",
-                    );
-                    ui.checkbox(
-                        &mut app.modals.contour_use_breaklines,
-                        "높이가 있는 DXF 선을 단절선으로 쓰기 (굴착선·어깨선)",
+                    // KaSurveyContourDialog.cpp:31-55 축 순서 / 이상한 점 + 고급 설정
+                    ui.horizontal(|ui| {
+                        ui.add_sized([74.0, 26.0], egui::Label::new("축 순서"));
+                        ui.checkbox(
+                            &mut app.modals.contour_swap_axes,
+                            "X를 북쪽, Y를 동쪽으로 읽기",
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        ui.add_sized([74.0, 26.0], egui::Label::new("이상한 점"));
+                        ui.checkbox(&mut app.modals.contour_exclude_suspicious, "의심점 빼기");
+                    });
+                    let adv_label = if app.modals.contour_advanced_open {
+                        "▾ 고급 설정"
+                    } else {
+                        "▸ 고급 설정"
+                    };
+                    if ui.button(egui::RichText::new(adv_label).size(12.5)).clicked() {
+                        app.modals.contour_advanced_open = !app.modals.contour_advanced_open;
+                    }
+                    if app.modals.contour_advanced_open {
+                        const CRS_LABELS: [&str; 5] = [
+                            "작업 좌표계와 같음 (EPSG:5187)",
+                            "EPSG:5185 서부원점",
+                            "EPSG:5186 중부원점",
+                            "EPSG:5179 UTM-K",
+                            "EPSG:4326 경위도 WGS84",
+                        ];
+                        ui.horizontal(|ui| {
+                            ui.add_sized([86.0, 26.0], egui::Label::new("파일 좌표계"));
+                            let idx = app.modals.contour_file_crs_idx.min(4);
+                            if ui
+                                .add_sized(
+                                    [260.0, 26.0],
+                                    egui::Button::new(format!("{}  ▼", CRS_LABELS[idx])),
+                                )
+                                .clicked()
+                            {
+                                app.modals.contour_file_crs_idx = (idx + 1) % 5;
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.add_sized([86.0, 26.0], egui::Label::new("최대 삼각형 변"));
+                            ui.add(
+                                egui::DragValue::new(&mut app.modals.contour_max_edge_m)
+                                    .range(0.0..=1000.0)
+                                    .speed(1.0)
+                                    .suffix(" m"),
+                            );
+                            if app.modals.contour_max_edge_m == 0.0 {
+                                ui.label(
+                                    egui::RichText::new("쓰지 않음")
+                                        .size(11.5)
+                                        .color(Color32::from_rgb(95, 94, 88)),
+                                );
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.add_sized([86.0, 26.0], egui::Label::new("단절선"));
+                            ui.checkbox(
+                                &mut app.modals.contour_use_breaklines,
+                                "높이가 있는 DXF 선을 단절선으로 쓰기",
+                            );
+                        });
+                        ui.horizontal(|ui| {
+                            ui.add_sized([86.0, 26.0], egui::Label::new("계산 격자"));
+                            ui.add(
+                                egui::DragValue::new(&mut app.modals.contour_cell_size_m)
+                                    .range(0.0..=5.0)
+                                    .speed(0.05)
+                                    .suffix(" m"),
+                            );
+                            if app.modals.contour_cell_size_m == 0.0 {
+                                ui.label(
+                                    egui::RichText::new("자동")
+                                        .size(11.5)
+                                        .color(Color32::from_rgb(95, 94, 88)),
+                                );
+                            }
+                        });
+                    }
+                    ui.label(
+                        egui::RichText::new(
+                            "DXF·엑셀의 점번호, X(북), Y(동), 표고는 자동으로 읽습니다.",
+                        )
+                        .size(11.5)
+                        .color(Color32::from_rgb(95, 94, 88)),
                     );
                     ui.add_space(6.0);
                     let line_est = ((23.7 / app.modals.contour_interval_m.max(0.1)).round() as usize)

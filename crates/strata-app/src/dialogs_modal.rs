@@ -59,6 +59,18 @@ pub struct ModalDialogController {
     pub trench_auto_place: bool,
     pub trench_azimuth_deg: f64,
     pub trench_coverage_pct: f32,
+    // D6 KaTrenchDialog.cpp / KaTrenchDialogPlan.cpp
+    /// 0 = 시굴조사 10%, 1 = 표본조사 2%, 2 = 직접 지정 (KaTrenchDialog.cpp:27-155)
+    pub trench_survey_kind_idx: usize,
+    /// "지형 사면 방향으로 넣기(등고선 직교)"
+    pub trench_slope_align: bool,
+    /// 둑(간격) m
+    pub trench_balk_m: f64,
+    pub trench_rows: usize,
+    pub trench_cols: usize,
+    pub trench_prefix: String,
+    // D6 KaSurveyContourDialog.cpp — 파일 좌표계 선택 (5개 라벨)
+    pub contour_file_crs_idx: usize,
     pub last_export_status: String,
     pub custom_paper_mode: bool,
     pub print_single_sheet: bool,
@@ -161,6 +173,13 @@ impl Default for ModalDialogController {
             trench_auto_place: true,
             trench_azimuth_deg: 0.0,
             trench_coverage_pct: 10.0,
+            trench_survey_kind_idx: 0,
+            trench_slope_align: false,
+            trench_balk_m: 10.0,
+            trench_rows: 2,
+            trench_cols: 2,
+            trench_prefix: "Tr-".to_owned(),
+            contour_file_crs_idx: 0,
             last_export_status: String::new(),
             custom_paper_mode: false,
             print_single_sheet: true,
@@ -2242,6 +2261,46 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // D6 KaTrenchDialog / KaTrenchDialogPlan / KaSurveyContourDialog defaults
+    #[test]
+    fn test_d6_trench_dial_survey_kind_and_contour_advanced_toggle() {
+        let mut ctrl = ModalDialogController::default();
+
+        // trench defaults
+        assert_eq!(ctrl.trench_survey_kind_idx, 0);
+        assert_eq!(ctrl.trench_rows, 2);
+        assert_eq!(ctrl.trench_cols, 2);
+        assert_eq!(ctrl.trench_balk_m, 10.0);
+        assert_eq!(ctrl.trench_prefix, "Tr-");
+        assert!(!ctrl.trench_slope_align);
+
+        // 조사 종류 cycles through the 3 C++ labels
+        let labels = [
+            "시굴조사 — 전체 면적의 10%",
+            "표본조사 — 전체 면적의 2%",
+            "직접 지정 — 규격·둑을 내가 정함",
+        ];
+        for expect in 1..=3usize {
+            ctrl.trench_survey_kind_idx = (ctrl.trench_survey_kind_idx + 1) % 3;
+            assert_eq!(expect % 3, ctrl.trench_survey_kind_idx);
+        }
+        assert_eq!(labels.len(), 3);
+
+        // contour advanced starts closed, then toggles open
+        assert!(!ctrl.contour_advanced_open);
+        ctrl.contour_advanced_open = true;
+        assert!(ctrl.contour_advanced_open);
+
+        // 5 CRS choices; cell/edge accept the "0 == automatic" sentinel
+        assert_eq!(ctrl.contour_file_crs_idx, 0);
+        ctrl.contour_file_crs_idx = 4;
+        assert_eq!(ctrl.contour_file_crs_idx, 4);
+        ctrl.contour_max_edge_m = 0.0;
+        ctrl.contour_cell_size_m = 0.0;
+        assert_eq!(ctrl.contour_max_edge_m, 0.0);
+        assert_eq!(ctrl.contour_cell_size_m, 0.0);
+    }
 
     // D5 KaTopographicAccountDialog.cpp:60-61 — an account with only one of
     // ID/PW must block the save; both-empty and both-filled are fine.
