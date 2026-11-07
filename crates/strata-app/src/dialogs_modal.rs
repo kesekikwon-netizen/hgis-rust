@@ -546,15 +546,13 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                             .fill(Color32::from_rgb(181, 87, 58))
                             .corner_radius(6.0)
                             .min_size(Vec2::new(78.0, 30.0));
-                            if ui.add(save_b).clicked() {
-                                if app.accounts.validate_credentials() {
-                                    app.accounts.save_all_to_disk();
-                                    app.home_map.draw_guide_message = Some(
-                                        "API 키와 사이트 계정(DPAPI 암호화)을 저장했습니다."
-                                            .to_owned(),
-                                    );
-                                    app.modals.active = None;
-                                }
+                            if ui.add(save_b).clicked() && app.accounts.validate_credentials() {
+                                app.accounts.save_all_to_disk();
+                                app.home_map.draw_guide_message = Some(
+                                    "API 키와 사이트 계정(DPAPI 암호화)을 저장했습니다."
+                                        .to_owned(),
+                                );
+                                app.modals.active = None;
                             }
                         });
                     });
