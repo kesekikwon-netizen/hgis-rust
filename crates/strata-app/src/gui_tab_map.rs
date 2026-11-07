@@ -91,9 +91,9 @@ impl StrataAppState {
 
             if is_style {
                 let card_r = Rect::from_min_size(rect.min + Vec2::new(12.0, 12.0), Vec2::new(236.0, 78.0));
-                let layer_lbl = self.right_inspector.selected_layer_key.as_deref().unwrap_or("조사구역");
-                Self::paint_opacity_card(&p, card_r, layer_lbl);
-                Self::paint_undo_redo_pill(&p, Pos2::new(card_r.right() + 6.0, card_r.top() + 8.0));
+                let layer_lbl = self.right_inspector.selected_layer_key.as_deref().unwrap_or("조사구역").to_owned();
+                self.paint_opacity_card(ui, &p, card_r, &layer_lbl);
+                self.paint_undo_redo_pill(ui, &p, Pos2::new(card_r.right() + 6.0, card_r.top() + 8.0));
                 if self.right_inspector.show_draw_tooltip {
                     let tip_r = Rect::from_min_size(Pos2::new(rect.left() + 26.0, rect.top() - 26.0), Vec2::new(418.0, 32.0));
                     let tp = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("ka_draw_tip")));
@@ -117,10 +117,10 @@ impl StrataAppState {
                     p.line_segment([Pos2::new(rc.x - 5.0, rc.y + 4.5), Pos2::new(rc.x + 5.0, rc.y - 4.5)], Stroke::new(2.2, Color32::from_rgb(35, 35, 32)));
                 }
                 p.text(Pos2::new(top_r.left() + 12.0, top_r.center().y), egui::Align2::LEFT_CENTER, top_txt, egui::FontId::proportional(11.5), Color32::from_rgb(45, 44, 40));
-                Self::paint_undo_redo_pill(&p, Pos2::new(top_r.right() + 6.0, top_r.top()));
+                self.paint_undo_redo_pill(ui, &p, Pos2::new(top_r.right() + 6.0, top_r.top()));
                 if is_trench || is_measure {
                     let card_r = Rect::from_min_size(rect.min + Vec2::new(12.0, 52.0), Vec2::new(236.0, 78.0));
-                    Self::paint_opacity_card(&p, card_r, "지적도 · 조사 주변 5km");
+                    self.paint_opacity_card(ui, &p, card_r, "지적도 · 조사 주변 5km");
                 }
             }
 
@@ -196,20 +196,43 @@ impl StrataAppState {
         });
     }
 
-    fn paint_undo_redo_pill(p: &egui::Painter, min: Pos2) {
+    fn paint_undo_redo_pill(&mut self, ui: &mut egui::Ui, p: &egui::Painter, min: Pos2) {
         let ur_r = Rect::from_min_size(min, Vec2::new(56.0, 30.0));
         p.rect_filled(ur_r, 5.0, Color32::WHITE);
         p.rect_stroke(ur_r, 5.0, Stroke::new(1.0, Color32::from_rgb(195, 192, 182)), egui::StrokeKind::Middle);
         p.line_segment([Pos2::new(ur_r.center().x, ur_r.top() + 1.0), Pos2::new(ur_r.center().x, ur_r.bottom() - 1.0)], Stroke::new(1.0, Color32::from_rgb(212, 209, 200)));
         p.text(Pos2::new(ur_r.left() + 14.0, ur_r.center().y), egui::Align2::CENTER_CENTER, "↺", egui::FontId::proportional(12.5), Color32::from_rgb(90, 88, 82));
-        p.text(Pos2::new(ur_r.right() - 14.0, ur_r.center().y), egui::Align2::CENTER_CENTER, "↻", egui::FontId::proportional(12.5), Color32::from_rgb(175, 172, 162));
+        p.text(Pos2::new(ur_r.right() - 14.0, ur_r.center().y), egui::Align2::CENTER_CENTER, "↻", egui::FontId::proportional(12.5), Color32::from_rgb(90, 88, 82));
+        let undo_r = Rect::from_min_max(ur_r.min, Pos2::new(ur_r.center().x, ur_r.max.y));
+        let redo_r = Rect::from_min_max(Pos2::new(ur_r.center().x, ur_r.min.y), ur_r.max);
+        if ui.interact(undo_r, ui.id().with("ka_canvas_undo_btn"), egui::Sense::click()).on_hover_text("실행취소 (Ctrl+Z)").clicked() {
+            self.home_map.cad.on_backspace(&mut self.home_map.scene);
+            self.home_map.draw_guide_message = Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
+        }
+        if ui.interact(redo_r, ui.id().with("ka_canvas_redo_btn"), egui::Sense::click()).on_hover_text("다시실행 (Ctrl+Y)").clicked() {
+            self.home_map.draw_guide_message = Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
+        }
     }
 
-    fn paint_opacity_card(p: &egui::Painter, card_r: Rect, title: &str) {
+    fn paint_opacity_card(&mut self, ui: &mut egui::Ui, p: &egui::Painter, card_r: Rect, title: &str) {
         p.rect_filled(card_r, 6.0, Color32::from_rgba_unmultiplied(252, 251, 247, 248));
         p.rect_stroke(card_r, 6.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
         p.text(Pos2::new(card_r.left() + 12.0, card_r.top() + 16.0), egui::Align2::LEFT_CENTER, title, egui::FontId::proportional(12.0), Color32::from_rgb(30, 30, 28));
-        for (row_i, (lbl, pct_txt, knob_t, col)) in [("투명도", "100%", 1.0_f32, Color32::from_rgb(181, 87, 58)), ("밝기", "그림만", 0.5_f32, Color32::from_rgb(125, 124, 118))].into_iter().enumerate() {
+        let opacity_val = self.home_map.real_survey.layer_opacity.clamp(0.0, 1.0);
+        let bright_val = self.home_map.real_survey.layer_brightness.clamp(0.0, 1.0);
+        let opacity_txt = format!("{:.0}%", opacity_val * 100.0);
+        let bright_txt = if (bright_val - 0.5).abs() < 0.03 {
+            "그림만".to_owned()
+        } else {
+            format!("{:+.0}%", (bright_val - 0.5) * 200.0)
+        };
+        for (row_i, (lbl, pct_txt, knob_t, col)) in [
+            ("투명도", opacity_txt, opacity_val, Color32::from_rgb(181, 87, 58)),
+            ("밝기", bright_txt, bright_val, Color32::from_rgb(125, 124, 118)),
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let y = card_r.top() + 38.0 + (row_i as f32) * 22.0;
             p.text(Pos2::new(card_r.left() + 12.0, y), egui::Align2::LEFT_CENTER, lbl, egui::FontId::proportional(11.5), Color32::from_rgb(95, 94, 88));
             let (sx0, sx1) = (card_r.left() + 56.0, card_r.right() - 48.0);
@@ -218,7 +241,20 @@ impl StrataAppState {
             p.line_segment([Pos2::new(kx, y), Pos2::new(sx1, y)], Stroke::new(3.0, Color32::from_rgb(205, 202, 194)));
             p.circle_filled(Pos2::new(kx, y), 5.5, Color32::WHITE);
             p.circle_stroke(Pos2::new(kx, y), 5.5, Stroke::new(1.8, col));
-            p.text(Pos2::new(card_r.right() - 10.0, y), egui::Align2::RIGHT_CENTER, pct_txt, egui::FontId::proportional(11.0), Color32::from_rgb(75, 74, 70));
+            p.text(Pos2::new(card_r.right() - 10.0, y), egui::Align2::RIGHT_CENTER, &pct_txt, egui::FontId::proportional(11.0), Color32::from_rgb(75, 74, 70));
+
+            let track_r = Rect::from_min_max(Pos2::new(sx0 - 6.0, y - 9.0), Pos2::new(sx1 + 6.0, y + 9.0));
+            let resp = ui.interact(track_r, ui.id().with(("ka_opacity_slider", row_i)), egui::Sense::click_and_drag());
+            if resp.clicked() || resp.dragged() {
+                if let Some(pos) = resp.interact_pointer_pos() {
+                    let t = ((pos.x - sx0) / (sx1 - sx0).max(1.0)).clamp(0.0, 1.0);
+                    if row_i == 0 {
+                        self.home_map.real_survey.layer_opacity = t;
+                    } else {
+                        self.home_map.real_survey.layer_brightness = t;
+                    }
+                }
+            }
         }
     }
 

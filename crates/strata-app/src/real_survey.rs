@@ -63,6 +63,20 @@ pub fn ring_area_m2(ring: &[[f64; 2]]) -> f64 {
     0.5 * s.abs()
 }
 
+pub fn ring_perimeter_m(ring: &[[f64; 2]]) -> f64 {
+    if ring.len() < 2 {
+        return 0.0;
+    }
+    let mut p = 0.0;
+    for i in 0..ring.len() {
+        let j = (i + 1) % ring.len();
+        let dx = ring[j][0] - ring[i][0];
+        let dy = ring[j][1] - ring[i][1];
+        p += (dx * dx + dy * dy).sqrt();
+    }
+    p
+}
+
 pub fn ring_centroid(ring: &[[f64; 2]]) -> [f64; 2] {
     if ring.is_empty() { return [219_745.6, 360_930.5]; }
     let (mut sx, mut sy) = (0.0, 0.0);

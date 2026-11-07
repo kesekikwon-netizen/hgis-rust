@@ -415,27 +415,117 @@ impl StrataAppState {
     }
 
     fn render_region_locator_popup(&mut self, ctx: &egui::Context) {
-        if !self.ribbon.app_bar.region_popup_open { return; }
+        if !self.ribbon.app_bar.region_popup_open {
+            return;
+        }
         let mut open = self.ribbon.app_bar.region_popup_open;
-        egui::Window::new("한반도 17개 광역 시·도 선택").open(&mut open).collapsible(false).resizable(false).default_width(300.0).show(ctx, |ui| {
-            egui::Grid::new("ka_peninsula_17_grid").spacing([6.0, 6.0]).show(ui, |ui| {
-                for r in 0..6 {
-                    for c in 0..4 {
-                        if let Some(tile) = PENINSULA_REGION_TILES.iter().find(|t| t.row == r && t.col == c) {
-                            if ui.add_sized([62.0, 28.0], egui::Button::new(tile.name)).clicked() {
-                                self.ribbon.app_bar.selected_sido = tile.name.to_owned();
-                                self.home_map.viewport.center_xy = tile.center_5187;
-                                self.active_tab = MainTab::Map;
-                                self.ribbon.app_bar.region_popup_open = false;
+        egui::Window::new("한반도 17개 광역 시·도 선택")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(320.0)
+            .show(ctx, |ui| {
+                egui::Grid::new("ka_peninsula_17_grid")
+                    .spacing([6.0, 6.0])
+                    .show(ui, |ui| {
+                        for r in 0..6 {
+                            for c in 0..4 {
+                                if let Some(tile) = PENINSULA_REGION_TILES.iter().find(|t| t.row == r && t.col == c) {
+                                    let is_sel = self.ribbon.app_bar.selected_sido == tile.name;
+                                    let btn = egui::Button::new(
+                                        egui::RichText::new(tile.name)
+                                            .size(12.5)
+                                            .strong()
+                                            .color(if is_sel { Color32::WHITE } else { Color32::from_rgb(30, 30, 28) }),
+                                    )
+                                    .fill(if is_sel { Color32::from_rgb(44, 43, 41) } else { Color32::WHITE })
+                                    .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                                    .corner_radius(5.0);
+                                    if ui.add_sized([66.0, 28.0], btn).clicked() {
+                                        self.ribbon.app_bar.selected_sido = tile.name.to_owned();
+                                        self.home_map.viewport.center_xy = tile.center_5187;
+                                        self.active_tab = MainTab::Map;
+                                    }
+                                } else {
+                                    ui.allocate_space(Vec2::new(66.0, 28.0));
+                                }
                             }
-                        } else {
-                            ui.allocate_space(Vec2::new(62.0, 28.0));
+                            ui.end_row();
                         }
+                    });
+                ui.add_space(6.0);
+                ui.separator();
+                ui.add_space(4.0);
+                egui::Grid::new("ka_region_detail_inputs")
+                    .num_columns(2)
+                    .spacing([8.0, 6.0])
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new("시·군·구").size(12.0));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.ribbon.app_bar.city_input)
+                                .hint_text("예: 경주시")
+                                .desired_width(210.0),
+                        );
+                        ui.end_row();
+                        ui.label(egui::RichText::new("읍·면·동").size(12.0));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.ribbon.app_bar.dong_input)
+                                .hint_text("예: 인왕동")
+                                .desired_width(210.0),
+                        );
+                        ui.end_row();
+                        ui.label(egui::RichText::new("지번").size(12.0));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.ribbon.app_bar.lot_input)
+                                .hint_text("예: 76 또는 산 12-1")
+                                .desired_width(210.0),
+                        );
+                        ui.end_row();
+                    });
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    let move_btn = egui::Button::new(
+                        egui::RichText::new("이동").color(Color32::WHITE).strong().size(13.0),
+                    )
+                    .fill(Color32::from_rgb(181, 87, 58))
+                    .corner_radius(5.0)
+                    .min_size(Vec2::new(140.0, 30.0));
+                    if ui.add(move_btn).clicked() {
+                        let full_addr = format!(
+                            "{} {} {} {}",
+                            self.ribbon.app_bar.selected_sido,
+                            self.ribbon.app_bar.city_input.trim(),
+                            self.ribbon.app_bar.dong_input.trim(),
+                            self.ribbon.app_bar.lot_input.trim()
+                        );
+                        self.ribbon.app_bar.query = full_addr.trim().to_owned();
+                        if let Some(parcel) = self
+                            .home_map
+                            .real_survey
+                            .cadastral_parcels
+                            .iter()
+                            .find(|p| !self.ribbon.app_bar.lot_input.trim().is_empty() && p.jibun.contains(self.ribbon.app_bar.lot_input.trim()))
+                        {
+                            self.home_map.viewport.center_xy = parcel.center;
+                            self.home_map.viewport.meters_per_pixel = 1.25;
+                        } else if let Some(tile) = PENINSULA_REGION_TILES
+                            .iter()
+                            .find(|t| t.name == self.ribbon.app_bar.selected_sido)
+                        {
+                            self.home_map.viewport.center_xy = tile.center_5187;
+                        }
+                        self.active_tab = MainTab::Map;
+                        self.home_map.draw_guide_message = Some(format!(
+                            "지역·지번 「{}」 위치로 이동했습니다.",
+                            self.ribbon.app_bar.query
+                        ));
+                        self.ribbon.app_bar.region_popup_open = false;
                     }
-                    ui.end_row();
-                }
+                    if ui.button("닫기").clicked() {
+                        self.ribbon.app_bar.region_popup_open = false;
+                    }
+                });
             });
-        });
         self.ribbon.app_bar.region_popup_open = open;
     }
 }

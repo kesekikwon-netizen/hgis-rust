@@ -28,6 +28,12 @@ pub struct RightInspectorState {
     pub active_card: InspectorCardTab,
     pub selected_layer_key: Option<String>,
     pub selected_feature_id: Option<i64>,
+    pub survey_name: String,
+    pub feature_no: String,
+    pub feature_type: String,
+    pub feature_period: String,
+    pub feature_memo: String,
+    pub survey_card_modal_open: bool,
     pub style_color_index: usize,
     pub no_fill: bool,
     pub no_stroke: bool,
@@ -45,7 +51,13 @@ impl RightInspectorState {
         Self {
             active_card: InspectorCardTab::FeatureAttributeCard,
             selected_layer_key: Some("조사구역".to_owned()),
-            selected_feature_id: None,
+            selected_feature_id: Some(1),
+            survey_name: "경주 월성북편 시굴조사".to_owned(),
+            feature_no: "1호 주거지".to_owned(),
+            feature_type: "주거지".to_owned(),
+            feature_period: "삼국".to_owned(),
+            feature_memo: "경주 인왕동 76번지 일원 지표·시굴조사 구역 및 유구 기록".to_owned(),
+            survey_card_modal_open: false,
             style_color_index: 1,
             no_fill: false,
             no_stroke: false,
@@ -121,11 +133,111 @@ impl StrataAppState {
                 ui.add_space(8.0);
 
                 if is_attr {
-                    ui.label(
-                        egui::RichText::new("지도에서 도형 하나를 고르면 기록이\n여기에 나옵니다.")
-                            .size(12.0)
-                            .color(Color32::from_rgb(95, 94, 88)),
-                    );
+                    let active_ring = self
+                        .home_map
+                        .selected_feature_idx
+                        .and_then(|idx| self.home_map.real_survey.survey_rings.get(idx))
+                        .or_else(|| self.home_map.real_survey.survey_rings.last());
+                    if let Some(ring) = active_ring {
+                        let area_m2 = crate::real_survey::ring_area_m2(ring);
+                        let pyeong = area_m2 / 3.305_785;
+                        let perim_m = crate::real_survey::ring_perimeter_m(ring);
+                        egui::Frame::NONE
+                            .fill(Color32::from_rgb(245, 243, 236))
+                            .stroke(Stroke::new(1.0, Color32::from_rgb(212, 209, 200)))
+                            .corner_radius(5.0)
+                            .inner_margin(egui::Margin::symmetric(8, 6))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    egui::RichText::new(format!("면적: {area_m2:.2} m² ({pyeong:.1} 평)"))
+                                        .size(12.0)
+                                        .strong()
+                                        .color(Color32::from_rgb(30, 30, 28)),
+                                );
+                                ui.label(
+                                    egui::RichText::new(format!("둘레: {perim_m:.2} m · {}", self.work_crs.auth_id()))
+                                        .size(11.5)
+                                        .color(Color32::from_rgb(80, 79, 74)),
+                                );
+                            });
+                        ui.add_space(6.0);
+                        egui::Grid::new("ka_feature_card_grid")
+                            .num_columns(2)
+                            .spacing([6.0, 5.0])
+                            .show(ui, |ui| {
+                                ui.label(egui::RichText::new("조사명").size(11.5));
+                                if ui
+                                    .add(egui::TextEdit::singleline(&mut self.right_inspector.survey_name).desired_width(155.0))
+                                    .changed()
+                                {
+                                    self.is_dirty = true;
+                                }
+                                ui.end_row();
+                                ui.label(egui::RichText::new("유구번호").size(11.5));
+                                if ui
+                                    .add(egui::TextEdit::singleline(&mut self.right_inspector.feature_no).desired_width(155.0))
+                                    .changed()
+                                {
+                                    self.is_dirty = true;
+                                }
+                                ui.end_row();
+                                ui.label(egui::RichText::new("종류").size(11.5));
+                                egui::ComboBox::from_id_salt("ka_feat_type_combo")
+                                    .selected_text(&self.right_inspector.feature_type)
+                                    .width(155.0)
+                                    .show_ui(ui, |ui| {
+                                        for ft in ["조사구역", "주거지", "수혈", "분묘", "구", "주초", "유물포함층"] {
+                                            if ui.selectable_value(&mut self.right_inspector.feature_type, ft.to_owned(), ft).changed() {
+                                                self.is_dirty = true;
+                                            }
+                                        }
+                                    });
+                                ui.end_row();
+                                ui.label(egui::RichText::new("시대").size(11.5));
+                                egui::ComboBox::from_id_salt("ka_feat_period_combo")
+                                    .selected_text(&self.right_inspector.feature_period)
+                                    .width(155.0)
+                                    .show_ui(ui, |ui| {
+                                        for pd in ["미상", "구석기", "신석기", "청동기", "원삼국", "삼국", "통일신라", "고려", "조선"] {
+                                            if ui.selectable_value(&mut self.right_inspector.feature_period, pd.to_owned(), pd).changed() {
+                                                self.is_dirty = true;
+                                            }
+                                        }
+                                    });
+                                ui.end_row();
+                            });
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new("메모").size(11.5));
+                        if ui
+                            .add(
+                                egui::TextEdit::multiline(&mut self.right_inspector.feature_memo)
+                                    .desired_rows(3)
+                                    .desired_width(f32::INFINITY),
+                            )
+                            .changed()
+                        {
+                            self.is_dirty = true;
+                        }
+                        ui.add_space(6.0);
+                        let card_btn = egui::Button::new(
+                            egui::RichText::new("조사카드 열기")
+                                .size(12.0)
+                                .strong()
+                                .color(Color32::WHITE),
+                        )
+                        .fill(Color32::from_rgb(181, 87, 58))
+                        .corner_radius(5.0)
+                        .min_size(Vec2::new(ui.available_width(), 28.0));
+                        if ui.add(card_btn).clicked() {
+                            self.right_inspector.survey_card_modal_open = true;
+                        }
+                    } else {
+                        ui.label(
+                            egui::RichText::new("지도에서 도형 하나를 고르면 기록이\n여기에 나옵니다.")
+                                .size(12.0)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                        );
+                    }
                 } else {
                     let layer_name = self.right_inspector.selected_layer_key.as_deref().unwrap_or("조사구역");
                     let stroke_col = self.right_inspector.active_stroke_color();
@@ -217,5 +329,61 @@ impl StrataAppState {
                     ui.separator();
                 });
             });
+
+        if self.right_inspector.survey_card_modal_open {
+            let mut open = self.right_inspector.survey_card_modal_open;
+            let mut close_requested = false;
+            egui::Window::new("조사카드 상세 기록 — Strata")
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .default_width(380.0)
+                .show(ui.ctx(), |ui| {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "조사명: {} · 유구번호: {}",
+                            self.right_inspector.survey_name, self.right_inspector.feature_no
+                        ))
+                        .size(13.0)
+                        .strong(),
+                    );
+                    ui.label(format!(
+                        "종류: {} · 시대: {}",
+                        self.right_inspector.feature_type, self.right_inspector.feature_period
+                    ));
+                    ui.separator();
+                    ui.label("현장 조사 메모 및 층위·출토유물 기록:");
+                    if ui
+                        .add(
+                            egui::TextEdit::multiline(&mut self.right_inspector.feature_memo)
+                                .desired_rows(5)
+                                .desired_width(f32::INFINITY),
+                        )
+                        .changed()
+                    {
+                        self.is_dirty = true;
+                    }
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        let save_btn = egui::Button::new(
+                            egui::RichText::new("조사카드 저장").color(Color32::WHITE).strong(),
+                        )
+                        .fill(Color32::from_rgb(181, 87, 58))
+                        .corner_radius(5.0);
+                        if ui.add(save_btn).clicked() {
+                            self.home_map.draw_guide_message = Some(format!(
+                                "「{}」 조사카드를 저장했습니다.",
+                                self.right_inspector.feature_no
+                            ));
+                            self.is_dirty = false;
+                            close_requested = true;
+                        }
+                        if ui.button("닫기").clicked() {
+                            close_requested = true;
+                        }
+                    });
+                });
+            self.right_inspector.survey_card_modal_open = open && !close_requested;
+        }
     }
 }
