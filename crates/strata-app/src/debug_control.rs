@@ -5,6 +5,7 @@ use strata_canvas2d::map_tools::MapToolKind;
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::ActiveModalDialog;
 use crate::ribbon::SubToolsMode;
+use crate::right_inspector::InspectorCardTab;
 
 impl StrataAppState {
     /// 외부 디버거·검증 스크립트가 `TEMP/ka_hgis_debug_cmd.txt`를 통해 실행 중인 Rust 앱의 15개 화면·모달·도구를 즉시 제어한다.
@@ -126,6 +127,16 @@ impl StrataAppState {
                 }
                 "popup:region" => {
                     self.ribbon.app_bar.region_popup_open = !self.ribbon.app_bar.region_popup_open;
+                }
+                "inspector:style" => {
+                    self.open_sample_survey_project(0);
+                    self.active_tab = MainTab::Map;
+                    self.modals.active = None;
+                    self.ribbon.sub_toolbar_visible = false;
+                    self.active_tool = MapToolKind::Pan;
+                    self.right_inspector.active_card = InspectorCardTab::LayerStyleCard;
+                    self.right_inspector.selected_layer_key = Some("조사구역".to_owned());
+                    self.right_inspector.show_draw_tooltip = true;
                 }
                 _ => {}
             }

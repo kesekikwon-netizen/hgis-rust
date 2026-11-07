@@ -1,24 +1,103 @@
 use eframe::egui::{self, Color32};
+use strata_canvas2d::map_tools::MapToolKind;
 use strata_types::crs::WorkCrs;
 
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::{render_active_modal_dialogs, ActiveModalDialog};
+use crate::ribbon::SubToolsMode;
 
 impl StrataAppState {
+    /// C++ `MainWindow.cpp` + `MainWindowRibbon.cpp` + `KaShellFocus.h` 단축키 1:1 처리
+    fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
+        let wants_kb = ctx.wants_keyboard_input();
+        ctx.input(|i| {
+            if i.key_pressed(egui::Key::Escape) {
+                self.home_map.cad.on_escape(&mut self.home_map.scene);
+                self.modals.active = None;
+                self.ribbon.sub_toolbar_visible = false;
+                self.active_tool = MapToolKind::Pan;
+            }
+            if i.key_pressed(egui::Key::F9) {
+                self.right_inspector.left_panel_collapsed = !self.right_inspector.left_panel_collapsed;
+                self.home_map.draw_guide_message = Some(
+                    if self.right_inspector.left_panel_collapsed {
+                        "왼쪽 패널을 접었습니다. F9 키를 누르면 다시 펼칩니다."
+                    } else {
+                        "왼쪽 패널을 펼쳤습니다."
+                    }
+                    .to_owned(),
+                );
+            }
+            if i.key_pressed(egui::Key::F10) {
+                self.right_inspector.right_panel_collapsed = !self.right_inspector.right_panel_collapsed;
+                self.home_map.draw_guide_message = Some(
+                    if self.right_inspector.right_panel_collapsed {
+                        "오른쪽 패널을 접었습니다. F10 키를 누르면 다시 펼칩니다."
+                    } else {
+                        "오른쪽 패널을 펼쳤습니다."
+                    }
+                    .to_owned(),
+                );
+            }
+            if i.key_pressed(egui::Key::F11) {
+                self.right_inspector.map_focused = !self.right_inspector.map_focused;
+                self.home_map.draw_guide_message = Some(
+                    if self.right_inspector.map_focused {
+                        "지도 넓게 보기 — Ctrl+F11 키를 다시 누르면 리본과 왼쪽 패널이 돌아옵니다."
+                    } else {
+                        "지도 넓게 보기를 끝냈습니다."
+                    }
+                    .to_owned(),
+                );
+            }
+            if !wants_kb && i.modifiers.is_none() && i.key_pressed(egui::Key::A) {
+                self.active_tab = MainTab::Map;
+                self.active_tool = MapToolKind::Select;
+            }
+            if !wants_kb && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+                self.home_map.cad.on_backspace(&mut self.home_map.scene);
+            }
+            if i.modifiers.ctrl {
+                if i.key_pressed(egui::Key::N) {
+                    self.start_new_survey_project("경주시");
+                } else if i.key_pressed(egui::Key::O) {
+                    self.open_sample_survey_project(0);
+                } else if i.key_pressed(egui::Key::S) {
+                    self.home_map.draw_guide_message = Some(format!("「{}」 조사를 저장했습니다.", self.project_title));
+                } else if i.key_pressed(egui::Key::Num1) {
+                    self.active_tab = MainTab::Map;
+                    self.active_tool = MapToolKind::Select;
+                } else if i.key_pressed(egui::Key::D) {
+                    self.active_tab = MainTab::Map;
+                    self.ribbon.toggle_sub_mode(SubToolsMode::Draw);
+                    self.active_tool = MapToolKind::DrawPolygon;
+                } else if i.key_pressed(egui::Key::L) {
+                    self.modals.active = Some(ActiveModalDialog::PaperSetup);
+                } else if i.key_pressed(egui::Key::P) {
+                    self.active_tab = MainTab::Drawing;
+                    self.modals.active = Some(ActiveModalDialog::DrawingPrint);
+                } else if i.key_pressed(egui::Key::E) {
+                    self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
+                } else if i.key_pressed(egui::Key::Z) {
+                    self.home_map.draw_guide_message = Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
+                } else if i.key_pressed(egui::Key::Y) {
+                    self.home_map.draw_guide_message = Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
+                }
+            }
+        });
+    }
+
     /// C++ `MainWindow.cpp` + `MainWindowChrome.cpp` + `KaStatusBar.cpp` 1:1 재현
     pub fn render_workspace_egui(&mut self, ctx: &egui::Context) -> egui::Rect {
         self.poll_debug_remote_commands(ctx);
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.home_map.cad.on_escape(&mut self.home_map.scene);
-            self.modals.active = None;
+        self.handle_cpp_keyboard_shortcuts(ctx);
+
+        if !self.right_inspector.map_focused {
+            egui::TopBottomPanel::top("ka_cpp_top_chrome").show(ctx, |ui| {
+                self.render_cpp_top_bars(ctx, ui);
+            });
         }
 
-        // 1. 상단 1행 리본(그룹명 상단 + 40x40 아이콘 박스 + 우측 지역/주소검색) + 보조 툴바 + 탭 스트립
-        egui::TopBottomPanel::top("ka_cpp_top_chrome").show(ctx, |ui| {
-            self.render_cpp_top_bars(ctx, ui);
-        });
-
-        // 2. 하단 상태 표시줄 (KaStatusBar.cpp 1:1)
         egui::TopBottomPanel::bottom("ka_status_bar")
             .exact_height(26.0)
             .show(ctx, |ui| {
@@ -59,13 +138,13 @@ impl StrataAppState {
                             let scale_str = if self.active_tab == MainTab::Drawing {
                                 "1:6532 ▼"
                             } else {
-                                "1:4846 ▼"
+                                "1:10117 ▼"
                             };
                             let _ = ui.small_button(scale_str);
                             ui.label(egui::RichText::new("축척").size(11.0));
                             if self.active_tab == MainTab::Map {
                                 ui.separator();
-                                ui.label(egui::RichText::new("X 219,333.191    Y 361,059.545").size(11.0));
+                                ui.label(egui::RichText::new("X 219,897.093    Y 361,622.354").size(11.0));
                             }
                             ui.colored_label(
                                 Color32::from_rgb(181, 87, 58),
@@ -80,7 +159,6 @@ impl StrataAppState {
                 });
             });
 
-        // 3. 중앙 본문 (탭별 1:1 화면)
         let mut central_rect = egui::Rect::NOTHING;
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::from_rgb(243, 241, 232)))

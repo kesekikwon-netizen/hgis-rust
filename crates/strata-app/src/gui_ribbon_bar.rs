@@ -6,7 +6,7 @@ use strata_types::schema::DomainLayerKey;
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::ActiveModalDialog;
 use crate::ribbon::{SubToolsMode, PENINSULA_REGION_TILES};
-use crate::ribbon_icons::paint_ribbon_icon;
+use crate::ribbon_icons::{cpp_ribbon_tooltip, paint_ribbon_icon};
 
 fn draw_buffer_pill(ui: &mut egui::Ui, icon_key: &str, badge_bg: bool, text: &str, width: f32) -> bool {
     let (r, resp) = ui.allocate_exact_size(Vec2::new(width, 28.0), egui::Sense::click());
@@ -221,7 +221,7 @@ impl StrataAppState {
         }
         let txt_col = if muted { Color32::from_rgb(150, 148, 140) } else { Color32::from_rgb(30, 30, 28) };
         p.text(Pos2::new(rect.center().x, rect.bottom() - 6.0), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(11.0), txt_col);
-        resp.clicked()
+        resp.on_hover_text(cpp_ribbon_tooltip(label)).clicked()
     }
 
     fn handle_ribbon_click(&mut self, label: &str) {

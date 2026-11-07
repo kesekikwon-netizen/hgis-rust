@@ -112,6 +112,11 @@ impl CadSessionController {
         self.last_measure = None;
     }
 
+    pub fn on_backspace(&mut self, scene: &mut MapSceneModel) {
+        let _ = scene.active_rubberband.pop();
+        self.recompute_measure(&scene.active_rubberband);
+    }
+
     pub fn on_wheel_zoom(
         &mut self,
         scroll_delta_y: f32,

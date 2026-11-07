@@ -90,8 +90,11 @@ type LayerRowSpec = (
 );
 
 impl StrataAppState {
-    /// C++ `KaLayerListChrome.cpp` + `KaLayerSectionDelegate.cpp` + `KaSymbolSwatch.cpp` + `KaFileBrowserPanel.cpp` 1:1 (Image 15)
+    /// C++ `KaLayerListChrome.cpp` + `KaLayerSectionDelegate.cpp` + `KaSymbolSwatch.cpp` + `KaFileBrowserPanel.cpp` 1:1 (Images 15, 16)
     pub(crate) fn render_cpp_left_layer_panel(&mut self, ui: &mut egui::Ui, show_set_btn: bool) {
+        if self.right_inspector.left_panel_collapsed || self.right_inspector.map_focused {
+            return;
+        }
         egui::SidePanel::left("ka_cpp_left_panel")
             .resizable(true)
             .default_width(272.0)
@@ -167,9 +170,15 @@ impl StrataAppState {
                         for (sec_title, top_rule, indent, arrow, sw_kind, name, cnt, right_lbl, alt_bg, txt_col) in rows {
                             let band_h = if !sec_title.is_empty() { 16.0 } else if *top_rule { 4.0 } else { 0.0 };
                             let row_h = 20.0;
-                            let (full_r, _) = ui.allocate_exact_size(Vec2::new(avail_w, band_h + row_h), egui::Sense::hover());
+                            let (full_r, resp) = ui.allocate_exact_size(Vec2::new(avail_w, band_h + row_h), egui::Sense::click());
+                            if resp.clicked() {
+                                self.right_inspector.selected_layer_key = Some((*name).to_owned());
+                            }
+                            let is_sel = self.right_inspector.selected_layer_key.as_deref() == Some(*name);
                             let p = ui.painter_at(full_r);
-                            if *alt_bg {
+                            if is_sel {
+                                p.rect_filled(Rect::from_min_max(Pos2::new(full_r.left(), full_r.top() + band_h), full_r.max), 0.0, Color32::from_rgb(219, 212, 196));
+                            } else if *alt_bg {
                                 p.rect_filled(Rect::from_min_max(Pos2::new(full_r.left(), full_r.top() + band_h), full_r.max), 0.0, Color32::from_rgb(239, 236, 228));
                             }
                             if *top_rule {
