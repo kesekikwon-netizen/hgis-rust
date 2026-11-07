@@ -90,30 +90,33 @@ impl StrataAppState {
                         ui.spacing_mut().item_spacing.x = 4.0;
                         match self.ribbon.sub_mode {
                             SubToolsMode::Draw => {
+                                let wbtn = |ui: &mut egui::Ui, txt: &str| -> egui::Response {
+                                    ui.add(egui::Button::new(egui::RichText::new(txt).size(12.0)).fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172))).corner_radius(5.0).min_size(Vec2::new(0.0, 26.0)))
+                                };
                                 ui.label(egui::RichText::new("그리기 ›").size(12.5).strong());
-                                let _ = ui.button("▶ 도형선택");
+                                let _ = wbtn(ui, "▶ 도형선택");
                                 ui.separator();
                                 let mut snap_on = true;
                                 let mut shared_on = true;
                                 ui.checkbox(&mut snap_on, "자석");
                                 ui.checkbox(&mut shared_on, "공유 경계 허용치");
-                                let _ = ui.button("12 px   ↕");
-                                let _ = ui.button("모든 조사 레이어 ▼");
-                                let _ = ui.button("▼");
+                                let _ = wbtn(ui, "12 px   ↕");
+                                let _ = wbtn(ui, "모든 조사 레이어 ▼");
+                                let _ = wbtn(ui, "▼");
                                 ui.separator();
                                 for b_lbl in ["／ 쉽게그리기", "□ 조사구역 그리기", "◇ 유구 그리기", "━ 유구 선", "● 유물위치표시"] {
-                                    if ui.button(b_lbl).clicked() {
+                                    if wbtn(ui, b_lbl).clicked() {
                                         self.active_tab = MainTab::Map;
                                         self.active_tool = MapToolKind::DrawPolygon;
                                     }
                                 }
                                 ui.separator();
-                                let _ = ui.button("연속 그리기");
+                                let _ = wbtn(ui, "연속 그리기");
                                 ui.separator();
                                 for op in ["폴리곤 묶기", "폴리곤 나누기", "구간 분리", "겹친 곳 지우기"] {
-                                    let _ = ui.button(op);
+                                    let _ = wbtn(ui, op);
                                 }
-                                if ui.button("닫기").clicked() {
+                                if wbtn(ui, "닫기").clicked() {
                                     self.ribbon.sub_toolbar_visible = false;
                                 }
                             }

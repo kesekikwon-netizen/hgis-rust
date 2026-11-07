@@ -261,6 +261,10 @@ impl StrataAppState {
             Pos2::new(c.x + 2.0, c.y + 162.0),
         ];
         p.add(egui::Shape::convex_polygon(survey_pts, Color32::from_rgba_unmultiplied(214, 92, 32, 85), Stroke::new(2.4, Color32::from_rgb(214, 78, 22))));
+        for ti in 0..18 {
+            let ty = c.y - 150.0 + (ti as f32) * 16.5;
+            p.line_segment([Pos2::new(c.x + 7.0, ty), Pos2::new(c.x + 25.0, ty)], Stroke::new(2.0, Color32::from_rgb(156, 62, 32)));
+        }
         let lbl_r = Rect::from_center_size(Pos2::new(c.x + 16.0, c.y + 4.0), Vec2::new(62.0, 16.0));
         p.rect_filled(lbl_r, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 220));
         p.text(lbl_r.center(), egui::Align2::CENTER_CENTER, "86,865.77 m²", egui::FontId::proportional(10.0), Color32::BLACK);
