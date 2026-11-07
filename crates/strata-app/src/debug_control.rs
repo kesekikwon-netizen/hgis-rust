@@ -141,6 +141,11 @@ impl StrataAppState {
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::HeritageBrowser);
                 }
+                "modal:topo_import" => {
+                    self.open_sample_survey_project(0);
+                    self.active_tab = MainTab::Map;
+                    self.modals.active = Some(ActiveModalDialog::TopographicImport);
+                }
                 "modal:none" => {
                     self.modals.active = None;
                 }

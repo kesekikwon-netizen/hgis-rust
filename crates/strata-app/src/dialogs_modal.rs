@@ -30,6 +30,7 @@ pub enum ActiveModalDialog {
     DemClass,
     ReferenceStatus,
     HeritageBrowser,
+    TopographicImport,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +112,15 @@ pub struct ModalDialogController {
     pub heritage_show_details: bool,
     pub heritage_request_log: Vec<String>,
     pub heritage_selected_row: Option<usize>,
+    // T9 KaTopographicImportDialog ("수치지형도 — 좌표계 확인과 지도 추가") 상태
+    pub topo_row_checks: [bool; 6],
+    pub topo_row_crs_idx: [usize; 6],
+    pub topo_row_already_loaded: [bool; 6],
+    pub topo_selected_row: usize,
+    pub topo_maps_enabled: bool,
+    pub topo_progress_pct: f32,
+    pub topo_status_text: String,
+    pub topo_imported_count: usize,
 }
 
 impl Default for ModalDialogController {
@@ -201,6 +211,14 @@ impl Default for ModalDialogController {
                 ),
             ],
             heritage_selected_row: Some(0),
+            topo_row_checks: [true, true, true, true, true, false],
+            topo_row_crs_idx: [1, 1, 12, 4, 3, 0],
+            topo_row_already_loaded: [true, true, false, false, false, false],
+            topo_selected_row: 4,
+            topo_maps_enabled: true,
+            topo_progress_pct: 1.0,
+            topo_status_text: "레이어 6개 · 파일 6개 확인 · 캐시 4개. 추가할 항목에 체크하세요.\n검토 필요: DXF 파일(35905086_행정경계.dxf)은 .prj가 없어 중부원점(EPSG:5186)과 동부원점(EPSG:5187) 판별이 애매합니다. 자동으로 지도에 추가하지 않습니다.".to_owned(),
+            topo_imported_count: 2,
         }
     }
 }
@@ -2221,6 +2239,7 @@ mod tests {
             ActiveModalDialog::DemClass,
             ActiveModalDialog::ReferenceStatus,
             ActiveModalDialog::HeritageBrowser,
+            ActiveModalDialog::TopographicImport,
         ] {
             ctrl.active = None;
             assert!(ctrl.show_exclusive_modal(variant));

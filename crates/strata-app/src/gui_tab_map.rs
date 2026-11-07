@@ -1290,6 +1290,20 @@ impl StrataAppState {
             }
         }
 
+        // T9 KaTopographicImportDialog에서 지도에 추가한 수치지형도 레이어 렌더링 (styleTopographic: 회색 0.2mm 선)
+        if self.modals.topo_maps_enabled && self.modals.topo_imported_count > 0 {
+            let topo_col = layer_color(
+                "수치지형도 1:5,000 (합침)",
+                Color32::from_rgba_unmultiplied(115, 115, 115, 190),
+            );
+            for idx in 0..self.modals.topo_imported_count.min(6) {
+                let offset = (idx as f64 - 2.5) * 140.0;
+                let p1 = w2s(rect, vp, [cx - 880.0, cy + offset - 90.0]);
+                let p2 = w2s(rect, vp, [cx + 880.0, cy + offset + 90.0]);
+                p.line_segment([p1, p2], Stroke::new(1.0, topo_col));
+            }
+        }
+
         // T6 (1) KaControlPointDialog에서 추가한 GPS 기준점 심볼·라벨 렌더링
         for (cp_id, cp_xy, cp_z) in &self.modals.control_points_world {
             let sp = w2s(rect, vp, *cp_xy);
