@@ -3,6 +3,11 @@ use crate::atmosphere_agx::{agx_tonemap_srgb, nishita_sky_zenith_horizon_rgb};
 pub const HGIS_Z_EXAG_MIN: f32 = 1.0;
 pub const HGIS_Z_EXAG_MAX: f32 = 5.0;
 pub const HGIS_Z_EXAG_DEFAULT: f32 = 1.5;
+pub const HGIS_PALEO3D_Z_EXAG_MIN: f32 = 0.5;
+pub const HGIS_PALEO3D_Z_EXAG_MAX: f32 = 10.0;
+pub const HGIS_CAMERA_PITCH_MIN_DEG: f32 = 0.0;
+pub const HGIS_CAMERA_PITCH_MAX_DEG: f32 = 85.0;
+pub const HGIS_CAMERA_DEFAULT_DIST: f32 = 1000.0;
 pub const HGIS_DEM_NODATA_VAL: f32 = -9999.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -35,6 +40,25 @@ impl OrbitCamera3D {
     /// C++ `Terrain3dRenderer::setVerticalExaggeration` — 수직 과장 배율 `[1.0, 5.0]` 클램핑
     pub fn set_vertical_exaggeration(&mut self, scale: f32) {
         self.z_exaggeration = scale.clamp(HGIS_Z_EXAG_MIN, HGIS_Z_EXAG_MAX);
+    }
+
+    /// C++ `KaPaleoViewer3D::setVerticalExaggeration` — 고지형 3D 뷰어 수직 과장 배율 `[0.5, 10.0]` 클램핑 및 NaN 방어
+    pub fn set_paleo_vertical_exaggeration(&mut self, factor: f32) {
+        if !factor.is_finite() {
+            self.z_exaggeration = HGIS_Z_EXAG_DEFAULT;
+        } else {
+            self.z_exaggeration = factor.clamp(HGIS_PALEO3D_Z_EXAG_MIN, HGIS_PALEO3D_Z_EXAG_MAX);
+        }
+    }
+
+    /// C++ `KaTerrainCamera3D::resetToNorth` — 방위각(`yaw_deg`)을 정북(`0.0°`)으로 복원하고 비정상 거리를 기본값으로 복구
+    pub fn reset_to_north(&mut self, distance: f32) -> f32 {
+        self.yaw_deg = 0.0;
+        if !distance.is_finite() || distance <= 1e-4 {
+            HGIS_CAMERA_DEFAULT_DIST
+        } else {
+            distance
+        }
     }
 }
 
@@ -189,5 +213,22 @@ mod tests {
 
         let z_outside = sample_dem_bilinear(&grid, 2, 2, 0.0, 0.0, 10.0, 25.0, 5.0, true);
         assert_eq!(z_outside, HGIS_DEM_NODATA_VAL);
+    }
+
+    #[test]
+    fn test_paleo_vertical_exaggeration_clamping_25_to_10_neg2_to_05_and_reset_to_north() {
+        let mut cam = OrbitCamera3D::default();
+        cam.set_paleo_vertical_exaggeration(25.0);
+        assert!((cam.z_exaggeration - 10.0).abs() < 1e-6);
+
+        cam.set_paleo_vertical_exaggeration(-2.0);
+        assert!((cam.z_exaggeration - 0.5).abs() < 1e-6);
+
+        cam.set_paleo_vertical_exaggeration(f32::NAN);
+        assert!((cam.z_exaggeration - HGIS_Z_EXAG_DEFAULT).abs() < 1e-6);
+
+        let dist = cam.reset_to_north(f32::NAN);
+        assert!((cam.yaw_deg - 0.0).abs() < 1e-6);
+        assert!((dist - HGIS_CAMERA_DEFAULT_DIST).abs() < 1e-5);
     }
 }

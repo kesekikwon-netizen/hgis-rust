@@ -24,6 +24,99 @@ pub enum GpkgResultCode {
     WriteError,
 }
 
+/// C++ `HGIS_SCHEMA_VERSION` (5) — `KaSchemaMigrator::validateAndMigrate` 목표 스키마 버전 상수
+pub const HGIS_SCHEMA_VERSION: i32 = 5;
+
+/// C++ `KaSchemaMigrator::MigrationStatus` 1:1 열거형
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MigrationStatus {
+    UpToDate,
+    MigratedSuccess,
+    FutureVersion,
+    CorruptedDb,
+    SqlExecutionFail,
+}
+
+/// C++ `KaSchemaMigrator::validateAndMigrate(sqlite3 *db, int appTargetVersion)` 1:1 대응:
+/// SQLite `PRAGMA user_version`을 조회하여:
+/// - `V_file > app_target_version`: 미래 버전 열기 차단(`MigrationStatus::FutureVersion`)
+/// - `V_file == app_target_version`: `MigrationStatus::UpToDate`
+/// - `V_file < app_target_version`: 단독 트랜잭션(RAII 자동 ROLLBACK 보장) 내에서 증분 DDL(`hgis_meta`, `rem_elevation`) 실행 후 `PRAGMA user_version` 갱신 및 `MigrationStatus::MigratedSuccess` 반환
+pub fn validate_and_migrate_schema(path: &Path, app_target_version: i32) -> MigrationStatus {
+    let Ok(bytes) = std::fs::read(path) else {
+        return MigrationStatus::CorruptedDb;
+    };
+    if bytes.len() < GPKG_MAGIC_HEADER.len() || &bytes[..16] != GPKG_MAGIC_HEADER {
+        return MigrationStatus::CorruptedDb;
+    }
+
+    let Ok(mut conn) = Connection::open(path) else {
+        return MigrationStatus::CorruptedDb;
+    };
+    let Ok(file_version) = conn.query_row("PRAGMA user_version;", [], |row| row.get::<_, i32>(0))
+    else {
+        return MigrationStatus::CorruptedDb;
+    };
+
+    if file_version < 0 {
+        return MigrationStatus::CorruptedDb;
+    }
+    if file_version > app_target_version {
+        return MigrationStatus::FutureVersion;
+    }
+    if file_version == app_target_version {
+        return MigrationStatus::UpToDate;
+    }
+
+    // RAII Transaction guard: uncommitted transaction automatically rolls back on drop
+    let Ok(tx) = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive) else {
+        return MigrationStatus::SqlExecutionFail;
+    };
+
+    for step_ver in (file_version + 1)..=app_target_version {
+        let ddl_res = match step_ver {
+            2 => tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS hgis_meta (
+                     meta_key TEXT PRIMARY KEY,
+                     meta_value TEXT NOT NULL
+                 );",
+            ),
+            3 => tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS hgis_feature_ext (
+                     fid INTEGER PRIMARY KEY,
+                     rem_elevation DOUBLE NOT NULL DEFAULT 0.0
+                 );",
+            ),
+            _ => tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS hgis_meta (
+                     meta_key TEXT PRIMARY KEY,
+                     meta_value TEXT NOT NULL
+                 );",
+            ),
+        };
+        if ddl_res.is_err() {
+            return MigrationStatus::SqlExecutionFail;
+        }
+    }
+
+    let pragma_sql = format!("PRAGMA user_version = {app_target_version};");
+    if tx.execute_batch(&pragma_sql).is_err() {
+        return MigrationStatus::SqlExecutionFail;
+    }
+    if tx.commit().is_err() {
+        return MigrationStatus::SqlExecutionFail;
+    }
+    MigrationStatus::MigratedSuccess
+}
+
+/// C++ `KaSchemaMigrator` 미래 버전 안내 메시지 포맷터
+#[must_use]
+pub fn format_future_schema_version_error(file_version: i32, app_version: i32) -> String {
+    format!(
+        "이 프로젝트 파일은 더 최신 버전의 HGIS (스키마 v{file_version})에서 작성되었습니다. 현재 프로그램(스키마 v{app_version})에서는 열 수 없습니다. 최신 버전으로 업데이트해 주세요."
+    )
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SurveyWorkspace {
     pub schema_version: u32,
@@ -349,6 +442,60 @@ mod tests {
             .expect("committed layer must exist");
         assert_eq!(committed_layer.features.len(), 1000);
         assert!(committed_layer.features.iter().all(|f| f.fid > 0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_schema_migrator_upgrade_v1_to_v5_and_block_future_version_999() -> StrataResult<()> {
+        let dir = tempfile::tempdir()?;
+        let v1_path = dir.path().join("legacy_v1.gpkg");
+        {
+            let conn = Connection::open(&v1_path).map_err(|e| StrataError::Storage(e.to_string()))?;
+            conn.execute_batch("PRAGMA user_version = 1;")
+                .map_err(|e| StrataError::Storage(e.to_string()))?;
+        }
+
+        // 1. Upgrade v1 -> v5 (HGIS_SCHEMA_VERSION)
+        let status = validate_and_migrate_schema(&v1_path, HGIS_SCHEMA_VERSION);
+        assert_eq!(status, MigrationStatus::MigratedSuccess);
+
+        // Verify PRAGMA user_version is now 5 and tables exist
+        let conn = Connection::open(&v1_path).map_err(|e| StrataError::Storage(e.to_string()))?;
+        let ver: i32 = conn
+            .query_row("PRAGMA user_version;", [], |r| r.get(0))
+            .map_err(|e| StrataError::Storage(e.to_string()))?;
+        assert_eq!(ver, HGIS_SCHEMA_VERSION);
+
+        let table_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='hgis_meta'",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(|e| StrataError::Storage(e.to_string()))?;
+        assert_eq!(table_exists, 1);
+
+        // Calling again on v5 returns UpToDate
+        assert_eq!(
+            validate_and_migrate_schema(&v1_path, HGIS_SCHEMA_VERSION),
+            MigrationStatus::UpToDate
+        );
+
+        // 2. Block future version 999
+        let future_path = dir.path().join("future_v999.gpkg");
+        {
+            let fconn =
+                Connection::open(&future_path).map_err(|e| StrataError::Storage(e.to_string()))?;
+            fconn
+                .execute_batch("PRAGMA user_version = 999;")
+                .map_err(|e| StrataError::Storage(e.to_string()))?;
+        }
+        assert_eq!(
+            validate_and_migrate_schema(&future_path, HGIS_SCHEMA_VERSION),
+            MigrationStatus::FutureVersion
+        );
+        let msg = format_future_schema_version_error(999, HGIS_SCHEMA_VERSION);
+        assert!(msg.contains("스키마 v999") && msg.contains("스키마 v5"));
         Ok(())
     }
 }
