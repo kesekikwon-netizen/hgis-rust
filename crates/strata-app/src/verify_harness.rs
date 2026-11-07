@@ -268,9 +268,15 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
     }
     gates.push(GateResult {
         gate_id: "V14",
-        title_ko: "10대 실무 모달 대화상자(용지·DEM·유산·수치지형·지적·시굴격자·인쇄·제출) egui 렌더링 검증",
-        passed: modal_ok,
-        detail: "10 modal dialogs rendered cleanly".to_owned(),
+        title_ko: "10대 실무 모달 대화상자 및 실제 C++ 계정(DPAPI)·경주시 GeoPackage 로드 검증",
+        passed: modal_ok && !gui_state.home_map.real_survey.survey_rings.is_empty(),
+        detail: format!(
+            "10 modals OK, accounts_ready={}, trenches={}, cadastral={}, heritage={}",
+            gui_state.accounts.status_summary_ko,
+            gui_state.home_map.real_survey.trenches.len(),
+            gui_state.home_map.real_survey.cadastral_parcels.len(),
+            gui_state.home_map.real_survey.heritage_polys.len()
+        ),
     });
 
     gates

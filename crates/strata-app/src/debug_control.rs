@@ -99,6 +99,11 @@ impl StrataAppState {
                     self.modals.active = Some(ActiveModalDialog::DrawingPrint);
                 }
                 "modal:account" => {
+                    self.accounts.show_passwords = false;
+                    self.modals.active = Some(ActiveModalDialog::AccountSettings);
+                }
+                "modal:account_show" => {
+                    self.accounts.show_passwords = true;
                     self.modals.active = Some(ActiveModalDialog::AccountSettings);
                 }
                 "modal:submit" => {

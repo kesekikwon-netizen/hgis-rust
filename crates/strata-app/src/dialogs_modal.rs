@@ -50,7 +50,6 @@ impl Default for ModalDialogController {
     }
 }
 
-/// C++ Qt/Windows 11 모달 상단 타이틀바 1:1 (좌측 Strata 테라코타 로고 + 제목 + 우측 닫기 ✕)
 pub fn render_strata_modal_header(ui: &mut egui::Ui, title: &str, open: &mut bool) {
     ui.horizontal(|ui| {
         let (logo_r, _) = ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::hover());
@@ -173,14 +172,61 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                 });
         }
         ActiveModalDialog::AccountSettings => {
-            egui::Window::new("ka_modal_account").title_bar(false).resizable(false).show(ctx, |ui| {
-                render_strata_modal_header(ui, "사이트 로그인 · API 키 설정 - Strata", &mut open);
-                ui.label(&app.accounts.status_summary_ko);
-                ui.separator();
-                ui.horizontal(|ui| { ui.label("VWorld API 키:"); ui.text_edit_singleline(&mut app.modals.vworld_key_input); });
-                ui.horizontal(|ui| { ui.label("국가유산청 인트라넷 ID:"); ui.text_edit_singleline(&mut app.modals.heritage_id_input); });
-                ui.horizontal(|ui| { ui.label("국토지리정보원(NGII) ID:"); ui.text_edit_singleline(&mut app.modals.ngii_id_input); });
-            });
+            egui::Window::new("ka_modal_account")
+                .title_bar(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .default_width(520.0)
+                .show(ctx, |ui| {
+                    render_strata_modal_header(ui, "API 키 · 사이트 계정 설정 - Strata", &mut open);
+                    ui.label(egui::RichText::new(&app.accounts.status_summary_ko).size(12.5).strong());
+                    ui.separator();
+                    let show_pw = app.accounts.show_passwords;
+                    egui::Grid::new("ka_account_grid").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+                        ui.label("VWorld API 키:");
+                        ui.add(egui::TextEdit::singleline(&mut app.accounts.vworld_key).desired_width(340.0));
+                        ui.end_row();
+                        ui.label("역사지리정보DB 키:");
+                        ui.add(egui::TextEdit::singleline(&mut app.accounts.history_gis_key).desired_width(340.0));
+                        ui.end_row();
+                        ui.label("VWorld 지적도 ID / PW:");
+                        ui.horizontal(|ui| {
+                            ui.add(egui::TextEdit::singleline(&mut app.accounts.cadastral_creds.username).desired_width(140.0));
+                            ui.add(egui::TextEdit::singleline(&mut app.accounts.cadastral_creds.password).password(!show_pw).desired_width(188.0));
+                        });
+                        ui.end_row();
+                        ui.label("수치지형도(NGII) ID / PW:");
+                        ui.horizontal(|ui| {
+                            ui.add(egui::TextEdit::singleline(&mut app.accounts.ngii_creds.username).desired_width(140.0));
+                            ui.add(egui::TextEdit::singleline(&mut app.accounts.ngii_creds.password).password(!show_pw).desired_width(188.0));
+                        });
+                        ui.end_row();
+                        ui.label("국가유산청 인트라넷 ID / PW:");
+                        ui.horizontal(|ui| {
+                            ui.add(egui::TextEdit::singleline(&mut app.accounts.heritage_creds.username).desired_width(140.0));
+                            ui.add(egui::TextEdit::singleline(&mut app.accounts.heritage_creds.password).password(!show_pw).desired_width(188.0));
+                        });
+                        ui.end_row();
+                    });
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut app.accounts.show_passwords, "비밀번호 표시");
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("닫기").clicked() {
+                                app.modals.active = None;
+                            }
+                            let save_b = egui::Button::new(egui::RichText::new("저장").color(Color32::WHITE).strong())
+                                .fill(Color32::from_rgb(181, 87, 58))
+                                .corner_radius(6.0)
+                                .min_size(Vec2::new(78.0, 30.0));
+                            if ui.add(save_b).clicked() {
+                                app.accounts.save_all_to_disk();
+                                app.home_map.draw_guide_message = Some("API 키와 사이트 계정(DPAPI 암호화)을 저장했습니다.".to_owned());
+                                app.modals.active = None;
+                            }
+                        });
+                    });
+                });
         }
         ActiveModalDialog::ExportSubmitPackage => {
             egui::Window::new("ka_modal_submit").title_bar(false).resizable(false).show(ctx, |ui| {
@@ -192,7 +238,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                 }
                 ui.separator();
                 if ui.button("EPSG:5179 제출 패키지 생성").clicked() {
-                    let out_dir = std::env::temp_dir().join("ka_hgis_submit_export");
+                    let out_dir = app.home_map.real_survey.survey_dir.join("제출꾸러미_5179");
                     if let Ok(m) = export_submission_package(&out_dir, &findings) {
                         app.modals.last_export_status = format!("내보내기 완료: {} (파일 {}종, SHA-256 검증됨)", out_dir.display(), m.files_sha256.len());
                     }

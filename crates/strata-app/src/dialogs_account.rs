@@ -1,18 +1,32 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use strata_secrets::accounts::{AccountKind, AccountSettings};
+use strata_secrets::accounts::{AccountKind, AccountSettings, Credentials};
 use strata_secrets::mask::SecretMask;
 use strata_secrets::vworld::VworldSettings;
 
 #[derive(Debug, Clone, Default)]
 pub struct AccountDialogState {
+    pub config_dir: PathBuf,
+    pub vworld_key: String,
+    pub history_gis_key: String,
+    pub cadastral_creds: Credentials,
+    pub ngii_creds: Credentials,
+    pub heritage_creds: Credentials,
     pub vworld_configured: bool,
-    pub heritage_configured: bool,
+    pub history_gis_configured: bool,
+    pub cadastral_configured: bool,
     pub ngii_configured: bool,
+    pub heritage_configured: bool,
     pub status_summary_ko: String,
+    pub show_passwords: bool,
 }
 
 impl AccountDialogState {
+    #[must_use]
+    pub fn probe_user_accounts() -> Self {
+        Self::probe_local_accounts(&AccountSettings::user_config_dir())
+    }
+
     #[must_use]
     pub fn probe_local_accounts(config_dir: &Path) -> Self {
         let vworld_ini = config_dir.join("ka-hgis-vworld.ini");
@@ -20,32 +34,95 @@ impl AccountDialogState {
             .ok()
             .filter(|k| !k.is_empty())
             .unwrap_or_else(VworldSettings::load_api_key);
-        let heritage = AccountSettings::read_ini(
-            &config_dir.join(AccountKind::HeritageIntranet.file_name()),
-            AccountKind::HeritageIntranet,
-        )
-        .ok();
-        let ngii = AccountSettings::read_ini(
-            &config_dir.join(AccountKind::NgiiTopographic.file_name()),
-            AccountKind::NgiiTopographic,
-        )
-        .ok();
+        let history_gis_key = VworldSettings::load_history_gis_from_ini(&vworld_ini)
+            .ok()
+            .filter(|k| !k.is_empty())
+            .unwrap_or_else(VworldSettings::load_history_gis_api_key);
 
-        let vworld_configured = !vworld_key.is_empty();
-        let heritage_configured = heritage.as_ref().is_some_and(|a| !a.username.is_empty());
-        let ngii_configured = ngii.as_ref().is_some_and(|a| !a.username.is_empty());
+        let cadastral_creds =
+            AccountSettings::read_from_dir(config_dir, AccountKind::VworldCadastral);
+        let ngii_creds = AccountSettings::read_from_dir(config_dir, AccountKind::NgiiTopographic);
+        let heritage_creds =
+            AccountSettings::read_from_dir(config_dir, AccountKind::HeritageIntranet);
+
+        let mut st = Self {
+            config_dir: config_dir.to_path_buf(),
+            vworld_key,
+            history_gis_key,
+            cadastral_creds,
+            ngii_creds,
+            heritage_creds,
+            vworld_configured: false,
+            history_gis_configured: false,
+            cadastral_configured: false,
+            ngii_configured: false,
+            heritage_configured: false,
+            status_summary_ko: String::new(),
+            show_passwords: false,
+        };
+        st.recompute_flags();
+        st
+    }
+
+    pub fn recompute_flags(&mut self) {
+        self.vworld_configured = !self.vworld_key.trim().is_empty();
+        self.history_gis_configured = !self.history_gis_key.trim().is_empty();
+        self.cadastral_configured = !self.cadastral_creds.username.trim().is_empty()
+            && !self.cadastral_creds.password.is_empty();
+        self.ngii_configured =
+            !self.ngii_creds.username.trim().is_empty() && !self.ngii_creds.password.is_empty();
+        self.heritage_configured = !self.heritage_creds.username.trim().is_empty()
+            && !self.heritage_creds.password.is_empty();
+
+        let ready_cnt = [
+            self.vworld_configured,
+            self.history_gis_configured,
+            self.cadastral_configured,
+            self.ngii_configured,
+            self.heritage_configured,
+        ]
+        .into_iter()
+        .filter(|&b| b)
+        .count();
 
         let raw_summary = format!(
-            "VWorld: {}, 국가유산청 인트라넷: {}, 국토지리정보원: {}",
-            if vworld_configured { "연결됨" } else { "미설정" },
-            if heritage_configured { "연결됨" } else { "미설정" },
-            if ngii_configured { "연결됨" } else { "미설정" }
+            "자료 연결 5곳 중 {ready_cnt}곳 설정됨 (VWorld: {}, 역사지리DB: {}, 지적도: {}, 수치지형도: {}, 국가유산청: {})",
+            if self.vworld_configured { "설정됨" } else { "미설정" },
+            if self.history_gis_configured { "설정됨" } else { "미설정" },
+            if self.cadastral_configured { "설정됨" } else { "미설정" },
+            if self.ngii_configured { "설정됨" } else { "미설정" },
+            if self.heritage_configured { "설정됨" } else { "미설정" },
         );
-        Self {
-            vworld_configured,
-            heritage_configured,
-            ngii_configured,
-            status_summary_ko: SecretMask::redact(&raw_summary, &[]),
-        }
+        self.status_summary_ko = SecretMask::redact(&raw_summary, &[]);
+    }
+
+    pub fn save_all_to_disk(&mut self) {
+        let dir = if self.config_dir.as_os_str().is_empty() {
+            AccountSettings::user_config_dir()
+        } else {
+            self.config_dir.clone()
+        };
+        let vworld_ini = dir.join("ka-hgis-vworld.ini");
+        let _ = VworldSettings::save_to_ini(&vworld_ini, &self.vworld_key);
+        let _ = VworldSettings::save_history_gis_to_ini(&vworld_ini, &self.history_gis_key);
+        let _ = AccountSettings::save_to_file(
+            &dir.join(AccountKind::VworldCadastral.file_name()),
+            AccountKind::VworldCadastral,
+            &self.cadastral_creds,
+            false,
+        );
+        let _ = AccountSettings::save_to_file(
+            &dir.join(AccountKind::NgiiTopographic.file_name()),
+            AccountKind::NgiiTopographic,
+            &self.ngii_creds,
+            false,
+        );
+        let _ = AccountSettings::save_to_file(
+            &dir.join(AccountKind::HeritageIntranet.file_name()),
+            AccountKind::HeritageIntranet,
+            &self.heritage_creds,
+            false,
+        );
+        self.recompute_flags();
     }
 }

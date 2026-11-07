@@ -5,6 +5,8 @@ use strata_canvas2d::viewport::ViewportTransform;
 use strata_net::address_search::sido_presets;
 use strata_net::tile_fetcher::BasemapSource;
 
+use crate::real_survey::RealSurveyData;
+
 #[derive(Debug, Clone)]
 pub struct HomeMapTabState {
     pub recent_files: Vec<String>,
@@ -21,10 +23,13 @@ pub struct HomeMapTabState {
     pub selected_sido_idx: usize,
     pub cad: CadSessionController,
     pub active_basemap: BasemapSource,
+    pub real_survey: RealSurveyData,
 }
 
 impl Default for HomeMapTabState {
     fn default() -> Self {
+        let real_survey = RealSurveyData::load_gyeongju_or_fallback();
+        let center = real_survey.survey_center;
         Self {
             recent_files: vec![
                 "경주_월성북편_시굴조사.gpkg".to_owned(),
@@ -36,14 +41,15 @@ impl Default for HomeMapTabState {
             files_open: true,
             layer_filter: String::new(),
             selected_feature_idx: None,
-            grid_enabled: true,
-            cursor_world_xy: [219_850.0, 360_120.0],
-            viewport: ViewportTransform::new([219_850.0, 360_120.0], 0.5, [1000.0, 720.0]),
+            grid_enabled: false,
+            cursor_world_xy: center,
+            viewport: ViewportTransform::new(center, 2.55, [1060.0, 680.0]),
             draw_guide_message: None,
             scene: MapSceneModel::new_demo_gyeongju_scene(),
             selected_sido_idx: 0,
             cad: CadSessionController::default(),
             active_basemap: BasemapSource::VworldSatellite,
+            real_survey,
         }
     }
 }
@@ -64,5 +70,10 @@ impl HomeMapTabState {
             self.selected_sido_idx = idx;
             self.viewport.center_xy = p.center_5187;
         }
+    }
+
+    pub fn fit_to_survey(&mut self) {
+        self.viewport.center_xy = self.real_survey.survey_center;
+        self.viewport.meters_per_pixel = 2.55;
     }
 }

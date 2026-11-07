@@ -1,3 +1,4 @@
+use crate::accounts::AccountSettings;
 use crate::secret_store::{parse_qt_ini_file, serialize_qt_ini};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -8,16 +9,26 @@ pub struct VworldSettings;
 
 impl VworldSettings {
     pub fn default_ini_path() -> Option<PathBuf> {
+        let dir = AccountSettings::user_config_dir();
+        let candidate = dir.join("ka-hgis-vworld.ini");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let legacy = PathBuf::from(&local_app_data)
+                .join("ka-hgis")
+                .join("ka-hgis-vworld.ini");
+            if legacy.is_file() {
+                return Some(legacy);
+            }
             return Some(
                 PathBuf::from(local_app_data)
+                    .join("ka-hgis")
                     .join("ka-hgis")
                     .join("ka-hgis-vworld.ini"),
             );
         }
-        std::env::var("HOME")
-            .ok()
-            .map(|h| PathBuf::from(h).join(".config/ka-hgis/ka-hgis-vworld.ini"))
+        Some(candidate)
     }
 
     pub fn load_from_ini(path: &Path) -> StrataResult<String> {
@@ -59,6 +70,23 @@ impl VworldSettings {
         String::new()
     }
 
+    pub fn load_history_gis_api_key() -> String {
+        if let Some(ini) = Self::default_ini_path() {
+            if let Ok(k) = Self::load_history_gis_from_ini(&ini) {
+                if !k.is_empty() {
+                    return k;
+                }
+            }
+        }
+        if let Ok(env_k) = std::env::var("HISTORY_GIS_API_KEY") {
+            let trimmed = env_k.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+        String::new()
+    }
+
     pub fn save_to_ini(path: &Path, key: &str) -> StrataResult<()> {
         let mut map = if path.is_file() {
             parse_qt_ini_file(path).unwrap_or_default()
@@ -70,6 +98,24 @@ impl VworldSettings {
             map.remove("VWorld/ApiKey");
         } else {
             map.insert("VWorld/ApiKey".to_string(), key.trim().to_string());
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, serialize_qt_ini(&map))?;
+        Ok(())
+    }
+
+    pub fn save_history_gis_to_ini(path: &Path, key: &str) -> StrataResult<()> {
+        let mut map = if path.is_file() {
+            parse_qt_ini_file(path).unwrap_or_default()
+        } else {
+            BTreeMap::new()
+        };
+        if key.trim().is_empty() {
+            map.remove("HistoryGis/ApiKey");
+        } else {
+            map.insert("HistoryGis/ApiKey".to_string(), key.trim().to_string());
         }
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;

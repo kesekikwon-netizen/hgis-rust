@@ -8,7 +8,6 @@ use crate::dialogs_modal::ActiveModalDialog;
 use crate::ribbon_icons::paint_strata_logo;
 
 impl StrataAppState {
-    /// C++ `KaStartPage.cpp` + `KaHomeTitleBlock.cpp` + `KaHomeRecentCard.cpp` + `KaHomeGuideCard.cpp` + `KaHomeConnectionCard.cpp` 1:1
     pub(crate) fn render_home_tab_ui(&mut self, ui: &mut egui::Ui) {
         let total_w = ui.available_width().clamp(800.0, 3600.0);
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -17,7 +16,6 @@ impl StrataAppState {
                 let inner_w = (total_w - 40.0).max(760.0);
                 ui.set_max_width(inner_w);
 
-                // 1. 상단 행: 좌측 KaStartHero (27%) + 우측 KaHomeTitleBlock 도면 표제란 (73%)
                 let hero_w = (inner_w * 0.26).max(240.0);
                 let title_w = (inner_w - hero_w - 20.0).max(480.0);
                 ui.horizontal_top(|ui| {
@@ -48,7 +46,6 @@ impl StrataAppState {
 
                 ui.add_space(22.0);
 
-                // 2. 중단 행: 좌측 최근 조사 테이블 (77%) + 우측 작업 순서 타임라인 (23%)
                 let recent_w = (inner_w * 0.77).max(520.0);
                 let guide_w = (inner_w - recent_w - 20.0).max(200.0);
                 ui.horizontal_top(|ui| {
@@ -107,23 +104,33 @@ impl StrataAppState {
                 ui.separator();
                 ui.add_space(6.0);
 
-                // 3. 하단 행: 연결 상태 (5열 가로 스트립)
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("연결 상태").size(14.5).strong());
                     ui.label(egui::RichText::new("비밀값은 표시되지 않습니다").size(12.0).color(Color32::from_rgb(105, 103, 96)));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("인터넷 확인").clicked() { self.home_map.internet_checked = true; }
+                        if ui.button("인터넷 확인").clicked() {
+                            self.home_map.internet_checked = true;
+                            self.home_map.draw_guide_message = Some("인터넷 연결 및 VWorld·국토정보플랫폼·국가유산청 계정 설정을 확인했습니다.".to_owned());
+                        }
                         let net_txt = if self.home_map.internet_checked { "인터넷 · 연결됨" } else { "인터넷 · 확인 안 함" };
                         ui.label(egui::RichText::new(net_txt).size(12.0).color(Color32::from_rgb(95, 94, 88)));
                     });
                 });
                 ui.add_space(8.0);
+                let statuses = [
+                    ("VWorld 키", self.accounts.vworld_configured),
+                    ("역사지리정보DB 키", self.accounts.history_gis_configured),
+                    ("VWorld 지적도 계정", self.accounts.cadastral_configured),
+                    ("수치지형도 계정", self.accounts.ngii_configured),
+                    ("문화재 인트라넷", self.accounts.heritage_configured),
+                ];
                 ui.columns(5, |cols| {
-                    for (idx, title) in ["VWorld 키", "역사지리정보DB 키", "VWorld 지적도 계정", "수치지형도 계정", "문화재 인트라넷"].into_iter().enumerate() {
+                    for (idx, (title, ready)) in statuses.into_iter().enumerate() {
                         cols[idx].horizontal(|ui| {
                             ui.vertical(|ui| {
                                 ui.label(egui::RichText::new(title).size(12.5).strong());
-                                ui.label(egui::RichText::new("설정됨").size(11.5).color(Color32::from_rgb(105, 103, 96)));
+                                let st_txt = if ready { "설정됨" } else { "미설정" };
+                                ui.label(egui::RichText::new(st_txt).size(11.5).color(Color32::from_rgb(105, 103, 96)));
                             });
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 if ui.link(egui::RichText::new("설정").size(12.0)).clicked() {
@@ -160,11 +167,12 @@ impl StrataAppState {
             self.open_sample_survey_project(0);
         }
 
+        let area_cnt = format!("{} 곳", self.home_map.real_survey.survey_rings.len().max(1));
         let cells = [
             ("폴더", "문서 › 경주시"),
             ("마지막 열림", "어제 22:26"),
             ("작업 좌표계", "5187 동부원점"),
-            ("조사구역", "1 곳"),
+            ("조사구역", area_cnt.as_str()),
             ("유구", "0 기"),
             ("검수", "검수 전"),
         ];
@@ -203,6 +211,9 @@ impl StrataAppState {
             ("andong", "바탕 화면 › andong", "⊗ 원본 없음", "—", "—", "—", "찾을 수 없음", false),
         ];
         for (idx, (name, folder, st, area, feat, chk, opened, ok)) in rows.into_iter().enumerate() {
+            if !self.home_map.recent_filter.trim().is_empty() && !name.contains(self.home_map.recent_filter.trim()) {
+                continue;
+            }
             let ry = box_r.top() + 30.0 + (idx as f32) * 43.0;
             let row_r = Rect::from_min_size(Pos2::new(box_r.left() + 1.0, ry), Vec2::new(width - 2.0, 42.0));
             if idx == 0 {
@@ -226,6 +237,7 @@ impl StrataAppState {
         let path = std::env::temp_dir().join(format!("{name}.gpkg"));
         let _ = GpkgRepository::create_new_survey(&path, self.work_crs);
         self.left_layers.ensure_domain_layer(DomainLayerKey::SurveyArea);
+        self.home_map.fit_to_survey();
         self.active_tab = MainTab::Map;
         self.home_map.draw_guide_message = Some("위성과 지적도를 올려 두었습니다.".to_owned());
     }
@@ -234,6 +246,7 @@ impl StrataAppState {
         self.project_title = "경주시".to_owned();
         self.left_layers.ensure_domain_layer(DomainLayerKey::SurveyArea);
         self.left_layers.add_cadastral_wms_layer();
+        self.home_map.fit_to_survey();
         self.active_tab = MainTab::Map;
         self.home_map.draw_guide_message = Some("다 그렸으면 리본의 「도면」으로 종이에 옮기세요.".to_owned());
     }

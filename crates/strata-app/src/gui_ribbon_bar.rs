@@ -112,7 +112,10 @@ impl StrataAppState {
                                     ui.add(egui::Button::new(egui::RichText::new(txt).size(12.0)).fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172))).corner_radius(5.0).min_size(Vec2::new(0.0, 26.0)))
                                 };
                                 ui.label(egui::RichText::new("그리기 ›").size(12.5).strong());
-                                let _ = wbtn(ui, "▶ 도형선택");
+                                if wbtn(ui, "▶ 도형선택").clicked() {
+                                    self.active_tab = MainTab::Map;
+                                    self.active_tool = MapToolKind::Select;
+                                }
                                 ui.separator();
                                 let mut snap_on = true;
                                 let mut shared_on = true;
@@ -122,30 +125,39 @@ impl StrataAppState {
                                 let _ = wbtn(ui, "모든 조사 레이어 ▼");
                                 let _ = wbtn(ui, "▼");
                                 ui.separator();
-                                for b_lbl in ["／ 쉽게그리기", "□ 조사구역 그리기", "◇ 유구 그리기", "━ 유구 선", "● 유물위치표시"] {
+                                for (b_lbl, tool) in [("／ 쉽게그리기", MapToolKind::DrawPolygon), ("□ 조사구역 그리기", MapToolKind::DrawPolygon), ("◇ 유구 그리기", MapToolKind::DrawPolygon), ("━ 유구 선", MapToolKind::DrawLine), ("● 유물위치표시", MapToolKind::PlacePoint)] {
                                     if wbtn(ui, b_lbl).clicked() {
                                         self.active_tab = MainTab::Map;
-                                        self.active_tool = MapToolKind::DrawPolygon;
+                                        self.active_tool = tool;
+                                        self.home_map.update_guide_for_tool(tool);
                                     }
                                 }
                                 ui.separator();
                                 let _ = wbtn(ui, "연속 그리기");
                                 ui.separator();
                                 for op in ["폴리곤 묶기", "폴리곤 나누기", "구간 분리", "겹친 곳 지우기"] {
-                                    let _ = wbtn(ui, op);
+                                    if wbtn(ui, op).clicked() {
+                                        self.home_map.draw_guide_message = Some(format!("「{op}」 도구를 실행할 도형을 지도에서 선택하세요."));
+                                    }
                                 }
-                                if wbtn(ui, "닫기").clicked() {
-                                    self.ribbon.sub_toolbar_visible = false;
-                                }
+                                if wbtn(ui, "닫기").clicked() { self.ribbon.sub_toolbar_visible = false; }
                             }
                             SubToolsMode::Buffer => {
                                 ui.label(egui::RichText::new("주변유적경계 ›").size(12.5).strong());
-                                let _ = draw_buffer_pill(ui, "버퍼", true, "500m", 78.0);
-                                let _ = draw_buffer_pill(ui, "버퍼", true, "1000m", 84.0);
-                                let _ = draw_buffer_pill(ui, "수치지형", false, "엑셀 내보내기", 118.0);
-                                if draw_buffer_pill(ui, "", false, "닫기", 48.0) {
-                                    self.ribbon.sub_toolbar_visible = false;
+                                if draw_buffer_pill(ui, "버퍼", true, "500m", 78.0) {
+                                    self.home_map.real_survey.toggle_layer_visible("주변 500m");
+                                    self.home_map.draw_guide_message = Some("조사구역 주변 500m 경계를 갱신했습니다.".to_owned());
                                 }
+                                if draw_buffer_pill(ui, "버퍼", true, "1000m", 84.0) {
+                                    self.home_map.real_survey.show_buffer_1000m = !self.home_map.real_survey.show_buffer_1000m;
+                                    self.home_map.draw_guide_message = Some("조사구역 주변 1,000m 경계를 지도에 표시했습니다.".to_owned());
+                                }
+                                if draw_buffer_pill(ui, "수치지형", false, "엑셀 내보내기", 118.0) {
+                                    if let Some(out) = self.home_map.real_survey.export_nearby_heritage_csv() {
+                                        self.home_map.draw_guide_message = Some(format!("주변유적 목록을 내보냈습니다: {}", out.display()));
+                                    }
+                                }
+                                if draw_buffer_pill(ui, "", false, "닫기", 48.0) { self.ribbon.sub_toolbar_visible = false; }
                             }
                             SubToolsMode::Align => {
                                 ui.strong("도면정합 ›");
@@ -245,7 +257,7 @@ impl StrataAppState {
             "인쇄" => { self.active_tab = MainTab::Drawing; self.modals.active = Some(ActiveModalDialog::DrawingPrint); }
             "GeoTIFF" => self.active_tab = MainTab::Drawing,
             "검수·제출" => self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage),
-            "더보기" => self.active_tab = MainTab::Terrain3d,
+            "더보기" => self.modals.active = Some(ActiveModalDialog::AccountSettings),
             _ => self.active_tab = MainTab::Map,
         }
     }

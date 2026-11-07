@@ -3183,6 +3183,7 @@ dependencies = [
  "eframe",
  "egui",
  "geo",
+ "rusqlite",
  "serde",
  "serde_json",
  "strata-canvas2d",

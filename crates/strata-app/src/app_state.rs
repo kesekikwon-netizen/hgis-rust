@@ -67,7 +67,7 @@ pub struct StrataAppState {
 impl StrataAppState {
     #[must_use]
     pub fn new_startup() -> Self {
-        let default_cfg = std::env::temp_dir().join("ka-hgis");
+        let accounts = AccountDialogState::probe_user_accounts();
         Self {
             active_tab: MainTab::Home,
             work_crs: WorkCrs::Epsg5187,
@@ -82,7 +82,7 @@ impl StrataAppState {
             home_map: HomeMapTabState::default(),
             paleo_3d: PaleoTerrain3dTabState::default(),
             drawing: DrawingTabState::default(),
-            accounts: AccountDialogState::probe_local_accounts(&default_cfg),
+            accounts,
             modals: ModalDialogController::default(),
         }
     }

@@ -46,13 +46,11 @@ impl WkbGeometry {
 #[must_use]
 pub fn encode_gpkg_wkb(srs_id: i32, geom: &WkbGeometry) -> Vec<u8> {
     let mut out = Vec::with_capacity(128);
-    // OGC GeoPackage Binary Header: 'G', 'P', version=0, flags=0x03 (little-endian + XY envelope)
     out.extend_from_slice(b"GP\x00\x03");
     out.extend_from_slice(&srs_id.to_le_bytes());
     for v in geom.envelope_xy() {
         out.extend_from_slice(&v.to_le_bytes());
     }
-    // Standard WKB (Little Endian = 1)
     out.push(1);
     match geom {
         WkbGeometry::Point(pt) => {
@@ -83,6 +81,40 @@ pub fn encode_gpkg_wkb(srs_id: i32, geom: &WkbGeometry) -> Vec<u8> {
     out
 }
 
+fn read_u32_le(buf: &[u8], idx: &mut usize) -> StrataResult<u32> {
+    let slice = buf
+        .get(*idx..*idx + 4)
+        .ok_or_else(|| StrataError::Storage("WKB 카운트 읽기 범위 초과".into()))?;
+    let mut arr = [0_u8; 4];
+    arr.copy_from_slice(slice);
+    *idx += 4;
+    Ok(u32::from_le_bytes(arr))
+}
+
+fn read_f64_le(buf: &[u8], idx: &mut usize) -> StrataResult<f64> {
+    let slice = buf
+        .get(*idx..*idx + 8)
+        .ok_or_else(|| StrataError::Storage("WKB 좌표 읽기 범위 초과".into()))?;
+    let mut arr = [0_u8; 8];
+    arr.copy_from_slice(slice);
+    *idx += 8;
+    Ok(f64::from_le_bytes(arr))
+}
+
+fn read_polygon_rings(wkb: &[u8], pos: &mut usize) -> StrataResult<Vec<Vec<[f64; 2]>>> {
+    let n_rings = read_u32_le(wkb, pos)? as usize;
+    let mut rings = Vec::with_capacity(n_rings);
+    for _ in 0..n_rings {
+        let n_pts = read_u32_le(wkb, pos)? as usize;
+        let mut ring = Vec::with_capacity(n_pts);
+        for _ in 0..n_pts {
+            ring.push([read_f64_le(wkb, pos)?, read_f64_le(wkb, pos)?]);
+        }
+        rings.push(ring);
+    }
+    Ok(rings)
+}
+
 pub fn decode_gpkg_wkb(bytes: &[u8]) -> StrataResult<(i32, WkbGeometry)> {
     if bytes.len() < 8 || &bytes[0..2] != b"GP" {
         return Err(StrataError::Storage("유효한 GeoPackage WKB 헤더가 아닙니다".into()));
@@ -102,53 +134,50 @@ pub fn decode_gpkg_wkb(bytes: &[u8]) -> StrataResult<(i32, WkbGeometry)> {
         return Err(StrataError::Storage("WKB 페이로드 길이 부족".into()));
     }
     let wkb = &bytes[wkb_offset..];
-    let geom_type = u32::from_le_bytes([wkb[1], wkb[2], wkb[3], wkb[4]]);
-    let mut pos = 5;
-    let read_f64 = |buf: &[u8], idx: &mut usize| -> StrataResult<f64> {
-        let slice = buf
-            .get(*idx..*idx + 8)
-            .ok_or_else(|| StrataError::Storage("WKB 좌표 읽기 범위 초과".into()))?;
-        let mut arr = [0_u8; 8];
-        arr.copy_from_slice(slice);
-        *idx += 8;
-        Ok(f64::from_le_bytes(arr))
-    };
-    let read_u32 = |buf: &[u8], idx: &mut usize| -> StrataResult<u32> {
-        let slice = buf
-            .get(*idx..*idx + 4)
-            .ok_or_else(|| StrataError::Storage("WKB 카운트 읽기 범위 초과".into()))?;
-        let mut arr = [0_u8; 4];
-        arr.copy_from_slice(slice);
-        *idx += 4;
-        Ok(u32::from_le_bytes(arr))
-    };
+    let mut pos = 1;
+    let raw_type = read_u32_le(wkb, &mut pos)?;
+    let geom_type = raw_type % 1000;
 
     let geom = match geom_type {
-        1 => {
-            let x = read_f64(wkb, &mut pos)?;
-            let y = read_f64(wkb, &mut pos)?;
-            WkbGeometry::Point([x, y])
-        }
+        1 => WkbGeometry::Point([read_f64_le(wkb, &mut pos)?, read_f64_le(wkb, &mut pos)?]),
         2 => {
-            let n = read_u32(wkb, &mut pos)? as usize;
+            let n = read_u32_le(wkb, &mut pos)? as usize;
             let mut pts = Vec::with_capacity(n);
             for _ in 0..n {
-                pts.push([read_f64(wkb, &mut pos)?, read_f64(wkb, &mut pos)?]);
+                pts.push([read_f64_le(wkb, &mut pos)?, read_f64_le(wkb, &mut pos)?]);
             }
             WkbGeometry::LineString(pts)
         }
-        3 => {
-            let n_rings = read_u32(wkb, &mut pos)? as usize;
-            let mut rings = Vec::with_capacity(n_rings);
-            for _ in 0..n_rings {
-                let n_pts = read_u32(wkb, &mut pos)? as usize;
-                let mut ring = Vec::with_capacity(n_pts);
-                for _ in 0..n_pts {
-                    ring.push([read_f64(wkb, &mut pos)?, read_f64(wkb, &mut pos)?]);
-                }
-                rings.push(ring);
+        3 => WkbGeometry::Polygon(read_polygon_rings(wkb, &mut pos)?),
+        4 => {
+            let n_sub = read_u32_le(wkb, &mut pos)? as usize;
+            if n_sub == 0 {
+                return Err(StrataError::Storage("빈 MultiPoint".into()));
             }
-            WkbGeometry::Polygon(rings)
+            pos += 5;
+            WkbGeometry::Point([read_f64_le(wkb, &mut pos)?, read_f64_le(wkb, &mut pos)?])
+        }
+        5 => {
+            let n_sub = read_u32_le(wkb, &mut pos)? as usize;
+            let mut pts = Vec::new();
+            for _ in 0..n_sub {
+                pos += 5;
+                let n = read_u32_le(wkb, &mut pos)? as usize;
+                for _ in 0..n {
+                    pts.push([read_f64_le(wkb, &mut pos)?, read_f64_le(wkb, &mut pos)?]);
+                }
+            }
+            WkbGeometry::LineString(pts)
+        }
+        6 => {
+            let n_polys = read_u32_le(wkb, &mut pos)? as usize;
+            let mut all_rings = Vec::new();
+            for _ in 0..n_polys {
+                pos += 5; // child byteOrder (1) + child wkbType (4)
+                let sub_rings = read_polygon_rings(wkb, &mut pos)?;
+                all_rings.extend(sub_rings);
+            }
+            WkbGeometry::Polygon(all_rings)
         }
         other => {
             return Err(StrataError::Storage(format!(

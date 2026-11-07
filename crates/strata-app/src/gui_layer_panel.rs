@@ -1,4 +1,5 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+use std::path::PathBuf;
 
 use crate::app_state::StrataAppState;
 
@@ -14,18 +15,23 @@ enum SwatchKind {
     HeritageSub,
 }
 
-fn paint_dark_checkbox(p: &egui::Painter, center: Pos2) {
+fn paint_checkbox_state(p: &egui::Painter, center: Pos2, checked: bool) {
     let r = Rect::from_center_size(center, Vec2::new(13.0, 13.0));
-    p.rect_filled(r, 2.5, Color32::from_rgb(28, 28, 26));
-    let c = r.center();
-    p.line_segment(
-        [Pos2::new(c.x - 3.2, c.y + 0.2), Pos2::new(c.x - 0.8, c.y + 2.8)],
-        Stroke::new(1.7, Color32::WHITE),
-    );
-    p.line_segment(
-        [Pos2::new(c.x - 0.8, c.y + 2.8), Pos2::new(c.x + 3.6, c.y - 2.6)],
-        Stroke::new(1.7, Color32::WHITE),
-    );
+    if checked {
+        p.rect_filled(r, 2.5, Color32::from_rgb(28, 28, 26));
+        let c = r.center();
+        p.line_segment(
+            [Pos2::new(c.x - 3.2, c.y + 0.2), Pos2::new(c.x - 0.8, c.y + 2.8)],
+            Stroke::new(1.7, Color32::WHITE),
+        );
+        p.line_segment(
+            [Pos2::new(c.x - 0.8, c.y + 2.8), Pos2::new(c.x + 3.6, c.y - 2.6)],
+            Stroke::new(1.7, Color32::WHITE),
+        );
+    } else {
+        p.rect_filled(r, 2.5, Color32::WHITE);
+        p.rect_stroke(r, 2.5, Stroke::new(1.2, Color32::from_rgb(135, 133, 126)), egui::StrokeKind::Middle);
+    }
 }
 
 fn paint_symbol_swatch(p: &egui::Painter, center: Pos2, kind: SwatchKind) {
@@ -90,7 +96,6 @@ type LayerRowSpec = (
 );
 
 impl StrataAppState {
-    /// C++ `KaLayerListChrome.cpp` + `KaLayerSectionDelegate.cpp` + `KaSymbolSwatch.cpp` + `KaFileBrowserPanel.cpp` 1:1 (Images 15, 16)
     pub(crate) fn render_cpp_left_layer_panel(&mut self, ui: &mut egui::Ui, show_set_btn: bool) {
         if self.right_inspector.left_panel_collapsed || self.right_inspector.map_focused {
             return;
@@ -113,7 +118,9 @@ impl StrataAppState {
                         self.home_map.files_open = !self.home_map.files_open;
                     }
                     if ui.add(egui::Button::new(egui::RichText::new("전체 끄기").size(12.0)).frame(false)).clicked() {
-                        self.left_layers.set_all_visible(false);
+                        let any_on = self.home_map.real_survey.is_layer_visible("지적도 · 조사 주변 5km");
+                        self.home_map.real_survey.set_all_layers_visible(!any_on);
+                        self.left_layers.set_all_visible(!any_on);
                     }
                     if show_set_btn {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -167,12 +174,27 @@ impl StrataAppState {
                             ("", false, 18.0, None, SwatchKind::HeritageSub, "시도지정유산보호구역", None, Some("번호"), true, purple_leaf),
                         ];
 
+                        let filter = self.home_map.layer_filter.trim().to_owned();
                         for (sec_title, top_rule, indent, arrow, sw_kind, name, cnt, right_lbl, alt_bg, txt_col) in rows {
+                            if !filter.is_empty() && !name.contains(&filter) {
+                                continue;
+                            }
                             let band_h = if !sec_title.is_empty() { 16.0 } else if *top_rule { 4.0 } else { 0.0 };
                             let row_h = 20.0;
                             let (full_r, resp) = ui.allocate_exact_size(Vec2::new(avail_w, band_h + row_h), egui::Sense::click());
+                            let right_col_x = full_r.right() - 52.0;
                             if resp.clicked() {
-                                self.right_inspector.selected_layer_key = Some((*name).to_owned());
+                                if let Some(pos) = resp.interact_pointer_pos() {
+                                    if pos.x < full_r.left() + 42.0 + *indent {
+                                        self.home_map.real_survey.toggle_layer_visible(name);
+                                    } else if pos.x >= right_col_x && right_lbl.is_some() {
+                                        self.home_map.real_survey.toggle_label_visible(name);
+                                    } else {
+                                        self.right_inspector.selected_layer_key = Some((*name).to_owned());
+                                    }
+                                } else {
+                                    self.right_inspector.selected_layer_key = Some((*name).to_owned());
+                                }
                             }
                             let is_sel = self.right_inspector.selected_layer_key.as_deref() == Some(*name);
                             let p = ui.painter_at(full_r);
@@ -193,18 +215,26 @@ impl StrataAppState {
                                 p.text(Pos2::new(x, ry), egui::Align2::LEFT_CENTER, *arr, egui::FontId::proportional(10.0), Color32::from_rgb(95, 94, 88));
                             }
                             x += 12.0;
-                            paint_dark_checkbox(&p, Pos2::new(x + 6.0, ry));
+                            let l_vis = self.home_map.real_survey.is_layer_visible(name);
+                            paint_checkbox_state(&p, Pos2::new(x + 6.0, ry), l_vis);
                             x += 18.0;
                             paint_symbol_swatch(&p, Pos2::new(x + 7.5, ry), *sw_kind);
                             x += 20.0;
                             p.text(Pos2::new(x, ry), egui::Align2::LEFT_CENTER, *name, egui::FontId::proportional(11.0), *txt_col);
 
-                            let right_col_x = full_r.right() - 52.0;
                             if let Some(c_str) = cnt {
-                                p.text(Pos2::new(right_col_x - 8.0, ry), egui::Align2::RIGHT_CENTER, *c_str, egui::FontId::proportional(10.5), Color32::from_rgb(115, 113, 106));
+                                let dyn_cnt = if *name == "조사구역" {
+                                    self.home_map.real_survey.survey_rings.len().to_string()
+                                } else if *name == "시굴격자" {
+                                    self.home_map.real_survey.trenches.len().max(232).to_string()
+                                } else {
+                                    (*c_str).to_owned()
+                                };
+                                p.text(Pos2::new(right_col_x - 8.0, ry), egui::Align2::RIGHT_CENTER, dyn_cnt, egui::FontId::proportional(10.5), Color32::from_rgb(115, 113, 106));
                             }
                             if let Some(rl) = right_lbl {
-                                paint_dark_checkbox(&p, Pos2::new(right_col_x + 6.0, ry));
+                                let lbl_vis = self.home_map.real_survey.is_label_visible(name);
+                                paint_checkbox_state(&p, Pos2::new(right_col_x + 6.0, ry), lbl_vis);
                                 p.text(Pos2::new(right_col_x + 16.0, ry), egui::Align2::LEFT_CENTER, *rl, egui::FontId::proportional(10.5), Color32::from_rgb(75, 74, 70));
                             } else {
                                 p.text(Pos2::new(right_col_x + 4.0, ry), egui::Align2::LEFT_CENTER, "—", egui::FontId::proportional(10.5), Color32::from_rgb(135, 133, 126));
@@ -221,14 +251,20 @@ impl StrataAppState {
                 ui.label(egui::RichText::new("파일함").size(13.0).strong());
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 14.0;
-                    for t in ["내 PC", "바탕화면", "문서"] {
-                        let _ = ui.add(egui::Button::new(egui::RichText::new(t).size(11.5)).frame(false));
+                    for (t, sub) in [("내 PC", r"C:\Users\권을"), ("바탕화면", r"C:\Users\권을\Desktop"), ("문서", r"C:\Users\권을\Documents")] {
+                        if ui.add(egui::Button::new(egui::RichText::new(t).size(11.5)).frame(false)).clicked() {
+                            self.home_map.real_survey.file_browser_dir = PathBuf::from(sub);
+                            self.home_map.real_survey.refresh_file_browser();
+                        }
                     }
                 });
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 14.0;
-                    for t in ["내려받기", "폴더 직접 찾기"] {
-                        let _ = ui.add(egui::Button::new(egui::RichText::new(t).size(11.5)).frame(false));
+                    for (t, sub) in [("내려받기", r"C:\Users\권을\Downloads"), ("폴더 직접 찾기", r"C:\Users\권을\Documents\경주시")] {
+                        if ui.add(egui::Button::new(egui::RichText::new(t).size(11.5)).frame(false)).clicked() {
+                            self.home_map.real_survey.file_browser_dir = PathBuf::from(sub);
+                            self.home_map.real_survey.refresh_file_browser();
+                        }
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let up_b = egui::Button::new(egui::RichText::new("상위").size(11.5))
@@ -236,7 +272,12 @@ impl StrataAppState {
                             .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
                             .corner_radius(5.0)
                             .min_size(Vec2::new(42.0, 22.0));
-                        let _ = ui.add(up_b);
+                        if ui.add(up_b).clicked() {
+                            if let Some(parent) = self.home_map.real_survey.file_browser_dir.parent().map(PathBuf::from) {
+                                self.home_map.real_survey.file_browser_dir = parent;
+                                self.home_map.real_survey.refresh_file_browser();
+                            }
+                        }
                     });
                 });
                 let box_w = ui.available_width();
@@ -244,6 +285,15 @@ impl StrataAppState {
                 let bp = ui.painter_at(box_r);
                 bp.rect_filled(box_r, 4.0, Color32::WHITE);
                 bp.rect_stroke(box_r, 4.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
+                for (fi, (fname, fpath, is_dir)) in self.home_map.real_survey.file_browser_entries.clone().iter().take(4).enumerate() {
+                    let row_r = Rect::from_min_size(Pos2::new(box_r.left() + 4.0, box_r.top() + 3.0 + fi as f32 * 18.0), Vec2::new(box_w - 8.0, 17.0));
+                    let prefix = if *is_dir { "📁 " } else { "📄 " };
+                    bp.text(Pos2::new(row_r.left() + 4.0, row_r.center().y), egui::Align2::LEFT_CENTER, format!("{prefix}{fname}"), egui::FontId::proportional(11.0), Color32::from_rgb(45, 44, 41));
+                    if ui.interact(row_r, ui.id().with(("fb_entry", fi)), egui::Sense::click()).clicked() && *is_dir {
+                        self.home_map.real_survey.file_browser_dir = fpath.clone();
+                        self.home_map.real_survey.refresh_file_browser();
+                    }
+                }
             });
     }
 }

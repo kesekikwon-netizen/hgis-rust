@@ -13,6 +13,7 @@ pub mod gui_tab_paleo;
 pub mod gui_tab_terrain3d;
 pub mod gui_theme_fonts;
 pub mod left_layer_panel;
+pub mod real_survey;
 pub mod ribbon;
 pub mod ribbon_icons;
 pub mod right_inspector;

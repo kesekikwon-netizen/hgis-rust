@@ -15,11 +15,27 @@ impl AccountKind {
         match self {
             Self::HeritageIntranet => "heritage",
             Self::NgiiTopographic => "ngii",
+            Self::VworldCadastral => "vworld_account",
+        }
+    }
+
+    pub const fn alt_group_name(self) -> &'static str {
+        match self {
+            Self::HeritageIntranet => "heritage",
+            Self::NgiiTopographic => "ngii",
             Self::VworldCadastral => "cadastral",
         }
     }
 
     pub const fn file_name(self) -> &'static str {
+        match self {
+            Self::HeritageIntranet => "heritage-account.ini",
+            Self::NgiiTopographic => "ngii-account.ini",
+            Self::VworldCadastral => "vworld-account.ini",
+        }
+    }
+
+    pub const fn alt_file_name(self) -> &'static str {
         match self {
             Self::HeritageIntranet => "heritage-account.ini",
             Self::NgiiTopographic => "ngii-account.ini",
@@ -55,6 +71,22 @@ impl Credentials {
 pub struct AccountSettings;
 
 impl AccountSettings {
+    #[must_use]
+    pub fn user_config_dir() -> PathBuf {
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            let p = PathBuf::from(&local).join("ka-hgis").join("ka-hgis");
+            if p.is_dir() {
+                return p;
+            }
+            return PathBuf::from(local).join("ka-hgis").join("ka-hgis");
+        }
+        let wsl_path = PathBuf::from("/mnt/c/Users/권을/AppData/Local/ka-hgis/ka-hgis");
+        if wsl_path.is_dir() {
+            return wsl_path;
+        }
+        std::env::temp_dir().join("ka-hgis")
+    }
+
     pub fn save_to_file(
         path: &Path,
         kind: AccountKind,
@@ -80,13 +112,28 @@ impl AccountSettings {
             return Ok(Credentials::empty());
         }
         let map = parse_qt_ini_file(path)?;
-        let group = kind.group_name();
-        let username = map
-            .get(&format!("{group}/username"))
-            .cloned()
-            .unwrap_or_default();
-        let password = SecretStore::read_password_from_map(&map, group).unwrap_or_default();
-        Ok(Credentials { username, password })
+        for group in [kind.group_name(), kind.alt_group_name()] {
+            let username = map
+                .get(&format!("{group}/username"))
+                .cloned()
+                .unwrap_or_default();
+            let password = SecretStore::read_password_from_map(&map, group).unwrap_or_default();
+            if !username.is_empty() || !password.is_empty() {
+                return Ok(Credentials { username, password });
+            }
+        }
+        Ok(Credentials::empty())
+    }
+
+    pub fn read_from_dir(config_dir: &Path, kind: AccountKind) -> Credentials {
+        let primary = config_dir.join(kind.file_name());
+        if let Ok(c) = Self::read_ini(&primary, kind) {
+            if !c.username.is_empty() || !c.password.is_empty() {
+                return c;
+            }
+        }
+        let alt = config_dir.join(kind.alt_file_name());
+        Self::read_ini(&alt, kind).unwrap_or_default()
     }
 
     pub fn read_from_files(
@@ -100,7 +147,9 @@ impl AccountSettings {
                 return Ok(creds);
             }
             let map = parse_qt_ini_file(personal)?;
-            if !SecretStore::has_undecryptable_password(&map, kind.group_name()) {
+            let undec = SecretStore::has_undecryptable_password(&map, kind.group_name())
+                || SecretStore::has_undecryptable_password(&map, kind.alt_group_name());
+            if !undec {
                 return Ok(creds);
             }
         }
