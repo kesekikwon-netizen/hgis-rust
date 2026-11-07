@@ -9,6 +9,63 @@ pub struct AddressSearchHit {
     pub lat: f64,
 }
 
+/// C++ `KaRegionLocator.h` 지오코딩 오류 코드 (`GeocodeError`) 1:1
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeocodeError {
+    NetworkFailure,
+    NotFound,
+}
+
+/// C++ `KaRegionLocator::parseAddressOrCadastral` 행정구역·지번 정규 파싱 결과 1:1
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedCadastralQuery {
+    pub sido: String,
+    pub sigungu: String,
+    pub eup_myeon_dong: String,
+    pub ri_or_detail: String,
+    pub jibun: String,
+}
+
+/// C++ `KaRegionLocator` 지번 검색 실패 시 안내 팝업 문구 1:1
+#[must_use]
+pub const fn format_geocode_error_ko(err: GeocodeError) -> &'static str {
+    match err {
+        GeocodeError::NotFound => {
+            "해당 지번을 찾을 수 없습니다. 지번 표기를 확인하거나 지도에서 직접 위치를 클릭하세요."
+        }
+        GeocodeError::NetworkFailure => {
+            "주소 검색 서버와 통신할 수 없습니다. 네트워크 연결을 확인하거나 지도에서 직접 위치를 클릭하세요."
+        }
+    }
+}
+
+/// C++ `KaRegionLocator` 행정구역·지번 문자열 파서 (`"충남 부여군 부여읍 쌍북리 123"` 등) 1:1
+pub fn parse_cadastral_query_ko(query: &str) -> Option<ParsedCadastralQuery> {
+    let tokens: Vec<&str> = query.split_whitespace().collect();
+    if tokens.len() < 4 {
+        return None;
+    }
+    let sido = tokens[0].to_owned();
+    let sigungu = tokens[1].to_owned();
+    let eup_myeon_dong = tokens[2].to_owned();
+    let (ri_or_detail, jibun) = if tokens.len() >= 5 {
+        (tokens[3].to_owned(), tokens[4..].join(" "))
+    } else {
+        (String::new(), tokens[3].to_owned())
+    };
+    let has_digit = jibun.chars().any(|c| c.is_ascii_digit());
+    if !has_digit {
+        return None;
+    }
+    Some(ParsedCadastralQuery {
+        sido,
+        sigungu,
+        eup_myeon_dong,
+        ri_or_detail,
+        jibun,
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SidoPreset {
     pub name_ko: &'static str,
@@ -156,5 +213,21 @@ mod tests {
         assert!((hits[0].lon - 129.2247).abs() < 1e-4);
         assert!((hits[0].lat - 35.8347).abs() < 1e-4);
         Ok(())
+    }
+
+    #[test]
+    fn test_region_locator_parsing_chungnam_buyeo_ssangbuk_123_extracts_admin_hierarchy_and_jibun()
+    {
+        let parsed = parse_cadastral_query_ko("충남 부여군 부여읍 쌍북리 123")
+            .expect("valid cadastral query should parse");
+        assert_eq!(parsed.sido, "충남");
+        assert_eq!(parsed.sigungu, "부여군");
+        assert_eq!(parsed.eup_myeon_dong, "부여읍");
+        assert_eq!(parsed.ri_or_detail, "쌍북리");
+        assert_eq!(parsed.jibun, "123");
+        assert!(
+            format_geocode_error_ko(GeocodeError::NotFound)
+                .contains("해당 지번을 찾을 수 없습니다.")
+        );
     }
 }

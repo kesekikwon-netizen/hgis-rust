@@ -1,3 +1,6 @@
+use std::fs;
+use std::path::Path;
+
 use strata_canvas2d::map_tools::MapToolKind;
 use strata_types::crs::WorkCrs;
 use strata_types::schema::DomainLayerKey;
@@ -11,6 +14,31 @@ use crate::right_inspector::RightInspectorState;
 use crate::tab_drawing::DrawingTabState;
 use crate::tabs_home_map::HomeMapTabState;
 use crate::tabs_paleo_3d::PaleoTerrain3dTabState;
+
+/// C++ `KaHomeScreen::ProjectTemplateConfig` 신규 프로젝트 생성 템플릿 설정 1:1
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectTemplateConfig {
+    pub survey_title: String,
+    pub work_crs: WorkCrs,
+    pub investigator: String,
+    pub default_layers: Vec<DomainLayerKey>,
+}
+
+impl Default for ProjectTemplateConfig {
+    fn default() -> Self {
+        Self {
+            survey_title: "새 고고학 지표·시굴조사".to_owned(),
+            work_crs: WorkCrs::Epsg5186,
+            investigator: "국가유산청 지표·시굴조사단".to_owned(),
+            default_layers: vec![
+                DomainLayerKey::SurveyArea,
+                DomainLayerKey::FeaturePoly,
+                DomainLayerKey::FeatureLine,
+                DomainLayerKey::TrialTrench,
+            ],
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MainTab {
@@ -113,6 +141,83 @@ impl StrataAppState {
         }
     }
 
+    /// C++ `KaHomeScreen::createNewProject(const ProjectTemplateConfig &config) -> std::optional<QString>` 1:1
+    pub fn create_new_project(
+        &mut self,
+        project_file_path: &Path,
+        config: &ProjectTemplateConfig,
+    ) -> Option<String> {
+        let parent = project_file_path.parent()?;
+        if !parent.exists() && fs::create_dir_all(parent).is_err() {
+            return None;
+        }
+        let layer_codes: Vec<&str> = config
+            .default_layers
+            .iter()
+            .map(|l| l.id())
+            .collect();
+        let payload = format!(
+            "STRATA_PROJECT_V1\ntitle={}\ncrs={}\ninvestigator={}\nlayers={}\n",
+            config.survey_title,
+            config.work_crs.auth_id(),
+            config.investigator,
+            layer_codes.join(",")
+        );
+        if fs::write(project_file_path, payload).is_err() {
+            return None;
+        }
+        self.project_title.clone_from(&config.survey_title);
+        self.work_crs = config.work_crs;
+        self.left_layers.entries.clear();
+        for &layer_key in &config.default_layers {
+            self.left_layers.ensure_domain_layer(layer_key);
+        }
+        self.is_dirty = false;
+        Some(project_file_path.to_string_lossy().into_owned())
+    }
+
+    /// C++ `MainWindow::openProject(const QString &projectPath) -> bool` 1:1
+    pub fn open_project(&mut self, project_file_path: &Path) -> bool {
+        let Ok(raw) = fs::read_to_string(project_file_path) else {
+            return false;
+        };
+        if !raw.starts_with("STRATA_PROJECT_V1\n") {
+            return false;
+        }
+        let mut parsed_title = None;
+        let mut parsed_crs = None;
+        let mut parsed_layers = Vec::new();
+        for line in raw.lines().skip(1) {
+            if let Some(rest) = line.strip_prefix("title=") {
+                parsed_title = Some(rest.to_owned());
+            } else if let Some(rest) = line.strip_prefix("crs=") {
+                parsed_crs = match rest.trim() {
+                    "EPSG:5186" => Some(WorkCrs::Epsg5186),
+                    "EPSG:5187" => Some(WorkCrs::Epsg5187),
+                    _ => None,
+                };
+            } else if let Some(rest) = line.strip_prefix("layers=") {
+                for code in rest.split(',').filter(|s| !s.is_empty()) {
+                    if let Some(k) = DomainLayerKey::from_id(code.trim()) {
+                        parsed_layers.push(k);
+                    }
+                }
+            }
+        }
+        let (Some(title), Some(crs)) = (parsed_title, parsed_crs) else {
+            return false;
+        };
+        self.project_title = title;
+        self.work_crs = crs;
+        self.left_layers.entries.clear();
+        for layer_key in parsed_layers {
+            self.left_layers.ensure_domain_layer(layer_key);
+        }
+        self.active_tab = MainTab::Map;
+        self.is_dirty = false;
+        true
+    }
+
     #[must_use]
     pub fn window_title(&self) -> String {
         let dirty_suffix = if self.is_dirty { " *" } else { "" };
@@ -190,5 +295,26 @@ mod tests {
         app.close_studio_tab(MainTab::Drawing);
         assert_eq!(app.active_tab, MainTab::Map);
         assert!(!app.open_studio_tabs.contains(&MainTab::Drawing));
+    }
+
+    #[test]
+    fn test_project_lifecycle_creates_and_reopens_4_default_layers_and_epsg_5186() {
+        let tmp_path = std::env::temp_dir().join(format!(
+            "strata_test_project_{}.qgs",
+            std::process::id()
+        ));
+        let mut creator = StrataAppState::new_startup();
+        let config = ProjectTemplateConfig::default();
+        let created = creator.create_new_project(&tmp_path, &config);
+        assert!(created.is_some());
+
+        let mut reader = StrataAppState::new_startup();
+        assert_eq!(reader.active_tab, MainTab::Home);
+        assert!(reader.open_project(&tmp_path));
+        assert_eq!(reader.active_tab, MainTab::Map);
+        assert_eq!(reader.work_crs.auth_id(), "EPSG:5186");
+        assert_eq!(reader.left_layers.entries.len(), 4);
+
+        let _ = std::fs::remove_file(&tmp_path);
     }
 }

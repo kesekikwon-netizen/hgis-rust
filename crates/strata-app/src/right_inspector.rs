@@ -75,6 +75,27 @@ impl RightInspectorState {
         let (r, g, b, _) = KA_STYLE_PALETTE[self.style_color_index.min(7)];
         Color32::from_rgb(r, g, b)
     }
+
+    /// C++ `KaFeatureCard::bindFeature` 면적(`#define PYEONG_FACTOR 3.305785`) 및 둘레 포맷팅 1:1
+    #[must_use]
+    pub fn format_bound_ring_metrics(ring: &[[f64; 2]]) -> (String, String) {
+        if ring.len() < 3 {
+            return ("0.00 ㎡ (약 0.0 평)".to_owned(), "0.00 m".to_owned());
+        }
+        let area_m2 = crate::real_survey::ring_area_m2(ring);
+        let pyeong = area_m2 / 3.305_785;
+        let perim_m = crate::real_survey::ring_perimeter_m(ring);
+        (
+            format!("{area_m2:.2} ㎡ (약 {pyeong:.1} 평)"),
+            format!("{perim_m:.2} m"),
+        )
+    }
+
+    /// C++ `KaFeatureCard::saveCurrentAttributes() -> bool` 필수 항목(`FEAT_NO`, `FEAT_TYPE`) 검증 1:1
+    #[must_use]
+    pub fn save_current_attributes(&self) -> bool {
+        !self.feature_no.trim().is_empty() && !self.feature_type.trim().is_empty()
+    }
 }
 
 impl StrataAppState {
@@ -385,5 +406,29 @@ impl StrataAppState {
                 });
             self.right_inspector.survey_card_modal_open = open && !close_requested;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_feature_card_area_calculation_10x20_rect_formats_exact_200m2_605_pyeong_and_60m_perim() {
+        let rect_10x20 = [
+            [0.0, 0.0],
+            [10.0, 0.0],
+            [10.0, 20.0],
+            [0.0, 20.0],
+            [0.0, 0.0],
+        ];
+        let (area_label, perim_label) = RightInspectorState::format_bound_ring_metrics(&rect_10x20);
+        assert_eq!(area_label, "200.00 ㎡ (약 60.5 평)");
+        assert_eq!(perim_label, "60.00 m");
+
+        let mut card = RightInspectorState::new_default();
+        assert!(card.save_current_attributes());
+        card.feature_no.clear();
+        assert!(!card.save_current_attributes());
     }
 }
