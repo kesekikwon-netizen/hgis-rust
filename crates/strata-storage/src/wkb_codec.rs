@@ -1,5 +1,13 @@
 use strata_types::error::{StrataError, StrataResult};
 
+/// C++ `WkbCodec::decodeFromWkb` 에러 코드 (`enum class WkbDecodeError`) 1:1
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WkbDecodeError {
+    BufferTruncated,
+    UnsupportedType,
+    InvalidHeader,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum WkbGeometry {
     Point([f64; 2]),
@@ -206,6 +214,29 @@ mod tests {
         let (srs, decoded) = decode_gpkg_wkb(&encoded)?;
         assert_eq!(srs, 5187);
         assert_eq!(decoded, poly);
+        Ok(())
+    }
+
+    #[test]
+    fn test_wkb_codec_100_vertex_polygon_roundtrip_and_truncated_buffer_detection() -> StrataResult<()>
+    {
+        let mut ring: Vec<[f64; 2]> = (0..100)
+            .map(|i| {
+                let angle = f64::from(i) * std::f64::consts::TAU / 100.0;
+                [219_800.0 + angle.cos() * 50.0, 361_500.0 + angle.sin() * 50.0]
+            })
+            .collect();
+        if let Some(&first) = ring.first() {
+            ring.push(first);
+        }
+        let poly = WkbGeometry::Polygon(vec![ring]);
+        let encoded = encode_gpkg_wkb(5186, &poly);
+        let (srs, decoded) = decode_gpkg_wkb(&encoded)?;
+        assert_eq!(srs, 5186);
+        assert_eq!(decoded, poly);
+
+        let truncated = &encoded[..encoded.len() - 12];
+        assert!(decode_gpkg_wkb(truncated).is_err());
         Ok(())
     }
 }

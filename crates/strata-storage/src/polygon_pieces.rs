@@ -44,4 +44,19 @@ mod tests {
         let pieces = split_polygon_pieces(&Geometry::MultiPolygon(mp));
         assert_eq!(pieces.len(), 2);
     }
+
+    #[test]
+    fn test_multipolygon_decompose_3_islands_preserves_exact_count_and_total_area() {
+        let mp = wkt!(MULTIPOLYGON(
+            ((0.0 0.0, 10.0 0.0, 10.0 10.0, 0.0 10.0, 0.0 0.0)),
+            ((20.0 20.0, 30.0 20.0, 30.0 30.0, 20.0 30.0, 20.0 20.0)),
+            ((40.0 40.0, 50.0 40.0, 50.0 45.0, 40.0 45.0, 40.0 40.0))
+        ));
+        let orig_geom = Geometry::MultiPolygon(mp);
+        let orig_area = orig_geom.unsigned_area();
+        let pieces = split_polygon_pieces(&orig_geom);
+        assert_eq!(pieces.len(), 3);
+        let sum_area: f64 = pieces.iter().map(|p| p.unsigned_area()).sum();
+        assert!((sum_area - orig_area).abs() < 1e-6);
+    }
 }

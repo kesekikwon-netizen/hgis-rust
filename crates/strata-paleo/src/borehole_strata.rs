@@ -64,6 +64,39 @@ pub fn classify_uscs(uscs_raw: &str) -> &'static str {
     }
 }
 
+/// C++ `BoreholeStrata.h` 고고학 입지 분석용 4대 퇴적 환경 코드 (`enum class PaleoSedimentType`) 1:1
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PaleoSedimentType {
+    BedrockResidual,
+    FluvialTerrace,
+    LeveeFanSand,
+    BackswampClay,
+}
+
+/// C++ `BoreholeStrata::classifyUscsTo4Paleo(uscsCode, nValue, depth) -> PaleoSedimentType` 1:1
+#[must_use]
+pub fn classify_uscs_to_4_paleo(uscs_code: &str, n_value: f64, depth_m: f64) -> PaleoSedimentType {
+    let u = uscs_code.trim().to_ascii_uppercase();
+    if n_value >= 50.0 || u == "RK" || u == "WR" || u == "SR" || u == "HR" {
+        PaleoSedimentType::BedrockResidual
+    } else if u.starts_with("GW")
+        || u.starts_with("GP")
+        || u.starts_with("GM")
+        || u.starts_with("GC")
+        || (depth_m >= 8.0 && (u.starts_with("SW") || u.starts_with("SP") || n_value >= 30.0))
+    {
+        PaleoSedimentType::FluvialTerrace
+    } else if u.starts_with("SM")
+        || u.starts_with("SC")
+        || u.starts_with("SW")
+        || u.starts_with("SP")
+    {
+        PaleoSedimentType::LeveeFanSand
+    } else {
+        PaleoSedimentType::BackswampClay
+    }
+}
+
 pub fn parse_single_borehole(bh: &BoreholeRawInput) -> ParsedBoreholeSummary {
     let mut fill_thickness_m = 0.0_f64;
     let mut alluvial_thickness_m = 0.0_f64;
@@ -345,5 +378,21 @@ mod tests {
 
         let cancelled = AtomicBool::new(true);
         assert!(decluster_boreholes_with_cancel(&holes, 30.0, 50, Some(&cancelled)).is_err());
+        assert_eq!(
+            classify_uscs_to_4_paleo("SM", 15.0, 2.5),
+            PaleoSedimentType::LeveeFanSand
+        );
+        assert_eq!(
+            classify_uscs_to_4_paleo("CL", 4.0, 3.0),
+            PaleoSedimentType::BackswampClay
+        );
+        assert_eq!(
+            classify_uscs_to_4_paleo("GP", 25.0, 6.0),
+            PaleoSedimentType::FluvialTerrace
+        );
+        assert_eq!(
+            classify_uscs_to_4_paleo("SM", 50.0, 12.0),
+            PaleoSedimentType::BedrockResidual
+        );
     }
 }

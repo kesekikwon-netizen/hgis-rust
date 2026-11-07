@@ -45,6 +45,41 @@ pub fn sha256_fingerprint(path: &Path) -> StrataResult<String> {
     Ok(hex)
 }
 
+/// C++ `SessionSave::createGenerationSnapshot(gpkgPath, maxGenerations = 5) -> bool` — `.v1` ~ `.vN` 롤링 시프트 보관 및 초과 세대 자동 정리 1:1
+pub fn create_generation_snapshot(gpkg_path: &Path, max_generations: usize) -> bool {
+    if !gpkg_path.exists() || max_generations == 0 {
+        return false;
+    }
+    let base = gpkg_path.to_string_lossy();
+    let stale_over = std::path::PathBuf::from(format!("{base}.v{}", max_generations + 1));
+    let _ = std::fs::remove_file(&stale_over);
+
+    for gen_idx in (1..max_generations).rev() {
+        let src = std::path::PathBuf::from(format!("{base}.v{gen_idx}"));
+        let dst = std::path::PathBuf::from(format!("{base}.v{}", gen_idx + 1));
+        if src.exists() {
+            let _ = std::fs::remove_file(&dst);
+            if std::fs::rename(&src, &dst).is_err() {
+                return false;
+            }
+        }
+    }
+
+    let tmp_v1 = std::path::PathBuf::from(format!("{base}.v1.tmp"));
+    let v1 = std::path::PathBuf::from(format!("{base}.v1"));
+    for attempt in 0..5 {
+        if std::fs::copy(gpkg_path, &tmp_v1).is_ok() {
+            let _ = std::fs::remove_file(&v1);
+            if std::fs::rename(&tmp_v1, &v1).is_ok() {
+                return true;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
+    }
+    let _ = std::fs::remove_file(&tmp_v1);
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,6 +115,23 @@ mod tests {
         assert!(!hash_before.is_empty());
         assert_eq!(hash_before, hash_after);
         assert!(copy.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn test_session_save_rolling_max_generations_3_keeps_v1_to_v3_and_never_creates_v4(
+    ) -> StrataResult<()> {
+        let tmp = TempDir::new()?;
+        let path = tmp.path().join("rolling_project.gpkg");
+        let _session = GpkgRepository::create_new_survey(&path, WorkCrs::Epsg5186)?;
+        for _ in 0..5 {
+            assert!(create_generation_snapshot(&path, 3));
+        }
+        let base = path.to_string_lossy();
+        assert!(std::path::Path::new(&format!("{base}.v1")).exists());
+        assert!(std::path::Path::new(&format!("{base}.v2")).exists());
+        assert!(std::path::Path::new(&format!("{base}.v3")).exists());
+        assert!(!std::path::Path::new(&format!("{base}.v4")).exists());
         Ok(())
     }
 }
