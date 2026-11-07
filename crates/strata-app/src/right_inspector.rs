@@ -1,4 +1,4 @@
-use eframe::egui::{self, Color32, Pos2, Stroke, Vec2};
+use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use strata_net::tile_fetcher::BasemapSource;
 
 use crate::app_state::StrataAppState;
@@ -38,6 +38,37 @@ pub enum AttributeSaveResult {
     Success,
     MissingRequiredField,
     InvalidNumericElevation,
+}
+
+/// C++ `FeaturePresets.cpp:19-44` — 기본 유구 종류 8종
+pub const KA_BUILTIN_KINDS: [&str; 8] = [
+    "주거지", "수혈", "구", "분묘", "주초", "가마", "수전", "기타",
+];
+
+/// C++ `FeaturePresets.cpp:19-44` — 기본 시대 10종과 시대 띠 색
+/// 시대 띠 색 (r,g,b). None 이면 색 없음(미상).
+pub type KaPeriodInk = Option<(u8, u8, u8)>;
+
+pub const KA_BUILTIN_PERIODS: [(&str, KaPeriodInk); 10] = [
+    ("구석기", Some((0x53, 0x29, 0x1B))),
+    ("신석기", Some((0x67, 0x40, 0x28))),
+    ("청동기", Some((0x7A, 0x57, 0x37))),
+    ("초기철기", Some((0x8B, 0x70, 0x48))),
+    ("원삼국", Some((0x9C, 0x8A, 0x5B))),
+    ("삼국", Some((0xAB, 0xA5, 0x71))),
+    ("통일신라", Some((0xBA, 0xC0, 0x8A))),
+    ("고려", Some((0xC7, 0xDC, 0xA6))),
+    ("조선", Some((0xD3, 0xF8, 0xC4))),
+    ("미상", None),
+];
+
+/// C++ `KaFeatureCardEditors.cpp:157-170` — "다음 번호" 제안.
+#[must_use]
+pub fn next_feature_number(current: &str) -> String {
+    let digits: String = current.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let rest = &current[digits.len()..];
+    let n = digits.parse::<u32>().unwrap_or(1);
+    format!("{}{}", n + 1, rest)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -304,17 +335,35 @@ impl StrataAppState {
                                 }
                                 ui.end_row();
                                 ui.label(egui::RichText::new("유구번호").size(11.5));
-                                if ui
-                                    .add(
-                                        egui::TextEdit::singleline(
-                                            &mut self.right_inspector.feature_no,
+                                ui.horizontal(|ui| {
+                                    if ui
+                                        .add(
+                                            egui::TextEdit::singleline(
+                                                &mut self.right_inspector.feature_no,
+                                            )
+                                            .desired_width(96.0),
                                         )
-                                        .desired_width(155.0),
-                                    )
-                                    .changed()
-                                {
-                                    self.is_dirty = true;
-                                }
+                                        .changed()
+                                    {
+                                        self.is_dirty = true;
+                                    }
+                                    // KaFeatureCardEditors.cpp:157-170
+                                    if ui
+                                        .add(
+                                            egui::Button::new(
+                                                egui::RichText::new("다음 번호").size(11.0),
+                                            )
+                                            .min_size(Vec2::new(50.0, 20.0)),
+                                        )
+                                        .on_hover_text("지금까지 쓴 번호 다음 값을 넣습니다.")
+                                        .clicked()
+                                    {
+                                        let next =
+                                            next_feature_number(&self.right_inspector.feature_no);
+                                        self.right_inspector.feature_no = next;
+                                        self.is_dirty = true;
+                                    }
+                                });
                                 ui.end_row();
                                 ui.label(egui::RichText::new("종류").size(11.5));
                                 egui::ComboBox::from_id_salt("ka_feat_type_combo")
@@ -373,6 +422,54 @@ impl StrataAppState {
                                     });
                                 ui.end_row();
                             });
+                            // KaFeatureCardEditors.cpp:38-75 — 10칸 시대 띠 (168x13)
+                            {
+                                let (band_r, _) = ui.allocate_exact_size(
+                                    Vec2::new(168.0, 13.0),
+                                    egui::Sense::hover(),
+                                );
+                                let bp = ui.painter_at(band_r);
+                                bp.rect_stroke(
+                                    band_r,
+                                    2.0,
+                                    Stroke::new(1.0, Color32::from_rgb(31, 35, 40)),
+                                    egui::StrokeKind::Middle,
+                                );
+                                let cell_w = 168.0 / KA_BUILTIN_PERIODS.len() as f32;
+                                let sel_idx = KA_BUILTIN_PERIODS
+                                    .iter()
+                                    .position(|(n, _)| *n == self.right_inspector.feature_period);
+                                for (i, (nm, rgb)) in KA_BUILTIN_PERIODS.iter().enumerate() {
+                                    let x0 = band_r.left() + cell_w * (i as f32);
+                                    let cell = Rect::from_min_size(
+                                        Pos2::new(x0 + 1.0, band_r.top() + 2.0),
+                                        Vec2::new(cell_w - 2.0, 8.0),
+                                    );
+                                    let col = match rgb {
+                                        Some((r, g, b)) => Color32::from_rgb(*r, *g, *b),
+                                        None => Color32::from_rgb(230, 228, 220),
+                                    };
+                                    let cell_resp = ui.interact(
+                                        cell,
+                                        egui::Id::new(("ka_period_band", i)),
+                                        egui::Sense::click(),
+                                    );
+                                    bp.rect_filled(cell, 1.0, col);
+                                    if sel_idx == Some(i) {
+                                        bp.line_segment(
+                                            [
+                                                Pos2::new(x0 + 2.0, band_r.bottom() - 3.0),
+                                                Pos2::new(x0 + cell_w - 2.0, band_r.bottom() - 3.0),
+                                            ],
+                                            Stroke::new(2.0, Color32::from_rgb(31, 35, 40)),
+                                        );
+                                    }
+                                    if cell_resp.on_hover_text(*nm).clicked() {
+                                        self.right_inspector.feature_period = (*nm).to_owned();
+                                        self.is_dirty = true;
+                                    }
+                                }
+                            }
                         ui.add_space(4.0);
                         let (pit_depth, pit_caption) =
                             strata_terrain3d::trench_profile3d::compute_pit_elevation_depth_and_caption(
@@ -415,6 +512,21 @@ impl StrataAppState {
                             self.is_dirty = true;
                         }
                         ui.add_space(4.0);
+                        // KaFeatureCard.cpp:240-244,298 — 저장 상태 칩
+                        if self.is_dirty {
+                            ui.label(
+                                egui::RichText::new("● 변경됨 · 아직 저장 안 됨")
+                                    .size(11.0)
+                                    .color(Color32::from_rgb(181, 87, 58)),
+                            )
+                            .on_hover_text("저장(Ctrl+S)으로 파일에 씁니다.");
+                        } else {
+                            ui.label(
+                                egui::RichText::new("● 저장된 값입니다")
+                                    .size(11.0)
+                                    .color(Color32::from_rgb(105, 103, 96)),
+                            );
+                        }
                         let card_btn = egui::Button::new(
                             egui::RichText::new("조사카드 열기")
                                 .size(12.0)
@@ -424,7 +536,11 @@ impl StrataAppState {
                         .fill(Color32::from_rgb(181, 87, 58))
                         .corner_radius(5.0)
                         .min_size(Vec2::new(ui.available_width(), 28.0));
-                        if ui.add(card_btn).clicked() {
+                        if ui
+                            .add(card_btn)
+                            .on_hover_text("이 유구의 전체 조사카드(모든 칸)를 창으로 엽니다.")
+                            .clicked()
+                        {
                             self.right_inspector.survey_card_modal_open = true;
                         }
                     } else {
@@ -503,21 +619,23 @@ impl StrataAppState {
                             }
                         });
                     ui.add_space(6.0);
+                    let mut nf = self.right_inspector.no_fill;
                     if ui
-                        .radio(self.right_inspector.no_fill, "채우기 없음 (선만)")
-                        .clicked()
+                        .add(egui::Checkbox::new(&mut nf, "채우기 없음 (선만)"))
+                        .changed()
                     {
-                        self.right_inspector.no_fill = !self.right_inspector.no_fill;
-                        if self.right_inspector.no_fill {
+                        self.right_inspector.no_fill = nf;
+                        if nf {
                             self.right_inspector.no_stroke = false;
                         }
                     }
+                    let mut ns = self.right_inspector.no_stroke;
                     if ui
-                        .radio(self.right_inspector.no_stroke, "선 없음")
-                        .clicked()
+                        .add(egui::Checkbox::new(&mut ns, "선 없음"))
+                        .changed()
                     {
-                        self.right_inspector.no_stroke = !self.right_inspector.no_stroke;
-                        if self.right_inspector.no_stroke {
+                        self.right_inspector.no_stroke = ns;
+                        if ns {
                             self.right_inspector.no_fill = false;
                         }
                     }
@@ -529,21 +647,14 @@ impl StrataAppState {
                                 .color(Color32::from_rgb(80, 79, 74)),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let w_txt =
-                                format!("{:.1} mm    ↕", self.right_inspector.stroke_width_mm);
-                            let wb = egui::Button::new(egui::RichText::new(w_txt).size(12.0))
-                                .fill(Color32::WHITE)
-                                .stroke(Stroke::new(1.0, Color32::from_rgb(175, 172, 162)))
-                                .corner_radius(5.0)
-                                .min_size(Vec2::new(88.0, 26.0));
-                            if ui.add(wb).clicked() {
-                                self.right_inspector.stroke_width_mm =
-                                    if self.right_inspector.stroke_width_mm >= 2.5 {
-                                        0.5
-                                    } else {
-                                        self.right_inspector.stroke_width_mm + 0.5
-                                    };
-                            }
+                            // KaInspectorStyle.cpp:87-94 — QDoubleSpinBox 0.2..=12.0
+                            ui.add(
+                                egui::DragValue::new(&mut self.right_inspector.stroke_width_mm)
+                                    .range(0.2..=12.0)
+                                    .speed(0.2)
+                                    .fixed_decimals(1)
+                                    .suffix(" mm"),
+                            );
                         });
                     });
                 }
@@ -569,7 +680,7 @@ impl StrataAppState {
                     });
                     ui.add_space(4.0);
                     ui.label(
-                        egui::RichText::new("바탕 지도")
+                        egui::RichText::new("배경 지도")
                             .size(11.5)
                             .color(Color32::from_rgb(95, 94, 88)),
                     );
@@ -640,6 +751,35 @@ impl StrataAppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // D9 KaFeatureCardEditors / KaFeatureCard / KaInspectorStyle
+    #[test]
+    fn test_d9_feature_card_period_band_next_number_and_style_drag() {
+        assert_eq!(KA_BUILTIN_PERIODS.len(), 10);
+        let names: Vec<&str> = KA_BUILTIN_PERIODS.iter().map(|(n, _)| *n).collect();
+        assert_eq!(
+            names,
+            vec![
+                "구석기", "신석기", "청동기", "초기철기", "원삼국", "삼국", "통일신라",
+                "고려", "조선", "미상"
+            ]
+        );
+        assert_eq!(KA_BUILTIN_PERIODS[0].1, Some((0x53, 0x29, 0x1B)));
+        assert_eq!(KA_BUILTIN_PERIODS[9].1, None);
+        assert_eq!(
+            KA_BUILTIN_PERIODS.iter().filter(|(_, c)| c.is_some()).count(),
+            9
+        );
+        assert_eq!(KA_BUILTIN_KINDS.len(), 8);
+        assert_eq!(KA_BUILTIN_KINDS[0], "주거지");
+        assert_eq!(KA_BUILTIN_KINDS[7], "기타");
+        assert_eq!(next_feature_number("1호 주거지"), "2호 주거지");
+        assert_eq!(next_feature_number("12호 수혈"), "13호 수혈");
+        assert_eq!(next_feature_number(""), "2");
+        assert_eq!(next_feature_number("3"), "4");
+        let d = RightInspectorState::new_default();
+        assert!((0.2..=12.0).contains(&d.stroke_width_mm));
+    }
 
     #[test]
     fn test_feature_card_area_calculation_10x20_rect_formats_exact_200m2_605_pyeong_and_60m_perim()
