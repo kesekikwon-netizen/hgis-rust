@@ -9,6 +9,39 @@ use strata_types::error::{StrataError, StrataResult};
 pub struct SecretStore;
 
 impl SecretStore {
+    /// C++ `SecretStore::saveSecret(const QString &key, const QString &plainText) -> bool`
+    pub fn save_secret(map: &mut BTreeMap<String, String>, key: &str, plain_text: &str) -> bool {
+        if key.trim().is_empty() || plain_text.is_empty() {
+            return false;
+        }
+        let encoded = Self::wrap_portable(plain_text);
+        if encoded.is_empty() {
+            return false;
+        }
+        map.insert(key.trim().to_owned(), encoded);
+        true
+    }
+
+    /// C++ `SecretStore::loadSecret(const QString &key) -> std::optional<QString>`
+    #[must_use]
+    pub fn load_secret(map: &BTreeMap<String, String>, key: &str) -> Option<String> {
+        let raw = map.get(key.trim())?;
+        if raw.trim().is_empty() {
+            return None;
+        }
+        Self::unwrap_portable(raw).ok()
+    }
+
+    /// C++ DPAPI / 자격 증명 오류 사용자 친화적 한글 메시지 매핑
+    #[must_use]
+    pub fn format_credential_error_ko(raw_err: &str) -> String {
+        if raw_err.trim().is_empty() {
+            "인증 키를 안전하게 저장할 수 없습니다 (Windows 자격 증명 오류)".to_owned()
+        } else {
+            format!("인증 키를 안전하게 저장할 수 없습니다 (Windows 자격 증명 오류: {raw_err})")
+        }
+    }
+
     pub fn wrap_portable(password: &str) -> String {
         if password.is_empty() {
             return String::new();
@@ -168,5 +201,21 @@ mod tests {
         let recovered = SecretStore::unwrap_portable(&wrapped)?;
         assert_eq!(recovered, "MyFieldPass!2026");
         Ok(())
+    }
+
+    #[test]
+    fn test_secret_store_save_and_load_roundtrip_stores_base64_ciphertext_not_plaintext() {
+        let mut store = BTreeMap::new();
+        let ok = SecretStore::save_secret(&mut store, "VWORLD_API_KEY", "VWORLD_KEY_12345!@#");
+        assert!(ok);
+        let raw_stored = store
+            .get("VWORLD_API_KEY")
+            .expect("stored key must exist in map");
+        assert_ne!(raw_stored, "VWORLD_KEY_12345!@#");
+        assert_eq!(
+            SecretStore::load_secret(&store, "VWORLD_API_KEY").as_deref(),
+            Some("VWORLD_KEY_12345!@#")
+        );
+        assert_eq!(SecretStore::load_secret(&store, "MISSING_KEY"), None);
     }
 }

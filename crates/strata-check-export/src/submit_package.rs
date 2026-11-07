@@ -7,13 +7,40 @@ use strata_storage::shp_io::{write_shapefile_utf8, ShpFeatureRow};
 use strata_types::crs::SubmitCrs;
 use strata_types::error::StrataResult;
 
-use crate::checklist_engine::ChecklistFinding;
+use crate::checklist_engine::{ChecklistFinding, ChecklistSeverity};
+
+/// C++ `SubmitPackageExporter::exportSubmissionZip` 반환 상태 열거형
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportResult {
+    Success,
+    HasBlockingErrors,
+    IoError,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubmissionManifest {
     pub crs: SubmitCrs,
     pub files_sha256: Vec<(String, String)>,
     pub readme_path: PathBuf,
+}
+
+/// C++ `SubmitPackageExporter::exportSubmissionZip` — `Severity::Error` 존재 시 `ExportResult::HasBlockingErrors` 반환 지원
+pub fn export_submission_package_checked(
+    out_dir: &Path,
+    findings: &[ChecklistFinding],
+    block_on_error: bool,
+) -> (ExportResult, Option<SubmissionManifest>) {
+    if block_on_error
+        && findings
+            .iter()
+            .any(|f| !f.passed && f.severity == ChecklistSeverity::Error)
+    {
+        return (ExportResult::HasBlockingErrors, None);
+    }
+    match export_submission_package(out_dir, findings) {
+        Ok(manifest) => (ExportResult::Success, Some(manifest)),
+        Err(_) => (ExportResult::IoError, None),
+    }
 }
 
 pub fn export_submission_package(
@@ -91,6 +118,39 @@ mod tests {
         let readme = std::fs::read_to_string(&manifest.readme_path)?;
         assert!(readme.contains("EPSG:5179"));
         assert!(readme.contains("R-NORTH-ARROW"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_submit_package_exporter_blocks_on_missing_feat_no_and_succeeds_after_fix(
+    ) -> StrataResult<()> {
+        let dir = tempfile::tempdir()?;
+        let blocking_findings = vec![ChecklistFinding {
+            rule_id: "R15-REQ-ATTR".to_owned(),
+            category_ko: "속성·스키마".to_owned(),
+            message_ko: "15. 필수 속성(조사명·유구번호) 기입 누락(FEAT_NO)".to_owned(),
+            severity: ChecklistSeverity::Error,
+            passed: false,
+            target_world_xy: None,
+        }];
+        let (res, manifest_opt) =
+            export_submission_package_checked(dir.path(), &blocking_findings, true);
+        assert_eq!(res, ExportResult::HasBlockingErrors);
+        assert!(manifest_opt.is_none());
+        assert!(!dir.path().join("MANIFEST.sha256").exists());
+
+        let resolved_findings = vec![ChecklistFinding {
+            rule_id: "R15-REQ-ATTR".to_owned(),
+            category_ko: "속성·스키마".to_owned(),
+            message_ko: "15. 필수 속성(조사명·유구번호) 기입 완료".to_owned(),
+            severity: ChecklistSeverity::Pass,
+            passed: true,
+            target_world_xy: None,
+        }];
+        let (res_ok, manifest_ok) =
+            export_submission_package_checked(dir.path(), &resolved_findings, true);
+        assert_eq!(res_ok, ExportResult::Success);
+        assert_eq!(manifest_ok.expect("manifest").files_sha256.len(), 3);
         Ok(())
     }
 }

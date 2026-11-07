@@ -100,4 +100,69 @@ impl ChecklistEngine {
         }
         (err, warn, pass)
     }
+
+    /// C++ `ChecklistEngine::evaluateAllRules` + `std::atomic<bool> m_cancelRequested` +
+    /// Rule #9 (`R09-INSIDE-SURVEY`: 유구 폴리곤이 조사구역 경계 내부에 위치) 공간 위상 평가
+    pub fn evaluate_sheet_with_topology(
+        sheet: &DrawingSheet,
+        submit_crs: SubmitCrs,
+        survey_bbox: Option<[f64; 4]>,
+        feature_bboxes: &[[f64; 4]],
+        cancel_requested: Option<&std::sync::atomic::AtomicBool>,
+    ) -> Result<Vec<ChecklistFinding>, &'static str> {
+        use std::sync::atomic::Ordering;
+
+        if cancel_requested.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            return Err("검수 작업이 사용자에 의해 취소되었습니다");
+        }
+        let mut findings = Self::evaluate_sheet(sheet, submit_crs, survey_bbox.is_some());
+        if let Some([s_min_x, s_min_y, s_max_x, s_max_y]) = survey_bbox {
+            let mut protruding_xy: Option<[f64; 2]> = None;
+            for &[f_min_x, f_min_y, f_max_x, f_max_y] in feature_bboxes {
+                if cancel_requested.is_some_and(|c| c.load(Ordering::Relaxed)) {
+                    return Err("검수 작업이 사용자에 의해 취소되었습니다");
+                }
+                if f_min_x < s_min_x || f_min_y < s_min_y || f_max_x > s_max_x || f_max_y > s_max_y
+                {
+                    protruding_xy = Some([(f_min_x + f_max_x) * 0.5, (f_min_y + f_max_y) * 0.5]);
+                    break;
+                }
+            }
+            if let Some(outside_pt) = protruding_xy {
+                if let Some(r9) = findings.iter_mut().find(|f| f.rule_id == "R09-INSIDE-SURVEY") {
+                    r9.passed = false;
+                    r9.severity = ChecklistSeverity::Error;
+                    r9.target_world_xy = Some(outside_pt);
+                }
+            }
+        }
+        Ok(findings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use strata_layout::sheet_composer::{SheetOrientation, SheetPaperSize};
+
+    #[test]
+    fn test_topology_checklist_protruding_feature_triggers_rule9_error_1_0_25() {
+        use std::sync::atomic::AtomicBool;
+
+        let sheet = DrawingSheet::new(SheetPaperSize::A3, SheetOrientation::Landscape);
+        let survey_bbox = Some([200_000.0, 350_000.0, 200_100.0, 350_100.0]);
+        // Protrudes 1.0 m outside survey east boundary (200_101.0 > 200_100.0)
+        let features = [[200_050.0, 350_050.0, 200_101.0, 350_080.0]];
+        let cancel = AtomicBool::new(false);
+        let findings = ChecklistEngine::evaluate_sheet_with_topology(
+            &sheet,
+            SubmitCrs::Epsg5179,
+            survey_bbox,
+            &features,
+            Some(&cancel),
+        )
+        .expect("topology checklist should complete");
+        let (errors, warnings, passes) = ChecklistEngine::count_by_severity(&findings);
+        assert_eq!((errors, warnings, passes), (1, 0, 25));
+    }
 }
