@@ -50,6 +50,98 @@ pub struct CrossSectionProfile {
     pub z_bedrock_base_m: Vec<f64>,
 }
 
+/// C++ `KaPaleoCrossSectionWidget::generateProfile` 절단선 상으로 직교 투영된 시추공 모델
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProjectedBoreholeOnProfile {
+    pub hole_id: String,
+    pub station_m: f64,
+    pub offset_m: f64,
+    pub ground_elev_m: f64,
+    pub total_depth_m: f64,
+    pub strata_count: usize,
+    pub summary: ParsedBoreholeSummary,
+}
+
+pub type CutlineProfileResult =
+    Result<(Vec<f64>, Vec<f64>, Vec<ProjectedBoreholeOnProfile>), &'static str>;
+
+/// C++ `KaPaleoCrossSectionWidget::generateProfile(const QgsGeometry &cutLine, double searchBufferMeters = 100.0)`
+pub fn generate_cutline_profile(
+    cut_line: &[[f64; 2]],
+    tf: &GridTransform,
+    z_curr: &[f64],
+    raw_boreholes: &[BoreholeRawInput],
+    search_buffer_m: f64,
+    abort_requested: Option<&std::sync::atomic::AtomicBool>,
+) -> CutlineProfileResult {
+    use std::sync::atomic::Ordering;
+
+    if cut_line.len() < 2 {
+        return Err("절단선은 최소 2개 이상의 정점이 필요합니다");
+    }
+    let start = cut_line[0];
+    let end = cut_line[cut_line.len() - 1];
+    let dx = end[0] - start[0];
+    let dy = end[1] - start[1];
+    let total_len = (dx * dx + dy * dy).sqrt();
+    if total_len < 1e-3 {
+        return Err("절단선 길이가 0에 가깝습니다");
+    }
+
+    let steps = (total_len.round() as usize).max(1);
+    let mut stations = Vec::with_capacity(steps + 1);
+    let mut elevations = Vec::with_capacity(steps + 1);
+    for s in 0..=steps {
+        if abort_requested.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            return Err("단면도 프로파일 생성이 중단되었습니다");
+        }
+        let t = (s as f64) / (steps as f64);
+        let wx = start[0] + dx * t;
+        let wy = start[1] + dy * t;
+        let z = tf
+            .world_to_cell(wx, wy)
+            .and_then(|(r, c)| z_curr.get(r * tf.width + c).copied())
+            .unwrap_or(15.0);
+        stations.push(total_len * t);
+        elevations.push(z);
+    }
+
+    let ux = dx / total_len;
+    let uy = dy / total_len;
+    let mut projected = Vec::new();
+    for bh in raw_boreholes {
+        if abort_requested.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            return Err("단면도 프로파일 생성이 중단되었습니다");
+        }
+        let vx = bh.x - start[0];
+        let vy = bh.y - start[1];
+        let along = vx * ux + vy * uy;
+        let perp = (vx * uy - vy * ux).abs();
+        if (0.0..=total_len).contains(&along) && perp <= search_buffer_m.max(1.0) {
+            let total_depth_m = bh
+                .strata
+                .iter()
+                .map(|st| st.depth_to_m)
+                .fold(0.0_f64, f64::max);
+            projected.push(ProjectedBoreholeOnProfile {
+                hole_id: bh.hole_id.clone(),
+                station_m: along,
+                offset_m: perp,
+                ground_elev_m: bh.ground_elev_m,
+                total_depth_m,
+                strata_count: bh.strata.len(),
+                summary: parse_single_borehole(bh),
+            });
+        }
+    }
+    projected.sort_by(|a, b| {
+        a.station_m
+            .partial_cmp(&b.station_m)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    Ok((stations, elevations, projected))
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PaleoAnalysisResult {
     pub transform: GridTransform,
@@ -236,5 +328,86 @@ mod tests {
         assert_eq!(res.paleo_rgba_buffer.len(), 32 * 32 * 4);
         assert!(!res.center_cross_section.dist_m.is_empty());
         assert!(res.aoi_summary_text.contains("고지형"));
+    }
+
+    #[test]
+    fn test_paleo_profile_extraction_500m_cutline_samples_501_points_and_projects_2_boreholes() {
+        use std::sync::atomic::AtomicBool;
+
+        let tf = GridTransform {
+            origin_x: 200_000.0,
+            origin_y: 500_000.0,
+            cell_size: 10.0,
+            width: 60,
+            height: 20,
+        };
+        let z_curr = vec![22.5; 60 * 20];
+        let cut_line = [[200_000.0, 499_900.0], [200_500.0, 499_900.0]];
+        let bh_list = vec![
+            BoreholeRawInput {
+                hole_id: "BH-10M".to_owned(),
+                x: 200_120.0,
+                y: 499_930.0, // 30 m offset (within 50 m / 100 m buffer)
+                ground_elev_m: 22.5,
+                water_depth_m: 2.0,
+                strata: vec![
+                    StratumLayer {
+                        depth_from_m: 0.0,
+                        depth_to_m: 3.0,
+                        layer_name: "매립층".to_owned(),
+                        uscs_code: "SM".to_owned(),
+                        description: "".to_owned(),
+                        n_value: 6.0,
+                    },
+                    StratumLayer {
+                        depth_from_m: 3.0,
+                        depth_to_m: 10.0,
+                        layer_name: "충적층".to_owned(),
+                        uscs_code: "CL".to_owned(),
+                        description: "점토".to_owned(),
+                        n_value: 8.0,
+                    },
+                ],
+            },
+            BoreholeRawInput {
+                hole_id: "BH-20M".to_owned(),
+                x: 200_380.0,
+                y: 499_860.0, // 40 m offset
+                ground_elev_m: 22.5,
+                water_depth_m: 2.5,
+                strata: vec![
+                    StratumLayer {
+                        depth_from_m: 0.0,
+                        depth_to_m: 5.0,
+                        layer_name: "충적층".to_owned(),
+                        uscs_code: "SP".to_owned(),
+                        description: "모래".to_owned(),
+                        n_value: 14.0,
+                    },
+                    StratumLayer {
+                        depth_from_m: 5.0,
+                        depth_to_m: 20.0,
+                        layer_name: "풍화암".to_owned(),
+                        uscs_code: "WR".to_owned(),
+                        description: "풍화암".to_owned(),
+                        n_value: 50.0,
+                    },
+                ],
+            },
+        ];
+
+        let abort = AtomicBool::new(false);
+        let (stations, elevations, projected) =
+            generate_cutline_profile(&cut_line, &tf, &z_curr, &bh_list, 100.0, Some(&abort))
+                .expect("profile extraction should succeed");
+        assert_eq!(stations.len(), 501);
+        assert_eq!(elevations.len(), 501);
+        assert_eq!(projected.len(), 2);
+        assert!((projected[0].station_m - 120.0).abs() < 1e-6);
+        assert!((projected[0].total_depth_m - 10.0).abs() < 1e-6);
+        assert_eq!(projected[0].strata_count, 2);
+        assert!((projected[1].station_m - 380.0).abs() < 1e-6);
+        assert!((projected[1].total_depth_m - 20.0).abs() < 1e-6);
+        assert_eq!(projected[1].strata_count, 2);
     }
 }

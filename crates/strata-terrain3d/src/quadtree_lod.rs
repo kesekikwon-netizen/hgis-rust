@@ -24,6 +24,24 @@ pub fn build_quadtree_patches(
     out
 }
 
+/// C++ `KaTerrain3dView::buildTerrainMesh` VRAM/버퍼 한도 초과 시 LOD 1단계 자동 하향 폴백
+#[must_use]
+pub fn build_quadtree_patches_with_vram_fallback(
+    center_xy: [f64; 2],
+    root_size_m: f64,
+    requested_max_depth: u32,
+    max_patch_budget: usize,
+) -> (u32, Vec<QuadPatch>) {
+    let patches = build_quadtree_patches(center_xy, root_size_m, requested_max_depth);
+    if patches.len() > max_patch_budget.max(1) && requested_max_depth > 0 {
+        let fallback_depth = requested_max_depth - 1;
+        let fallback_patches = build_quadtree_patches(center_xy, root_size_m, fallback_depth);
+        (fallback_depth, fallback_patches)
+    } else {
+        (requested_max_depth, patches)
+    }
+}
+
 fn subdivide_node(
     min_xy: [f64; 2],
     size_m: f64,
