@@ -78,3 +78,13 @@ pub fn extract_dxf_elevation_points(path: &Path) -> StrataResult<Vec<[f64; 3]>> 
     }
     Ok(pts)
 }
+
+/// C++ `CadCsvDxfImporter::loadDxfControlPoints` — 손상/미지원 DXF 헤더 검사 및 에러 전파
+pub fn load_dxf_control_points_validated(path: &Path) -> Result<Vec<[f64; 3]>, String> {
+    let pts = extract_dxf_elevation_points(path)
+        .map_err(|_| "DXF 형식이 손상되었거나 지원하지 않는 엔티티 버전입니다".to_owned())?;
+    if pts.is_empty() {
+        return Err("DXF 형식이 손상되었거나 지원하지 않는 엔티티 버전입니다".to_owned());
+    }
+    Ok(pts)
+}
