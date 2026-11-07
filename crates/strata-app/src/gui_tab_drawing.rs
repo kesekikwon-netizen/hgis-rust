@@ -330,16 +330,18 @@ impl StrataAppState {
                 Color32::from_rgb(75, 74, 70),
             );
 
-            // 1. 용지(mm) 비율에 맞춘 화면 용지 사각형 (절대 용지 밖으로 넘치지 않음)
+            // 1. 용지(mm) 비율에 맞춘 화면 용지 사각형 (상단 힌트 알약과 하단 7버튼 툴바 사이에 100% 수용)
             let paper_w_mm = (self.drawing.sheet.width_mm.max(100.0)) as f32;
             let paper_h_mm = (self.drawing.sheet.height_mm.max(100.0)) as f32;
-            let avail_w = (rect.width() - 56.0).max(240.0);
-            let avail_h = (rect.height() - 104.0).clamp(300.0, 660.0);
-            let px_per_mm = (avail_w / paper_w_mm).min(avail_h / paper_h_mm).clamp(1.0, 3.2);
+            let top_bound = rect.top() + 50.0;
+            let bottom_bound = (rect.bottom() - 54.0).max(top_bound + 180.0);
+            let avail_w = (rect.width() - 48.0).max(200.0);
+            let avail_h = (bottom_bound - top_bound).max(180.0);
+            let px_per_mm = (avail_w / paper_w_mm).min(avail_h / paper_h_mm).clamp(0.75, 3.2);
             let sheet_w = paper_w_mm * px_per_mm;
             let sheet_h = paper_h_mm * px_per_mm;
             let sheet_rect = Rect::from_center_size(
-                Pos2::new(rect.center().x, rect.center().y - 18.0),
+                Pos2::new(rect.center().x, 0.5 * (top_bound + bottom_bound)),
                 Vec2::new(sheet_w, sheet_h),
             );
             p.rect_filled(
@@ -368,7 +370,8 @@ impl StrataAppState {
                     ),
                 )
             };
-            let map_rect = mm_to_rect(self.drawing.sheet.map_frame);
+            let chrome = self.drawing.sheet.standard_chrome();
+            let map_rect = mm_to_rect(chrome.map);
 
             let rs = &self.home_map.real_survey;
             let map_bg = if rs.is_layer_visible("지형 음영")
@@ -844,21 +847,37 @@ impl StrataAppState {
                 }
             }
 
-            // (2) 표제란 (title_block_visible 토글 연동, KaTitleBlock.cpp:57-111 1:1)
+            // (2) 하단 장식띠: LayoutService::standardSheetChrome 사각형 (scale_bar, scale_label, crs, north) 및 KaTitleBlock::defaultRect
+            let chrome_north_r = mm_to_rect(chrome.north);
+            let size_scale = (self.drawing.sheet.north_arrow_size_mm as f32 / 28.0).clamp(0.8, 1.35);
+            let north_sz = (chrome_north_r.width() * size_scale)
+                .clamp(28.0, (sheet_rect.bottom() - chrome_north_r.top() - 4.0).max(28.0));
+            let north_rect = Rect::from_min_size(
+                Pos2::new(
+                    (chrome_north_r.right() - north_sz).max(sheet_rect.left() + 4.0),
+                    chrome_north_r.top().max(map_rect.bottom() + 6.0),
+                ),
+                Vec2::new(north_sz, north_sz),
+            );
+            let chrome_crs_r = mm_to_rect(chrome.crs);
+            let chrome_bar_r = mm_to_rect(chrome.scale_bar);
+            let chrome_lbl_r = mm_to_rect(chrome.scale_label);
+
+            // 표제란 (title_block_visible 토글 연동, KaTitleBlock.cpp:57-111 1:1)
             // 도면명 / 조사명 / 유적명 / 축  척 / 작성일 (빈 값은 ―, 위치는 chrome.crs 아래 1.5mm 또는 지도 우하단)
             if self.drawing.sheet.title_block_visible {
-                let raw_tb_r = mm_to_rect(self.drawing.sheet.title_block_rect);
-                let tb_w = raw_tb_r.width().max(118.0);
-                let tb_h = raw_tb_r.height().max(48.0);
-                let tb_x = raw_tb_r
-                    .left()
-                    .clamp(sheet_rect.left() + 4.0, (sheet_rect.right() - tb_w - 4.0).max(sheet_rect.left() + 4.0));
-                let tb_y = raw_tb_r
-                    .top()
-                    .clamp(sheet_rect.top() + 4.0, (sheet_rect.bottom() - tb_h - 3.0).max(sheet_rect.top() + 4.0));
+                let raw_tb_r = mm_to_rect(self.drawing.sheet.default_title_block_rect());
+                let tb_top = (map_rect.bottom() + 14.0).min(raw_tb_r.top());
+                let tb_bottom = (sheet_rect.bottom() - 3.0).max(tb_top + 44.0);
+                let tb_right = (north_rect.left() - 5.0).max(raw_tb_r.right());
+                let tb_w = (tb_right - raw_tb_r.left()).clamp(112.0, 168.0);
+                let tb_x = (tb_right - tb_w).clamp(sheet_rect.left() + 4.0, (sheet_rect.right() - tb_w - 4.0).max(sheet_rect.left() + 4.0));
+                let tb_h = (tb_bottom - tb_top).clamp(44.0, 62.0);
+                let tb_y = tb_top.clamp(sheet_rect.top() + 4.0, (sheet_rect.bottom() - tb_h - 2.5).max(sheet_rect.top() + 4.0));
                 let tb_r = Rect::from_min_size(Pos2::new(tb_x, tb_y), Vec2::new(tb_w, tb_h));
                 sheet_p.rect_filled(tb_r, 0.0, Color32::WHITE);
-                sheet_p.rect_stroke(tb_r, 0.0, Stroke::new(0.85, ink), egui::StrokeKind::Middle);
+                sheet_p.rect_stroke(tb_r, 0.0, Stroke::new(0.9, ink), egui::StrokeKind::Middle);
+                let tb_p = sheet_p.with_clip_rect(tb_r.shrink(1.5));
                 let tb_lines = format_title_block_lines(
                     &self.drawing.title_ko,
                     &rs.survey_name,
@@ -866,48 +885,32 @@ impl StrataAppState {
                     self.drawing.sheet.scale_denominator,
                     "2026-11-08",
                 );
-                let line_step = ((tb_r.height() - 6.0) / 5.0).max(8.2);
+                let line_step = (tb_r.height() - 4.0) / 5.0;
                 for (li, line) in tb_lines.iter().enumerate() {
-                    let ly = tb_r.top() + 3.0 + ((li as f32) + 0.5) * line_step;
-                    sheet_p.text(
+                    let ly = tb_r.top() + 2.0 + ((li as f32) + 0.5) * line_step;
+                    tb_p.text(
                         Pos2::new(tb_r.left() + 4.5, ly),
                         egui::Align2::LEFT_CENTER,
                         line,
-                        egui::FontId::proportional(7.2),
+                        egui::FontId::proportional(7.5),
                         ink,
                     );
                 }
             }
 
-            // (3) 하단 장식띠: LayoutService::standardSheetChrome 사각형 (scale_bar, scale_label, crs, north)
-            let chrome_north_r = mm_to_rect(self.drawing.sheet.north_arrow_rect);
-            let size_scale = (self.drawing.sheet.north_arrow_size_mm as f32 / 28.0).clamp(0.7, 1.35);
-            let north_sz = (chrome_north_r.width() * size_scale)
-                .clamp(22.0, (sheet_rect.bottom() - chrome_north_r.top() - 4.0).max(22.0));
-            let north_rect = Rect::from_min_size(
-                Pos2::new(
-                    (chrome_north_r.right() - north_sz).max(sheet_rect.left() + 4.0),
-                    chrome_north_r.top(),
-                ),
-                Vec2::new(north_sz, north_sz),
-            );
-            let chrome_crs_r = mm_to_rect(self.drawing.sheet.crs_label_rect);
-            let chrome_bar_r = mm_to_rect(self.drawing.sheet.scale_bar_rect);
-            let chrome_lbl_r = mm_to_rect(self.drawing.sheet.scale_text_rect);
-
             let seg_m = nice_scale_bar_segment_meters(
-                self.drawing.sheet.map_frame.width_mm,
+                chrome.map.width_mm,
                 scale_denom,
                 4,
             );
             let seg_count = 4usize;
-            let max_bar_w = (chrome_crs_r.left() - chrome_bar_r.left() - 8.0).max(64.0);
+            let max_bar_w = (chrome_crs_r.left() - chrome_bar_r.left() - 10.0).max(76.0);
             let raw_bar_w = ((seg_m * (seg_count as f64) * px_per_meter) as f32)
-                .clamp(64.0, max_bar_w.min(chrome_bar_r.width().max(84.0)));
+                .clamp(76.0, max_bar_w.min(chrome_bar_r.width().max(116.0)));
             let seg_w = raw_bar_w / (seg_count as f32);
             let bar_x0 = chrome_bar_r.left();
-            let bar_y0 = chrome_bar_r.top() + 6.0;
-            let bar_h = 5.5_f32;
+            let bar_y0 = (map_rect.bottom() + 16.0).max(chrome_bar_r.top() + 6.0);
+            let bar_h = 6.5_f32;
 
             match self.drawing.sheet.scale_bar_style {
                 ScaleBarStyle::DoubleBox => {
@@ -1005,10 +1008,10 @@ impl StrataAppState {
 
             // 좌표계 라벨 (chrome.crs)
             sheet_p.text(
-                Pos2::new(chrome_crs_r.left(), chrome_crs_r.center().y),
-                egui::Align2::LEFT_CENTER,
+                Pos2::new(north_rect.left() - 6.0, map_rect.bottom() + 7.5),
+                egui::Align2::RIGHT_CENTER,
                 "동부원점(GRS80) · EPSG:5187",
-                egui::FontId::proportional(7.2),
+                egui::FontId::proportional(7.5),
                 ink,
             );
 

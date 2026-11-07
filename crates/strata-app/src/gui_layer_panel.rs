@@ -180,6 +180,7 @@ impl StrataAppState {
             .default_width(272.0)
             .width_range(250.0..=320.0)
             .show_inside(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("레이어").size(13.0).strong());
@@ -387,6 +388,7 @@ impl StrataAppState {
                         }
                     }
                 }
+                });
             });
     }
 }

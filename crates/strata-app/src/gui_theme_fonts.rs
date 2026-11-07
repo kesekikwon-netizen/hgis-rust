@@ -2,6 +2,7 @@ use eframe::egui;
 use strata_types::theme_tokens::ThemeTokens;
 
 pub fn configure_korean_fonts_and_theme(ctx: &egui::Context, tokens: &ThemeTokens) {
+    ctx.set_pixels_per_point(1.0);
     let mut fonts = egui::FontDefinitions::default();
     let candidate_paths = [
         r"C:\Windows\Fonts\malgun.ttf",

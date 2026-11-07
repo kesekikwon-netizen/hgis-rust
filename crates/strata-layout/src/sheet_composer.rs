@@ -496,22 +496,69 @@ impl DrawingSheet {
         self.recover_orphaned_items();
     }
 
-    /// `KaDrawingStudio::replaceSheetChrome` (`0001a93`) — `LayoutService::standardSheetChrome` (`target/cpp-ref/src/core/LayoutService.cpp:895`)으로 지도·축척자·축척 글·좌표계·방위·표제란 사각형 계산
+    /// `KaDrawingStudio::replaceSheetChrome` (`0001a93`) — 장식 넷(축척자·축척 글·좌표계·방위)을 어디에 끌어 두었든 새 용지의 아래 띠 자리로 되돌림
     pub fn replace_sheet_chrome(&mut self) {
+        let w = self.width_mm;
+        let h = self.height_mm;
+        let margin = 12.0;
+        let bottom_band_h = 22.0;
+        let band_y = h - margin - bottom_band_h + 2.0;
+        self.scale_bar_rect = SheetRectMm {
+            x_mm: margin,
+            y_mm: band_y,
+            width_mm: 55.0,
+            height_mm: 8.5,
+        };
+        self.scale_text_rect = SheetRectMm {
+            x_mm: margin,
+            y_mm: band_y + 9.0,
+            width_mm: 55.0,
+            height_mm: 7.0,
+        };
+        self.crs_label_rect = SheetRectMm {
+            x_mm: margin + 60.0,
+            y_mm: band_y,
+            width_mm: 65.0,
+            height_mm: 16.0,
+        };
+        self.north_arrow_rect = SheetRectMm {
+            x_mm: (w - margin - 18.0).max(margin + 128.0),
+            y_mm: band_y,
+            width_mm: 16.0,
+            height_mm: 16.0,
+        };
+        let page = SheetRectMm {
+            x_mm: 0.0,
+            y_mm: 0.0,
+            width_mm: w,
+            height_mm: h,
+        };
+        self.title_block_rect = default_title_block_rect_mm(page, self.map_frame);
+    }
+
+    /// C++ `LayoutService::standardSheetChrome(page, defaultMapRect())` (`LayoutService.cpp:895`) 결과 반환
+    #[must_use]
+    pub fn standard_chrome(&self) -> SheetChromeRects {
         let page = SheetRectMm {
             x_mm: 0.0,
             y_mm: 0.0,
             width_mm: self.width_mm,
             height_mm: self.height_mm,
         };
-        let requested_map = default_map_rect_mm(self.width_mm, self.height_mm);
-        let chrome = standard_sheet_chrome(page, requested_map);
-        self.map_frame = chrome.map;
-        self.scale_bar_rect = chrome.scale_bar;
-        self.scale_text_rect = chrome.scale_label;
-        self.crs_label_rect = chrome.crs;
-        self.north_arrow_rect = chrome.north;
-        self.title_block_rect = default_title_block_rect_mm(page, self.map_frame);
+        standard_sheet_chrome(page, default_map_rect_mm(self.width_mm, self.height_mm))
+    }
+
+    /// C++ `KaTitleBlock::defaultRect(page, mapRect)` (`KaTitleBlock.cpp:67`) 결과 반환
+    #[must_use]
+    pub fn default_title_block_rect(&self) -> SheetRectMm {
+        let page = SheetRectMm {
+            x_mm: 0.0,
+            y_mm: 0.0,
+            width_mm: self.width_mm,
+            height_mm: self.height_mm,
+        };
+        let chrome = self.standard_chrome();
+        default_title_block_rect_mm(page, chrome.map)
     }
 
     /// `KaDrawingStudio.cpp` (`c9e58e3`) — A3 -> A4 전환 등에서 용지 밖으로 밀려난 범례/장식을 `clamp(pos, 4.0, max(4.0, page - size - 4.0))`로 복구
@@ -561,6 +608,14 @@ impl DrawingSheet {
         self.width_mm = w;
         self.height_mm = h;
 
+        let margin = 12.0;
+        let bottom_band_h = 22.0;
+        self.map_frame = SheetRectMm {
+            x_mm: margin,
+            y_mm: margin,
+            width_mm: (w - margin * 2.0).max(50.0),
+            height_mm: (h - margin * 2.0 - bottom_band_h).max(50.0),
+        };
         self.replace_sheet_chrome();
         // KaDrawingStudio::defaultItemRect(kIdLegend): QRectF(mapR.right() - 52.0, mapR.top() + 6.0, 48.0, 74.0)
         self.legend_rect = if self.legend_kept_on_page {
@@ -1356,10 +1411,10 @@ mod tests {
         // Switch down to A4 Portrait
         sheet.change_paper(SheetPaperSize::A4, SheetOrientation::Portrait);
         assert!(sheet.all_decorations_inside_sheet());
-        let expected_row_top = sheet.map_frame.bottom() + 7.0;
-        assert!((sheet.scale_bar_rect.y_mm - expected_row_top).abs() < 1e-6);
-        assert!((sheet.crs_label_rect.y_mm - (expected_row_top + 2.5)).abs() < 1e-6);
-        assert!((sheet.north_arrow_rect.y_mm - expected_row_top).abs() < 1e-6);
+        let expected_band_y = sheet.height_mm - 12.0 - 22.0 + 2.0;
+        assert!((sheet.scale_bar_rect.y_mm - expected_band_y).abs() < 1e-6);
+        assert!((sheet.crs_label_rect.y_mm - expected_band_y).abs() < 1e-6);
+        assert!((sheet.north_arrow_rect.y_mm - expected_band_y).abs() < 1e-6);
     }
 
     #[test]

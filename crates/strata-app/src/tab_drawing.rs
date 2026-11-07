@@ -16,7 +16,7 @@ impl Default for DrawingTabState {
         let sheet = DrawingSheet::new(SheetPaperSize::A4, SheetOrientation::Portrait);
         let last_findings = ChecklistEngine::evaluate_sheet(&sheet, SubmitCrs::Epsg5179, true);
         Self {
-            title_ko: "유적 지표·시굴조사 위치 및 트렌치 배치도".to_owned(),
+            title_ko: "조사도면".to_owned(),
             sheet,
             last_findings,
         }

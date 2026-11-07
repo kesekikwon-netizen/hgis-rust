@@ -131,6 +131,32 @@ impl StrataAppState {
 
     /// C++ `MainWindow.cpp` + `MainWindowChrome.cpp` + `KaStatusBar.cpp` 1:1 재현
     pub fn render_workspace_egui(&mut self, ctx: &egui::Context) -> egui::Rect {
+        if (ctx.pixels_per_point() - 1.0).abs() > 0.01 {
+            ctx.set_pixels_per_point(1.0);
+        }
+        let native_ppp = ctx.native_pixels_per_point().unwrap_or(1.0);
+        if native_ppp > 1.05 {
+            let full = ctx.screen_rect();
+            let vis_w = (full.width() / native_ppp - 8.0).max(960.0);
+            let vis_h = (full.height() / native_ppp - 16.0).max(600.0);
+            let pad_b = (full.height() - vis_h).max(0.0);
+            let pad_r = (full.width() - vis_w).max(0.0);
+            if pad_b > 0.5 {
+                egui::TopBottomPanel::bottom("ka_dpi_capture_pad_bottom")
+                    .exact_height(pad_b)
+                    .show_separator_line(false)
+                    .frame(egui::Frame::NONE)
+                    .show(ctx, |_ui| {});
+            }
+            if pad_r > 0.5 {
+                egui::SidePanel::right("ka_dpi_capture_pad_right")
+                    .exact_width(pad_r)
+                    .resizable(false)
+                    .show_separator_line(false)
+                    .frame(egui::Frame::NONE)
+                    .show(ctx, |_ui| {});
+            }
+        }
         self.poll_debug_remote_commands(ctx);
         self.handle_cpp_keyboard_shortcuts(ctx);
 

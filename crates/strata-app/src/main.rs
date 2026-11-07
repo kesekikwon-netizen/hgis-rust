@@ -53,8 +53,8 @@ fn main() {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Strata")
-            .with_position([40.0, 16.0])
-            .with_inner_size([1620.0, 860.0])
+            .with_position([16.0, 16.0])
+            .with_inner_size([1500.0, 900.0])
             .with_min_inner_size([1120.0, 720.0])
             .with_active(true)
             .with_visible(true),
