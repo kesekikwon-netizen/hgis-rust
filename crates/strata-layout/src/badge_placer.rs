@@ -139,6 +139,25 @@ impl LayoutBadgePlacer {
         }
         placed
     }
+
+    /// C++ `DrawingBadgePlacer::placeAllBoxes(mapItem, badges, scaleDenom)` 축척 분모 필터링 통합 배치 1:1
+    #[must_use]
+    pub fn place_badges_for_scale(
+        sites: &[(u32, String, f64, f64, f64, f64)],
+        scale_denominator: u32,
+        prefer_names_under_5000: bool,
+        allowed_rect_mm: Option<(f64, f64, f64, f64)>,
+    ) -> (Vec<HeritageBadge>, Vec<HeritageNameBox>) {
+        let points_mm: Vec<(u32, f64, f64)> =
+            sites.iter().map(|(n, _, x, y, _, _)| (*n, *x, *y)).collect();
+        let badges = Self::place_non_overlapping_badges(&points_mm, 2.2);
+        let name_boxes = if Self::should_render_site_names(scale_denominator, prefer_names_under_5000) {
+            Self::place_all_boxes(sites, allowed_rect_mm)
+        } else {
+            Vec::new()
+        };
+        (badges, name_boxes)
+    }
 }
 
 #[cfg(test)]
@@ -171,5 +190,23 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_badge_placer_scale_filtering_1000_emits_name_boxes_and_10000_emits_only_numbered_circles()
+    {
+        let sites = vec![
+            (1, "경주 황남동 고분군".to_owned(), 50.0, 50.0, 24.0, 5.0),
+            (2, "경주 인왕동 사지".to_owned(), 55.0, 60.0, 22.0, 5.0),
+        ];
+        let (badges_1k, names_1k) =
+            LayoutBadgePlacer::place_badges_for_scale(&sites, 1_000, true, None);
+        assert_eq!(badges_1k.len(), 2);
+        assert_eq!(names_1k.len(), 2);
+
+        let (badges_10k, names_10k) =
+            LayoutBadgePlacer::place_badges_for_scale(&sites, 10_000, true, None);
+        assert_eq!(badges_10k.len(), 2);
+        assert!(names_10k.is_empty());
     }
 }

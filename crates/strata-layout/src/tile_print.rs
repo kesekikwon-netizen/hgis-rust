@@ -71,6 +71,49 @@ pub fn compute_tile_print_plan(sheet: &DrawingSheet, printer_paper: SheetPaperSi
     }
 }
 
+/// C++ `TilePrint::preparePage` 물리 프린터 용지 크기 허용 오차(±2.0mm) 검증 1:1
+#[must_use]
+pub fn is_printer_page_size_within_tolerance(
+    layout_width_mm: f64,
+    layout_height_mm: f64,
+    printer_width_mm: f64,
+    printer_height_mm: f64,
+) -> bool {
+    const TOLERANCE_MM: f64 = 2.0;
+    (layout_width_mm - printer_width_mm).abs() <= TOLERANCE_MM
+        && (layout_height_mm - printer_height_mm).abs() <= TOLERANCE_MM
+}
+
+/// C++ `TilePrint::renderTiledPages` 인쇄 가능 영역(`printable_w`, `printable_h`) 및 오버랩(`overlap_mm`) 기준 행렬 분할 계산 1:1
+#[must_use]
+pub fn compute_tile_print_grid_from_printable_mm(
+    sheet_width_mm: f64,
+    sheet_height_mm: f64,
+    printable_width_mm: f64,
+    printable_height_mm: f64,
+    overlap_mm: f64,
+) -> TilePrintPlan {
+    let eff_w = (printable_width_mm - overlap_mm).max(50.0);
+    let eff_h = (printable_height_mm - overlap_mm).max(50.0);
+    let cols = (sheet_width_mm / eff_w).ceil().max(1.0) as u32;
+    let rows = (sheet_height_mm / eff_h).ceil().max(1.0) as u32;
+    TilePrintPlan {
+        rows,
+        cols,
+        overlap_mm,
+    }
+}
+
+/// C++ `TilePrint::preparePage` 미지원 대형 규격일 때 타일 분할 전환 안내 문구 1:1
+#[must_use]
+pub fn format_tile_fallback_prompt_ko(paper: SheetPaperSize, total_tiles: u32) -> String {
+    format!(
+        "단일 대형 인쇄 불가: 타일 분할 인쇄({} {}장)로 전환하시겠습니까?",
+        paper.label_ko(),
+        total_tiles.max(1)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,6 +131,22 @@ mod tests {
         assert_eq!(
             format_print_dispatched_message(SheetPaperSize::A3, SheetOrientation::Portrait, 10),
             "A3 세로 10쪽을 프린터로 보냈습니다"
+        );
+    }
+
+    #[test]
+    fn test_tile_print_grid_calculation_a1_landscape_on_a3_printable_400x277_yields_3x3_9_tiles_and_tolerance()
+    {
+        let plan = compute_tile_print_grid_from_printable_mm(841.0, 594.0, 400.0, 277.0, 10.0);
+        assert_eq!(plan.cols, 3);
+        assert_eq!(plan.rows, 3);
+        assert_eq!(plan.cols * plan.rows, 9);
+
+        assert!(is_printer_page_size_within_tolerance(420.0, 297.0, 419.5, 297.0));
+        assert!(!is_printer_page_size_within_tolerance(841.0, 594.0, 420.0, 297.0));
+        assert_eq!(
+            format_tile_fallback_prompt_ko(SheetPaperSize::A3, 9),
+            "단일 대형 인쇄 불가: 타일 분할 인쇄(A3 9장)로 전환하시겠습니까?"
         );
     }
 }
