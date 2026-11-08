@@ -632,10 +632,13 @@ impl StrataAppState {
                                 );
                                 if ui.button(ALIGN_SUBTOOLBAR_ITEMS[0]).clicked() {
                                     // MainWindowAlign.cpp:627-703 applyAlignMove
-                                    if let Err(message) = self.apply_align_move() {
-                                        // :632 KaUserError::warn({「이동」, 「도면을 옮기지 못했습니다」, err})
-                                        self.home_map.draw_guide_message =
-                                            Some(format!("도면을 옮기지 못했습니다 — {message}"));
+                                    match self.apply_align_move() {
+                                        Ok(()) => {}
+                                        Err(message) => {
+                                            // :632 KaUserError::warn({「이동」, 「도면을 옮기지 못했습니다」, err})
+                                            self.home_map.draw_guide_message =
+                                                Some(format!("도면을 옮기지 못했습니다 — {message}"));
+                                        }
                                     }
                                 }
                                 if ui.button(ALIGN_SUBTOOLBAR_ITEMS[1]).clicked() {
@@ -655,9 +658,9 @@ impl StrataAppState {
                                 }
                                 if ui.button(ALIGN_SUBTOOLBAR_ITEMS[3]).clicked() {
                                     // MainWindowAlign.cpp:745-792 맞추기 저장
-                                    let (notice, status) = self.save_align_result();
-                                    self.status_bar_hint = status;
-                                    self.home_map.draw_guide_message = Some(notice);
+                                    let saved = self.save_align_result();
+                                    self.status_bar_hint = saved.1;
+                                    self.home_map.draw_guide_message = Some(saved.0);
                                 }
                                 if ui.button(ALIGN_SUBTOOLBAR_ITEMS[4]).clicked() {
                                     // MainWindowAlign.cpp:793-794 → hideSubTools(:769-777)
@@ -1532,28 +1535,6 @@ impl StrataAppState {
             self.modals.active = Some(ActiveModalDialog::SurveyContour);
         }
     }
-    /// C++ `MainWindowOverlay.cpp:225-240` `toggleExistingOverlay` 그대로.
-    /// 레이어가 이미 있으면 켜고 끄기만 하며 `…를 껐습니다.` / `…를 다시 켰습니다.` 를
-    /// 남기고 `true`. 없으면 `false` 라 호출한 쪽이 처음 받아 오는 길로 간다.
-    /// (`layer_visible` 에 키가 있는지가 C++ 의 `layersMatchingBaseName` 결과가
-    /// 비어 있지 않은지에 해당한다)
-    fn toggle_existing_overlay(&mut self, title: &str) -> bool {
-        if !self.home_map.real_survey.layer_visible.contains_key(title) {
-            return false;
-        }
-        let now_on = !self.home_map.real_survey.is_layer_visible(title);
-        self.home_map
-            .real_survey
-            .layer_visible
-            .insert(title.to_owned(), now_on);
-        self.status_bar_hint = if now_on {
-            format!("{title}를 다시 켰습니다.")
-        } else {
-            format!("{title}를 껐습니다.")
-        };
-        true
-    }
-
     /// C++ `MainWindow::applyAlignMove()` — `MainWindowAlign.cpp:627-703`.
     /// 점이 2개 미만이면 C++ `KaAlignMapTool::applyMove` 문구(`KaAlignMapTool.cpp:346-348`)로 거절한다.
     fn apply_align_move(&mut self) -> Result<(), String> {
@@ -1567,6 +1548,9 @@ impl StrataAppState {
         self.align.transform = Some(transform);
         self.align.applied = true;
         self.is_dirty = true;
+        // :695-701 — 좌표 파일을 새로 썼다는 사실과 백업 위치를 함께 알린다.
+        // Rust 는 아직 세계파일을 쓰지 않으므로(:694 `backup` 이 빈 경우의 C++ 분기와 같다)
+        // 뒷문장 없이 앞문장만 남긴다.
         Ok(())
     }
 
@@ -1609,13 +1593,17 @@ impl StrataAppState {
                 self.align.status_text(),
             );
         }
-        let status = self.align.status_text();
         // :763 — 저장하며 도면 세션은 끝난다
         self.stop_align_session();
         self.is_dirty = true;
+        let path = self.align.saved_path.clone();
         (
             "맞춰 두었습니다. 이 도면은 참고용이니 제출할 구역은 그리기로 직접 그리세요.".to_owned(),
-            status,
+            match path {
+                // :791 `맞춤 저장: %1`
+                Some(p) => format!("맞춤 저장: {p}"),
+                None => self.align.status_text(),
+            },
         )
     }
 
@@ -1678,13 +1666,39 @@ impl StrataAppState {
 
     /// C++ `MainWindow::hideSubTools()` — `MainWindowRibbon.cpp:769-777`.
     /// 정합 모드에서 도구 줄을 닫으면 정합 세션도 함께 끝난다.
-    pub(crate) fn hide_sub_tools(&mut self) {
+    fn hide_sub_tools(&mut self) {
         if self.ribbon.sub_mode == SubToolsMode::Align {
             self.stop_align_session();
             return;
         }
         self.ribbon.sub_toolbar_visible = false;
         self.ribbon.sub_mode = SubToolsMode::None;
+    }
+
+    /// C++ `MainWindowOverlay.cpp:225-240` `toggleExistingOverlay` 그대로.
+    /// 레이어가 이미 있으면 켜고 끄기만 하며 `…를 껐습니다.` / `…를 다시 켰습니다.` 를
+    /// 남기고 `true`. 없으면 `false` 라 호출한 쪽이 처음 받아 오는 길로 간다.
+    /// (`layer_visible` 에 키가 있는지가 C++ 의 `layersMatchingBaseName` 비어 있지 않음에 해당)
+    fn toggle_existing_overlay(&mut self, title: &str) -> bool {
+        if !self
+            .home_map
+            .real_survey
+            .layer_visible
+            .contains_key(title)
+        {
+            return false;
+        }
+        let now_on = !self.home_map.real_survey.is_layer_visible(title);
+        self.home_map
+            .real_survey
+            .layer_visible
+            .insert(title.to_owned(), now_on);
+        self.status_bar_hint = if now_on {
+            format!("{title}를 다시 켰습니다.")
+        } else {
+            format!("{title}를 껐습니다.")
+        };
+        true
     }
 
     fn handle_ribbon_click(&mut self, label: &str) {
@@ -1821,8 +1835,6 @@ impl StrataAppState {
                 self.active_tab = MainTab::Map;
                 self.modals.active = Some(ActiveModalDialog::HeritageRegionSelect);
             }
-            // C++ MainWindowOverlay.cpp:243 toggleTerrainMap — 「지형맵」 겹침을 켜고 끈다.
-            // 레이어 표시 상태로 토글하고 상태줄에 C++ 문구를 띄운다.
             // C++ MainWindowOverlay.cpp:243-271 toggleTerrainMap. 이미 있는 「지형맵」 은
             // :247 toggleExistingOverlay(:225-240)가 껐다 켰다 하고 `지형맵를 껐습니다.` /
             // `지형맵를 다시 켰습니다.` 를 내며, 처음 올릴 때만 :267 의
@@ -1929,7 +1941,21 @@ impl StrataAppState {
                     );
                 }
             }
-            "도면" => self.modals.active = Some(ActiveModalDialog::PaperSetup),
+            // MainWindowRibbon.cpp:552-557 「도면」 → MainWindow::openLayoutDesigner (Ctrl+L).
+            // MainWindowExport.cpp:204-213 — the studio tab already exists: go there without
+            // asking for the paper again (re-opening would move the user's sheet view).
+            // MainWindowExport.cpp:216 — only the first open asks, through KaPaperDialog.
+            "도면" => {
+                if self.open_studio_tabs.contains(&MainTab::Drawing) {
+                    self.open_studio_tab(MainTab::Drawing);
+                    // MainWindowExport.cpp:206 `hideSubTools()` — 도면 탭으로 가면 도구 줄을 닫는다.
+                    self.hide_sub_tools();
+                    self.home_map.draw_guide_message =
+                        Some(StrataAppState::DRAWING_STUDIO_WELCOME.to_owned());
+                } else {
+                    self.modals.active = Some(ActiveModalDialog::PaperSetup);
+                }
+            }
             "인쇄" => {
                 // MainWindowExport.cpp:186-194 — 도면 화면이 앞에 없으면 도면 탭을 열고
                 // 인쇄 창을 띄운다. 용지 기본값은 KaPrintDialog.cpp:124 대로 프린터가
@@ -1955,9 +1981,8 @@ impl StrataAppState {
                 }
                 // MainWindowExport.cpp:68-75 — 저장 대화상자: 기본 이름 지도_EPSG_5187.tif,
                 // 필터 "GeoTIFF (*.tif *.tiff)", 기본 확장자 tif, 시작 폴더는 조사 폴더.
-                let default_name = crate::dialogs_download_print::geotiff_default_file_name(
-                    self.work_crs.auth_id(),
-                );
+                let default_name =
+                    crate::dialogs_download_print::geotiff_default_file_name(self.work_crs.auth_id());
                 let Some(path) = ::rfd::FileDialog::new()
                     .set_title("현재 지도 GeoTIFF 저장")
                     .add_filter("GeoTIFF", &["tif", "tiff"])
@@ -2636,7 +2661,10 @@ mod tests_align {
         let mut app = StrataAppState::new_startup();
         app.align.target_layer = Some("사진".to_owned());
         let (notice, status) = app.save_align_result();
-        assert_eq!(notice, "맞추기 — 점을 2곳 이상 찍은 뒤 저장하세요.");
+        assert_eq!(
+            notice,
+            "맞추기 — 점을 2곳 이상 찍은 뒤 저장하세요."
+        );
         assert_eq!(status, "점을 2곳 이상 찍은 뒤 저장하세요.");
         assert!(!app.ribbon.sub_toolbar_visible);
     }
@@ -2651,7 +2679,7 @@ mod tests_align {
         assert_eq!(app.active_tool, MapToolKind::GeorefAlign);
         assert_eq!(app.status_bar_hint, "왼쪽 도면 모서리 → 오른쪽 지적 모서리");
 
-        app.hide_sub_tools();
+        app.stop_align_session();
         assert!(!app.ribbon.sub_toolbar_visible);
         assert_eq!(app.ribbon.sub_mode, SubToolsMode::None);
         assert_eq!(app.active_tool, MapToolKind::Pan);

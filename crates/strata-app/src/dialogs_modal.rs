@@ -193,7 +193,7 @@ impl Default for ModalDialogController {
             custom_paper_mode: false,
             print_single_sheet: true,
             // KaPrintDialog.cpp:124 — 기본은 A4 다. A3 는 프린터가 A3 를 지원할 때만
-            // 인쇄 창을 열 때 고른다 (`default_print_paper_for_printer`).
+            // 인쇄 창을 열 때 고른다 (`refresh_print_paper_for_printer`).
             print_paper: SheetPaperSize::A4,
             print_dpi: 300,
             print_overlap_mm: HGIS_PRINT_OVERLAP_DEFAULT_MM,
@@ -2634,6 +2634,19 @@ mod tests {
     // D18 최신 kyi/main 정본 — 고지형 자료 창 반경 3항목·버튼 순서
     // D19 KaTrenchDialog 하단 버튼·개별편집 + KaDrawingStudio SpinBox 범위
     #[test]
+    fn test_r10_print_paper_defaults_follow_printer_a3_support() {
+        // 이 PC 에 실제로 설치된 프린터로 계산한다. 값은 환경에 따라 A3/A4 둘 중 하나다.
+        let paper = default_print_paper_for_printer();
+        assert!(
+            paper == SheetPaperSize::A3 || paper == SheetPaperSize::A4,
+            "용지 기본값은 A3 또는 A4 여야 한다"
+        );
+        // 프린터 목록을 못 읽거나 지원 목록이 비면 지원으로 본다(C++ :352).
+        // 그래서 이 호출이 패닉하지 않고 항상 A3/A4 를 돌려주는 것이 계약이다.
+        assert_eq!(ModalDialogController::default().print_paper, SheetPaperSize::A4);
+    }
+
+    #[test]
     fn test_d19_trench_dialog_actions_and_drawing_studio_spinboxes() {
         // KaTrenchDialog.cpp:137-154 — 하단 실행 버튼 3개
         let buttons = ["구역에 깔기", "맵에 찍기", "닫기"];
@@ -3053,20 +3066,6 @@ mod tests {
             ),
             "기본은 A4 세로입니다. A4 가로는 좌·우·위 1cm를 더 줍니다."
         );
-    }
-
-    // R10 — KaPrintDialog.cpp:124,348-354 — 용지 기본값은 A3 지원 프린터일 때만 A3
-    #[test]
-    fn test_r10_print_paper_defaults_follow_printer_a3_support() {
-        // 이 PC 에 실제로 설치된 프린터로 계산한다. 값은 환경에 따라 A3/A4 둘 중 하나다.
-        let paper = default_print_paper_for_printer();
-        assert!(
-            paper == SheetPaperSize::A3 || paper == SheetPaperSize::A4,
-            "용지 기본값은 A3 또는 A4 여야 한다"
-        );
-        // 프린터 목록을 못 읽거나 지원 목록이 비면 지원으로 본다(C++ :352).
-        // 그래서 이 호출이 패닉하지 않고 항상 A3/A4 를 돌려주는 것이 계약이다.
-        assert_eq!(ModalDialogController::default().print_paper, SheetPaperSize::A4);
     }
 
     #[test]

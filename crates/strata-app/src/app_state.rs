@@ -131,7 +131,7 @@ pub struct StrataAppState {
     pub cad_import_path: String,
     /// `KaStatusBar::showMessage` 대응 — 맞추기 같은 긴 작업의 결과를 상태줄에 남긴다
     pub status_bar_hint: String,
-    /// MainWindowAlign.cpp 정합(맞추기) 세션 — m_alignTool + m_alignApplied 1:1
+    /// `MainWindowAlign.cpp` — 정합(맞추기) 세션. `m_alignTool` + `m_alignApplied` 1:1
     pub align: crate::gui_ribbon_bar::AlignSessionState,
     pub theme_menu_open: bool,
     pub large_font_mode: bool,
