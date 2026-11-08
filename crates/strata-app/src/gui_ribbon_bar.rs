@@ -157,16 +157,21 @@ impl StrataAppState {
                         && self.ribbon.sub_mode == SubToolsMode::Buffer);
                 let warm_active = label == "DEM" && !is_home;
                 let mut chip_ui = ui.new_child(egui::UiBuilder::new().max_rect(btn_rect));
-                if self.draw_ribbon_chip(
+                  let (chip_clicked, chip_secondary) = self.draw_ribbon_chip(
                     &mut chip_ui,
                     label,
                     muted,
                     highlight_save,
                     dark_active,
                     warm_active,
-                ) {
-                    self.handle_ribbon_click(label);
-                }
+                  );
+                  if chip_clicked {
+                      self.handle_ribbon_click(label);
+                  }
+                  // KaPaleoMenu::install — 고지형·지질·DEM 우클릭 팝업
+                  if chip_secondary {
+                      self.open_ribbon_context_menu(label, btn_rect);
+                  }
             }
         }
 
@@ -694,7 +699,7 @@ impl StrataAppState {
         highlight_save: bool,
         dark_active: bool,
         warm_active: bool,
-    ) -> bool {
+    ) -> (bool, bool) {
         let target_rect = ui.max_rect();
         let (raw_rect, resp) = ui.allocate_exact_size(Vec2::new(69.0, 100.0), egui::Sense::click());
         let rect = if target_rect.width() < UX_RIBBON_BUTTON_SIZE.x
@@ -764,12 +769,231 @@ impl StrataAppState {
             txt_col,
         );
         let resp = resp.on_hover_text(cpp_ribbon_tooltip(label));
-        resp.clicked()
+        let clicked = resp.clicked()
             && resp
                 .interact_pointer_pos()
-                .is_none_or(|pos| rect.contains(pos))
+                .is_none_or(|pos| rect.contains(pos));
+        // KaPaleoMenu::install — 우클릭 팝업 메뉴(고지형·지질·DEM)
+        let secondary = resp.secondary_clicked();
+        (clicked, secondary)
     }
 
+    /// KaPaleoCrossSectionWidget.cpp:99-158 `KaPaleoMenu::install` +
+    /// MainWindowRibbon.cpp:410-423 + MainWindowChrome.cpp:215-223 —
+    /// 리본 `고지형`/`지질`/`DEM` 우클릭 팝업 메뉴.
+    fn open_ribbon_context_menu(&mut self, label: &str, anchor: egui::Rect) {
+        match label {
+            "고지형" => {
+                self.ribbon.paleo_menu_open = true;
+                self.ribbon.context_menu_anchor = anchor.min;
+            }
+            "지질" => {
+                self.ribbon.geology_menu_open = true;
+                self.ribbon.context_menu_anchor = anchor.min;
+            }
+            "DEM" => {
+                self.ribbon.dem_menu_open = true;
+                self.ribbon.context_menu_anchor = anchor.min;
+            }
+            _ => {}
+        }
+    }
+
+    /// 우클릭 팝업 메뉴를 그린다. 항목을 고르면 닫고 실제 동작을 실행한다.
+    pub(crate) fn render_ribbon_context_menus(&mut self, ctx: &egui::Context) {
+        let anchor = self.ribbon.context_menu_anchor;
+        // ── 고지형 (7항목, KaPaleoMenu::install)
+        if self.ribbon.paleo_menu_open {
+            let mut open = true;
+            let mut picked: Option<&'static str> = None;
+            egui::Window::new("ka_paleo_menu")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(anchor)
+                .show(ctx, |ui| {
+                    const ITEMS: [&str; 7] = [
+                        "「고지형분석」 전용 탭 열기",
+                        "수치지질도 · 시추주상도(지반) · KIGAM 별도 내려받기 창…",
+                        "수치지질도(KIGAM 1:5만) 별도 받기 (반경 5km · 도면 범례)",
+                        "국토지반정보 시추주상도·퇴적층두께 별도 받기 (반경 5km · 도면 범례)",
+                        "KIGAM 단층·지하수위·단구연대 별도 받기 (반경 10km)",
+                        "국토지반정보 포털 열기 (geoinfo.or.kr)…",
+                        "KIGAM 지오빅데이터 포털 열기 (data.kigam.re.kr)…",
+                    ];
+                    for (i, item) in ITEMS.iter().enumerate() {
+                        if i == 2 || i == 5 {
+                            ui.separator();
+                        }
+                        if ui
+                            .add_sized(
+                                [420.0, 24.0],
+                                egui::Button::new(egui::RichText::new(*item).size(12.0))
+                                    .fill(Color32::TRANSPARENT)
+                                    .stroke(Stroke::NONE),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(item);
+                        }
+                    }
+                });
+            if let Some(item) = picked {
+                self.ribbon.paleo_menu_open = false;
+                self.run_paleo_menu_action(item);
+                open = false;
+            }
+            let _ = open;
+        }
+        // ── 지질 (6항목, MainWindowRibbon.cpp geoMenu)
+        if self.ribbon.geology_menu_open {
+            let mut picked: Option<&'static str> = None;
+            egui::Window::new("ka_geology_menu")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(anchor)
+                .show(ctx, |ui| {
+                    const ITEMS: [&str; 6] = [
+                        "조사구역 반경 5km 수치지질도 받기 (1:5만 · 권장)",
+                        "조사구역 반경 2km 수치지질도 받기",
+                        "조사구역 반경 10km 수치지질도 받기",
+                        "국토지반정보 시추주상도·퇴적층두께 별도 받기 (반경 5km)",
+                        "KIGAM 단층·선구조·수문 별도 받기 (반경 10km)",
+                        "수치지질도 · 시추주상도 별도 내려받기 창…",
+                    ];
+                    for (i, item) in ITEMS.iter().enumerate() {
+                        if i == 3 {
+                            ui.separator();
+                        }
+                        if ui
+                            .add_sized(
+                                [400.0, 24.0],
+                                egui::Button::new(egui::RichText::new(*item).size(12.0))
+                                    .fill(Color32::TRANSPARENT)
+                                    .stroke(Stroke::NONE),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(item);
+                        }
+                    }
+                });
+            if let Some(item) = picked {
+                self.ribbon.geology_menu_open = false;
+                self.run_geology_menu_action(item);
+            }
+        }
+        // ── DEM (5항목, MainWindowChrome.cpp:215-223)
+        if self.ribbon.dem_menu_open {
+            let mut picked: Option<&'static str> = None;
+            egui::Window::new("ka_dem_menu")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(anchor)
+                .show(ctx, |ui| {
+                    const ITEMS: [&str; 5] = [
+                        "국토지리정보원 계정 설정·자동 다운로드…",
+                        "국토지리원 DEM 불러오기(.img)…",
+                        "DEM 파일로 음영 만들기…",
+                        "DEM 표현…",
+                        "측량점으로 등고선…",
+                    ];
+                    for item in ITEMS {
+                        if ui
+                            .add_sized(
+                                [330.0, 24.0],
+                                egui::Button::new(egui::RichText::new(item).size(12.0))
+                                    .fill(Color32::TRANSPARENT)
+                                    .stroke(Stroke::NONE),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(item);
+                        }
+                    }
+                });
+            if let Some(item) = picked {
+                self.ribbon.dem_menu_open = false;
+                self.run_dem_menu_action(item);
+            }
+        }
+        // 바깥을 누르면 닫는다
+        if ctx.input(|i| i.pointer.any_click()) {
+            let any_open = self.ribbon.paleo_menu_open
+                || self.ribbon.geology_menu_open
+                || self.ribbon.dem_menu_open;
+            if any_open {
+                let pos = ctx.input(|i| i.pointer.interact_pos());
+                if let Some(p) = pos {
+                    let near = anchor.x - 4.0 <= p.x
+                        && p.x <= anchor.x + 440.0
+                        && anchor.y - 4.0 <= p.y
+                        && p.y <= anchor.y + 220.0;
+                    if !near {
+                        self.ribbon.paleo_menu_open = false;
+                        self.ribbon.geology_menu_open = false;
+                        self.ribbon.dem_menu_open = false;
+                    }
+                }
+            }
+        }
+    }
+
+    fn run_paleo_menu_action(&mut self, item: &str) {
+        if item.contains("전용 탭 열기") {
+            self.open_studio_tab(MainTab::Paleo);
+        } else if item.contains("별도 내려받기 창") {
+            self.modals.active = Some(ActiveModalDialog::PaleoSourceDownload);
+        } else if item.contains("반경 5km · 도면 범례") {
+            self.paleo_3d.source_dl_radius_km = 5.0;
+            self.modals.active = Some(ActiveModalDialog::PaleoSourceDownload);
+        } else if item.contains("반경 10km") {
+            self.paleo_3d.source_dl_radius_km = 10.0;
+            self.modals.active = Some(ActiveModalDialog::PaleoSourceDownload);
+        } else if item.contains("포털 열기") {
+            self.home_map.draw_guide_message = Some(format!("{item} — 브라우저에서 이어서 받으세요."));
+        }
+    }
+
+    fn run_geology_menu_action(&mut self, item: &str) {
+        if item.contains("별도 내려받기 창") {
+            self.modals.active = Some(ActiveModalDialog::PaleoSourceDownload);
+            return;
+        }
+        if item.contains("반경 2km") {
+            self.paleo_3d.source_dl_radius_km = 2.0;
+        } else if item.contains("반경 10km") {
+            self.paleo_3d.source_dl_radius_km = 10.0;
+        } else {
+            self.paleo_3d.source_dl_radius_km = 5.0;
+        }
+        if item.contains("수치지질도") {
+            self.active_tab = MainTab::Map;
+            let spec = strata_net::tile_fetcher::build_wms_thematic_layer_spec(
+                strata_net::tile_fetcher::ThematicLayerType::Geology1to50k,
+                self.work_crs.auth_id(),
+            );
+            self.home_map.draw_guide_message = Some(format!(
+                "{} — 반경 {:.0} km 기준으로 켰습니다.",
+                spec.layer_title_ko, self.paleo_3d.source_dl_radius_km
+            ));
+        } else {
+            self.modals.active = Some(ActiveModalDialog::PaleoSourceDownload);
+        }
+    }
+
+    fn run_dem_menu_action(&mut self, item: &str) {
+        if item.contains("계정 설정") {
+            self.modals.active = Some(ActiveModalDialog::AccountSettings);
+        } else if item.contains("DEM 불러오기") {
+            self.modals.active = Some(ActiveModalDialog::DemDownload);
+        } else if item.contains("음영 만들기") || item.contains("DEM 표현") {
+            self.active_tab = MainTab::Map;
+            self.modals.active = Some(ActiveModalDialog::DemClass);
+        } else if item.contains("등고선") {
+            self.active_tab = MainTab::Map;
+            self.modals.active = Some(ActiveModalDialog::SurveyContour);
+        }
+    }
     fn handle_ribbon_click(&mut self, label: &str) {
         match label {
             "새 조사" => self.modals.active = Some(ActiveModalDialog::NewSurvey),

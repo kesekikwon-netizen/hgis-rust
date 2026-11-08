@@ -17,14 +17,43 @@ impl StrataAppState {
                     ui.strong("고지형 · 기본층서 종합 분석 (반경 10km)");
                     ui.add_space(2.0);
                     ui.strong("6대 입력 자료 현황");
-                    ui.colored_label(
-                        Color32::from_rgb(21, 128, 61),
-                        format!(
-                            "● 국토지리원DEM · ● 토양도 · ● 지질도({}건)\n● 수계도 · ● KIGAM수문 · ● 시추({}공·디클러스터링)",
-                            self.paleo_3d.geology_feature_count,
-                            self.paleo_3d.declustered_borehole_count
-                        ),
-                    );
+                      // KaPaleoStudio.cpp:226-250 refreshSourceStatus — 준비된 항목은 초록 ●,
+                      // 미비 항목은 빨강 ○ 로 6대 입력 자료 상태를 한 줄에 보여준다.
+                      {
+                        let geol_ok = self.paleo_3d.geology_feature_count > 0;
+                        let bh_ok = self.paleo_3d.declustered_borehole_count > 0;
+                        let sources: [(&str, bool, String); 6] = [
+                            ("국토지리원DEM", true, String::new()),
+                            ("토양도", true, String::new()),
+                            ("지질도", geol_ok, format!("({}건)", self.paleo_3d.geology_feature_count)),
+                            ("수계도", true, String::new()),
+                            ("KIGAM수문", true, String::new()),
+                            (
+                                "시추",
+                                bh_ok,
+                                format!("({}공)", self.paleo_3d.declustered_borehole_count),
+                            ),
+                        ];
+                        ui.horizontal_wrapped(|ui| {
+                            for (idx, (name, ready, suffix)) in sources.iter().enumerate() {
+                                let (mark, col) = if *ready {
+                                    ("●", Color32::from_rgb(0x15, 0x80, 0x3D))
+                                } else {
+                                    ("○", Color32::from_rgb(0xB9, 0x1C, 0x1C))
+                                };
+                                ui.colored_label(
+                                    col,
+                                    egui::RichText::new(format!("{mark} {name}{suffix}"))
+                                        .size(12.0),
+                                );
+                                if idx % 3 == 2 {
+                                    ui.end_row();
+                                } else if idx + 1 < sources.len() {
+                                    ui.label(egui::RichText::new("·").size(12.0));
+                                }
+                            }
+                        });
+                      }
                     ui.add_space(4.0);
                     // C++ KaPaleoStudio.cpp:143-150: two separate download entries side by side.
                     ui.horizontal(|ui| {
@@ -35,7 +64,8 @@ impl StrataAppState {
                             self.modals.active = Some(ActiveModalDialog::PaleoSourceDownload);
                         }
                         if ui.button("국토지리원 DEM 받기…").clicked() {
-                            self.modals.active = Some(ActiveModalDialog::TopographicImport);
+                            // MainWindowDownloads.cpp:85-155 (56776d3) — 국토지리정보원 DEM 브라우저
+                            self.modals.active = Some(ActiveModalDialog::DemDownload);
                         }
                     });
                     ui.checkbox(

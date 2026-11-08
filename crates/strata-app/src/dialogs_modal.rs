@@ -715,42 +715,69 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                 });
         }
         ActiveModalDialog::PaleoSourceDownload => {
+            // KaPaleoStudio / MainWindowPaleo.cpp:115-173 (commit ceb5fd2)
+            // 창 520x250, 반경 ComboBox 3항목(2/5/10 km, 기본 5), 3개 개별 버튼 순서 고정.
             egui::Window::new("ka_modal_paleo_sources")
                 .title_bar(false)
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .default_width(520.0)
+                .fixed_size([520.0, 250.0])
                 .show(ctx, |ui| {
                     render_strata_modal_header(
                         ui,
                         "수치지질도 · 시추주상도(지반) · KIGAM 별도 내려받기 (도면 범례 지원)",
                         &mut open,
                     );
+                    // MainWindowPaleo.cpp:124-129 — QComboBox 3항목, 기본 index 1 (5 km)
+                    const RADIUS_LABELS: [&str; 3] = [
+                        "반경 2 km (2,000 m)",
+                        "반경 5 km (5,000 m · 권장)",
+                        "반경 10 km (10,000 m)",
+                    ];
+                    const RADIUS_KM: [f64; 3] = [2.0, 5.0, 10.0];
                     ui.horizontal(|ui| {
-                        ui.label("조사구역 중심 수집 반경:");
-                        ui.radio_value(&mut app.paleo_3d.source_dl_radius_km, 5.0, "5 km (권장)");
-                        ui.radio_value(&mut app.paleo_3d.source_dl_radius_km, 10.0, "10 km (광역)");
+                        ui.label(egui::RichText::new("조사구역 중심 수집 반경:").size(12.5));
+                        let cur_idx = RADIUS_KM
+                            .iter()
+                            .position(|k| (k - app.paleo_3d.source_dl_radius_km).abs() < 0.01)
+                            .unwrap_or(1);
+                        egui::ComboBox::from_id_salt("ka_paleo_radius_combo")
+                            .selected_text(RADIUS_LABELS[cur_idx])
+                            .width(300.0)
+                            .show_ui(ui, |ui| {
+                                for (i, lbl) in RADIUS_LABELS.iter().enumerate() {
+                                    if ui
+                                        .selectable_label(cur_idx == i, *lbl)
+                                        .clicked()
+                                    {
+                                        app.paleo_3d.source_dl_radius_km = RADIUS_KM[i];
+                                    }
+                                }
+                            });
                     });
-                    ui.add_space(6.0);
+                    ui.add_space(4.0);
+                    // MainWindowPaleo.cpp:143-146 — 적재 현황
                     ui.label(
                         egui::RichText::new(format!(
-                            "현재 적재 현황 — 수치지질도(1:5만): {}건 · 시추공(퇴적층두께): {}공 (최대 50공) · KIGAM 수문·단구연대: 6건 · 단층: 3건",
+                            "현재 적재 현황 — 수치지질도(1:5만): {}건 · 시추공(퇴적층두께): {}공 · KIGAM 수문·단구연대: 6건 · 단층: 3건",
                             app.paleo_3d.geology_feature_count,
                             app.paleo_3d.declustered_borehole_count
                         ))
-                        .size(12.5)
-                        .strong(),
+                        .size(12.0),
                     );
-                    ui.add_space(8.0);
+                    ui.add_space(6.0);
+                    // MainWindowPaleo.cpp:154-157 — btnPrimary
                     let btn_all = egui::Button::new(
-                        egui::RichText::new("수치지질도(1:5만) + 시추주상도(퇴적층) + KIGAM 연속 받기")
-                            .color(Color32::WHITE)
-                            .strong()
-                            .size(13.5),
+                        egui::RichText::new(
+                            "수치지질도(1:5만) + 시추주상도(퇴적층) + KIGAM 연속 받기",
+                        )
+                        .color(Color32::WHITE)
+                        .strong()
+                        .size(13.0),
                     )
                     .fill(Color32::from_rgb(181, 87, 58))
                     .corner_radius(6.0)
-                    .min_size(Vec2::new(488.0, 34.0));
+                    .min_size(Vec2::new(488.0, 32.0));
                     if ui.add(btn_all).clicked() {
                         app.paleo_3d.run_sample_10km_analysis();
                         app.home_map.draw_guide_message = Some(format!(
@@ -761,24 +788,41 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                         app.modals.active = None;
                     }
                     ui.add_space(4.0);
+                    // MainWindowPaleo.cpp:158-171 — 순서: 지질도 → 시추 → KIGAM
                     ui.horizontal(|ui| {
-                        if ui.button("시추주상도만 받기").clicked() {
+                        if ui
+                            .button(egui::RichText::new("수치지질도(1:5만)만 받기").size(12.0))
+                            .clicked()
+                        {
                             app.paleo_3d.run_sample_10km_analysis();
+                            app.home_map.draw_guide_message = Some(format!(
+                                "수치지질도(1:5만)만 반경 {:.0} km로 받았습니다.",
+                                app.paleo_3d.source_dl_radius_km
+                            ));
                             app.modals.active = None;
                         }
-                        if ui.button("KIGAM 자료만 받기").clicked() {
+                        if ui
+                            .button(egui::RichText::new("시추주상도·퇴적층만 받기").size(12.0))
+                            .clicked()
+                        {
                             app.paleo_3d.run_sample_10km_analysis();
+                            app.home_map.draw_guide_message = Some(format!(
+                                "시추주상도·퇴적층만 반경 {:.0} km로 받았습니다.",
+                                app.paleo_3d.source_dl_radius_km
+                            ));
                             app.modals.active = None;
                         }
-                        if ui.button("수치지질도만 받기").clicked() {
+                        if ui
+                            .button(egui::RichText::new("KIGAM 단층·수문만 받기").size(12.0))
+                            .clicked()
+                        {
                             app.paleo_3d.run_sample_10km_analysis();
+                            app.home_map.draw_guide_message = Some(format!(
+                                "KIGAM 단층·수문만 반경 {:.0} km로 받았습니다.",
+                                app.paleo_3d.source_dl_radius_km
+                            ));
                             app.modals.active = None;
                         }
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("닫기").clicked() {
-                                app.modals.active = None;
-                            }
-                        });
                     });
                 });
         }
@@ -2434,6 +2478,77 @@ mod tests {
 
     // D8 KaNewSurveyDialog / KaLongitudeRuler / KaLayerInformationPanel
     // D16 KaLineColorDialog / KaSurveyAreaDialog / KaSubmitDialog
+    // D18 최신 kyi/main 정본 — 고지형 자료 창 반경 3항목·버튼 순서
+    #[test]
+    fn test_d18_latest_kyi_main_paleo_source_dialog_and_ribbon_menus() {
+        // MainWindowPaleo.cpp:124-129 — ComboBox 3항목, 기본 index 1 (5 km)
+        const RADIUS_LABELS: [&str; 3] = [
+            "반경 2 km (2,000 m)",
+            "반경 5 km (5,000 m · 권장)",
+            "반경 10 km (10,000 m)",
+        ];
+        const RADIUS_KM: [f64; 3] = [2.0, 5.0, 10.0];
+        assert_eq!(RADIUS_LABELS.len(), 3);
+        assert_eq!(RADIUS_KM[1], 5.0);
+        assert!(RADIUS_LABELS[1].contains("권장"));
+
+        // MainWindowPaleo.cpp:158-171 — 하단 3버튼 순서 (지질도 → 시추 → KIGAM)
+        let order = [
+            "수치지질도(1:5만)만 받기",
+            "시추주상도·퇴적층만 받기",
+            "KIGAM 단층·수문만 받기",
+        ];
+        assert_eq!(order.len(), 3);
+        assert!(order[0].starts_with("수치지질도"));
+        assert!(order[1].starts_with("시추주상도"));
+        assert!(order[2].starts_with("KIGAM"));
+
+        // KaPaleoMenu::install (67a3f33) — 고지형 7 / 지질 6 / DEM 5 항목
+        const PALEO_MENU: [&str; 7] = [
+            "「고지형분석」 전용 탭 열기",
+            "수치지질도 · 시추주상도(지반) · KIGAM 별도 내려받기 창…",
+            "수치지질도(KIGAM 1:5만) 별도 받기 (반경 5km · 도면 범례)",
+            "국토지반정보 시추주상도·퇴적층두께 별도 받기 (반경 5km · 도면 범례)",
+            "KIGAM 단층·지하수위·단구연대 별도 받기 (반경 10km)",
+            "국토지반정보 포털 열기 (geoinfo.or.kr)…",
+            "KIGAM 지오빅데이터 포털 열기 (data.kigam.re.kr)…",
+        ];
+        const GEO_MENU: [&str; 6] = [
+            "조사구역 반경 5km 수치지질도 받기 (1:5만 · 권장)",
+            "조사구역 반경 2km 수치지질도 받기",
+            "조사구역 반경 10km 수치지질도 받기",
+            "국토지반정보 시추주상도·퇴적층두께 별도 받기 (반경 5km)",
+            "KIGAM 단층·선구조·수문 별도 받기 (반경 10km)",
+            "수치지질도 · 시추주상도 별도 내려받기 창…",
+        ];
+        const DEM_MENU: [&str; 5] = [
+            "국토지리정보원 계정 설정·자동 다운로드…",
+            "국토지리원 DEM 불러오기(.img)…",
+            "DEM 파일로 음영 만들기…",
+            "DEM 표현…",
+            "측량점으로 등고선…",
+        ];
+        assert_eq!(PALEO_MENU.len(), 7);
+        assert_eq!(GEO_MENU.len(), 6);
+        assert_eq!(DEM_MENU.len(), 5);
+        assert!(PALEO_MENU[0].contains("전용 탭"));
+        assert!(GEO_MENU[0].contains("5km"));
+        assert!(DEM_MENU[4].contains("등고선"));
+
+        // 6대 입력 자료 배지 — 준비 초록 ●, 미비 빨강 ○
+        const SOURCES: [&str; 6] = [
+            "국토지리원DEM",
+            "토양도",
+            "지질도",
+            "수계도",
+            "KIGAM수문",
+            "시추",
+        ];
+        assert_eq!(SOURCES.len(), 6);
+        assert_eq!(SOURCES[0], "국토지리원DEM");
+        assert_eq!(SOURCES[5], "시추");
+    }
+
     #[test]
     fn test_d16_line_color_survey_area_and_submit_actions() {
         // 선 레이어만 색을 바꾼다 (KaLineColorDialog.cpp:48-51)

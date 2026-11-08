@@ -247,6 +247,11 @@ impl KaAppBarSearch {
 pub struct KaBeginnerRibbon {
     pub active_category: RibbonCategory,
     pub sub_toolbar_visible: bool,
+    // KaPaleoMenu::install — 리본 우클릭 팝업 메뉴 상태
+    pub paleo_menu_open: bool,
+    pub geology_menu_open: bool,
+    pub dem_menu_open: bool,
+    pub context_menu_anchor: eframe::egui::Pos2,
     pub sub_mode: SubToolsMode,
     pub draw_sub_target: DrawSubTarget,
     pub snap_assist_menu_open: bool,
@@ -258,6 +263,10 @@ impl Default for KaBeginnerRibbon {
         Self {
             active_category: RibbonCategory::Survey,
             sub_toolbar_visible: false,
+        paleo_menu_open: false,
+        geology_menu_open: false,
+        dem_menu_open: false,
+        context_menu_anchor: eframe::egui::Pos2::ZERO,
             sub_mode: SubToolsMode::None,
             draw_sub_target: DrawSubTarget::SurveyArea,
             snap_assist_menu_open: false,

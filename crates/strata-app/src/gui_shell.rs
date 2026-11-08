@@ -349,6 +349,7 @@ impl StrataAppState {
                 }
             });
 
+        self.render_ribbon_context_menus(ctx);
         render_active_modal_dialogs(self, ctx);
         central_rect
     }
