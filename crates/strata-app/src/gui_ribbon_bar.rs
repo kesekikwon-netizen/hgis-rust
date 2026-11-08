@@ -1522,9 +1522,18 @@ impl StrataAppState {
                 self.active_tab = MainTab::Map;
                 self.modals.active = Some(ActiveModalDialog::HeritageRegionSelect);
             }
+            // C++ MainWindowOverlay.cpp:243 toggleTerrainMap — 「지형맵」 겹침을 켜고 끈다.
+            // 레이어 표시 상태로 토글하고 상태줄에 C++ 문구를 띄운다.
             "지형" => {
                 self.active_tab = MainTab::Map;
-                self.home_map.active_basemap = BasemapSource::VworldBase;
+                let now_on = !self.home_map.real_survey.is_layer_visible("지형맵");
+                self.home_map.real_survey.layer_visible.insert("지형맵".to_owned(), now_on);
+                if now_on {
+                    self.status_bar_hint =
+                        "지형맵을 올렸습니다. 다시 누르면 숨깁니다.".to_owned();
+                } else {
+                    self.status_bar_hint = "지형맵을 숨겼습니다.".to_owned();
+                }
             }
             "등고선" => {
                 self.active_tab = MainTab::Map;
