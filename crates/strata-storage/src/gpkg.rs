@@ -678,15 +678,15 @@ mod tests {
         assert!(is_valid_project_name("정상_조사_2026"));
         assert_eq!(
             validate_survey_name_ko("CON"),
-            Err("윈도우가 장치 이름으로 쓰는 단어라 파일 이름으로 쓸 수 없습니다.")
+            Err("Windows가 장치 이름으로 쓰는 예약 이름이라 조사명으로 쓸 수 없습니다.")
         );
         assert_eq!(
             validate_survey_name_ko("경주?유적"),
-            Err("조사명에 쓸 수 없는 글자(\\ / : * ? \" < > |)가 있습니다.")
+            Err("조사명에는 \\ / : * ? \" < > | 와 제어 문자를 쓸 수 없습니다.")
         );
         assert_eq!(
             validate_survey_name_ko("..."),
-            Err("점이나 공백만으로는 파일 이름을 만들 수 없습니다.")
+            Err("조사명은 마침표(.)로 끝날 수 없습니다. Windows가 파일 이름 끝의 점을 지웁니다.")
         );
         assert_eq!(validate_survey_name_ko("병산동"), Ok("병산동".to_string()));
 
@@ -761,18 +761,22 @@ pub fn is_valid_project_name(name: &str) -> bool {
 
 /// C++ `KaNewSurveyDialog::nameProblem` 한글 안내 문구 검증 1:1 대응
 pub fn validate_survey_name_ko(raw: &str) -> Result<String, &'static str> {
+    // C++ `KaNewSurveyDialog.cpp:196-212` `nameProblem` 문구 1:1
     let s = raw.trim();
     if s.is_empty() {
-        return Err("조사명을 적어 주세요.");
+        return Err("조사명을 입력하세요.");
     }
     if s.chars()
-        .any(|c| matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .any(|c| matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || (c as u32) < 0x20)
     {
-        return Err("조사명에 쓸 수 없는 글자(\\ / : * ? \" < > |)가 있습니다.");
+        return Err("조사명에는 \\ / : * ? \" < > | 와 제어 문자를 쓸 수 없습니다.");
+    }
+    if s.ends_with('.') {
+        return Err("조사명은 마침표(.)로 끝날 수 없습니다. Windows가 파일 이름 끝의 점을 지웁니다.");
     }
     let stem = s.trim_end_matches(|c: char| c == '.' || c.is_whitespace());
     if stem.is_empty() {
-        return Err("점이나 공백만으로는 파일 이름을 만들 수 없습니다.");
+        return Err("조사명은 마침표(.)로 끝날 수 없습니다. Windows가 파일 이름 끝의 점을 지웁니다.");
     }
     let upper = stem
         .split('.')
@@ -785,10 +789,11 @@ pub fn validate_survey_name_ko(raw: &str) -> Result<String, &'static str> {
         "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     ];
     if RESERVED.contains(&upper.as_str()) {
-        return Err("윈도우가 장치 이름으로 쓰는 단어라 파일 이름으로 쓸 수 없습니다.");
+        // C++ 는 이름을 넣어 보여 준다. 정적 &str 로는 이름을 끼울 수 없어 같은 뜻의 문장을 쓴다.
+        return Err("Windows가 장치 이름으로 쓰는 예약 이름이라 조사명으로 쓸 수 없습니다.");
     }
     if s.chars().count() > 80 {
-        return Err("조사명은 80자 이내로 적어 주세요.");
+        return Err("조사명은 80자 이하로 줄여 주세요.");
     }
     Ok(s.to_owned())
 }

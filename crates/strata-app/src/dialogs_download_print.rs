@@ -1005,15 +1005,6 @@ pub fn render_download_and_print_dialogs(
                         );
                     }
                     ui.add_space(6.0);
-                    ui.label(egui::RichText::new("저장 폴더").strong().size(13.0));
-                    ui.horizontal(|ui| {
-                        ui.add_sized(
-                            [356.0, 28.0],
-                            egui::TextEdit::singleline(&mut app.modals.new_survey_dir),
-                        );
-                        let _ = ui.add_sized([76.0, 28.0], egui::Button::new("폴더 선택..."));
-                    });
-                    ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("작업 좌표계").strong().size(13.0));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1182,16 +1173,40 @@ pub fn render_download_and_print_dialogs(
                             }
                         }
                     });
-                    // KaNewSurveyDialog.cpp:100-124 — 3 안내문
-                    ui.add_space(4.0);
-                    ui.label(
-                        egui::RichText::new(
-                            "지금 지도 중심(동경 129.2°)은 동부원점(5187) 구역입니다.",
-                        )
-                        .size(11.5)
-                        .strong()
-                        .color(Color32::from_rgb(31, 35, 40)),
-                    );
+                    // KaNewSurveyDialog.cpp:160-176 updateState — 지도 중심 경도를 실제로
+                    // 계산해 「지금 지도 중심(동경 N.N°)은 ○○원점(NNNN) 구역입니다.」 를 만든다.
+                    let map_lon = {
+                        let [cx, cy] = app.home_map.viewport.center_xy;
+                        match strata_geo::crs_transform::TmParams::for_crs(
+                            strata_types::crs::CrsCode::Epsg5187,
+                        ) {
+                            Some(p) => strata_geo::crs_transform::tm_to_lonlat(cx, cy, &p)[0],
+                            None => 129.2,
+                        }
+                    };
+                    // KaNewSurveyDialog.cpp:205-212 suggestedWorkCrs — 126~128 중부, 128~130 동부
+                    let suggested = if (126.0..128.0).contains(&map_lon) {
+                        Some(WorkCrs::Epsg5186)
+                    } else if (128.0..130.0).contains(&map_lon) {
+                        Some(WorkCrs::Epsg5187)
+                    } else {
+                        None
+                    };
+                    if let Some(sug) = suggested {
+                        let zone = match sug {
+                            WorkCrs::Epsg5186 => "중부원점(5186)",
+                            _ => "동부원점(5187)",
+                        };
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "지금 지도 중심(동경 {map_lon:.1}°)은 {zone} 구역입니다."
+                            ))
+                            .size(11.5)
+                            .strong()
+                            .color(Color32::from_rgb(31, 35, 40)),
+                        );
+                    }
                     ui.label(
                         egui::RichText::new(
                             "경계 가까운 곳은 발주처·측량 성과의 원점을 따르세요.",
@@ -1201,23 +1216,18 @@ pub fn render_download_and_print_dialogs(
                     );
                     ui.label(
                         egui::RichText::new(
-                            "작업 좌표계는 나중에 화면 아래에서 바꿀 수 있습니다. 제출 파일은 언제나 5179로 바뀝니다.",
+                            "작업 좌표계는 나중에 화면 아래에서 바꿀 수 있습니다.",
                         )
                         .size(11.0)
                         .color(Color32::from_rgb(107, 114, 128)),
                     );
+                    ui.label(
+                        egui::RichText::new("제출 파일은 언제나 5179로 바뀝니다.")
+                            .size(11.0)
+                            .color(Color32::from_rgb(107, 114, 128)),
+                    );
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        let folder_preview = format!(
-                            "{}/{}",
-                            app.modals.new_survey_dir,
-                            app.modals.new_survey_name.trim()
-                        );
-                        ui.label(
-                            egui::RichText::new(folder_preview)
-                                .size(11.0)
-                                .color(Color32::from_rgb(95, 94, 88)),
-                        );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui
                                 .add_sized([68.0, 30.0], egui::Button::new("취소"))
