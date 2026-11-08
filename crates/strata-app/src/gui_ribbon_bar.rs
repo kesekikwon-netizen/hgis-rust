@@ -1,7 +1,6 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use strata_canvas2d::map_tools::MapToolKind;
 use strata_net::tile_fetcher::BasemapSource;
-use strata_types::schema::DomainLayerKey;
 
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::ActiveModalDialog;
@@ -64,6 +63,11 @@ fn draw_buffer_pill(
     }
     resp.clicked()
 }
+
+/// C++ `BasemapDsm.h:21` `copernicusTitle()` = `지표모델(DSM) 30m · Copernicus`.
+/// Rust 범례(`gui_layer_panel.rs`)는 이 이름을 `지표모델(DSM) 30m · Coperni...` 로 줄여
+/// 쓰므로 DEM 토글은 두 키를 함께 맞춘다.
+const DEM_LEGEND_KEY: &str = "지표모델(DSM) 30m · Coperni...";
 
 impl StrataAppState {
     /// C++ `MainWindowRibbon.cpp` + `KaBeginnerRibbon.cpp` 1:1 (Images 1, 2, 4, 9, 10, 11, 12, 15)
@@ -165,7 +169,10 @@ impl StrataAppState {
                     Vec2::new(cw, 69.0 + extra_h),
                 );
                 bx += cw;
-                let muted = is_home && (*g_title == "기록" || label == "GeoTIFF");
+                // MainWindowRibbon.cpp:572 / MainWindow.cpp:1086 — GeoTIFF 는 「지도」 탭에서만
+                // 켜진다. 다른 탭(홈·도면·고지형·입체지형)에서는 흐리게 그린다.
+                let muted = (is_home && *g_title == "기록")
+                    || (label == "GeoTIFF" && self.active_tab != MainTab::Map);
                 let highlight_save = label == "저장" && dirty_save;
                 let dark_active = (label == "선택" && self.active_tool == MapToolKind::Select)
                     || (label == "측거" && self.active_tool == MapToolKind::Measure)
@@ -1440,6 +1447,28 @@ impl StrataAppState {
             self.modals.active = Some(ActiveModalDialog::SurveyContour);
         }
     }
+    /// C++ `MainWindowOverlay.cpp:225-240` `toggleExistingOverlay` 그대로.
+    /// 레이어가 이미 있으면 켜고 끄기만 하며 `…를 껐습니다.` / `…를 다시 켰습니다.` 를
+    /// 남기고 `true`. 없으면 `false` 라 호출한 쪽이 처음 받아 오는 길로 간다.
+    /// (`layer_visible` 에 키가 있는지가 C++ 의 `layersMatchingBaseName` 결과가
+    /// 비어 있지 않은지에 해당한다)
+    fn toggle_existing_overlay(&mut self, title: &str) -> bool {
+        if !self.home_map.real_survey.layer_visible.contains_key(title) {
+            return false;
+        }
+        let now_on = !self.home_map.real_survey.is_layer_visible(title);
+        self.home_map
+            .real_survey
+            .layer_visible
+            .insert(title.to_owned(), now_on);
+        self.status_bar_hint = if now_on {
+            format!("{title}를 다시 켰습니다.")
+        } else {
+            format!("{title}를 껐습니다.")
+        };
+        true
+    }
+
     fn handle_ribbon_click(&mut self, label: &str) {
         match label {
             "새 조사" => self.modals.active = Some(ActiveModalDialog::NewSurvey),
@@ -1505,9 +1534,61 @@ impl StrataAppState {
                 self.active_tab = MainTab::Map;
                 self.ribbon.toggle_sub_mode(SubToolsMode::Buffer);
             }
+            // C++ MainWindowOverlay.cpp:303-348 toggleDemMap — DEM 겹침이 이미 있으면
+            // 보이기/숨기기만 하고(:315-340), 없을 때만 받으러 간다(:344 startDemDownload).
+            // C++ 은 :315 에서 이름 "DEM" 으로 묻지만 이것은 BasemapDsm.h:44-57 이
+            // ka_hgis/reference_kind=dem 태그로 찾는 것과 같은 레이어이고, 그 범례 이름은
+            // BasemapDsm.h:21 `지표모델(DSM) 30m · Copernicus` 다. Rust 범례는 이 이름을
+            // `지표모델(DSM) 30m · Coperni...` 로 줄여 쓰므로 두 키를 같은 값으로 맞춘다.
             "DEM" => {
                 self.active_tab = MainTab::Map;
-                self.modals.active = Some(ActiveModalDialog::DemDownload);
+                let present = self
+                    .home_map
+                    .real_survey
+                    .layer_visible
+                    .contains_key("DEM")
+                    || self
+                        .home_map
+                        .real_survey
+                        .layer_visible
+                        .contains_key(DEM_LEGEND_KEY);
+                if present {
+                    let make_visible = !self.home_map.real_survey.is_layer_visible("DEM");
+                    for key in ["DEM", DEM_LEGEND_KEY] {
+                        self.home_map
+                            .real_survey
+                            .layer_visible
+                            .insert(key.to_owned(), make_visible);
+                    }
+                    // MainWindowOverlay.cpp:330-332 — DEM 을 끄는데 지질도가 꺼져 있으면
+                    // 같이 올라와 있던 「지형 음영」 도 내린다. C++ `LayerOps::isLayerVisible`
+                    // 은 레이어가 없으면 false 이므로(BasemapOps.cpp:2358-2359) Rust 기본값
+                    // (없으면 true)을 그대로 쓰지 않고 있는지까지 본다.
+                    let geology_on = self
+                        .home_map
+                        .real_survey
+                        .layer_visible
+                        .contains_key("지질도(KIGAM 1:5만)")
+                        && self
+                            .home_map
+                            .real_survey
+                            .is_layer_visible("지질도(KIGAM 1:5만)");
+                    if !make_visible && !geology_on {
+                        self.home_map
+                            .real_survey
+                            .layer_visible
+                            .insert("지형 음영".to_owned(), false);
+                    }
+                    // MainWindowOverlay.cpp:337-340 문구 그대로
+                    self.status_bar_hint = if make_visible {
+                        "DEM을 켰습니다. 「DEM 표현」에서 색과 음영을 조절하세요.".to_owned()
+                    } else {
+                        "DEM 지형을 숨겼습니다.".to_owned()
+                    };
+                } else {
+                    // :344 startDemDownload
+                    self.modals.active = Some(ActiveModalDialog::DemDownload);
+                }
             }
             "지적" => {
                 self.active_tab = MainTab::Map;
@@ -1524,61 +1605,79 @@ impl StrataAppState {
             }
             // C++ MainWindowOverlay.cpp:243 toggleTerrainMap — 「지형맵」 겹침을 켜고 끈다.
             // 레이어 표시 상태로 토글하고 상태줄에 C++ 문구를 띄운다.
+            // C++ MainWindowOverlay.cpp:243-271 toggleTerrainMap. 이미 있는 「지형맵」 은
+            // :247 toggleExistingOverlay(:225-240)가 껐다 켰다 하고 `지형맵를 껐습니다.` /
+            // `지형맵를 다시 켰습니다.` 를 내며, 처음 올릴 때만 :267 의
+            // `지형맵을 올렸습니다. 다시 누르면 숨깁니다.` 가 나간다.
             "지형" => {
                 self.active_tab = MainTab::Map;
-                let now_on = !self.home_map.real_survey.is_layer_visible("지형맵");
-                self.home_map.real_survey.layer_visible.insert("지형맵".to_owned(), now_on);
-                if now_on {
+                if !self.toggle_existing_overlay("지형맵") {
+                    self.home_map
+                        .real_survey
+                        .layer_visible
+                        .insert("지형맵".to_owned(), true);
                     self.status_bar_hint =
                         "지형맵을 올렸습니다. 다시 누르면 숨깁니다.".to_owned();
-                } else {
-                    self.status_bar_hint = "지형맵을 숨겼습니다.".to_owned();
                 }
             }
+            // C++ MainWindowRibbon.cpp:429-436 — `contour` 단추에는 setCheckable 이 없어
+            // 토글이 아니고, 누르면 MainWindowSurveyContour.cpp:104 createSurveyContours 만
+            // 돈다. 그 함수는 단면선 같은 도메인 레이어를 만들지 않는다(계산이 끝나면
+            // :165 SurveyContourStyle::apply 가 결과 레이어를 올린다).
             "등고선" => {
                 self.active_tab = MainTab::Map;
-                self.left_layers
-                    .ensure_domain_layer(DomainLayerKey::SectionLine);
                 self.modals.active = Some(ActiveModalDialog::SurveyContour);
             }
+            // C++ MainWindowOverlay.cpp:352-401 downloadSoilTerrain — 본체 클릭은
+            // :357 toggleExistingOverlay(`토양도(흙토람)`)로 껐다 켰다 하고, 없을 때만
+            // 내려받는다(:396 startReferenceDownload → :536,622 `토양도를 추가했습니다. …`).
             "토양" => {
                 self.active_tab = MainTab::Map;
-                let spec = strata_net::tile_fetcher::build_wms_thematic_layer_spec(
-                    strata_net::tile_fetcher::ThematicLayerType::SoilDrainage,
-                    self.work_crs.auth_id(),
-                );
-                self.home_map.draw_guide_message = Some(format!(
-                    "{} ({}) 오버레이를 켰습니다 (투명도 {:.0}%).",
-                    spec.layer_title_ko,
-                    self.work_crs.auth_id(),
-                    spec.opacity * 100.0
-                ));
+                if !self.toggle_existing_overlay("토양도(흙토람)") {
+                    self.home_map
+                        .real_survey
+                        .layer_visible
+                        .insert("토양도(흙토람)".to_owned(), true);
+                    self.status_bar_hint =
+                        "토양도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
+                }
             }
+            // C++ MainWindowOverlay.cpp:405-472 downloadGeologyMap — :409 toggleExistingOverlay
+            // (`지질도(KIGAM 1:5만)`, m_actGeology)로 껐다 켰다 하고, 켤 때는 지형 음영
+            // 겹침(GeologyMapService::reliefLayerTitle = `지질 음영`, GeologyMapService.cpp:60)
+            // 도 같은 상태로 맞춘다(:422-423). 없을 때만 내려받는다(:467 → :536,622).
             "지질" => {
                 self.active_tab = MainTab::Map;
-                let spec = strata_net::tile_fetcher::build_wms_thematic_layer_spec(
-                    strata_net::tile_fetcher::ThematicLayerType::Geology1to50k,
-                    self.work_crs.auth_id(),
-                );
-                self.home_map.draw_guide_message = Some(format!(
-                    "{} ({}) 오버레이를 켰습니다 (투명도 {:.0}%).",
-                    spec.layer_title_ko,
-                    self.work_crs.auth_id(),
-                    spec.opacity * 100.0
-                ));
+                if !self.toggle_existing_overlay("지질도(KIGAM 1:5만)") {
+                    self.home_map
+                        .real_survey
+                        .layer_visible
+                        .insert("지질도(KIGAM 1:5만)".to_owned(), true);
+                    self.status_bar_hint =
+                        "지질도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
+                }
+                let now_on = self
+                    .home_map
+                    .real_survey
+                    .is_layer_visible("지질도(KIGAM 1:5만)");
+                self.home_map
+                    .real_survey
+                    .layer_visible
+                    .insert("지질 음영".to_owned(), now_on);
             }
+            // C++ MainWindowOverlay.cpp:476-527 downloadRiverMap — :479 toggleExistingOverlay
+            // (`수계도(하천망)`, m_actRiver)로 껐다 켰다 하고, 없을 때만 내려받는다
+            // (:522 → :536,622 `수계도를 추가했습니다. …`).
             "수계" => {
                 self.active_tab = MainTab::Map;
-                let spec = strata_net::tile_fetcher::build_wms_thematic_layer_spec(
-                    strata_net::tile_fetcher::ThematicLayerType::HydroNetworkWaterway,
-                    self.work_crs.auth_id(),
-                );
-                self.home_map.draw_guide_message = Some(format!(
-                    "{} ({}) 오버레이를 켰습니다 (투명도 {:.0}%).",
-                    spec.layer_title_ko,
-                    self.work_crs.auth_id(),
-                    spec.opacity * 100.0
-                ));
+                if !self.toggle_existing_overlay("수계도(하천망)") {
+                    self.home_map
+                        .real_survey
+                        .layer_visible
+                        .insert("수계도(하천망)".to_owned(), true);
+                    self.status_bar_hint =
+                        "수계도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
+                }
             }
             "옛 지도" => {
                 self.active_tab = MainTab::Map;
@@ -1599,42 +1698,66 @@ impl StrataAppState {
                 self.ribbon.toggle_sub_mode(SubToolsMode::Align);
                 self.active_tool = MapToolKind::GeorefAlign;
             }
-            // MainWindowRibbon.cpp:552-557 「도면」 → MainWindow::openLayoutDesigner (Ctrl+L).
-            // MainWindowExport.cpp:204-213 — the studio tab already exists: go there without
-            // asking for the paper again (re-opening would move the user's sheet view).
-            // MainWindowExport.cpp:216 — only the first open asks, through KaPaperDialog.
-            "도면" => {
-                if self.open_studio_tabs.contains(&MainTab::Drawing) {
-                    self.open_studio_tab(MainTab::Drawing);
-                    // MainWindowExport.cpp:206 `hideSubTools()` — 도면 탭으로 가면 도구 줄을 닫는다.
-                    self.hide_sub_tools();
-                    self.home_map.draw_guide_message =
-                        Some(StrataAppState::DRAWING_STUDIO_WELCOME.to_owned());
-                } else {
-                    self.modals.active = Some(ActiveModalDialog::PaperSetup);
-                }
-            }
+            "도면" => self.modals.active = Some(ActiveModalDialog::PaperSetup),
             "인쇄" => {
                 self.open_studio_tab(MainTab::Drawing);
                 self.modals.active = Some(ActiveModalDialog::DrawingPrint);
             }
+            // MainWindowRibbon.cpp:566-573 + KaShellUi.cpp:48-50 + MainWindow.cpp:1086 —
+            // GeoTIFF 는 「지도」 탭에서만 쓴다. 다른 탭이면 사유만 알리고 끝낸다.
             "GeoTIFF" => {
-                self.open_studio_tab(MainTab::Drawing);
-                let out_path = std::env::temp_dir().join("strata_drawing_plate.tif");
+                if self.active_tab != MainTab::Map {
+                    self.home_map.draw_guide_message =
+                        Some(crate::dialogs_download_print::MAP_TAB_ONLY_REASON.to_owned());
+                    return;
+                }
+                // MainWindowExport.cpp:63-67 — 저장할 레이어가 없으면 안내만 한다.
+                if self.left_layers.entries.is_empty() {
+                    self.home_map.draw_guide_message =
+                        Some("지도에 저장할 레이어가 없습니다.".to_owned());
+                    return;
+                }
+                // MainWindowExport.cpp:68-75 — 저장 대화상자: 기본 이름 지도_EPSG_5187.tif,
+                // 필터 "GeoTIFF (*.tif *.tiff)", 기본 확장자 tif, 시작 폴더는 조사 폴더.
+                let default_name = crate::dialogs_download_print::geotiff_default_file_name(
+                    self.work_crs.auth_id(),
+                );
+                let Some(path) = ::rfd::FileDialog::new()
+                    .set_title("현재 지도 GeoTIFF 저장")
+                    .add_filter("GeoTIFF", &["tif", "tiff"])
+                    .set_file_name(&default_name)
+                    .set_directory(&self.home_map.real_survey.survey_dir)
+                    .save_file()
+                else {
+                    return;
+                };
+                // MapGeoTiffExport.cpp:94-103 — 화면 캔버스 출력 크기 그대로, 상한만 검사한다.
+                let size = match crate::dialogs_download_print::geotiff_canvas_size_px(
+                    self.home_map.viewport.screen_size_px,
+                ) {
+                    Ok(sz) => sz,
+                    Err(reason) => {
+                        self.home_map.draw_guide_message = Some(reason.to_owned());
+                        return;
+                    }
+                };
+                // MapGeoTiffExport.cpp:187-190 — 좌표계는 지도 좌표계 그대로 기록한다.
+                let auth_id = self.work_crs.auth_id();
                 if strata_layout::pdf_geotiff::export_geotiff_with_cancel(
-                    &out_path,
-                    2480,
-                    3508,
+                    &path,
+                    size.0,
+                    size.1,
                     self.work_crs.epsg_code(),
                     None,
                 )
                 .is_ok()
                 {
-                    self.home_map.draw_guide_message = Some(format!(
-                        "GeoTIFF 도면(300 DPI · {})을 저장했습니다: {}",
-                        self.work_crs.auth_id(),
-                        out_path.display()
-                    ));
+                    // MainWindowExport.cpp:90-91 — "GeoTIFF 저장 완료 · EPSG:5187 · 경로"
+                    self.home_map.draw_guide_message =
+                        Some(format!("GeoTIFF 저장 완료 · {} · {}", auth_id, path.display()));
+                } else {
+                    self.home_map.draw_guide_message =
+                        Some("GeoTIFF를 저장하지 못했습니다".to_owned());
                 }
             }
             "검수·제출" => self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage),
@@ -2160,5 +2283,126 @@ impl StrataAppState {
         ));
         self.ribbon.app_bar.region_popup_open = false;
         self.ribbon.app_bar.address_popup_open = false;
+    }
+}
+
+#[cfg(test)]
+mod tests_overlay_toggles {
+    use super::*;
+    use crate::app_state::StrataAppState;
+
+    /// R8 — C++ `MainWindowOverlay.cpp:225-240` `toggleExistingOverlay`.
+    /// 없는 레이어면 `false` 이고 아무 문구도 내지 않는다.
+    #[test]
+    fn test_r8_toggle_existing_overlay_returns_false_when_absent() {
+        let mut app = StrataAppState::new_startup();
+        assert!(!app.toggle_existing_overlay("지질도(KIGAM 1:5만)"));
+        assert_eq!(app.status_bar_hint, "");
+    }
+
+    /// R8 — 「지형」: C++ `MainWindowOverlay.cpp:243-271`.
+    /// 처음 누르면 :267 문구(올림), 다음부터는 :231/:236 문구(껐다 켰다).
+    #[test]
+    fn test_r8_terrain_toggle_uses_cpp_first_and_repeat_texts() {
+        let mut app = StrataAppState::new_startup();
+        app.handle_ribbon_click("지형");
+        assert!(app.home_map.real_survey.is_layer_visible("지형맵"));
+        assert_eq!(app.status_bar_hint, "지형맵을 올렸습니다. 다시 누르면 숨깁니다.");
+
+        app.handle_ribbon_click("지형");
+        assert!(!app.home_map.real_survey.is_layer_visible("지형맵"));
+        assert_eq!(app.status_bar_hint, "지형맵를 껐습니다.");
+
+        app.handle_ribbon_click("지형");
+        assert!(app.home_map.real_survey.is_layer_visible("지형맵"));
+        assert_eq!(app.status_bar_hint, "지형맵를 다시 켰습니다.");
+    }
+
+    /// R8 — 「토양」·「수계」는 `MainWindowOverlay.cpp:357,479` 가
+    /// `토양도(흙토람)` / `수계도(하천망)` 이름으로 토글한다.
+    #[test]
+    fn test_r8_soil_and_river_toggle_with_cpp_layer_names() {
+        for (button, title) in [("토양", "토양도(흙토람)"), ("수계", "수계도(하천망)")] {
+            let mut app = StrataAppState::new_startup();
+            // 없는 상태: 받아 오는 길(여기서는 안내 문구)로 간다.
+            app.handle_ribbon_click(button);
+            assert!(app.home_map.real_survey.is_layer_visible(title), "{button}");
+            assert!(
+                app.status_bar_hint.contains("추가했습니다"),
+                "{button}: {}",
+                app.status_bar_hint
+            );
+
+            // 있는 상태: 끄고 켜며 C++ toggleExistingOverlay 문구를 쓴다.
+            app.handle_ribbon_click(button);
+            assert!(!app.home_map.real_survey.is_layer_visible(title), "{button}");
+            assert_eq!(app.status_bar_hint, format!("{title}를 껐습니다."));
+
+            app.handle_ribbon_click(button);
+            assert!(app.home_map.real_survey.is_layer_visible(title), "{button}");
+            assert_eq!(app.status_bar_hint, format!("{title}를 다시 켰습니다."));
+        }
+    }
+
+    /// R8 — 「지질」은 `MainWindowOverlay.cpp:409,422` 처럼 `지질도(KIGAM 1:5만)` 을
+    /// 토글하고 `지질 음영` 을 같은 상태로 맞춘다.
+    #[test]
+    fn test_r8_geology_toggle_also_sets_relief_layer() {
+        let mut app = StrataAppState::new_startup();
+        app.handle_ribbon_click("지질");
+        assert!(app
+            .home_map
+            .real_survey
+            .is_layer_visible("지질도(KIGAM 1:5만)"));
+        app.handle_ribbon_click("지질");
+        assert!(!app
+            .home_map
+            .real_survey
+            .is_layer_visible("지질도(KIGAM 1:5만)"));
+        assert_eq!(app.status_bar_hint, "지질도(KIGAM 1:5만)를 껐습니다.");
+        // :422-423 — 지질도를 끄면 지형 음영 겹침도 내린다.
+        assert!(!app.home_map.real_survey.is_layer_visible("지질 음영"));
+    }
+
+    /// R8 — 「DEM」은 `MainWindowOverlay.cpp:303-348`. 없으면 받는 창(:344),
+    /// 있으면 :337-340 두 문구로 켜고 끈다.
+    #[test]
+    fn test_r8_dem_opens_download_when_absent_and_toggles_when_present() {
+        let mut app = StrataAppState::new_startup();
+        app.handle_ribbon_click("DEM");
+        assert_eq!(app.modals.active, Some(ActiveModalDialog::DemDownload));
+
+        app.modals.active = None;
+        app.home_map
+            .real_survey
+            .layer_visible
+            .insert("DEM".to_owned(), true);
+        app.handle_ribbon_click("DEM");
+        assert!(!app.home_map.real_survey.is_layer_visible("DEM"));
+        assert_eq!(app.status_bar_hint, "DEM 지형을 숨겼습니다.");
+        // :330-332 — 지질도가 꺼져 있으면 지형 음영도 함께 내린다.
+        assert!(!app.home_map.real_survey.is_layer_visible("지형 음영"));
+
+        app.handle_ribbon_click("DEM");
+        assert!(app.home_map.real_survey.is_layer_visible("DEM"));
+        assert_eq!(
+            app.status_bar_hint,
+            "DEM을 켰습니다. 「DEM 표현」에서 색과 음영을 조절하세요."
+        );
+    }
+
+    /// R8 — 「등고선」은 토글이 아니다(`MainWindowRibbon.cpp:429-436` 에 setCheckable 없음).
+    /// `MainWindowSurveyContour.cpp:104` 도 도메인 레이어를 만들지 않는다 — 빈 단면선
+    /// 레이어를 자동으로 넣으면 「빈 도메인 레이어 자동 추가 금지」 규칙에 어긋난다.
+    #[test]
+    fn test_r8_contour_opens_dialog_without_creating_a_domain_layer() {
+        let mut app = StrataAppState::new_startup();
+        app.handle_ribbon_click("등고선");
+        assert_eq!(app.modals.active, Some(ActiveModalDialog::SurveyContour));
+        assert!(
+            app.left_layers.entries.is_empty(),
+            "등고선은 빈 도메인 레이어를 만들지 않는다: {:?}",
+            app.left_layers.entries.len()
+        );
     }
 }
