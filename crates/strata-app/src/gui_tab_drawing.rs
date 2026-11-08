@@ -304,6 +304,9 @@ impl StrataAppState {
                                 .corner_radius(6.0)
                                 .min_size(Vec2::new(68.0, 36.0));
                         if ui.add(prt_btn).clicked() {
+                            // KaPrintDialog.cpp:124 — 용지 기본값은 프린터가 A3 를 지원할 때만 A3.
+                            self.modals.print_paper =
+                                crate::dialogs_modal::default_print_paper_for_printer();
                             self.modals.active = Some(ActiveModalDialog::DrawingPrint);
                         }
                     });

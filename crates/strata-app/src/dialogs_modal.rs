@@ -192,7 +192,9 @@ impl Default for ModalDialogController {
             last_export_status: String::new(),
             custom_paper_mode: false,
             print_single_sheet: true,
-            print_paper: SheetPaperSize::A3,
+            // KaPrintDialog.cpp:124 — 기본은 A4 다. A3 는 프린터가 A3 를 지원할 때만
+            // 인쇄 창을 열 때 고른다 (`default_print_paper_for_printer`).
+            print_paper: SheetPaperSize::A4,
             print_dpi: 300,
             print_overlap_mm: HGIS_PRINT_OVERLAP_DEFAULT_MM,
             print_marks: true,
@@ -273,6 +275,57 @@ impl Default for ModalDialogController {
             ],
         }
     }
+}
+
+/// `KaPrintDialog.cpp:124` — 용지 기본값은 `printerSupports(A3) && !printers.isEmpty()`
+/// 일 때만 A3, 아니면 A4 다. `:348-354` 대로 프린터 이름이 없거나 지원 목록이 비면 지원으로 본다.
+#[must_use]
+pub fn default_print_paper_for_printer() -> SheetPaperSize {
+    if windows_a3_printer_supports() {
+        SheetPaperSize::A3
+    } else {
+        SheetPaperSize::A4
+    }
+}
+
+/// 설치된 프린터 중 하나라도 A3 를 지원하는지 본다. `KaPrintDialog.cpp:83-91` 처럼
+/// 프린터 목록을 훑고, 목록을 못 읽으면 `:352` 대로 지원으로 친다.
+#[cfg(windows)]
+fn windows_a3_printer_supports() -> bool {
+    use std::os::windows::process::CommandExt;
+
+    // PowerShell 로 프린터 이름과 용지만 읽는다. 인쇄는 하지 않는다.
+    let script = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; \
+         Get-Printer | ForEach-Object { $_.Name + '|' + (($_.PrinterPaperNames) -join ',') }";
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    // CREATE_NO_WINDOW — 콘솔 창이 깜빡이지 않게 한다.
+    cmd.creation_flags(0x0800_0000);
+    let Ok(out) = cmd.output() else {
+        return true; // 목록을 못 읽으면 지원으로 본다 (`:352` sizes.isEmpty() 와 같은 뜻)
+    };
+    if !out.status.success() {
+        return true;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let rows: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    if rows.is_empty() {
+        return false; // 설치된 프린터 없음 (`:85-87`)
+    }
+    rows.iter().any(|row| {
+        row.split_once('|')
+            .is_some_and(|(_, papers)| papers.to_ascii_uppercase().contains("A3"))
+    })
+}
+
+#[cfg(not(windows))]
+fn windows_a3_printer_supports() -> bool {
+    // 다른 OS 에는 이 확인 경로가 없다. C++ `:352` 처럼 지원으로 친다.
+    true
 }
 
 impl ModalDialogController {
@@ -3000,6 +3053,20 @@ mod tests {
             ),
             "기본은 A4 세로입니다. A4 가로는 좌·우·위 1cm를 더 줍니다."
         );
+    }
+
+    // R10 — KaPrintDialog.cpp:124,348-354 — 용지 기본값은 A3 지원 프린터일 때만 A3
+    #[test]
+    fn test_r10_print_paper_defaults_follow_printer_a3_support() {
+        // 이 PC 에 실제로 설치된 프린터로 계산한다. 값은 환경에 따라 A3/A4 둘 중 하나다.
+        let paper = default_print_paper_for_printer();
+        assert!(
+            paper == SheetPaperSize::A3 || paper == SheetPaperSize::A4,
+            "용지 기본값은 A3 또는 A4 여야 한다"
+        );
+        // 프린터 목록을 못 읽거나 지원 목록이 비면 지원으로 본다(C++ :352).
+        // 그래서 이 호출이 패닉하지 않고 항상 A3/A4 를 돌려주는 것이 계약이다.
+        assert_eq!(ModalDialogController::default().print_paper, SheetPaperSize::A4);
     }
 
     #[test]

@@ -1700,7 +1700,12 @@ impl StrataAppState {
             }
             "도면" => self.modals.active = Some(ActiveModalDialog::PaperSetup),
             "인쇄" => {
+                // MainWindowExport.cpp:186-194 — 도면 화면이 앞에 없으면 도면 탭을 열고
+                // 인쇄 창을 띄운다. 용지 기본값은 KaPrintDialog.cpp:124 대로 프린터가
+                // A3 를 지원할 때만 A3 다.
                 self.open_studio_tab(MainTab::Drawing);
+                self.modals.print_paper =
+                    crate::dialogs_modal::default_print_paper_for_printer();
                 self.modals.active = Some(ActiveModalDialog::DrawingPrint);
             }
             // MainWindowRibbon.cpp:566-573 + KaShellUi.cpp:48-50 + MainWindow.cpp:1086 —

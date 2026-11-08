@@ -125,7 +125,10 @@ impl StrataAppState {
                 } else if i.key_pressed(egui::Key::L) {
                     self.modals.active = Some(ActiveModalDialog::PaperSetup);
                 } else if i.key_pressed(egui::Key::P) {
+                    // MainWindowExport.cpp:186-194 + KaPrintDialog.cpp:124 — Ctrl+P 도 같은 인쇄 창.
                     self.open_studio_tab(MainTab::Drawing);
+                    self.modals.print_paper =
+                        crate::dialogs_modal::default_print_paper_for_printer();
                     self.modals.active = Some(ActiveModalDialog::DrawingPrint);
                 } else if i.key_pressed(egui::Key::E) {
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
