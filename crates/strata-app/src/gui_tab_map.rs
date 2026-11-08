@@ -238,6 +238,77 @@ pub fn grid_stroke_for(cfg: &ShellGridConfig, ink: Color32) -> Stroke {
     )
 }
 
+/// C++ `MeasureOps::formatLengthM` — `MeasureOps.cpp:163-171`.
+/// 음수·비유한 값은 `—`, 1 km 이상은 km(소수 3), 10 m 이상은 m(소수 2), 그 아래는 m(소수 3).
+#[must_use]
+pub fn format_length_m(meters: f64) -> String {
+    if !meters.is_finite() || meters < 0.0 {
+        return "—".to_owned();
+    }
+    if meters >= 1000.0 {
+        return format!("{:.3} km", meters / 1000.0);
+    }
+    if meters >= 10.0 {
+        return format!("{meters:.2} m");
+    }
+    format!("{meters:.3} m")
+}
+
+/// C++ `MeasureOps::formatAreaM2` — `MeasureOps.cpp:188-198`.
+/// 음수·비유한 값은 `—`, 1 ha 이상은 `ha (㎡)`, 100 ㎡ 이상은 소수 1, 그 아래는 소수 2.
+#[must_use]
+pub fn format_area_m2(square_meters: f64) -> String {
+    if !square_meters.is_finite() || square_meters < 0.0 {
+        return "—".to_owned();
+    }
+    if square_meters >= 10000.0 {
+        return format!(
+            "{:.3} ha ({:.1} ㎡)",
+            square_meters / 10000.0,
+            square_meters
+        );
+    }
+    if square_meters >= 100.0 {
+        return format!("{square_meters:.1} ㎡");
+    }
+    format!("{square_meters:.2} ㎡")
+}
+
+/// C++ `MeasureOps::gridBearingDegrees` — `MeasureOps.cpp:73-82`.
+/// 도북 기준 시계방향 방위각. 두 점이 같으면 `NaN`.
+#[must_use]
+pub fn grid_bearing_degrees(from: [f64; 2], to: [f64; 2]) -> f64 {
+    let dx = to[0] - from[0];
+    let dy = to[1] - from[1];
+    if dx.abs() < 1e-12 && dy.abs() < 1e-12 {
+        return f64::NAN;
+    }
+    let mut deg = dx.atan2(dy).to_degrees();
+    if deg < 0.0 {
+        deg += 360.0;
+    }
+    if deg >= 360.0 {
+        deg -= 360.0;
+    }
+    deg
+}
+
+/// C++ `MeasureOps::polygonPerimeterMeters` — `MeasureOps.cpp:129-147`.
+/// 점이 3개 미만이면 0(둘레가 성립하지 않는다).
+#[must_use]
+pub fn ring_perimeter_m(ring: &[[f64; 2]]) -> f64 {
+    if ring.len() < 3 {
+        return 0.0;
+    }
+    (0..ring.len())
+        .map(|i| {
+            let a = ring[i];
+            let b = ring[(i + 1) % ring.len()];
+            (b[0] - a[0]).hypot(b[1] - a[1])
+        })
+        .sum()
+}
+
 /// 격자 선 한 조각(`a`→`b`)을 `dash_idx` 모양대로 서브 세그먼트로 나눈다
 #[must_use]
 pub fn grid_dash_segments(a: Pos2, b: Pos2, dash_idx: usize, width: f32) -> Vec<[Pos2; 2]> {
@@ -966,16 +1037,28 @@ impl StrataAppState {
                     self.home_map.real_survey.measure_area_tab = true;
                 }
 
-                // KaMeasureMapTool.cpp:331-355,400 — 좌표계 이름은 작업 좌표계에서 그대로 가져온다
+                // KaMeasureMapTool.cpp:357-405 refreshHud — 총계는 MeasureOps 포맷,
+                // 상세줄은 「· 」로 이은 조각들 + `작업좌표 … 평면`.
                 let auth_id = self.work_crs.auth_id();
-                let readout = if let Some(m) = &self.home_map.cad.last_measure {
-                    if area_mode {
-                        format!("{:.2} m²", m.polygon_area_m2)
-                    } else {
-                        format!("{:.3} m", m.total_distance_m)
-                    }
+                // 아래에서 씬을 다시 빌리므로(마침·한 점 취소·다시) 사본으로 둔다.
+                let ring = self.home_map.scene.active_rubberband.clone();
+                let finished = self.home_map.cad.last_measure.is_some();
+                let readout = if area_mode {
+                    let area = self
+                        .home_map
+                        .cad
+                        .last_measure
+                        .as_ref()
+                        .map_or(0.0, |m| m.polygon_area_m2);
+                    format_area_m2(area)
                 } else {
-                    "0.000 m".to_owned()
+                    let len = self
+                        .home_map
+                        .cad
+                        .last_measure
+                        .as_ref()
+                        .map_or(0.0, |m| m.total_distance_m);
+                    format_length_m(len)
                 };
                 p.text(
                     Pos2::new(mr.left() + 12.0, mr.top() + 58.0),
@@ -984,19 +1067,40 @@ impl StrataAppState {
                     FontId::proportional(19.0),
                     Color32::BLACK,
                 );
-                let detail = match (&self.home_map.cad.last_measure, area_mode) {
-                    (Some(m), true) => format!(
-                        "둘레 {:.2} m · 면적만 산출 · 작업좌표\n{auth_id} 평면",
-                        m.polygon_perimeter_m
-                    ),
-                    (Some(m), false) => format!(
-                        "{:.3} m · 도북 방위 · 작업좌표\n{auth_id} 평면",
-                        m.total_distance_m
-                    ),
-                    (None, _) => format!(
-                        "세 점 이상 찍고 우클릭 → 마침 · 작업좌표\n{auth_id} 평면"
-                    ),
-                };
+                // :372-399 — 면적은 둘레·확정 안내, 거리는 구간별 길이·도북 방위.
+                let mut bits: Vec<String> = Vec::new();
+                if area_mode {
+                    let perimeter = ring_perimeter_m(&ring);
+                    if ring.len() >= 3 {
+                        bits.push(format!("둘레 {}", format_length_m(perimeter)));
+                    }
+                    if finished {
+                        bits.push("면적만 산출".to_owned());
+                    } else if ring.len() < 3 {
+                        bits.push("세 점 이상 찍고 우클릭 → 마침".to_owned());
+                    } else {
+                        bits.push("우클릭에서 마침을 고르면 면적만 확정".to_owned());
+                    }
+                } else if ring.len() < 2 {
+                    bits.push("두 점 이상 찍고 우클릭 → 마침".to_owned());
+                } else {
+                    for (i, w) in ring.windows(2).take(8).enumerate() {
+                        let d = (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]);
+                        bits.push(format!("{}구간 {}", i + 1, format_length_m(d)));
+                    }
+                    let n = ring.len();
+                    bits.push(format!(
+                        "도북 방위 {}",
+                        strata_canvas2d::cad_interaction::format_bearing_dms(
+                            grid_bearing_degrees(ring[n - 2], ring[n - 1])
+                        )
+                    ));
+                    if !finished {
+                        bits.push("우클릭 → 마침".to_owned());
+                    }
+                }
+                bits.push(format!("작업좌표 {auth_id} 평면"));
+                let detail = bits.join(" · ");
                 p.text(
                     Pos2::new(mr.left() + 12.0, mr.top() + 86.0),
                     egui::Align2::LEFT_CENTER,
@@ -1035,24 +1139,42 @@ impl StrataAppState {
                                     .on_right_click(MapToolKind::Measure, &mut self.home_map.scene);
                             }
                             1 => {
-                                // KaMeasureMapTool::copyText() — 한 줄이 아니라 여러 줄을 복사한다
+                                // KaMeasureMapTool.cpp:331-355 copyText() — 면적은 면적+둘레,
+                                // 거리는 거리+구간별(길이·도북 방위), 끝에 작업좌표 한 줄.
                                 let mut lines = Vec::new();
-                                if let Some(m) = &self.home_map.cad.last_measure {
-                                    if area_mode {
+                                if area_mode {
+                                    let area = self
+                                        .home_map
+                                        .cad
+                                        .last_measure
+                                        .as_ref()
+                                        .map_or(0.0, |m| m.polygon_area_m2);
+                                    lines.push(format!("면적 {}", format_area_m2(area)));
+                                    if ring.len() >= 3 {
                                         lines.push(format!(
-                                            "면적 {readout}"
+                                            "둘레 {}",
+                                            format_length_m(ring_perimeter_m(&ring))
                                         ));
-                                        lines.push(format!(
-                                            "둘레 {:.2} m",
-                                            m.polygon_perimeter_m
-                                        ));
-                                    } else {
-                                        lines.push(format!("거리 {readout}"));
                                     }
-                                } else if area_mode {
-                                    lines.push("면적 0.00 ㎡".to_owned());
                                 } else {
-                                    lines.push("거리 0.00 m".to_owned());
+                                    let len = self
+                                        .home_map
+                                        .cad
+                                        .last_measure
+                                        .as_ref()
+                                        .map_or(0.0, |m| m.total_distance_m);
+                                    lines.push(format!("거리 {}", format_length_m(len)));
+                                    for (i, w) in ring.windows(2).enumerate() {
+                                        let d = (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]);
+                                        lines.push(format!(
+                                            "{}구간 {} · 도북 방위 {}",
+                                            i + 1,
+                                            format_length_m(d),
+                                            strata_canvas2d::cad_interaction::format_bearing_dms(
+                                                grid_bearing_degrees(w[0], w[1])
+                                            )
+                                        ));
+                                    }
                                 }
                                 lines.push(format!("작업좌표 {auth_id} 평면"));
                                 self.status_bar_hint =
@@ -2100,5 +2222,65 @@ impl StrataAppState {
                 Stroke::new(2.2, Color32::from_rgb(214, 78, 22)),
             ));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_measure_hud {
+    use super::*;
+
+    /// R9 — `MeasureOps::formatLengthM` `MeasureOps.cpp:163-171` 세 구간과 `—`.
+    #[test]
+    fn test_r9_format_length_m_matches_measureops() {
+        assert_eq!(format_length_m(f64::NAN), "—");
+        assert_eq!(format_length_m(-1.0), "—");
+        // 10 m 미만은 소수 3자리
+        assert_eq!(format_length_m(9.8765), "9.877 m");
+        // 10 m 이상 1 km 미만은 소수 2자리
+        assert_eq!(format_length_m(10.0), "10.00 m");
+        assert_eq!(format_length_m(123.456), "123.46 m");
+        // 1 km 이상은 km 소수 3자리
+        assert_eq!(format_length_m(1000.0), "1.000 km");
+        assert_eq!(format_length_m(2500.0), "2.500 km");
+    }
+
+    /// R9 — `MeasureOps::formatAreaM2` `MeasureOps.cpp:188-198` 세 구간과 `—`.
+    #[test]
+    fn test_r9_format_area_m2_matches_measureops() {
+        assert_eq!(format_area_m2(f64::INFINITY), "—");
+        assert_eq!(format_area_m2(-5.0), "—");
+        // 100 ㎡ 미만은 소수 2자리
+        assert_eq!(format_area_m2(42.128), "42.13 ㎡");
+        // 100 ㎡ 이상은 소수 1자리
+        assert_eq!(format_area_m2(100.0), "100.0 ㎡");
+        assert_eq!(format_area_m2(1234.567), "1234.6 ㎡");
+        // 1 ha 이상은 `ha (㎡)`
+        assert_eq!(format_area_m2(10000.0), "1.000 ha (10000.0 ㎡)");
+        assert_eq!(format_area_m2(25000.0), "2.500 ha (25000.0 ㎡)");
+    }
+
+    /// R9 — `MeasureOps::gridBearingDegrees` `MeasureOps.cpp:73-82`.
+    /// 북 0°, 동 90°, 남 180°, 서 270° 이고, 같은 점이면 NaN.
+    #[test]
+    fn test_r9_grid_bearing_degrees_matches_measureops() {
+        let o = [0.0, 0.0];
+        assert_eq!(grid_bearing_degrees(o, [0.0, 10.0]), 0.0); // 북
+        assert_eq!(grid_bearing_degrees(o, [10.0, 0.0]), 90.0); // 동
+        assert_eq!(grid_bearing_degrees(o, [0.0, -10.0]), 180.0); // 남
+        assert_eq!(grid_bearing_degrees(o, [-10.0, 0.0]), 270.0); // 서
+        assert!(grid_bearing_degrees(o, o).is_nan(), "같은 점은 NaN");
+    }
+
+    /// R9 — `MeasureOps::polygonPerimeterMeters` `MeasureOps.cpp:129-147`.
+    /// 점이 3개 미만이면 0, 3개면 닫는 변까지 더한다.
+    #[test]
+    fn test_r9_ring_perimeter_m_matches_measureops() {
+        assert_eq!(ring_perimeter_m(&[]), 0.0);
+        assert_eq!(ring_perimeter_m(&[[0.0, 0.0], [10.0, 0.0]]), 0.0);
+        let square = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]];
+        assert!((ring_perimeter_m(&square) - 40.0).abs() < 1e-9);
+        // 삼각형: 닫는 변(마지막→처음)까지 더한다
+        let tri = [[0.0, 0.0], [3.0, 0.0], [0.0, 4.0]];
+        assert!((ring_perimeter_m(&tri) - 12.0).abs() < 1e-9);
     }
 }
