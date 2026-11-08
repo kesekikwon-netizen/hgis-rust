@@ -755,7 +755,8 @@ fn percent_encode(input: &str) -> String {
     out
 }
 
-fn http_get_bytes(url: &str) -> Result<Vec<u8>, String> {
+/// curl 로 GET — `vworld_client` 의 지적도·행정구역 다운로드도 같은 방식을 쓴다.
+pub(crate) fn http_get_bytes(url: &str) -> Result<Vec<u8>, String> {
     let curl_bin = if cfg!(target_os = "windows") {
         "curl.exe"
     } else {

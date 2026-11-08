@@ -343,6 +343,7 @@ pub fn render_download_and_print_dialogs(
             render_topographic_browser(app, ctx, open);
         }
         ActiveModalDialog::CadastralDownload => {
+            crate::cadastral_download_ui::render_cadastral_download(app, ctx, open);
         }
         ActiveModalDialog::TrenchGenerator => {
             egui::Window::new("ka_modal_trench")
@@ -2623,6 +2624,10 @@ fn render_topographic_browser(app: &mut StrataAppState, ctx: &egui::Context, ope
                         .size(12.5)
                         .color(Color32::from_rgb(95, 94, 88)),
                     );
+                    ui.add_space(6.0);
+                    // 1단계 「도엽 확인」은 로그인 없이 실제 HTTP 로 된다
+                    // (`ngii-topographic.js:43,63` → `combineBufferQuery.do` → `suchiQuery.do`).
+                    crate::ngii_topographic_ui::render_sheet_lookup(app, ui, ctx);
                     ui.add_space(6.0);
                     // 진행 로그
                     for line in app.modals.topo_browser_log.iter().rev().take(3) {
