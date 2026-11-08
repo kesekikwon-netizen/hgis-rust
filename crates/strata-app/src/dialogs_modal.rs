@@ -133,14 +133,26 @@ pub struct ModalDialogController {
     pub heritage_request_log: Vec<String>,
     pub heritage_selected_row: Option<usize>,
     // T9 KaTopographicImportDialog ("수치지형도 — 좌표계 확인과 지도 추가") 상태
-    pub topo_row_checks: [bool; 6],
-    pub topo_row_crs_idx: [usize; 6],
-    pub topo_row_already_loaded: [bool; 6],
+    /// C++ `MainWindowTopographic.cpp:131-148` `showTopographicFiles(folder)` 의 그 폴더.
+    /// 비어 있으면 아직 고르지 않았다.
+    pub topo_folder: String,
+    /// 폴더를 실제로 스캔했는가(`TopographicCatalog::scan` 을 한 번 돌렸는가).
+    pub topo_scanned: bool,
+    /// C++ `KaTopographicImportDialog::m_records` — 스캔 결과 그대로.
+    pub topo_records: Vec<strata_net::topographic_catalog::Record>,
+    pub topo_row_checks: Vec<bool>,
+    pub topo_row_crs_idx: Vec<usize>,
+    pub topo_row_already_loaded: Vec<bool>,
     pub topo_selected_row: usize,
     pub topo_maps_enabled: bool,
     pub topo_progress_pct: f32,
     pub topo_status_text: String,
     pub topo_imported_count: usize,
+    /// C++ `ScanResult.filesRead` / `cacheHits` / `warnings` — 상태줄 문구용.
+    pub topo_files_read: usize,
+    pub topo_cache_hits: usize,
+    pub topo_warnings: Vec<String>,
+    pub topo_scan_error: Option<String>,
     // D4 KaTopographicBrowser ("수치지형도 내려받기") 상태
     /// false = compact summary panel, true = expanded official details
     pub topo_browser_detail: bool,
@@ -255,14 +267,21 @@ impl Default for ModalDialogController {
                 ),
             ],
             heritage_selected_row: Some(0),
-            topo_row_checks: [true, true, true, true, true, false],
-            topo_row_crs_idx: [1, 1, 12, 4, 3, 0],
-            topo_row_already_loaded: [true, true, false, false, false, false],
-            topo_selected_row: 4,
+            topo_folder: String::new(),
+            topo_scanned: false,
+            topo_records: Vec::new(),
+            topo_row_checks: Vec::new(),
+            topo_row_crs_idx: Vec::new(),
+            topo_row_already_loaded: Vec::new(),
+            topo_selected_row: 0,
             topo_maps_enabled: true,
             topo_progress_pct: 1.0,
-            topo_status_text: "레이어 6개 · 파일 6개 확인 · 캐시 4개. 추가할 항목에 체크하세요.\n검토 필요: DXF 파일(35905086_행정경계.dxf)은 .prj가 없어 중부원점(EPSG:5186)과 동부원점(EPSG:5187) 판별이 애매합니다. 자동으로 지도에 추가하지 않습니다.".to_owned(),
-            topo_imported_count: 2,
+            topo_status_text: String::new(),
+            topo_imported_count: 0,
+            topo_files_read: 0,
+            topo_cache_hits: 0,
+            topo_warnings: Vec::new(),
+            topo_scan_error: None,
             topo_browser_detail: false,
             topo_browser_stage: 0,
             topo_browser_login_id: String::new(),
@@ -274,6 +293,100 @@ impl Default for ModalDialogController {
                 "도엽 확인 — 현재 조사 주변 1:25,000 DXF 도엽을 고릅니다.".to_owned(),
             ],
         }
+    }
+}
+
+/// C++ `KaTopographicImportDialog::recordKey` — 같은 자료를 알아보는 열쇠.
+/// C++ 은 원본·레이어·서명·CAD 레이어·도형 갈래를 SHA-256 으로 묶는다(`:401-404`).
+#[must_use]
+pub fn topo_record_key(record: &strata_net::topographic_catalog::Record) -> String {
+    format!(
+        "{}|{}|{}",
+        record.source, record.layer_name, record.cad_layer
+    )
+}
+
+/// C++ `KaTopographicImportDialog.cpp:476` 콤보 첫 줄.
+pub const TOPO_CRS_UNKNOWN: &str = "좌표계 미확인 — 선택 필요";
+
+/// C++ `KaTopographicImportDialog.cpp:479` 후보 목록(이 순서 그대로).
+pub const TOPO_CRS_CANDIDATES: [u32; 12] = [
+    5185, 5186, 5187, 5188, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 4326,
+];
+
+/// C++ `KaTopographicImportDialog.cpp:243-259` `crsLabel` 이 돌려주는 이름.
+#[must_use]
+pub const fn topo_crs_label_ko(epsg: u32) -> &'static str {
+    match epsg {
+        5185 => "서부원점(GRS80) · EPSG:5185",
+        5186 => "중부원점(GRS80) · EPSG:5186",
+        5187 => "동부원점(GRS80) · EPSG:5187",
+        5188 => "동해원점(GRS80) · EPSG:5188",
+        5173 => "서부원점(보정 베셀) · EPSG:5173",
+        5174 => "중부원점(보정 베셀) · EPSG:5174",
+        5175 => "제주원점(보정 베셀) · EPSG:5175",
+        5176 => "동부원점(보정 베셀) · EPSG:5176",
+        5177 => "동해원점(보정 베셀) · EPSG:5177",
+        5178 => "UTM-K(베셀) · EPSG:5178",
+        5179 => "UTM-K(GRS80) · EPSG:5179",
+        4326 => "경위도(WGS84) · EPSG:4326",
+        _ => TOPO_CRS_UNKNOWN,
+    }
+}
+
+/// 표 한 줄에 그릴 값 — 창을 그리는 동안 `self` 를 빌리지 않게 미리 뽑아 둔다.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopoTableRow {
+    /// `KaTopographicImportDialog.cpp:466` — `[검토 필요]` 를 뺀 이름.
+    pub label: String,
+    pub file_name: String,
+    /// 있으면 `[검토 필요]` 로 표시하고 자동 체크하지 않는다(`:465-470`).
+    pub review_reason: Option<String>,
+    /// `:488-491` 범위 문구.
+    pub extent_label: String,
+    /// `:476-486` 콤보 항목. 0 번은 늘 「좌표계 미확인」, 1 번은 `.prj` 파일 정보(있을 때).
+    pub choices: Vec<String>,
+}
+
+impl TopoTableRow {
+    #[must_use]
+    pub fn choice_label(&self, index: usize) -> String {
+        self.choices
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| TOPO_CRS_UNKNOWN.to_owned())
+    }
+
+    /// `.prj` 에서 읽은 좌표계를 콤보 자리로 바꾼다. 없으면 0(미확인).
+    #[must_use]
+    pub fn default_choice_index(&self, record: &strata_net::topographic_catalog::Record) -> usize {
+        if record.crs_epsg().is_some() && self.choices.len() > 1 {
+            1
+        } else {
+            0
+        }
+    }
+
+    /// 고른 좌표계가 작업 좌표계 계열(GRS80 원점대)인가.
+    /// C++ `previewCurrent(:498-522)` 는 실제로 좌표변환해 겹쳐 보지만, 이 창에는 지도 캔버스가
+    /// 없어 같은 판단만 보인다. 베셀·경위도는 원점대가 달라 그대로 겹치지 않는다.
+    #[must_use]
+    pub fn choice_is_work_crs_family(&self, index: usize) -> bool {
+        self.choices
+            .get(index)
+            .and_then(|choice| choice.rsplit_once("EPSG:"))
+            .and_then(|(_, code)| code.parse::<u32>().ok())
+            .is_some_and(|epsg| matches!(epsg, 5186 | 5187 | 5188 | 5185 | 5179))
+    }
+}
+
+/// `.prj` 에서 읽은 EPSG 를 콤보 자리로. 못 읽었으면 0(미확인), 읽었으면 1(파일 정보).
+#[must_use]
+pub fn topo_default_crs_idx(epsg: Option<u32>) -> usize {
+    if epsg.is_some() {
+        1
+    } else {
+        0
     }
 }
 
@@ -437,6 +550,135 @@ impl ModalDialogController {
         }
         self.active = Some(dialog);
         true
+    }
+
+    /// C++ `KaTopographicImportDialog.cpp:433-448` `scanFolder` — 폴더를 실제로 훑는다.
+    /// 안내문은 `:437`, 결과는 `:449-497` `populate` 를 따른다.
+    pub fn rescan_topo_folder(&mut self, folder: &std::path::Path) {
+        self.topo_folder = folder.to_string_lossy().into_owned();
+        self.topo_status_text =
+            "받은 자료를 확인하고 있습니다… 지도 작업을 계속할 수 있습니다.".to_owned();
+        self.topo_progress_pct = 0.0;
+        let result = strata_net::topographic_catalog::scan_folder(folder);
+        self.topo_scanned = true;
+        // C++ `:450-453` — 취소·오류면 기존 목록을 건드리지 않고 문구만 바꾼다.
+        if let Some(error) = result.error {
+            self.topo_scan_error = Some(error.clone());
+            self.topo_status_text = error;
+            self.topo_progress_pct = 0.0;
+            return;
+        }
+        self.topo_scan_error = None;
+        self.topo_files_read = result.files_read;
+        self.topo_cache_hits = result.cache_hits;
+        self.topo_warnings = result.warnings.clone();
+        // C++ `:454-459` — 이전에 사용자가 만진 체크·좌표계 선택을 같은 항목에 옮긴다.
+        let previous: Vec<(String, bool, usize)> = self
+            .topo_records
+            .iter()
+            .enumerate()
+            .filter_map(|(index, record)| {
+                let checked = *self.topo_row_checks.get(index)?;
+                let crs_idx = *self.topo_row_crs_idx.get(index)?;
+                Some((topo_record_key(record), checked, crs_idx))
+            })
+            .collect();
+        self.topo_row_checks = result
+            .records
+            .iter()
+            .map(|record| {
+                let key = topo_record_key(record);
+                previous
+                    .iter()
+                    .find(|(known, _, _)| *known == key)
+                    .map_or_else(|| record.initially_selected(), |(_, checked, _)| *checked)
+            })
+            .collect();
+        self.topo_row_crs_idx = result
+            .records
+            .iter()
+            .map(|record| {
+                let key = topo_record_key(record);
+                previous
+                    .iter()
+                    .find(|(known, _, _)| *known == key)
+                    .map_or_else(|| topo_default_crs_idx(record.crs_epsg()), |(_, _, index)| *index)
+            })
+            .collect();
+        self.topo_row_already_loaded = vec![false; result.records.len()];
+        self.topo_selected_row = 0;
+        // C++ `:494-495` 상태줄 — 레코드를 옮기기 전에 만든다.
+        let summary = result.summary_ko();
+        self.topo_records = result.records;
+        self.topo_progress_pct = 1.0;
+        self.topo_status_text = summary;
+    }
+
+    /// 표에 그릴 줄들 — `KaTopographicImportDialog.cpp:462-491` `populate` 의 표 부분.
+    #[must_use]
+    pub fn topo_table_rows(&self) -> Vec<TopoTableRow> {
+        self.topo_records
+            .iter()
+            .map(|record| {
+                // C++ `:475-482` — 0 번은 「좌표계 미확인」, 1 번은 .prj 파일 정보,
+                // 이어서 후보 열두 개.
+                let mut choices = vec![TOPO_CRS_UNKNOWN.to_owned()];
+                if let Some(epsg) = record.crs_epsg() {
+                    choices.push(format!("파일 정보: {}", topo_crs_label_ko(epsg)));
+                }
+                for epsg in TOPO_CRS_CANDIDATES {
+                    choices.push(topo_crs_label_ko(epsg).to_owned());
+                }
+                TopoTableRow {
+                    label: record.label_ko().to_owned(),
+                    file_name: std::path::Path::new(&record.source)
+                        .file_name()
+                        .map_or_else(
+                            || record.source.clone(),
+                            |name| name.to_string_lossy().into_owned(),
+                        ),
+                    review_reason: record.review_reason.clone(),
+                    extent_label: record.extent_label_ko(),
+                    choices,
+                }
+            })
+            .collect()
+    }
+
+    /// C++ `:433-434` 색인 취소 — 목록을 비우고 문구만 남긴다.
+    pub fn cancel_topo_scan(&mut self) {
+        self.topo_status_text = "색인을 취소했습니다. 기존 지도는 유지됩니다.".to_owned();
+        self.topo_progress_pct = 0.0;
+    }
+
+    /// 체크된 항목 가운데 올릴 수 없는 것이 있으면 C++ 문구(`:529-537`).
+    /// C++ 은 범위를 먼저 보고, 이어서 **콤보에서 고른** 좌표계가 유효한지 본다.
+    /// `.prj` 를 못 읽어 0(「좌표계 미확인」)으로 남은 항목은 사용자가 골라야 한다.
+    #[must_use]
+    pub fn topo_blocking_message(&self) -> Option<&'static str> {
+        if self.topo_records.iter().enumerate().any(|(index, record)| {
+            self.topo_row_checks.get(index).copied().unwrap_or(false) && !record.has_extent()
+        }) {
+            return Some(strata_net::topographic_catalog::IMPORT_NEEDS_EXTENT);
+        }
+        if self.topo_records.iter().enumerate().any(|(index, _)| {
+            self.topo_row_checks.get(index).copied().unwrap_or(false)
+                && self.topo_row_crs_idx.get(index).copied().unwrap_or(0) == 0
+        }) {
+            return Some(strata_net::topographic_catalog::IMPORT_NEEDS_CRS);
+        }
+        None
+    }
+
+    /// 체크된 항목의 행 번호들.
+    #[must_use]
+    pub fn topo_checked_rows(&self) -> Vec<usize> {
+        self.topo_row_checks
+            .iter()
+            .enumerate()
+            .filter(|(_, checked)| **checked)
+            .map(|(index, _)| index)
+            .collect()
     }
 
     /// C++ `KaModalDialogController` ESC 취소 및 미저장 입력값 존재 시 닫기 확인(`"저장되지 않은 변경사항이 있습니다. 닫으시겠습니까?"`)
@@ -3064,5 +3306,126 @@ mod tests {
             assert!(ctrl.show_exclusive_modal(variant));
             assert_eq!(ctrl.active, Some(variant));
         }
+    }
+
+    /// 임시 폴더에 가짜 자료를 만들고 스캔 결과가 창 상태로 옮겨지는지 본다.
+    /// C++ `KaTopographicImportDialog.cpp:433-497` `scanFolder` → `populate`.
+    #[test]
+    fn test_r14_topographic_import_reads_the_real_folder_instead_of_fixed_rows() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let folder = std::env::temp_dir().join(format!(
+            "ka_hgis_r14_app_{}_{nanos}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("임시 폴더");
+        let mut header = vec![0_u8; 100];
+        header[..4].copy_from_slice(&9994_u32.to_be_bytes());
+        for (offset, value) in [(36, 218_450.0_f64), (44, 359_800.0), (52, 221_250.0), (60, 362_400.0)]
+        {
+            header[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        std::fs::write(folder.join("A0010000.shp"), &header).expect("shp");
+        std::fs::write(
+            folder.join("A0010000.prj"),
+            "PROJCS[\"Korea 2000 / East Belt\",AUTHORITY[\"EPSG\",\"5187\"]]",
+        )
+        .expect("prj");
+        // .prj 없는 DXF — C++ 규칙대로 [검토 필요]이고 자동 체크되지 않는다.
+        std::fs::write(
+            folder.join("행정경계.dxf"),
+            "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\nG0010000\n10\n0.0\n20\n0.0\n\
+             0\nLINE\n8\nG0010000\n10\n10.0\n20\n10.0\n0\nENDSEC\n0\nEOF\n",
+        )
+        .expect("dxf");
+
+        let mut ctrl = ModalDialogController::default();
+        // 시작할 때는 하드코딩 목록이 없다.
+        assert!(ctrl.topo_records.is_empty());
+        assert!(ctrl.topo_row_checks.is_empty());
+        assert!(!ctrl.topo_scanned);
+
+        ctrl.rescan_topo_folder(&folder);
+        assert_eq!(std::fs::remove_dir_all(&folder).is_ok(), true);
+
+        assert!(ctrl.topo_scanned);
+        assert_eq!(ctrl.topo_records.len(), 2);
+        assert_eq!(ctrl.topo_row_checks.len(), 2);
+        assert_eq!(ctrl.topo_files_read, 2);
+        // C++ `:469-470` — 도로는 체크, 검토 필요 DXF 는 해제.
+        let road = ctrl
+            .topo_records
+            .iter()
+            .position(|r| r.layer_name == "A0010000")
+            .expect("도로 레코드");
+        let review = ctrl
+            .topo_records
+            .iter()
+            .position(|r| r.review_reason.is_some())
+            .expect("검토 필요 레코드");
+        assert!(ctrl.topo_row_checks[road]);
+        assert!(!ctrl.topo_row_checks[review]);
+        // `.prj` 를 읽었으므로 콤보가 「파일 정보」를 가리킨다(C++ `:484`).
+        assert_eq!(ctrl.topo_row_crs_idx[road], 1);
+        assert_eq!(ctrl.topo_row_crs_idx[review], 0);
+
+        let rows = ctrl.topo_table_rows();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[road].label, "도로경계(미분류)");
+        assert_eq!(
+            rows[road].extent_label,
+            "X 218450.0 ~ 221250.0\nY 359800.0 ~ 362400.0"
+        );
+        assert!(rows[review].review_reason.is_some());
+        assert_eq!(rows[review].extent_label, "X 0.0 ~ 10.0\nY 0.0 ~ 10.0");
+        // 상태줄은 C++ `:494-495` 문구다.
+        assert!(ctrl.topo_status_text.starts_with("레이어 2개 · 파일 2개 확인 · 캐시 0개."));
+        assert!((ctrl.topo_progress_pct - 1.0).abs() < 1e-6);
+
+        // 체크된 항목(도로)만으로는 막히지 않는다.
+        assert_eq!(ctrl.topo_blocking_message(), None);
+        assert_eq!(ctrl.topo_checked_rows(), vec![road]);
+
+        // 검토 필요 항목을 사용자가 직접 체크하면 추가는 되지만, 좌표계를 골라야 한다
+        // (C++ `:534-536`).
+        ctrl.topo_row_checks[review] = true;
+        assert_eq!(
+            ctrl.topo_blocking_message(),
+            Some(strata_net::topographic_catalog::IMPORT_NEEDS_CRS)
+        );
+        ctrl.topo_row_crs_idx[review] = 2; // 후보 중 하나를 직접 고른다(C++ `:533-537`)
+        assert_eq!(ctrl.topo_blocking_message(), None);
+
+        // 없는 폴더는 C++ `TopographicCatalog.cpp:262` 문구로 끝나고 목록은 그대로다.
+        let before = ctrl.topo_records.len();
+        ctrl.rescan_topo_folder(&std::env::temp_dir().join("ka_hgis_r14_없는폴더"));
+        assert!(ctrl.topo_status_text.starts_with("수치지형도 폴더를 읽을 수 없습니다:"));
+        assert_eq!(ctrl.topo_records.len(), before, "오류일 때 기존 목록을 지우지 않는다");
+
+        // 색인 취소 문구(C++ `:451`).
+        ctrl.cancel_topo_scan();
+        assert_eq!(
+            ctrl.topo_status_text,
+            "색인을 취소했습니다. 기존 지도는 유지됩니다."
+        );
+    }
+
+    /// C++ `KaTopographicImportDialog.cpp:243-259,479-482` — 좌표계 이름표와 후보 12종.
+    #[test]
+    fn test_r14_topographic_crs_labels_follow_the_cpp_dialog() {
+        assert_eq!(topo_crs_label_ko(5187), "동부원점(GRS80) · EPSG:5187");
+        assert_eq!(topo_crs_label_ko(5176), "동부원점(보정 베셀) · EPSG:5176");
+        assert_eq!(topo_crs_label_ko(5179), "UTM-K(GRS80) · EPSG:5179");
+        assert_eq!(topo_crs_label_ko(4326), "경위도(WGS84) · EPSG:4326");
+        assert_eq!(topo_crs_label_ko(9999), TOPO_CRS_UNKNOWN);
+        assert_eq!(
+            TOPO_CRS_CANDIDATES,
+            [5185, 5186, 5187, 5188, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 4326]
+        );
+        // .prj 를 읽었으면 1(파일 정보), 못 읽었으면 0(미확인).
+        assert_eq!(topo_default_crs_idx(Some(5187)), 1);
+        assert_eq!(topo_default_crs_idx(None), 0);
     }
 }
