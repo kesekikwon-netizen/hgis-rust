@@ -272,6 +272,58 @@ impl Default for ModalDialogController {
 }
 
 impl ModalDialogController {
+    /// C++ `KaLineColorDialog.cpp:48-51` — 면·래스터·음영 레이어는 선 색을 바꾸지 않는다.
+    #[must_use]
+    pub fn is_line_map_layer(layer_name: &str) -> bool {
+        const NON_LINE: [&str; 7] = [
+            "지형 음영",
+            "지표모델(DSM) 30m · Coperni...",
+            "토양도",
+            "지질도",
+            "고지형",
+            "위성",
+            "항공",
+        ];
+        !NON_LINE.iter().any(|n| layer_name.contains(n))
+    }
+
+    /// C++ `KaSurveyAreaDialog.cpp:24-43` `readableTextOn` — WCAG 상대 휘도로
+    /// 배경 위에서 읽히는 글자색을 고른다(명암비 4.5 이상이면 흰색).
+    #[must_use]
+    pub fn readable_text_on(r: u8, g: u8, b: u8) -> egui::Color32 {
+        let lin = |c: u8| -> f64 {
+            let s = f64::from(c) / 255.0;
+            if s <= 0.040_45 {
+                s / 12.92
+            } else {
+                ((s + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+        let contrast_white = 1.05 / (lum + 0.05);
+        if contrast_white >= 4.5 {
+            egui::Color32::from_rgb(255, 255, 255)
+        } else {
+            egui::Color32::from_rgb(30, 35, 45)
+        }
+    }
+
+    /// C++ `KaSubmitDialog.cpp:109-121` — 검수 실패 항목의 바로가기 버튼 이름.
+    #[must_use]
+    pub fn submit_action_label(action: &str) -> Option<&'static str> {
+        match action {
+            "open_layout" => Some("도면 열기"),
+            "draw_survey_area" => Some("조사구역 그리기"),
+            "draw_feature" => Some("유구 그리기"),
+            "add_control_point" => Some("기준점 찍기"),
+            "edit_attributes" => Some("속성 고치기"),
+            "vertex_edit" => Some("꼭짓점 편집"),
+            "select_tool" => Some("도형 선택"),
+            "set_work_crs" => Some("좌표계 고르기"),
+            _ => None,
+        }
+    }
+
     /// C++ KaClosePrompt.cpp:12-22 `withObjectParticle` — attach 을/를 to a
     /// Korean name using the Hangul batchim (final consonant) rule.
     pub fn with_object_particle(name: &str) -> String {
@@ -982,6 +1034,54 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                                 ));
                                                 app.modals.active = None;
                                             }
+                                            // KaSubmitDialog.cpp:180-200 — 실패 항목의 바로가기 버튼
+                                            if !r.passed {
+                                                if let Some(lbl) =
+                                                    ModalDialogController::submit_action_label(&r.action)
+                                                {
+                                                    if ui.small_button(lbl).clicked() {
+                                                        match r.action.as_str() {
+                                                            "open_layout" => {
+                                                                app.active_tab = MainTab::Drawing;
+                                                            }
+                                                            "draw_survey_area"
+                                                            | "draw_feature" => {
+                                                                app.active_tab = MainTab::Map;
+                                                                app.active_tool =
+                                                                    strata_canvas2d::map_tools::MapToolKind::DrawPolygon;
+                                                            }
+                                                            "add_control_point" => {
+                                                                app.active_tab = MainTab::Map;
+                                                                app.modals.active = Some(
+                                                                    ActiveModalDialog::ControlPoint,
+                                                                );
+                                                            }
+                                                            "edit_attributes" => {
+                                                                app.active_tab = MainTab::Map;
+                                                                app.right_inspector.active_card =
+                                                                    crate::right_inspector::InspectorCardTab::LayerStyleCard;
+                                                            }
+                                                            "select_tool" => {
+                                                                app.active_tab = MainTab::Map;
+                                                                app.active_tool =
+                                                                    strata_canvas2d::map_tools::MapToolKind::Select;
+                                                            }
+                                                            "set_work_crs" => {
+                                                                app.modals.active = Some(
+                                                                    ActiveModalDialog::AccountSettings,
+                                                                );
+                                                            }
+                                                            _ => {
+                                                                app.active_tab = MainTab::Map;
+                                                            }
+                                                        }
+                                                        app.home_map.draw_guide_message = Some(format!(
+                                                            "{} — 「{}」", lbl, r.id
+                                                        ));
+                                                        app.modals.active = None;
+                                                    }
+                                                }
+                                            }
                                             let (badge, col) = if r.passed {
                                                 (format!("[통과·{}]", r.severity), Color32::from_rgb(21, 128, 61))
                                             } else if r.severity == "error" {
@@ -1622,6 +1722,18 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                             .color(Color32::from_rgb(0x47, 0x55, 0x69)),
                     );
                     ui.add_space(6.0);
+                    // KaLineColorDialog.cpp:48-51 — 선이 아닌 레이어 경고
+                    if !ModalDialogController::is_line_map_layer(&target_layer) {
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "「{target_layer}」은 색을 바꾸지 않습니다.\n면을 색으로 채운 지도(토양도·지질도)와 점·글자는 공식 범례·도면 표시 그대로 둡니다.\n도면 선·받은 지적도·등고선처럼 선으로 된 지도나 조사 데이터 레이어를 고르세요."
+                            ))
+                            .size(11.0)
+                            .color(Color32::from_rgb(0x9A, 0x34, 0x12)),
+                        );
+                    }
+                    ui.add_space(6.0);
 
                     let [r, g, b] = app.modals.line_color_rgb;
                     let fg = if i32::from(r) + i32::from(g) + i32::from(b) > 380 {
@@ -1688,8 +1800,9 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                             ui.horizontal(|ui| {
                                 ui.add(
                                     egui::DragValue::new(&mut app.modals.line_width_mm)
-                                        .range(0.5..=5.0)
-                                        .speed(0.25)
+                                        .range(0.1..=5.0)
+                                        .speed(0.1)
+                                        .fixed_decimals(2)
                                         .suffix(" mm"),
                                 );
                                 for w_mm in [0.5_f32, 1.0, 1.5, 2.0, 3.0] {
@@ -1727,7 +1840,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                 app.modals.active = None;
                             }
                             let ok_btn = egui::Button::new(
-                                egui::RichText::new("확인")
+                                egui::RichText::new("적용")
                                     .color(Color32::WHITE)
                                     .strong(),
                             )
@@ -2157,13 +2270,13 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                 .show(ui, |ui| {
                                     ui.set_min_width(modal_w - 44.0);
                                     for (col_lbl, w) in [
-                                        ("자료", 210.0),
-                                        ("종류", 72.0),
-                                        ("범위", 108.0),
-                                        ("받은 날짜", 108.0),
+                                        ("자료", 176.0),
+                                        ("종류", 68.0),
+                                        ("범위", 96.0),
+                                        ("받은 날짜", 96.0),
                                         ("크기", 56.0),
-                                        ("현장(오프라인)", 175.0),
-                                        ("받기 / 설정", 92.0),
+                                        ("현장(오프라인)", 150.0),
+                                        ("받기 / 설정", 86.0),
                                     ] {
                                         ui.add_sized(
                                             [w, 18.0],
@@ -2212,7 +2325,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                             .spacing([8.0, 4.0])
                                             .show(ui, |ui| {
                                                 ui.add_sized(
-                                                    [210.0, 22.0],
+                                                    [176.0, 22.0],
                                                     egui::Label::new(
                                                         egui::RichText::new(name)
                                                             .size(11.5)
@@ -2221,32 +2334,40 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                                     .truncate(),
                                                 );
                                                 ui.add_sized(
-                                                    [72.0, 22.0],
+                                                    [68.0, 22.0],
                                                     egui::Label::new(
                                                         egui::RichText::new(kind_lbl).size(11.5),
                                                     ),
                                                 );
                                                 ui.add_sized(
-                                                    [108.0, 22.0],
+                                                    [96.0, 22.0],
                                                     egui::Label::new(
                                                         egui::RichText::new(extent_txt).size(11.0),
                                                     ),
                                                 );
                                                 ui.add_sized(
-                                                    [108.0, 22.0],
+                                                    [96.0, 22.0],
                                                     egui::Label::new(
                                                         egui::RichText::new(received_txt)
                                                             .monospace()
                                                             .size(11.0),
                                                     ),
                                                 );
-                                                ui.add_sized(
-                                                    [56.0, 22.0],
-                                                    egui::Label::new(
-                                                        egui::RichText::new(size_txt)
-                                                            .monospace()
-                                                            .size(11.0),
+                                                // KaReferenceStatusDialog.cpp:106-109 — 크기 열 우측 정렬
+                                                ui.with_layout(
+                                                    egui::Layout::right_to_left(
+                                                        egui::Align::Center,
                                                     ),
+                                                    |ui| {
+                                                        ui.add_sized(
+                                                            [56.0, 22.0],
+                                                            egui::Label::new(
+                                                                egui::RichText::new(size_txt)
+                                                                    .monospace()
+                                                                    .size(11.5),
+                                                            ),
+                                                        );
+                                                    },
                                                 );
                                                 // KaReferenceStatusDialog.cpp:110 — Offline 아니면 warnMark(#7A5A00) 표시
                                                 let (status_prefix, status_col) = if is_offline {
@@ -2255,7 +2376,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                                     ("▲ ", Color32::from_rgb(0x7A, 0x5A, 0x00))
                                                 };
                                                 ui.add_sized(
-                                                    [175.0, 22.0],
+                                                    [150.0, 22.0],
                                                     egui::Label::new(
                                                         egui::RichText::new(format!(
                                                             "{status_prefix}{offline_txt}"
@@ -2312,6 +2433,59 @@ mod tests {
     use super::*;
 
     // D8 KaNewSurveyDialog / KaLongitudeRuler / KaLayerInformationPanel
+    // D16 KaLineColorDialog / KaSurveyAreaDialog / KaSubmitDialog
+    #[test]
+    fn test_d16_line_color_survey_area_and_submit_actions() {
+        // 선 레이어만 색을 바꾼다 (KaLineColorDialog.cpp:48-51)
+        assert!(ModalDialogController::is_line_map_layer("도면 선"));
+        assert!(ModalDialogController::is_line_map_layer("등고선"));
+        assert!(ModalDialogController::is_line_map_layer("조사구역"));
+        assert!(!ModalDialogController::is_line_map_layer("지형 음영"));
+        assert!(!ModalDialogController::is_line_map_layer("토양도"));
+        assert!(!ModalDialogController::is_line_map_layer("지질도"));
+        assert!(!ModalDialogController::is_line_map_layer("위성"));
+
+        // WCAG readable text (KaSurveyAreaDialog.cpp:24-43)
+        // 어두운 배경 -> 흰 글자, 밝은 배경 -> 먹색
+        assert_eq!(
+            ModalDialogController::readable_text_on(20, 25, 35),
+            egui::Color32::from_rgb(255, 255, 255)
+        );
+        assert_eq!(
+            ModalDialogController::readable_text_on(250, 250, 245),
+            egui::Color32::from_rgb(30, 35, 45)
+        );
+
+        // 검수 실패 바로가기 (KaSubmitDialog.cpp:109-121)
+        assert_eq!(
+            ModalDialogController::submit_action_label("open_layout"),
+            Some("도면 열기")
+        );
+        assert_eq!(
+            ModalDialogController::submit_action_label("draw_survey_area"),
+            Some("조사구역 그리기")
+        );
+        assert_eq!(
+            ModalDialogController::submit_action_label("set_work_crs"),
+            Some("좌표계 고르기")
+        );
+        assert_eq!(ModalDialogController::submit_action_label("unknown"), None);
+
+        // 8개 action 이 모두 C++ 라벨을 가진다
+        for a in [
+            "open_layout",
+            "draw_survey_area",
+            "draw_feature",
+            "add_control_point",
+            "edit_attributes",
+            "vertex_edit",
+            "select_tool",
+            "set_work_crs",
+        ] {
+            assert!(ModalDialogController::submit_action_label(a).is_some());
+        }
+    }
+
     #[test]
     fn test_d8_new_survey_longitude_ruler_and_layer_display_settings() {
         use crate::gui_layer_panel::KA_LABEL_INKS;

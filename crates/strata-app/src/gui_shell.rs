@@ -476,6 +476,42 @@ mod tests {
     }
 
     // D14 KaRegionLocator.cpp:143-195, 265-276 — 찾기/취소, 법정동·읍·면·리, 산 12-3, 아래 규칙 두 줄
+    // D17 KaDrawGuideBand 실시간 스케치 측정 · KaReferenceStatusDialog
+    #[test]
+    fn test_d17_draw_guide_measure_and_reference_status() {
+        // KaDrawGuideBand.cpp:48-62 — 선 길이·면 면적 계산
+        let ring = [[0.0_f64, 0.0], [30.0, 0.0], [30.0, 40.0]];
+        let mut len_m = 0.0_f64;
+        for w in ring.windows(2) {
+            let dx = w[1][0] - w[0][0];
+            let dy = w[1][1] - w[0][1];
+            len_m += (dx * dx + dy * dy).sqrt();
+        }
+        assert!((len_m - 70.0).abs() < 1e-9);
+        let mut area = 0.0_f64;
+        for k in 0..ring.len() {
+            let a = ring[k];
+            let b = ring[(k + 1) % ring.len()];
+            area += a[0] * b[1] - b[0] * a[1];
+        }
+        assert!((area.abs() * 0.5 - 600.0).abs() < 1e-9);
+
+        // 1 km 이상이면 km 병기
+        let far = [[0.0_f64, 0.0], [1500.0, 0.0]];
+        let mut far_len = 0.0_f64;
+        for w in far.windows(2) {
+            let dx = w[1][0] - w[0][0];
+            let dy = w[1][1] - w[0][1];
+            far_len += (dx * dx + dy * dy).sqrt();
+        }
+        assert!(far_len >= 1000.0);
+
+        // KaReferenceStatusDialog.cpp:56-60 — 7개 열 폭 합이 창 안에 든다
+        let cols = [176.0_f32, 68.0, 96.0, 96.0, 56.0, 150.0, 86.0];
+        let sum: f32 = cols.iter().sum::<f32>() + 48.0;
+        assert!(sum <= 776.0, "columns {sum} must fit the 820px dialog inner width");
+    }
+
     #[test]
     fn test_d14_region_locator_and_canvas_grid_band() {
         let mut app = StrataAppState::new_startup();

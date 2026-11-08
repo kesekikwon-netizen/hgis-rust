@@ -675,16 +675,16 @@ impl StrataAppState {
             self.paint_gyeongju_heritage_canvas(ctx, &p, rect, is_trench || is_measure || is_style);
 
             // 1. KaDrawGuideBand (KaDrawGuideBand.cpp:28-70, MainWindowChrome.cpp:73-84)
-            let guide_info: Option<(String, &str)> = if is_draw_tool {
+            let guide_info: Option<(String, String)> = if is_draw_tool {
                 if effective_tool == MapToolKind::PlacePoint {
                     Some((
                         "그리기 · 유물 위치".to_owned(),
-                        "클릭한 자리에 점을 놓습니다",
+                        "클릭한 자리에 점을 놓습니다".to_owned(),
                     ))
                 } else if effective_tool == MapToolKind::DrawLine {
                     Some((
                         "그리기 · 유구 선".to_owned(),
-                        "클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)",
+                        "클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)".to_owned(),
                     ))
                 } else {
                     let target = self
@@ -698,19 +698,54 @@ impl StrataAppState {
                     } else {
                         format!("그리기 · {target}")
                     };
-                    Some((title, "클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)"))
+                    // KaDrawGuideBand.cpp:48-62 — m_measure 실시간 길이·면적
+                    let mut measure_txt = String::new();
+                    let ring = &self.home_map.scene.active_rubberband;
+                    if ring.len() >= 2 {
+                        let mut len_m = 0.0_f64;
+                        for w in ring.windows(2) {
+                            let dx = w[1][0] - w[0][0];
+                            let dy = w[1][1] - w[0][1];
+                            len_m += (dx * dx + dy * dy).sqrt();
+                        }
+                        measure_txt = if len_m >= 1000.0 {
+                            format!("길이 {:.1} m ({:.2} km)", len_m, len_m / 1000.0)
+                        } else {
+                            format!("길이 {len_m:.1} m")
+                        };
+                        if ring.len() >= 3 {
+                            let mut area = 0.0_f64;
+                            for k in 0..ring.len() {
+                                let a = ring[k];
+                                let b = ring[(k + 1) % ring.len()];
+                                area += a[0] * b[1] - b[0] * a[1];
+                            }
+                            measure_txt.push_str(&format!(
+                                " · 면적 {:.1} ㎡",
+                                area.abs() * 0.5
+                            ));
+                        }
+                    }
+                    if measure_txt.is_empty() {
+                        Some((title, "클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)".to_owned()))
+                    } else {
+                        Some((title, measure_txt))
+                    }
                 }
             } else if is_measure {
                 Some((
                     "줄자".to_owned(),
-                    "두 점을 클릭하면 거리가, 셋 이상이면 면적이 나옵니다",
+                    "두 점을 클릭하면 거리가, 셋 이상이면 면적이 나옵니다".to_owned(),
                 ))
             } else if is_trench {
-                Some(("시굴 격자".to_owned(), "격자를 놓을 원점을 클릭합니다"))
+                Some((
+                    "시굴 격자".to_owned(),
+                    "격자를 놓을 원점을 클릭합니다".to_owned(),
+                ))
             } else if is_select_tool {
                 Some((
                     "도형선택".to_owned(),
-                    "도형을 클릭하면 수정점이 나옵니다. 점을 끌어 옮깁니다",
+                    "도형을 클릭하면 수정점이 나옵니다. 점을 끌어 옮깁니다".to_owned(),
                 ))
             } else {
                 None
