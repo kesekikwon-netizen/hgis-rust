@@ -1452,15 +1452,44 @@ impl StrataAppState {
             "다른 이름" => {
                 let _ = self.save_survey_project_as();
             }
+            // C++ MainWindowEditing.cpp:182 startSelectTool — 같은 도구를 다시 누르면
+            // 이동(Pan)으로 돌아가고 상태줄에 「도형 선택 종료」를 띄운다.
             "선택" => {
                 self.active_tab = MainTab::Map;
-                self.active_tool = MapToolKind::Select;
+                if self.active_tool == MapToolKind::Select {
+                    self.active_tool = MapToolKind::Pan;
+                    self.status_bar_hint = "도형 선택 종료".to_owned();
+                } else {
+                    self.active_tool = MapToolKind::Select;
+                    self.status_bar_hint = "도형선택 — 도형을 클릭하면 점이 나옵니다. 점을 끌면 옮기고(Ctrl=자석), 점을 찍은 뒤 Delete로 지웁니다. 같은 자리를 다시 누르면 겹친 도형을 고릅니다.".to_owned();
+                }
             }
-            "측거" => self.trigger_map_ribbon_tool(MapToolKind::Measure),
+            // C++ MainWindowEditing.cpp:242 startMeasureTool — 토글 + 두 상태줄 문구
+            "측거" => {
+                if self.active_tool == MapToolKind::Measure {
+                    self.active_tool = MapToolKind::Pan;
+                    self.status_bar_hint = "줄자 종료".to_owned();
+                } else {
+                    self.active_tool = MapToolKind::Measure;
+                    self.active_tab = MainTab::Map;
+                    self.status_bar_hint =
+                        "줄자: 점을 찍고 우클릭에서 마침을 고르세요. 면적은 면적만 나옵니다."
+                            .to_owned();
+                }
+            }
+            // C++ MainWindowRibbon.cpp:345 — 다시 누르면 도구를 닫고 이동으로 돌아간다
             "그리기" => {
                 self.active_tab = MainTab::Map;
+                let was_open =
+                    self.ribbon.sub_toolbar_visible && self.ribbon.sub_mode == SubToolsMode::Draw;
                 self.ribbon.toggle_sub_mode(SubToolsMode::Draw);
-                self.active_tool = MapToolKind::DrawPolygon;
+                if was_open {
+                    self.active_tool = MapToolKind::Pan;
+                    self.status_bar_hint = "그리기 도구 모음을 닫고 지도 이동으로 돌아갑니다"
+                        .to_owned();
+                } else {
+                    self.active_tool = MapToolKind::DrawPolygon;
+                }
             }
             "시굴격자" => self.modals.active = Some(ActiveModalDialog::TrenchGenerator),
             "버퍼" => {
