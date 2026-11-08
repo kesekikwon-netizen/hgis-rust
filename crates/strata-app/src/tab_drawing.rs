@@ -11,6 +11,37 @@ pub struct DrawingTabState {
     pub last_findings: Vec<ChecklistFinding>,
     /// KaDrawingStudio.cpp:233-252 decorationSizePercent (75/100/125/150)
     pub decoration_size_percent: u32,
+    /// KaDrawingStudio.cpp:822-838 m_adjustBar — 지도 조정 모드
+    pub map_adjust_active: bool,
+    /// KaDrawingCoordCallout.cpp — 용지 위 좌표점 콜아웃
+    pub coord_callout_mode: bool,
+    pub coord_callouts: Vec<CoordCallout>,
+    /// KaDrawingSheetSet.cpp — 보관한 도면 목록
+    pub stored_sheets: Vec<StoredSheet>,
+    /// KaDrawingSheetSet.cpp:135 팝업 열림 상태
+    pub sheet_set_menu_open: bool,
+}
+
+/// KaDrawingCoordCallout.cpp — 용지 위 좌표점 하나
+#[derive(Debug, Clone)]
+pub struct CoordCallout {
+    /// A, B, C … 태그
+    pub tag: String,
+    /// 용지 위 픽셀 위치
+    pub pos: [f32; 2],
+    /// 작업 좌표 N(북), E(동)
+    pub world: [f64; 2],
+}
+
+/// KaDrawingSheetSet.cpp — 보관한 도면 한 벌
+#[derive(Debug, Clone)]
+pub struct StoredSheet {
+    pub title: String,
+    pub scale_denominator: u32,
+    pub paper_w_mm: f64,
+    pub paper_h_mm: f64,
+    pub legend_visible: bool,
+    pub title_block_visible: bool,
 }
 
 impl Default for DrawingTabState {
@@ -22,6 +53,11 @@ impl Default for DrawingTabState {
             sheet,
             last_findings,
             decoration_size_percent: 100,
+            map_adjust_active: false,
+            coord_callout_mode: false,
+            coord_callouts: Vec::new(),
+            stored_sheets: Vec::new(),
+            sheet_set_menu_open: false,
         }
     }
 }

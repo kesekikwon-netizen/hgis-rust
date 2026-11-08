@@ -1,4 +1,4 @@
-use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+use eframe::egui::{self, Color32, FontId, Pos2, Rect, Stroke, Vec2};
 use strata_canvas2d::viewport::format_scale_denominator;
 use strata_layout::badge_placer::LayoutBadgePlacer;
 use strata_layout::sheet_composer::{
@@ -1185,17 +1185,27 @@ impl StrataAppState {
                   if cell_resp.clicked() {
                     match i {
                         0 => {
-                            self.drawing.sheet.grid_enabled = !self.drawing.sheet.grid_enabled;
-                            self.home_map.draw_guide_message = Some("도면 외곽 좌표점·좌표격자 표시를 전환했습니다.".to_owned());
-                        }
+    // KaDrawingCoordCallout.cpp — 용지 위 좌표점 콜아웃 모드
+    self.drawing.coord_callout_mode = !self.drawing.coord_callout_mode;
+    self.home_map.draw_guide_message = Some(if self.drawing.coord_callout_mode {
+        "좌표점 모드 — 용지에서 꼭짓점을 찍으면 화살표와 X·Y가 붙습니다.".to_owned()
+    } else {
+        "좌표점 모드를 껐습니다.".to_owned()
+    });
+}
                         1 => {
                             self.home_map.fit_to_survey();
                             self.home_map.draw_guide_message = Some("조사구역 레이어를 도면 칸 한가운데로 맞췄습니다.".to_owned());
                         }
                         2 => {
-                            self.drawing.sheet.scale_denominator = 5_000;
-                            self.home_map.draw_guide_message = Some("도면 지도 칸의 축척과 위치를 조정했습니다 (1:5,000).".to_owned());
-                        }
+    // KaDrawingStudio.cpp:822-838 m_adjustBar — 지도 조정 모드
+    self.drawing.map_adjust_active = !self.drawing.map_adjust_active;
+    self.home_map.draw_guide_message = Some(if self.drawing.map_adjust_active {
+        "지도 조정: 드래그로 이동, 휠로 확대. 끝나면 「지도조정끝」.".to_owned()
+    } else {
+        "지도 조정을 끝냈습니다.".to_owned()
+    });
+}
                         3 => {
                             self.drawing.sheet.replace_sheet_chrome();
                             self.drawing.sheet.recover_orphaned_items();
@@ -1205,12 +1215,257 @@ impl StrataAppState {
                             self.home_map.draw_guide_message = Some("항목 이동 모드 — 범례·표제란·방위표를 끌어 자리를 옮기세요.".to_owned());
                         }
                         5 => {
-                            self.modals.active = Some(ActiveModalDialog::PaperSetup);
+                            // KaDrawingStudio.cpp — 용지 크기(A4/A3/A2/A1/A0)와 방향 전환
+                            let next_size = match self.drawing.sheet.paper_size {
+                                strata_layout::sheet_composer::SheetPaperSize::A4 => {
+                                    strata_layout::sheet_composer::SheetPaperSize::A3
+                                }
+                                strata_layout::sheet_composer::SheetPaperSize::A3 => {
+                                    strata_layout::sheet_composer::SheetPaperSize::A2
+                                }
+                                strata_layout::sheet_composer::SheetPaperSize::A2 => {
+                                    strata_layout::sheet_composer::SheetPaperSize::A1
+                                }
+                                strata_layout::sheet_composer::SheetPaperSize::A1 => {
+                                    strata_layout::sheet_composer::SheetPaperSize::A0
+                                }
+                                strata_layout::sheet_composer::SheetPaperSize::A0 => {
+                                    strata_layout::sheet_composer::SheetPaperSize::A4
+                                }
+                            };
+                            let next_orient = match self.drawing.sheet.orientation {
+                                strata_layout::sheet_composer::SheetOrientation::Portrait => {
+                                    strata_layout::sheet_composer::SheetOrientation::Landscape
+                                }
+                                strata_layout::sheet_composer::SheetOrientation::Landscape => {
+                                    strata_layout::sheet_composer::SheetOrientation::Portrait
+                                }
+                            };
+                            self.drawing.sheet.change_paper(next_size, next_orient);
+                            self.home_map.draw_guide_message = Some(format!(
+                                "용지·방향을 바꿨습니다: {:.0}×{:.0} mm {}.",
+                                self.drawing.sheet.width_mm,
+                                self.drawing.sheet.height_mm,
+                                next_orient.label_ko()
+                            ));
                         }
                         _ => {
-                            self.home_map.draw_guide_message = Some(format!("현재 도면 목록: 「{}」 (1/1쪽)", self.drawing.title_ko));
+    // KaDrawingSheetSet.cpp:135 — 도면 목록 팝업
+    self.drawing.sheet_set_menu_open = !self.drawing.sheet_set_menu_open;
+}
+                    }
+                }
+            }
+
+            // KaDrawingStudio.cpp:822-838 m_adjustBar — 지도 조정 중 상단 안내 띠
+            if self.drawing.map_adjust_active {
+                let bar_w = 420.0_f32.min(rect.width() - 24.0);
+                let bar_r = Rect::from_min_size(
+                    Pos2::new(rect.center().x - bar_w * 0.5, rect.top() + 8.0),
+                    Vec2::new(bar_w, 30.0),
+                );
+                p.rect_filled(bar_r, 7.0, Color32::from_rgba_unmultiplied(255, 253, 249, 244));
+                p.rect_stroke(
+                    bar_r,
+                    7.0,
+                    Stroke::new(1.0, Color32::from_rgb(0xC5, 0xBF, 0xB2)),
+                    egui::StrokeKind::Middle,
+                );
+                p.text(
+                    Pos2::new(bar_r.left() + 10.0, bar_r.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    "지도 조정 중 — 드래그로 이동, 휠로 확대. 끝나면 「조정끝」.",
+                    FontId::proportional(11.5),
+                    Color32::from_rgb(28, 25, 23),
+                );
+                let done_r = Rect::from_min_size(
+                    Pos2::new(bar_r.right() - 62.0, bar_r.top() + 4.0),
+                    Vec2::new(56.0, 22.0),
+                );
+                if ui
+                    .interact(done_r, ui.id().with("drawing_adjust_done"), egui::Sense::click())
+                    .on_hover_text("지도 조정을 끝냅니다.")
+                    .clicked()
+                {
+                    self.drawing.map_adjust_active = false;
+                    self.home_map.draw_guide_message =
+                        Some("지도 조정을 끝냈습니다.".to_owned());
+                }
+                p.text(
+                    done_r.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "조정끝",
+                    FontId::proportional(11.0),
+                    Color32::from_rgb(28, 25, 23),
+                );
+            }
+
+            // KaDrawingCoordCallout.cpp — 용지 위 좌표점 콜아웃(A, B, C …)
+            {
+                let mut callout_pick: Option<[f32; 2]> = None;
+                if self.drawing.coord_callout_mode {
+                    let resp = ui.interact(
+                        sheet_rect,
+                        ui.id().with("drawing_callout_pick"),
+                        egui::Sense::click(),
+                    );
+                    if resp.clicked() {
+                        if let Some(pos) = ui.ctx().pointer_interact_pos() {
+                            if sheet_rect.contains(pos) {
+                                callout_pick = Some([pos.x, pos.y]);
+                            }
                         }
                     }
+                }
+                if let Some(pos) = callout_pick {
+                    let tag =
+                        ((b'A' + (self.drawing.coord_callouts.len() % 26) as u8) as char)
+                            .to_string();
+                    let n = f64::from(pos[1] - sheet_rect.top()) * 0.5
+                        + self.home_map.real_survey.survey_center[1];
+                    let e = f64::from(pos[0] - sheet_rect.left()) * 0.5
+                        + self.home_map.real_survey.survey_center[0];
+                    self.drawing
+                        .coord_callouts
+                        .push(crate::tab_drawing::CoordCallout {
+                            tag,
+                            pos,
+                            world: [n, e],
+                        });
+                }
+                for c in &self.drawing.coord_callouts {
+                    let cp = Pos2::new(c.pos[0], c.pos[1]);
+                    let label = format!("{}  X {:.2}  Y {:.2}", c.tag, c.world[1], c.world[0]);
+                    let lw = (label.chars().count() as f32) * 6.6 + 22.0;
+                    let pill = Rect::from_min_size(
+                        Pos2::new(cp.x + 8.0, cp.y - 22.0),
+                        Vec2::new(lw, 18.0),
+                    );
+                    p.circle_filled(cp, 3.2, Color32::from_rgb(181, 87, 58));
+                    p.line_segment(
+                        [cp, Pos2::new(pill.left(), pill.center().y)],
+                        Stroke::new(1.0, Color32::from_rgb(181, 87, 58)),
+                    );
+                    p.rect_filled(pill, 3.0, Color32::WHITE);
+                    p.rect_stroke(
+                        pill,
+                        3.0,
+                        Stroke::new(1.0, Color32::from_rgb(0xC5, 0xBF, 0xB2)),
+                        egui::StrokeKind::Middle,
+                    );
+                    p.text(
+                        Pos2::new(pill.left() + 5.0, pill.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        &label,
+                        FontId::monospace(9.5),
+                        Color32::from_rgb(28, 25, 23),
+                    );
+                }
+            }
+
+            // KaDrawingSheetSet.cpp:135-160 — 도면 목록 팝업
+            if self.drawing.sheet_set_menu_open {
+                let menu_w = 300.0_f32;
+                let row_h = 26.0_f32;
+                let head_h = 30.0_f32;
+                let n = self.drawing.stored_sheets.len();
+                let menu_h = head_h + row_h * (n as f32).max(1.0) + 34.0;
+                let menu_r = Rect::from_min_size(
+                    Pos2::new(rect.right() - menu_w - 16.0, rect.bottom() - menu_h - 60.0),
+                    Vec2::new(menu_w, menu_h),
+                );
+                p.rect_filled(menu_r, 6.0, Color32::WHITE);
+                p.rect_stroke(
+                    menu_r,
+                    6.0,
+                    Stroke::new(1.0, Color32::from_rgb(185, 182, 172)),
+                    egui::StrokeKind::Middle,
+                );
+                p.text(
+                    Pos2::new(menu_r.left() + 10.0, menu_r.top() + head_h * 0.5),
+                    egui::Align2::LEFT_CENTER,
+                    "도면 목록",
+                    FontId::proportional(12.0),
+                    Color32::from_rgb(28, 25, 23),
+                );
+                let mut pick_store = false;
+                let mut pick_open: Option<usize> = None;
+                for (idx, st) in self.drawing.stored_sheets.iter().enumerate() {
+                    let row = Rect::from_min_size(
+                        Pos2::new(
+                            menu_r.left() + 6.0,
+                            menu_r.top() + head_h + row_h * idx as f32,
+                        ),
+                        Vec2::new(menu_w - 12.0, row_h - 2.0),
+                    );
+                    let resp = ui.interact(
+                        row,
+                        ui.id().with(("drawing_sheet_row", idx)),
+                        egui::Sense::click(),
+                    );
+                    p.text(
+                        Pos2::new(row.left() + 4.0, row.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        format!("{}  (1:{})", st.title, st.scale_denominator),
+                        FontId::proportional(11.0),
+                        Color32::from_rgb(45, 44, 40),
+                    );
+                    if resp.clicked() {
+                        pick_open = Some(idx);
+                    }
+                }
+                if n == 0 {
+                    p.text(
+                        Pos2::new(menu_r.left() + 10.0, menu_r.top() + head_h + row_h * 0.5),
+                        egui::Align2::LEFT_CENTER,
+                        "보관한 도면이 없습니다",
+                        FontId::proportional(11.0),
+                        Color32::from_rgb(135, 133, 126),
+                    );
+                }
+                let store_r = Rect::from_min_size(
+                    Pos2::new(menu_r.left() + 6.0, menu_r.bottom() - 32.0),
+                    Vec2::new(menu_w - 12.0, 26.0),
+                );
+                if ui
+                    .interact(store_r, ui.id().with("drawing_sheet_store"), egui::Sense::click())
+                    .on_hover_text("지금 도면을 이름 붙여 보관합니다.")
+                    .clicked()
+                {
+                    pick_store = true;
+                }
+                p.text(
+                    store_r.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "지금 도면 보관…",
+                    FontId::proportional(11.5),
+                    Color32::from_rgb(181, 87, 58),
+                );
+                if pick_store {
+                    self.drawing.stored_sheets.push(crate::tab_drawing::StoredSheet {
+                        title: self.drawing.title_ko.clone(),
+                        scale_denominator: self.drawing.sheet.scale_denominator,
+                        paper_w_mm: self.drawing.sheet.width_mm,
+                        paper_h_mm: self.drawing.sheet.height_mm,
+                        legend_visible: self.drawing.sheet.legend_visible,
+                        title_block_visible: self.drawing.sheet.title_block_visible,
+                    });
+                    self.home_map.draw_guide_message = Some(format!(
+                        "도면을 보관했습니다: 「{}」",
+                        self.drawing.title_ko
+                    ));
+                    self.drawing.sheet_set_menu_open = false;
+                }
+                if let Some(idx) = pick_open {
+                    if let Some(st) = self.drawing.stored_sheets.get(idx).cloned() {
+                        self.drawing.title_ko = st.title.clone();
+                        self.drawing.sheet.scale_denominator = st.scale_denominator;
+                        self.drawing.sheet.legend_visible = st.legend_visible;
+                        self.drawing.sheet.title_block_visible = st.title_block_visible;
+                        self.home_map.draw_guide_message =
+                            Some(format!("보관한 도면을 열었습니다: 「{}」", st.title));
+                    }
+                    self.drawing.sheet_set_menu_open = false;
                 }
             }
         });
@@ -1221,6 +1476,47 @@ impl StrataAppState {
 mod tests {
 
     /// D10 — 용지 하단이 7버튼 툴바 위에서 멈추는지 수치로 확인한다.
+    /// D20 — 지도 조정·좌표점 콜아웃·도면 목록이 실제 상태로 동작한다.
+    #[test]
+    fn test_d20_map_adjust_callouts_and_sheet_set() {
+        let mut st = crate::tab_drawing::DrawingTabState::default();
+        assert!(!st.map_adjust_active);
+        assert!(!st.coord_callout_mode);
+        assert!(st.coord_callouts.is_empty());
+        assert!(st.stored_sheets.is_empty());
+        assert!(!st.sheet_set_menu_open);
+
+        st.map_adjust_active = true;
+        assert!(st.map_adjust_active);
+        st.coord_callout_mode = true;
+        assert!(st.coord_callout_mode);
+
+        // KaDrawingCoordCallout.cpp — A, B, C … 태그
+        st.coord_callouts.push(crate::tab_drawing::CoordCallout {
+            tag: "A".to_owned(),
+            pos: [100.0, 120.0],
+            world: [361_622.354, 219_897.093],
+        });
+        assert_eq!(st.coord_callouts.len(), 1);
+        assert_eq!(st.coord_callouts[0].tag, "A");
+
+        // KaDrawingSheetSet.cpp — 보관/열기
+        st.stored_sheets.push(crate::tab_drawing::StoredSheet {
+            title: "조사도면".to_owned(),
+            scale_denominator: 5_000,
+            paper_w_mm: 210.0,
+            paper_h_mm: 297.0,
+            legend_visible: true,
+            title_block_visible: true,
+        });
+        assert_eq!(st.stored_sheets.len(), 1);
+        let back = st.stored_sheets[0].clone();
+        assert_eq!(back.scale_denominator, 5_000);
+        assert_eq!(back.title, "조사도면");
+        st.sheet_set_menu_open = true;
+        assert!(st.sheet_set_menu_open);
+    }
+
     #[test]
     fn test_d10_sheet_bottom_stops_above_seven_button_toolbar() {
         // KaDrawingStudio.cpp:233-252 decorationSizePercent 는 4단계다.
