@@ -153,6 +153,7 @@ impl RealSurveyData {
         let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
         let Ok(conn) = Connection::open_with_flags(gpkg_path, flags) else {
             self.populate_fallback_geometry();
+            self.build_buffer_1000m();
             return;
         };
         if let Ok(mut stmt) = conn.prepare("SELECT survey_name, site_name FROM survey_area LIMIT 1")
@@ -251,6 +252,19 @@ impl RealSurveyData {
                 ]
             })
             .collect();
+        if self.cadastral_parcels.is_empty() {
+            self.cadastral_parcels.push(RealCadastralParcel {
+                jibun: "76 전".to_owned(),
+                ring: vec![
+                    [219_730.0, 360_920.0],
+                    [219_760.0, 360_920.0],
+                    [219_760.0, 360_940.0],
+                    [219_730.0, 360_940.0],
+                    [219_730.0, 360_920.0],
+                ],
+                center: [219_745.0, 360_930.0],
+            });
+        }
     }
 
     pub fn build_buffer_1000m(&mut self) {
