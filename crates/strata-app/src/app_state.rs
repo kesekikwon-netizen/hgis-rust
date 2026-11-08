@@ -112,6 +112,17 @@ pub struct StrataAppState {
     // D12 KaStatusBar.cpp:121-136,77-98 — 지도갱신 토글과 축척 직접 입력칸
     pub map_rendering_enabled: bool,
     pub scale_input_buf: String,
+    // MainWindowContextMenus.cpp:112-161 — 지도 캔버스 우클릭 메뉴
+    pub map_context_menu_open: bool,
+    pub map_context_menu_pos: [f32; 2],
+    /// 메뉴를 연 지도 좌표 (N, E)
+    pub map_context_menu_world: [f64; 2],
+    // MainWindowContextMenus.cpp:176-448 — 왼쪽 레이어 트리 우클릭 메뉴
+    pub layer_context_menu_open: bool,
+    pub layer_context_menu_pos: [f32; 2],
+    pub layer_context_menu_key: Option<String>,
+    /// 라벨 하위 메뉴 펼침 상태 (라벨·명칭 속성 / 투명도 / 깨진 한글)
+    pub layer_menu_sub: u8,
     /// `KaStatusBar::showMessage` 대응 — 맞추기 같은 긴 작업의 결과를 상태줄에 남긴다
     pub status_bar_hint: String,
     pub theme_menu_open: bool,
@@ -143,6 +154,13 @@ impl StrataAppState {
             scale_menu_open: false,
             map_rendering_enabled: true,
             scale_input_buf: String::new(),
+            map_context_menu_open: false,
+            map_context_menu_pos: [0.0, 0.0],
+            map_context_menu_world: [0.0, 0.0],
+            layer_context_menu_open: false,
+            layer_context_menu_pos: [0.0, 0.0],
+            layer_context_menu_key: None,
+            layer_menu_sub: 0,
             status_bar_hint: String::new(),
             theme_menu_open: false,
             large_font_mode: false,

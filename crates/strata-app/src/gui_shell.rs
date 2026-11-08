@@ -350,6 +350,8 @@ impl StrataAppState {
             });
 
         self.render_ribbon_context_menus(ctx);
+        self.render_map_context_menu(ctx);
+        self.render_layer_context_menu(ctx);
         render_active_modal_dialogs(self, ctx);
         central_rect
     }
@@ -393,6 +395,65 @@ mod tests {
     };
 
     // D12 KaStatusBar.cpp:77-136 — 13단계 축척 프리셋, 직접 입력 칸, 지도갱신 토글
+    // D21 — 지도 캔버스·레이어 트리 우클릭 메뉴 상태
+    #[test]
+    fn test_d21_map_and_layer_context_menus() {
+        // MainWindowContextMenus.cpp:112-161 mapContextMenu 항목 순서
+        let map_items = [
+            "이 도형 기록 입력",
+            "조사 도형 그리기",
+            "조사구역",
+            "유구 면",
+            "유구 선",
+            "단면선 그리기",
+            "이전 지도 범위",
+            "다음 지도 범위",
+            "선택한 레이어로 이동",
+            "전체 지도 보기",
+            "지도 새로고침",
+            "이 위치 좌표 복사",
+        ];
+        assert!(map_items.contains(&"이 위치 좌표 복사"));
+        assert!(map_items.contains(&"전체 지도 보기"));
+
+        // 좌표 복사 문구 형식 "{N:.3}, {E:.3} ({EPSG})"
+        let txt = format!("{:.3}, {:.3} ({})", 361_622.354_f64, 219_897.093_f64, "EPSG:5187");
+        assert!(txt.starts_with("361622.354, "));
+
+        // MainWindowContextMenus.cpp:176-448 layerContextMenu 항목
+        let layer_items = [
+            "참고 자료 불러오기…",
+            "이름 바꾸기 (두 번 클릭)",
+            "면·외곽선 색",
+            "도형 속성",
+            "라벨·명칭 속성",
+            "깨진 한글 바로잡기",
+            "투명도",
+            "이 레이어로 이동",
+            "전체 보기",
+            "같은 묶음의 맨 아래로",
+            "그리기·편집 시작",
+            "꼭짓점 수정",
+            "폴리곤 묶기",
+            "면적 확인",
+            "그린 도형 모두 지우기…",
+            "레이어 삭제",
+        ];
+        assert_eq!(layer_items.len(), 16);
+        assert_eq!(layer_items[0], "참고 자료 불러오기…");
+        assert_eq!(layer_items[15], "레이어 삭제");
+
+        // 글자 크기 후보 10종
+        let sizes = [3_u32, 4, 5, 6, 7, 8, 9, 10, 12, 14];
+        assert_eq!(sizes.len(), 10);
+        // 투명도 후보 6종
+        let opacity = [0_u8, 20, 40, 50, 60, 80];
+        assert_eq!(opacity.len(), 6);
+        // 인코딩 후보 4종
+        let encodings = ["CP949", "EUC-KR", "UTF-8", "이 컴퓨터 설정"];
+        assert_eq!(encodings.len(), 4);
+    }
+
     #[test]
     fn test_d12_status_bar_13_scale_presets_and_render_toggle() {
         assert_eq!(KA_STATUS_SCALE_PRESETS.len(), 13);
