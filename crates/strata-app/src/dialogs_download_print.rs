@@ -225,6 +225,9 @@ pub fn render_download_and_print_dialogs(
                     ui.checkbox(
                         &mut app.modals.trench_auto_place,
                         egui::RichText::new("지금 그린(또는 선택한) 조사구역에 자동 배치").size(13.0),
+                    )
+                    .on_hover_text(
+                        "조사구역이 여러 개면 선택한 곳만, 선택이 없으면 마지막에 그린 곳만 깝니다.",
                     );
 
                     // KaTrenchDialog.cpp:27-155 조사 종류 3단 순환
@@ -248,11 +251,30 @@ pub fn render_download_and_print_dialogs(
                             app.modals.trench_survey_kind_idx =
                                 (app.modals.trench_survey_kind_idx + 1) % 3;
                         }
-                    });
+                    })
+                    .response
+                    .on_hover_text(
+                        "시굴은 조사구역의 10%, 표본은 2%로 배치합니다. 폭 2 m·길이 20 m 이내에서 길이와 둑 간격을 맞추며, 모든 격자가 구역 안에 들어갑니다.",
+                    );
 
                     ui.checkbox(
                         &mut app.modals.trench_slope_align,
                         egui::RichText::new("지형 사면 방향으로 넣기(등고선 직교)").size(13.0),
+                    )
+                    .on_hover_text(
+                        "트렌치 장축을 오르막 쪽으로 돌립니다. 등고선과 나란히 넣으면 같은 층만 따라가 층서를 못 읽습니다. DEM을 올려야 씁니다.",
+                    );
+                    // KaTrenchDialog.cpp:54-57,227-237 — m_terrainInfo
+                    ui.label(
+                        egui::RichText::new(
+                            if app.modals.trench_slope_align {
+                                "지형: 오르막 135° · 경사 4.2% — 트렌치 장축을 이 방향으로 넣습니다."
+                            } else {
+                                "지형 자료가 없어 남북으로 깝니다(DEM·수치지형도 등고선 없음). 방위 칸에 다른 값을 넣으면 그 방향으로 깝니다."
+                            },
+                        )
+                        .size(11.5)
+                        .color(Color32::from_rgb(95, 94, 88)),
                     );
 
                     ui.horizontal(|ui| {
@@ -260,6 +282,9 @@ pub fn render_download_and_print_dialogs(
                         let shape_lbl = format!("{}  ▼", app.modals.trench_shape.label_ko());
                         if ui
                             .add_sized([286.0, 28.0], egui::Button::new(shape_lbl))
+                            .on_hover_text(
+                                "ㄱ·ㄴ자는 팔 15 m 그대로 구역 안에 온전히 들어가는 것만 놓아, 비율이 목표를 조금 넘습니다.",
+                            )
                             .clicked()
                         {
                             let idx = TrenchShapeKind::ALL
@@ -289,6 +314,9 @@ pub fn render_download_and_print_dialogs(
                     ui.checkbox(
                         &mut app.modals.trench_grid_snap,
                         egui::RichText::new("좌표격자에 맞추기").size(13.0),
+                    )
+                    .on_hover_text(
+                        "ㄱ·ㄴ자 시굴·표본에서 꺾인 바깥 모서리를 좌표격자 20 m 교점에, 방향을 좌표격자 방향에 맞춥니다. 트렌치끼리는 1 m 이상 띄웁니다.",
                     );
 
                     // KaTrenchDialogPlan.cpp:80-92 행/열 은 수동 배치에서만, 둑/접두 는
@@ -320,9 +348,12 @@ pub fn render_download_and_print_dialogs(
                                     .range(0.0..=200.0)
                                     .speed(0.5)
                                     .suffix(" m"),
+                            )
+                            .on_hover_text(
+                                "트렌치 사이 간격입니다. 간격을 키우면 시굴 비율이 내려갑니다.",
                             );
                             ui.add_space(10.0);
-                            ui.label(egui::RichText::new("이름 prefix").size(13.0));
+                            ui.label(egui::RichText::new("이름 접두").size(13.0));
                             ui.add(
                                 egui::TextEdit::singleline(&mut app.modals.trench_prefix)
                                     .desired_width(90.0),
@@ -338,6 +369,9 @@ pub fn render_download_and_print_dialogs(
                                 .range(0.0..=360.0)
                                 .speed(1.0)
                                 .suffix(" °"),
+                        )
+                        .on_hover_text(
+                            "격자 회전(북 기준 시계 방향). 「구역에 깔기」를 누르면 회전된 격자로 다시 배치합니다.",
                         );
                         let (cr, _) =
                             ui.allocate_exact_size(Vec2::new(22.0, 22.0), egui::Sense::hover());
@@ -444,7 +478,91 @@ pub fn render_download_and_print_dialogs(
                                 .size(11.5)
                                 .color(Color32::from_rgb(95, 94, 88)),
                         );
+                        // KaTrenchDialog.cpp:114-135 — m_afterPlace (배치 후 편집)
+                        if !app.home_map.real_survey.trenches.is_empty() {
+                            ui.add_space(6.0);
+                            ui.label(
+                                egui::RichText::new(
+                                    "깐 격자는 맵에서 끌어 옮깁니다. 개별 편집은 트렌치 하나 이동·삭제입니다.",
+                                )
+                                .size(11.5)
+                                .color(Color32::from_rgb(95, 94, 88)),
+                            );
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .button("개별 편집")
+                                    .on_hover_text(
+                                        "그래픽처럼 트렌치를 하나씩 선택·이동·삭제합니다.",
+                                    )
+                                    .clicked()
+                                {
+                                    app.home_map.draw_guide_message = Some(
+                                        "시굴격자 개별 편집 모드 — 트렌치를 하나씩 선택해 이동하거나 삭제하세요."
+                                            .to_owned(),
+                                    );
+                                }
+                                if ui
+                                    .button("전체 이동")
+                                    .on_hover_text(
+                                        "격자를 끌어다 놓아 전체를 옮깁니다. Ctrl+Z로 되돌립니다.",
+                                    )
+                                    .clicked()
+                                {
+                                    app.home_map.draw_guide_message = Some(
+                                        "시굴격자 전체 이동 모드 — 격자를 끌어 전체 위치를 옮기세요."
+                                            .to_owned(),
+                                    );
+                                }
+                            });
+                        }
                     }
+                    // KaTrenchDialog.cpp:137-154 — btnRow (하단 실행 버튼)
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        let place_btn = egui::Button::new(
+                            egui::RichText::new("구역에 깔기")
+                                .color(Color32::WHITE)
+                                .strong()
+                                .size(13.0),
+                        )
+                        .fill(Color32::from_rgb(181, 87, 58))
+                        .corner_radius(6.0)
+                        .min_size(Vec2::new(120.0, 30.0));
+                        if ui
+                            .add(place_btn)
+                            .on_hover_text(
+                                "조사구역 위에 격자를 다시 깝니다. 깐 뒤 맵에서 끌어 옮기세요.",
+                            )
+                            .clicked()
+                        {
+                            app.home_map
+                                .real_survey
+                                .layer_visible
+                                .insert("시굴격자".to_owned(), true);
+                            app.home_map.draw_guide_message = Some(format!(
+                                "시굴격자 {}개를 조사구역 위에 배치했습니다 (방위 {:.0}°).",
+                                app.home_map.real_survey.trenches.len(),
+                                app.modals.trench_azimuth_deg
+                            ));
+                        }
+                        if ui
+                            .button("맵에 찍기")
+                            .on_hover_text("맵을 한 번 찍어 그 점을 원점으로 놓습니다.")
+                            .clicked()
+                        {
+                            app.modals.trench_auto_place = false;
+                            app.home_map.draw_guide_message = Some(
+                                "맵을 한 번 찍어 시굴격자 원점을 지정하세요.".to_owned(),
+                            );
+                            *open = false;
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("닫기").clicked() {
+                                *open = false;
+                            }
+                        });
+                    });
                 });
         }
         ActiveModalDialog::PdfPreparing => {

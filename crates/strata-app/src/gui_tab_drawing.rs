@@ -71,22 +71,22 @@ impl StrataAppState {
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("글자").size(12.0));
-                        let pt_lbl =
-                            format!("{} pt               ▼", self.drawing.sheet.legend_font_pt);
-                        if ui.button(pt_lbl).clicked() {
-                            self.drawing.sheet.legend_font_pt =
-                                if self.drawing.sheet.legend_font_pt >= 14 {
-                                    9
-                                } else {
-                                    self.drawing.sheet.legend_font_pt + 1
-                                };
-                        }
+                        // KaDrawingStudio.cpp:953-956 — QSpinBox 5..=24 pt
+                        ui.add(
+                            egui::DragValue::new(&mut self.drawing.sheet.legend_font_pt)
+                                .range(5..=24)
+                                .speed(0.2)
+                                .suffix(" pt"),
+                        );
                         ui.checkbox(&mut self.drawing.sheet.legend_bold, "B");
                         ui.checkbox(&mut self.drawing.sheet.legend_italic, "I");
                     });
                     ui.checkbox(
                         &mut self.drawing.sheet.show_site_names_under_5000,
                         "1:5,000 이하에서 유적 이름으로 표시",
+                    )
+                    .on_hover_text(
+                        "켜면 1:5,000과 더 크게 본 축척에서 주변유적 번호 대신 유적 이름을 쓰고, 범례에는 유적 종류만 남깁니다",
                     );
 
                     ui.separator();
@@ -131,21 +131,14 @@ impl StrataAppState {
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("크기").size(12.0));
-                        let sz_lbl = format!(
-                            "{:.0} mm                                  ▼",
-                            self.drawing.sheet.north_arrow_size_mm
+                        // KaDrawingStudio.cpp:1018-1022 — QDoubleSpinBox 3..=80 mm
+                        ui.add(
+                            egui::DragValue::new(&mut self.drawing.sheet.north_arrow_size_mm)
+                                .range(3.0..=80.0)
+                                .speed(1.0)
+                                .fixed_decimals(0)
+                                .suffix(" mm"),
                         );
-                        if ui
-                            .add_sized([ui.available_width(), 24.0], egui::Button::new(sz_lbl))
-                            .clicked()
-                        {
-                            self.drawing.sheet.north_arrow_size_mm =
-                                if self.drawing.sheet.north_arrow_size_mm >= 36.0 {
-                                    20.0
-                                } else {
-                                    self.drawing.sheet.north_arrow_size_mm + 4.0
-                                };
-                        }
                     });
 
                     ui.separator();
@@ -159,7 +152,7 @@ impl StrataAppState {
                         // KaDrawingStudio.cpp:158-166 — 축척 값을 직접 끌어 바꾼다
                         ui.add(
                             egui::DragValue::new(&mut self.drawing.sheet.scale_denominator)
-                                .range(10..=250_000)
+                                .range(10..=5_000_000)
                                 .speed(50.0),
                         );
                         if ui.button("적용").clicked() {
@@ -240,22 +233,16 @@ impl StrataAppState {
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("선택 항목 크기").size(12.0));
-                        // KaDrawingStudio.cpp:233-252 — 75/100/125/150 % 순환
-                        let pct = self.drawing.decoration_size_percent;
-                        if ui
-                            .add_sized(
-                                [ui.available_width(), 24.0],
-                                egui::Button::new(format!("{pct} %                        ▼")),
-                            )
-                            .clicked()
-                        {
-                            self.drawing.decoration_size_percent = match pct {
-                                75 => 100,
-                                100 => 125,
-                                125 => 150,
-                                _ => 75,
-                            };
-                        }
+                        // KaDrawingStudio.cpp:1137-1146 — QSpinBox 25..=200 %
+                        ui.add(
+                            egui::DragValue::new(&mut self.drawing.decoration_size_percent)
+                                .range(25..=200)
+                                .speed(1.0)
+                                .suffix(" %"),
+                        )
+                        .on_hover_text(
+                            "용지의 축척자·축척·좌표계·방위표를 선택해 크기를 조절합니다. 위치는 끌어서 옮깁니다.",
+                        );
                     });
                     ui.add_space(4.0);
                     ui.columns(3, |cols| {
@@ -1173,9 +1160,18 @@ impl StrataAppState {
             let bar_r = Rect::from_center_size(Pos2::new(rect.center().x, bar_cy), Vec2::new(bar_w, bar_h_px));
             p.rect_filled(bar_r, 6.0, Color32::WHITE);
             p.rect_stroke(bar_r, 6.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
-            let btns = [("■", "좌표점"), ("◎", "레이어를 가운데"), ("□", "지도 조정"), ("▣", "화면 맞춤"), ("✥", "항목 이동"), ("▯", "용지/방향"), ("≡", "도면 목록")];
+                          // KaDrawingStudio.cpp:1292-1323 — 7버튼 툴팁
+              let btns: [(&str, &str, &str); 7] = [
+                  ("■", "좌표점", "용지에서 꼭짓점을 찍으면 화살표와 X·Y가 붙습니다"),
+                  ("◎", "레이어를 가운데", "축척은 두고, 고른 레이어를 용지 한가운데로 옮깁니다"),
+                  ("□", "지도 조정", "지도 칸 안의 지도를 끌어 옮기고 휠로 확대합니다. 다시 누르면 끝냅니다"),
+                  ("▣", "화면 맞춤", "지도 화면과 같은 범위·축척으로 지도 칸을 다시 맞춥니다"),
+                  ("✥", "항목 이동", "좌표 상자를 끌어 옮깁니다"),
+                  ("▯", "용지/방향", "용지 크기(A4/A3) 및 방향(가로/세로)을 전환합니다"),
+                  ("≡", "도면 목록", "지금 도면을 이름 붙여 보관하고, 보관한 도면을 다시 엽니다. 제출 PDF는 지금 열린 도면입니다"),
+              ];
             let bw = bar_w / (btns.len() as f32);
-            for (i, (ico, lbl)) in btns.iter().enumerate() {
+            for (i, (ico, lbl, tip)) in btns.iter().enumerate() {
                 let x0 = bar_r.left() + bw * (i as f32);
                 if i > 0 {
                     p.line_segment([Pos2::new(x0, bar_r.top() + 4.0), Pos2::new(x0, bar_r.bottom() - 4.0)], Stroke::new(1.0, Color32::from_rgb(222, 220, 210)));
@@ -1183,7 +1179,10 @@ impl StrataAppState {
                 let cell_r = Rect::from_min_size(Pos2::new(x0, bar_r.top()), Vec2::new(bw, bar_h_px));
                 p.text(Pos2::new(cell_r.center().x, cell_r.top() + bar_h_px * 0.32), egui::Align2::CENTER_CENTER, *ico, egui::FontId::proportional(if compact_v { 9.5 } else { 11.0 }), Color32::from_rgb(55, 54, 50));
                 p.text(Pos2::new(cell_r.center().x, cell_r.bottom() - bar_h_px * 0.24), egui::Align2::CENTER_CENTER, *lbl, egui::FontId::proportional(if compact_v { 8.0 } else { 10.0 }), Color32::from_rgb(55, 54, 50));
-                if ui.interact(cell_r, ui.id().with(("drawing_toolbar_btn", i)), egui::Sense::click()).clicked() {
+                let cell_resp = ui
+                      .interact(cell_r, ui.id().with(("drawing_toolbar_btn", i)), egui::Sense::click())
+                      .on_hover_text(*tip);
+                  if cell_resp.clicked() {
                     match i {
                         0 => {
                             self.drawing.sheet.grid_enabled = !self.drawing.sheet.grid_enabled;

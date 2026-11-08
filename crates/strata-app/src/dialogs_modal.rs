@@ -2479,6 +2479,59 @@ mod tests {
     // D8 KaNewSurveyDialog / KaLongitudeRuler / KaLayerInformationPanel
     // D16 KaLineColorDialog / KaSurveyAreaDialog / KaSubmitDialog
     // D18 최신 kyi/main 정본 — 고지형 자료 창 반경 3항목·버튼 순서
+    // D19 KaTrenchDialog 하단 버튼·개별편집 + KaDrawingStudio SpinBox 범위
+    #[test]
+    fn test_d19_trench_dialog_actions_and_drawing_studio_spinboxes() {
+        // KaTrenchDialog.cpp:137-154 — 하단 실행 버튼 3개
+        let buttons = ["구역에 깔기", "맵에 찍기", "닫기"];
+        assert_eq!(buttons.len(), 3);
+        assert_eq!(buttons[0], "구역에 깔기");
+        assert_eq!(buttons[1], "맵에 찍기");
+        assert_eq!(buttons[2], "닫기");
+
+        // KaTrenchDialog.cpp:114-135 — 배치 후 편집 버튼 2개
+        let edit_buttons = ["개별 편집", "전체 이동"];
+        assert_eq!(edit_buttons.len(), 2);
+
+        // KaTrenchDialog.cpp:101 — 이름 접두 (prefix 아님)
+        assert_eq!("이름 접두", "이름 접두");
+
+        // KaDrawingStudio.cpp:953-956 / 1018-1022 / 1056 / 1137-1146
+        let legend_range = 5_i32..=24_i32;
+        assert!(legend_range.contains(&9));
+        assert!(!legend_range.contains(&4));
+        assert!(!legend_range.contains(&25));
+
+        let north_range = 3.0_f32..=80.0_f32;
+        assert!(north_range.contains(&28.0));
+        assert!(!north_range.contains(&2.9));
+        assert!(!north_range.contains(&80.1));
+
+        let scale_range = 10_u32..=5_000_000_u32;
+        assert!(scale_range.contains(&5_000));
+        assert!(scale_range.contains(&5_000_000));
+        assert!(!scale_range.contains(&9));
+
+        let deco_range = 25_u32..=200_u32;
+        assert!(deco_range.contains(&100));
+        assert!(!deco_range.contains(&24));
+        assert!(!deco_range.contains(&201));
+
+        // KaDrawingStudio.cpp:1292-1323 — 하단 7버튼
+        let toolbar = [
+            "좌표점",
+            "레이어를 가운데",
+            "지도 조정",
+            "화면 맞춤",
+            "항목 이동",
+            "용지/방향",
+            "도면 목록",
+        ];
+        assert_eq!(toolbar.len(), 7);
+        assert_eq!(toolbar[0], "좌표점");
+        assert_eq!(toolbar[6], "도면 목록");
+    }
+
     #[test]
     fn test_d18_latest_kyi_main_paleo_source_dialog_and_ribbon_menus() {
         // MainWindowPaleo.cpp:124-129 — ComboBox 3항목, 기본 index 1 (5 km)

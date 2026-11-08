@@ -1229,7 +1229,7 @@ impl StrataAppState {
     }
 
     /// `KaLayerOpacityRail.cpp:18-177` — 좌상단 투명도(0~100) · 밝기(-255~255) 레일
-    fn paint_opacity_card(
+    pub(crate) fn paint_opacity_card(
         &mut self,
         ctx: &egui::Context,
         ui: &mut egui::Ui,
