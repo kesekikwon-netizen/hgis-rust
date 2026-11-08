@@ -635,15 +635,104 @@ impl StrataAppState {
         self.home_map.draw_guide_message = Some("위성과 지적도를 올려 두었습니다.".to_owned());
     }
 
-    pub fn open_sample_survey_project(&mut self, _idx: usize) {
-        self.project_title = "경주시".to_owned();
-        self.left_layers
-            .ensure_domain_layer(DomainLayerKey::SurveyArea);
-        self.left_layers.add_cadastral_wms_layer();
-        self.home_map.fit_to_survey();
-        self.active_tab = MainTab::Map;
-        self.home_map.draw_guide_message =
-            Some("다 그렸으면 리본의 「도면」으로 종이에 옮기세요.".to_owned());
+    /// C++ `MainWindowSession.cpp:1634-1680` `openProject` — 「열기」.
+    /// 파일 대화상자로 조사 파일(.gpkg)을 고르면 실제로 읽어 워크스페이스를 되살린다.
+    /// 취소하면 아무 것도 바꾸지 않는다. 견본(idx) 경로는 테스트·시연용으로 남긴다.
+    pub fn open_sample_survey_project(&mut self, idx: usize) {
+        const SAMPLE_IDX: usize = usize::MAX;
+        if idx != SAMPLE_IDX {
+            // 견본 열기 (기존 동작 유지)
+            self.project_title = "경주시".to_owned();
+            self.left_layers
+                .ensure_domain_layer(DomainLayerKey::SurveyArea);
+            self.left_layers.add_cadastral_wms_layer();
+            self.home_map.fit_to_survey();
+            self.active_tab = MainTab::Map;
+            self.home_map.draw_guide_message =
+                Some("다 그렸으면 리본의 「도면」으로 종이에 옮기세요.".to_owned());
+            return;
+        }
+        self.open_survey_file_dialog();
+    }
+
+    /// C++ `openProject` 의 파일 선택 + `openSurveyGpkg` 에 해당한다.
+    pub fn open_survey_file_dialog(&mut self) {
+        // C++ QFileDialog 필터: 조사 (*.gpkg *.qgz *.qgs);; GeoPackage (*.gpkg)
+        let picked = ::rfd::FileDialog::new()
+            .set_title("열기")
+            .add_filter("조사", &["gpkg", "qgz", "qgs"])
+            .add_filter("GeoPackage", &["gpkg"])
+            .pick_file();
+        let Some(path) = picked else {
+            // 사용자가 취소했다 — C++ 은 아무 것도 하지 않는다.
+            return;
+        };
+        self.open_survey_gpkg(&path);
+    }
+
+    /// C++ `openSurveyGpkg` — 파일을 읽어 조사 제목·좌표계·레이어를 되살린다.
+    pub fn open_survey_gpkg(&mut self, path: &std::path::Path) {
+        use strata_storage::gpkg::GpkgRepository;
+
+        // C++ 은 .qgz/.qgs 를 고르면 같은 이름의 .gpkg 동반 파일을 먼저 찾는다.
+        let mut target = path.to_path_buf();
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if ext != "gpkg" {
+            let companion = path.with_extension("gpkg");
+            if companion.exists() {
+                target = companion;
+            } else {
+                self.home_map.draw_guide_message = Some(format!(
+                    "「{}」은(는) GeoPackage 조사 파일이 아니고 같은 이름의 .gpkg 도 없습니다.",
+                    path.display()
+                ));
+                return;
+            }
+        }
+
+        match GpkgRepository::open_read_only(&target) {
+            Ok(ws) => {
+                // 조사 이름: 파일 이름(확장자 제외)
+                let title = target
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("조사")
+                    .to_owned();
+                self.project_title = title.clone();
+                self.work_crs = ws.work_crs;
+
+                // 레이어 종류별로 도메인 레이어를 되살린다.
+                for key_name in ws.layers.keys() {
+                    if let Some(key) = DomainLayerKey::from_id(key_name.as_str()) {
+                        self.left_layers.ensure_domain_layer(key);
+                    }
+                }
+                self.left_layers.add_cadastral_wms_layer();
+                self.home_map.fit_to_survey();
+                self.active_tab = MainTab::Map;
+                self.is_dirty = false;
+                let recent = target.to_string_lossy().to_string();
+                if !self.home_map.recent_files.contains(&recent) {
+                    self.home_map.recent_files.insert(0, recent);
+                    self.home_map.recent_files.truncate(12);
+                }
+                self.home_map.draw_guide_message = Some(format!(
+                    "「{}」 조사를 열었습니다 ({} · 레이어 {}개).",
+                    title,
+                    self.work_crs.auth_id(),
+                    ws.layers.len()
+                ));
+            }
+            Err(e) => {
+                // C++ KaUserError::warn — 오류를 알리고 아무 것도 바꾸지 않는다.
+                self.home_map.draw_guide_message =
+                    Some(format!("조사 파일을 열 수 없습니다: {e}"));
+            }
+        }
     }
 
     pub fn import_demo_dxf_and_csv(&mut self) {

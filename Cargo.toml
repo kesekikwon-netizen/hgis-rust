@@ -45,6 +45,7 @@ quick-xml = "0.37"
 tempfile = "3.13"
 eframe = { version = "0.31", features = ["glow"] }
 egui = "0.31"
+rfd = "0.15"
 wgpu = { version = "24.0.5", features = ["wgsl"] }
 lyon = "1.0"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
