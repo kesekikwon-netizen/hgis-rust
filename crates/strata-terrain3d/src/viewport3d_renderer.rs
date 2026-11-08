@@ -1,3 +1,4 @@
+#![allow(unknown_lints, clippy::chunks_exact_to_as_chunks)]
 use crate::atmosphere_agx::{
     apply_nishita_aerial_perspective_agx, nishita_sky_zenith_horizon_rgb, sample_bilinear,
 };

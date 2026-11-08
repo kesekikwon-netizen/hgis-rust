@@ -1,3 +1,4 @@
+#![allow(unknown_lints, clippy::chunks_exact_to_as_chunks)]
 use crate::pipeline::CrossSectionProfile;
 
 /// C++ `HGIS_MIN_SECTION_VERT_RANGE_M` (10.0m) — 완전 평지(`z_max == z_min`) 시 최소 수직 표고 범위 보장
