@@ -1491,7 +1491,16 @@ impl StrataAppState {
                     self.active_tool = MapToolKind::DrawPolygon;
                 }
             }
-            "시굴격자" => self.modals.active = Some(ActiveModalDialog::TrenchGenerator),
+            // C++ MainWindow.cpp:1834 startTrenchGrid — 조사가 없으면 먼저 안내하고 열지 않는다
+            "시굴격자" => {
+                if self.survey_path.is_none() {
+                    self.home_map.draw_guide_message = Some(
+                        "먼저 「새 조사」를 만들거나 「열기」로 조사를 여세요.".to_owned(),
+                    );
+                } else {
+                    self.modals.active = Some(ActiveModalDialog::TrenchGenerator);
+                }
+            }
             "버퍼" => {
                 self.active_tab = MainTab::Map;
                 self.ribbon.toggle_sub_mode(SubToolsMode::Buffer);
