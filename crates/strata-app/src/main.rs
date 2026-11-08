@@ -7,6 +7,7 @@
 pub mod app_state;
 pub mod cadastral_download_ui;
 pub mod debug_control;
+pub mod dem_download_ui;
 pub mod dialogs_account;
 pub mod dialogs_download_print;
 pub mod dialogs_modal;

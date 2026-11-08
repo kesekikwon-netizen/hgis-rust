@@ -589,44 +589,11 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                 });
         }
         ActiveModalDialog::DemDownload => {
-            egui::Window::new("ka_modal_dem_download")
-                .title_bar(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .default_width(510.0)
-                .show(ctx, |ui| {
-                    render_strata_modal_header(ui, "국토지리정보원 DEM 다운로드 - Strata", &mut open);
-                    ui.label(egui::RichText::new("국토정보플랫폼 · 조사 주변 도엽의 정밀 DEM을 확인하고 수치지형도 등고선으로 합성합니다.").size(14.0).color(Color32::from_rgb(25, 25, 24)));
-                    ui.add_space(10.0);
-                    let (bar_rect, _) = ui.allocate_exact_size(Vec2::new(480.0, 32.0), egui::Sense::hover());
-                    let p = ui.painter_at(bar_rect);
-                    p.rect_filled(bar_rect, 6.0, Color32::WHITE);
-                    p.rect_stroke(bar_rect, 6.0, Stroke::new(1.2, Color32::from_rgb(150, 148, 142)), egui::StrokeKind::Middle);
-                    p.rect_filled(Rect::from_min_size(bar_rect.min + Vec2::new(2.0, 2.0), Vec2::new(192.0, 28.0)), 5.0, Color32::from_rgb(20, 20, 20));
-                    p.text(bar_rect.center(), egui::Align2::CENTER_CENTER, "[DEM] 국토지리원_DEM.tif · 다중 도엽 병합 준비", egui::FontId::proportional(12.5), Color32::from_rgb(55, 54, 50));
-                    ui.add_space(10.0);
-                    ui.horizontal(|ui| {
-                        let synth_btn = egui::Button::new(egui::RichText::new("등고선 정밀 DEM 합성").color(Color32::WHITE).strong().size(13.5))
-                            .fill(Color32::from_rgb(44, 43, 41))
-                            .corner_radius(6.0)
-                            .min_size(Vec2::new(152.0, 36.0));
-                        if ui.add(synth_btn).clicked() {
-                            app.home_map.real_survey.layer_visible.insert("지표모델(DSM) 30m · Coperni...".to_owned(), false);
-                            app.home_map.real_survey.layer_visible.insert("지형 음영".to_owned(), true);
-                            app.home_map.draw_guide_message = Some(
-                                "국토지리정보원 수치지형도 등고선으로 정밀 DEM·광역지형도·경사도를 생성했습니다.".to_owned(),
-                            );
-                            app.modals.active = None;
-                        }
-                        if ui.button("계정 설정").clicked() {
-                            app.modals.active = Some(ActiveModalDialog::AccountSettings);
-                        }
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let cancel_btn = egui::Button::new(egui::RichText::new("취소").color(Color32::WHITE).strong().size(14.0)).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(72.0, 36.0));
-                            if ui.add(cancel_btn).clicked() { app.modals.active = None; }
-                        });
-                    });
-                });
+            // C++ `MainWindowDownloads.cpp:123-197` `startDemDownload` — 조사 폴더
+            // `DEM/원본` 에 Copernicus 30m 타일을 실제로 받는다. 타일 규칙·상한·404
+            // 건너뛰기는 `DemDownloadService.cpp:85-305` 를 `strata-net::dem_copernicus`
+            // 가 그대로 옮겼다.
+            crate::dem_download_ui::render_dem_download(app, ctx, &mut open);
         }
         ActiveModalDialog::AccountSettings => {
             egui::Window::new("ka_modal_account")
