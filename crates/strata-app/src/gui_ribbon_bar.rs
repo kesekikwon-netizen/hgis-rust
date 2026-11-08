@@ -1445,12 +1445,12 @@ impl StrataAppState {
             "새 조사" => self.modals.active = Some(ActiveModalDialog::NewSurvey),
             // C++ MainWindowSession.cpp:1634 openProject — 파일 대화상자로 조사 파일을 고른다
             "열기" => self.open_survey_file_dialog(),
-            "저장" | "다른 이름" => {
-                self.is_dirty = false;
-                self.home_map.draw_guide_message = Some(format!(
-                    "「{}」 조사를 안전하게 저장했습니다.",
-                    self.project_title
-                ));
+            // C++ MainWindowSession.cpp:1409 saveProject / :1420 saveProjectAs
+            "저장" => {
+                let _ = self.save_survey_project();
+            }
+            "다른 이름" => {
+                let _ = self.save_survey_project_as();
             }
             "선택" => {
                 self.active_tab = MainTab::Map;

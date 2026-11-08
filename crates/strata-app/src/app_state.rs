@@ -138,6 +138,8 @@ pub struct StrataAppState {
     pub theme: ThemeTokens,
     /// C++ `KaThemeOptions.cpp` — 테마·고대비가 바뀌면 다음 프레임에 스타일을 다시 적용한다
     pub theme_dirty: bool,
+    /// C++ `MainWindow::m_surveyPath` — 지금 열려 있는 조사 파일(.gpkg) 경로
+    pub survey_path: Option<std::path::PathBuf>,
     pub paper_look: bool,
     pub project_title: String,
     pub is_dirty: bool,
@@ -183,6 +185,7 @@ impl StrataAppState {
             work_crs: WorkCrs::Epsg5187,
             theme: ThemeTokens::for_options(&default_opts),
             theme_dirty: true,
+            survey_path: None,
             paper_look: true,
             project_title: "새 고고학 지표·시굴조사".to_owned(),
             is_dirty: false,
@@ -435,6 +438,101 @@ impl StrataAppState {
         self.paleo_3d.run_sample_10km_analysis();
     }
 
+    /// C++ `MainWindowSession.cpp:1409` `saveProject` — 지금 조사를 파일에 쓴다.
+    /// 경로가 없으면 「다른 이름으로 저장」으로 넘긴다 (C++ 과 같다).
+    pub fn save_survey_project(&mut self) -> bool {
+        let Some(path) = self.survey_path.clone() else {
+            return self.save_survey_project_as();
+        };
+        self.write_survey_to(&path)
+    }
+
+    /// C++ `MainWindowSession.cpp:1420` `saveProjectAs` — 다른 이름으로 저장.
+    /// .qgz 를 고르면 같은 이름의 .gpkg 로 쓴다. 취소하면 아무 것도 바꾸지 않는다.
+    pub fn save_survey_project_as(&mut self) -> bool {
+        let default_name = if let Some(cur) = self.survey_path.as_ref() {
+            let stem = cur
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("조사");
+            format!("{stem}_복사본.gpkg")
+        } else {
+            "새조사.gpkg".to_owned()
+        };
+        let mut dialog = rfd::FileDialog::new()
+            .set_title("다른 이름으로 저장")
+            .add_filter("고고학 조사 파일", &["gpkg", "qgz"])
+            .add_filter("GeoPackage", &["gpkg"])
+            .set_file_name(&default_name);
+        if let Some(dir) = self.survey_path.as_ref().and_then(|p| p.parent()) {
+            dialog = dialog.set_directory(dir);
+        }
+        let Some(picked) = dialog.save_file() else {
+            return false;
+        };
+        let mut target = picked;
+        if target
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("qgz"))
+            .unwrap_or(false)
+        {
+            target = target.with_extension("gpkg");
+        } else if !target
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("gpkg"))
+            .unwrap_or(false)
+        {
+            target.set_extension("gpkg");
+        }
+        if self.write_survey_to(&target) {
+            self.survey_path = Some(target);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 워크스페이스를 GPKG 로 실제로 쓴다. 성공하면 제목·저장 상태를 갱신한다.
+    fn write_survey_to(&mut self, path: &std::path::Path) -> bool {
+        use std::collections::BTreeMap;
+        use strata_storage::gpkg::{GpkgRepository, SurveyWorkspace};
+
+        let mut ws = SurveyWorkspace {
+            schema_version: 3,
+            work_crs: self.work_crs,
+            layers: BTreeMap::new(),
+            embedded_project_json: format!("{{\"title\":{:?}}}", self.project_title),
+        };
+        for entry in &self.left_layers.entries {
+            if let Some(key) = DomainLayerKey::from_id(&entry.layer_key) {
+                ws.ensure_domain_layer(key);
+            }
+        }
+        match GpkgRepository::write_workspace_file(path, &ws) {
+            Ok(()) => {
+                self.project_title = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&self.project_title)
+                    .to_owned();
+                self.is_dirty = false;
+                self.home_map.draw_guide_message = Some(format!(
+                    "「{}」 조사를 저장했습니다: {}",
+                    self.project_title,
+                    path.display()
+                ));
+                true
+            }
+            Err(e) => {
+                self.home_map.draw_guide_message =
+                    Some(format!("조사를 저장하지 못했습니다: {e}"));
+                false
+            }
+        }
+    }
+
     /// C++ `CrashHandler::handleCrash` / `emergencyAutoSave` — 비정상 종료 시 현재 열려 있는 조사 버퍼를 `.crash_recovery.gpkg`로 즉시 직렬화 백업 1:1
     pub fn emergency_auto_save(&self, crash_recovery_path: &Path) -> bool {
         use std::collections::BTreeMap;
@@ -461,6 +559,34 @@ impl StrataAppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// R3 — 저장이 실제 .gpkg 파일을 만들고, 다시 읽으면 좌표계·제목이 살아 있는지.
+    #[test]
+    fn test_r3_save_project_writes_real_gpkg_and_reopens() {
+        let mut app = StrataAppState::new_startup();
+        app.project_title = "병산동".to_owned();
+        app.work_crs = WorkCrs::Epsg5186;
+        app.left_layers
+            .ensure_domain_layer(DomainLayerKey::SurveyArea);
+        app.is_dirty = true;
+
+        let dir = std::env::temp_dir().join("strata_r3_save_test");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("병산동.gpkg");
+        let _ = std::fs::remove_file(&path);
+
+        assert!(app.write_survey_to(&path), "save should succeed");
+        assert!(path.exists(), "the .gpkg must exist on disk");
+        assert!(!app.is_dirty, "a successful save clears the dirty flag");
+
+        // 다시 읽어 좌표계와 레이어가 살아 있는지
+        let ws = strata_storage::gpkg::GpkgRepository::open_read_only(&path)
+            .expect("the file must be a readable GeoPackage");
+        assert_eq!(ws.work_crs, WorkCrs::Epsg5186);
+        assert!(ws.layers.contains_key("survey_area"));
+
+        let _ = std::fs::remove_file(&path);
+    }
 
     #[test]
     fn startup_opens_home_tab_and_drawing_ribbon_tool_switches_to_map_tab() {
