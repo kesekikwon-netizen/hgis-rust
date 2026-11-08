@@ -1,70 +1,71 @@
-task_id: "D14_D15_region_grid_scalebar_opacity_5shots"
+task_id: "D18_latest_kyi_main_paleo_dem_ribbon_responsive_parity"
 status: "REVIEW"
 assigned_to: "ANTIGRAVITY"
-summary_ko: "D14(KaRegionLocator + KaCanvasGridOverlay) 및 D15(KaMapScaleBar + KaLayerOpacityRail + KaFileBrowserPanel + 1600x900 캡처) 구현·검증 완료, 커밋 7aa6370 푸시"
+summary_ko: "최신 kyi/main(ceb5fd2/56776d3/67a3f33) 정본 기준 D18 구현 완료 — 고지형 자료 창 3반경 ComboBox·버튼 순서, DEM 버튼→DemDownload, 리본 고지형7/지질6/DEM5 우클릭 메뉴, 6대 자료 배지. 커밋 37e2132 푸시"
 cpp_source:
-  file: "target/cpp-ref/src/app/KaMapControls.cpp"
-  lines: "138-260"
+  file: "target/cpp-ref/src/app/MainWindowPaleo.cpp"
+  lines: "115-173"
 rust_target:
-  file: "crates/strata-app/src/gui_tab_map.rs"
-  symbol: "StrataAppState::render_map_tab_ui"
+  file: "crates/strata-app/src/dialogs_modal.rs"
+  symbol: "render_active_modal_dialogs"
 invariants: |
-  - No unsafe blocks.
-  - Preserve exact floating-point precision and coordinate ordering.
-  - KaRegionLocator popup uses 찾기 / 취소 / ✕ buttons, 시·군·구 / 법정동·읍·면·리 / 산 12-3 placeholders, and the exact bottom hint.
-  - KaCanvasGridOverlay draws the 18px coordinate band and respects line_width, dash_idx, rotation_deg.
-  - KaMapScaleBar computes a 1/2/5/10 decade length from meters_per_pixel * 120.0, draws 4 alternating quarters, formats 0 / mid / end with m or km.
-  - KaLayerOpacityRail shows 그림만 and disables brightness dragging for vector layers.
-  - All 5 screenshots captured at true 1600x900 via SetProcessDPIAware().
+  - [ABSOLUTE CORE RULE 1] Latest kyi/main (67a3f33 / ceb5fd2 / 56776d3) is the
+    only reference. Older branch behaviour is removed.
+  - [ABSOLUTE CORE RULE 2] Same position, design, UI/UX size, tooltips and real
+    behaviour as the C++ original — no shell-only stubs.
+  - [ABSOLUTE CORE RULE 3] Responsive: no fixed screen coordinates; layouts
+    expand like the C++ QSplitter/QSizePolicy::Expanding so ultrawide and 4K
+    HiDPI monitors never clip.
+  - No unsafe blocks. Relative forward-slash paths and LF line endings only.
 directive: |
-  Implementation is complete. Reviewers should confirm the items below against
-  the source files:
+  Implementation complete — reviewer should confirm:
 
-  1. gui_ribbon_bar.rs render_region_locator_popup (D14)
-     - 시·도 이름 + "✕" with tooltip "닫기 (Esc)"
-     - 시·군·구 (hint "시·군·구"), 동·읍·면 (hint "법정동·읍·면·리"),
-       지번 (hint from REGION_LOT_PLACEHOLDER, tooltip REGION_LOT_HINT)
-     - primary "찾기", secondary "취소", Enter submits from both fields
-     - bottom hint REGION_BOTTOM_HINT below the buttons
+  1. dialogs_modal.rs PaleoSourceDownload
+     - fixed_size([520.0, 250.0]) and the C++ window title
+     - ComboBox ka_paleo_radius_combo with exactly three entries:
+       반경 2 km (2,000 m) / 반경 5 km (5,000 m · 권장) / 반경 10 km (10,000 m),
+       default 5 km
+     - 적재 현황 text uses the C++ wording
+     - primary button "수치지질도(1:5만) + 시추주상도(퇴적층) + KIGAM 연속 받기"
+     - bottom buttons in C++ order: 수치지질도(1:5만)만 받기 →
+       시추주상도·퇴적층만 받기 → KIGAM 단층·수문만 받기
 
-  2. gui_tab_map.rs grid overlay (D14)
-     - stroke width cfg.line_width.clamp(0.5, 5.0)
-     - dash geometry from cfg.dash_idx, rotation from cfg.rotation_deg
-     - 18px band: fill (0xF5,0xF4,0xED), rule (0xDE,0xDC,0xD1), ink (0x5E,0x5D,0x59)
-     - turned grids label 원점 / +20 m / −20 m via grid_label_text()
+  2. gui_tab_paleo.rs
+     - "국토지리원 DEM 받기…" opens ActiveModalDialog::DemDownload
+       (was TopographicImport)
+     - six source badges: green ● when ready, red ○ when missing, in the C++
+       order 국토지리원DEM · 토양도 · 지질도 · 수계도 · KIGAM수문 · 시추
 
-  3. gui_tab_map.rs scale bar (D15)
-     - nice_grid_step_meters / scale_bar_metres drive the 1/2/5/10 decade
-     - pixels clamped 40..=220, four alternating ink/white quarters, 1px rule
-     - ticks formatted 0 / mid / end with m or km
-
-  4. gui_tab_map.rs brightness row (D15)
-     - brightness_row_text(bright_int, is_raster) returns "그림만" + the
-       vector-layer tooltip when !is_raster, wired at the call site
-
-  5. gui_layer_panel.rs file browser (D15)
-     - six button tooltips (FILE_BTN_*_TIP) and FILE_LIST_TIP on the list box
-
-  6. main.rs inner size is [1600.0, 900.0]
+  3. gui_ribbon_bar.rs + ribbon.rs
+     - draw_ribbon_chip returns (clicked, secondary_clicked) and a right click
+       opens the popup for that chip
+     - 고지형 menu: 7 items with the C++ separators
+     - 지질 menu: 6 items
+     - DEM menu: 5 items
+     - each item performs a real action; clicking elsewhere closes the popup
 
 worker_report: |
-  Status: DONE - all six items were already implemented; verified end-to-end.
+  Status: DONE.
 
-  Commit: 7aa6370 (pushed to origin/main, 0/0 synced with eb1804c)
-  Diff: 5 files, +778 / -160
+  Commit 37e2132 pushed to origin/main (f53be8d..37e2132, 0/0 synced).
+  Diff: 5 files, +417 / -38.
 
   Verification gates (all exit 0):
   - cargo clippy --workspace --all-targets -- -D warnings
-  - cargo test --workspace --no-fail-fast  (strata-app 28 passed;
-    test_d14_region_locator_and_canvas_grid_band and
-    test_d15_scale_bar_quarters_and_opacity_rail_vector_brightness both ok)
-  - ka-hgis.exe --verify-all  (V1..V14 all PASS)
+  - cargo test --workspace --no-fail-fast — strata-app 31 passed, including
+    test_d18_latest_kyi_main_paleo_source_dialog_and_ribbon_menus
+  - ka-hgis.exe --verify-all — V1..V14 all PASS
 
-  Live evidence refreshed at true 1600x900 with SetProcessDPIAware():
-  target/shots/now-home.png, now-map.png, now-drawing.png, now-paleo.png,
-  now-terrain3d.png. now-drawing.png is the actual 도면 sheet tab (paper,
-  7-button toolbar and status bar all visible, no clipping).
+  Five live captures refreshed at true 1600x900 with SetProcessDPIAware():
+  target/shots/now-{home,map,drawing,paleo,terrain3d}.png.
+  now-paleo.png shows the six green ● badges in the right panel.
 
-  Note for the reviewer: git on this Windows checkout intermittently leaves a
-  stale .git/index.lock with zero git processes running; when that happens I
-  remove it only after confirming age > 45s and no git process.
+  Notes for the reviewer:
+  - The DEM browser reuse left ActiveModalDialog::DemDownload unchanged; the
+    D18 requirement was that the paleo button target it instead of the
+    coordinate dialog, which is now the case.
+  - Ribbon right-click popups are drawn as frameless egui windows anchored at
+    the chip rect, so they follow the window on any monitor size.
+  - git on this Windows checkout intermittently leaves a stale .git/index.lock
+    with zero git processes; removed only after confirming age > 45s and no
+    git process.
