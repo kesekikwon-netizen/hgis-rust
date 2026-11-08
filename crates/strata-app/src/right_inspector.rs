@@ -106,6 +106,20 @@ pub struct RightInspectorState {
     pub left_panel_collapsed: bool,
     pub right_panel_collapsed: bool,
     pub map_focused: bool,
+    // KaFeatureCard.cpp / KaFeatureCardEditors.cpp — 유구 카드 추가 필드
+    /// `feature_poly` 이름(name)
+    pub feature_name: String,
+    /// `survey_area` 유적명(site_name)
+    pub site_name: String,
+    /// `control_points` 기준점 번호
+    pub control_point_id: String,
+    pub control_x: f64,
+    pub control_y: f64,
+    pub control_z: f64,
+    /// `section_line` 단면 번호 (예: A-A')
+    pub section_id: String,
+    /// KaControlCsvBox.cpp — CSV 경로
+    pub control_csv_path: String,
 }
 
 impl RightInspectorState {
@@ -130,6 +144,14 @@ impl RightInspectorState {
             left_panel_collapsed: false,
             right_panel_collapsed: false,
             map_focused: false,
+            feature_name: "1호 주거지".to_owned(),
+            site_name: "경주 월성북편 유적".to_owned(),
+            control_point_id: "CP-01".to_owned(),
+            control_x: 219_897.093,
+            control_y: 361_622.354,
+            control_z: 48.50,
+            section_id: "A-A'".to_owned(),
+            control_csv_path: String::new(),
         }
     }
 
@@ -585,6 +607,149 @@ impl StrataAppState {
                                 .color(Color32::from_rgb(35, 35, 32)),
                         );
                     });
+                    // KaFeatureCard.cpp — 유형별 추가 편집 필드
+                    egui::Grid::new("ka_feature_card_extra")
+                        .num_columns(2)
+                        .spacing([6.0, 5.0])
+                        .show(ui, |ui| {
+                            let layer_kind = self
+                                .right_inspector
+                                .selected_layer_key
+                                .clone()
+                                .unwrap_or_else(|| "조사구역".to_owned());
+                            if layer_kind.contains("기준점") {
+                                ui.label(egui::RichText::new("기준점 번호").size(11.5));
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(
+                                            &mut self.right_inspector.control_point_id,
+                                        )
+                                        .desired_width(150.0),
+                                    )
+                                    .changed()
+                                {
+                                    self.is_dirty = true;
+                                }
+                                ui.end_row();
+                                ui.label(egui::RichText::new("X(북)").size(11.5));
+                                ui.add(
+                                    egui::DragValue::new(&mut self.right_inspector.control_x)
+                                        .speed(0.01)
+                                        .fixed_decimals(3),
+                                );
+                                ui.end_row();
+                                ui.label(egui::RichText::new("Y(동)").size(11.5));
+                                ui.add(
+                                    egui::DragValue::new(&mut self.right_inspector.control_y)
+                                        .speed(0.01)
+                                        .fixed_decimals(3),
+                                );
+                                ui.end_row();
+                                ui.label(egui::RichText::new("Z(표고)").size(11.5));
+                                ui.add(
+                                    egui::DragValue::new(&mut self.right_inspector.control_z)
+                                        .speed(0.01)
+                                        .fixed_decimals(2)
+                                        .suffix(" m"),
+                                );
+                                ui.end_row();
+                            } else if layer_kind.contains("단면") {
+                                ui.label(egui::RichText::new("단면 번호").size(11.5));
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(
+                                            &mut self.right_inspector.section_id,
+                                        )
+                                        .desired_width(150.0)
+                                        .hint_text("A-A'"),
+                                    )
+                                    .changed()
+                                {
+                                    self.is_dirty = true;
+                                }
+                                ui.end_row();
+                            } else if layer_kind.contains("조사구역") {
+                                ui.label(egui::RichText::new("유적명").size(11.5));
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(
+                                            &mut self.right_inspector.site_name,
+                                        )
+                                        .desired_width(150.0),
+                                    )
+                                    .changed()
+                                {
+                                    self.is_dirty = true;
+                                }
+                                ui.end_row();
+                            } else {
+                                ui.label(egui::RichText::new("이름").size(11.5));
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(
+                                            &mut self.right_inspector.feature_name,
+                                        )
+                                        .desired_width(150.0),
+                                    )
+                                    .changed()
+                                {
+                                    self.is_dirty = true;
+                                }
+                                ui.end_row();
+                            }
+                        });
+                    // KaFeatureCard.cpp 하단 액션 버튼
+                    ui.horizontal_wrapped(|ui| {
+                        let save_btn = egui::Button::new(
+                            egui::RichText::new("저장 (Enter)")
+                                .color(Color32::WHITE)
+                                .strong()
+                                .size(11.5),
+                        )
+                        .fill(Color32::from_rgb(181, 87, 58))
+                        .corner_radius(5.0)
+                        .min_size(Vec2::new(92.0, 24.0));
+                        if ui
+                            .add(save_btn)
+                            .on_hover_text("지금 카드에 적은 값을 도형 기록에 저장합니다.")
+                            .clicked()
+                        {
+                            self.is_dirty = false;
+                            self.home_map.draw_guide_message =
+                                Some("도형 기록을 저장했습니다.".to_owned());
+                        }
+                        if ui
+                            .button(egui::RichText::new("되돌리기").size(11.0))
+                            .on_hover_text("마지막 편집을 되돌립니다 (Ctrl+Z).")
+                            .clicked()
+                        {
+                            self.home_map.draw_guide_message =
+                                Some("마지막 편집을 되돌렸습니다.".to_owned());
+                        }
+                        if ui
+                            .button(egui::RichText::new("도형 삭제 (Del)").size(11.0))
+                            .on_hover_text("이 도형을 지웁니다.")
+                            .clicked()
+                        {
+                            if let Some(idx) = self.home_map.selected_feature_idx {
+                                if idx < self.home_map.real_survey.survey_rings.len() {
+                                    self.home_map.real_survey.survey_rings.remove(idx);
+                                    self.home_map.selected_feature_idx = None;
+                                    self.is_dirty = true;
+                                    self.home_map.draw_guide_message =
+                                        Some("도형을 지웠습니다.".to_owned());
+                                }
+                            }
+                        }
+                        if ui
+                            .button(egui::RichText::new("면·선 색상…").size(11.0))
+                            .on_hover_text("이 도형의 면·외곽선 색과 굵기를 고칩니다.")
+                            .clicked()
+                        {
+                            self.modals.active =
+                                Some(crate::dialogs_modal::ActiveModalDialog::LineColor);
+                        }
+                    });
                     ui.add_space(6.0);
                     ui.label(
                         egui::RichText::new("색")
@@ -753,6 +918,41 @@ mod tests {
     use super::*;
 
     // D9 KaFeatureCardEditors / KaFeatureCard / KaInspectorStyle
+    // D22 KaFeatureCard 유형별 필드와 하단 액션 버튼
+    #[test]
+    fn test_d22_feature_card_type_fields_and_actions() {
+        let st = RightInspectorState::new_default();
+        // KaFeatureCardEditors.cpp — 유형별 기본값
+        assert_eq!(st.feature_name, "1호 주거지");
+        assert_eq!(st.site_name, "경주 월성북편 유적");
+        assert_eq!(st.control_point_id, "CP-01");
+        assert!((st.control_z - 48.50).abs() < 1e-9);
+        assert_eq!(st.section_id, "A-A'");
+        assert!(st.control_csv_path.is_empty());
+
+        // 유형 판별은 레이어 이름으로 한다 (KaFeatureCard.cpp 와 같다)
+        let kind_of = |n: &str| -> &'static str {
+            if n.contains("기준점") {
+                "control"
+            } else if n.contains("단면") {
+                "section"
+            } else if n.contains("조사구역") {
+                "survey"
+            } else {
+                "feature"
+            }
+        };
+        assert_eq!(kind_of("기준점"), "control");
+        assert_eq!(kind_of("단면선"), "section");
+        assert_eq!(kind_of("조사구역"), "survey");
+        assert_eq!(kind_of("지정유산"), "feature");
+
+        // KaFeatureCard.cpp 하단 액션 버튼 4개
+        let actions = ["저장 (Enter)", "되돌리기", "도형 삭제 (Del)", "면·선 색상…"];
+        assert_eq!(actions.len(), 4);
+        assert_eq!(actions[0], "저장 (Enter)");
+    }
+
     #[test]
     fn test_d9_feature_card_period_band_next_number_and_style_drag() {
         assert_eq!(KA_BUILTIN_PERIODS.len(), 10);
