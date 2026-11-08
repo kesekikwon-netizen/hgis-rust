@@ -5,6 +5,7 @@ use strata_layout::tile_print::{
     compute_tile_print_plan_with_overlap, format_print_dispatched_message,
     verify_requested_device_paper,
 };
+use strata_net::heritage_intranet::{HeritagePipelineOutcome, HeritageStage};
 use strata_storage::gpkg::{validate_survey_name_ko, KA_LONGITUDE_RULER_CITIES};
 use strata_types::crs::WorkCrs;
 
@@ -30,6 +31,146 @@ fn render_ka_download_header(ui: &mut egui::Ui, title: &str, subtitle: &str, min
     ui.add_space(10.0);
 }
 
+/// 「받기」 한 번의 인트라넷 작업을 딴 실에서 돌린다. UI 를 멈추지 않는다.
+struct HeritageFetchJob {
+    rx: std::sync::mpsc::Receiver<Result<HeritagePipelineOutcome, String>>,
+}
+
+thread_local! {
+    static HERITAGE_FETCH_JOB: std::cell::RefCell<Option<HeritageFetchJob>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// 받는 중인가. 화면을 다시 그리게 하는 데 쓴다.
+fn heritage_fetch_in_progress() -> bool {
+    HERITAGE_FETCH_JOB.with(|job| job.borrow().is_some())
+}
+
+/// 「받기」 — C++ `KaHeritageBrowser::start()` (`KaHeritageBrowser.cpp:571-629`) 와 같은 순서.
+///
+/// 막는 조건(계정·시군·조사폴더)은 요청 전에 C++ 문구로 끝낸다. 통과하면
+/// 다운로드 화면 → 목록 → 폼 → 시·군 검색 → 자료별 ZIP 을 실제 HTTP 로 받는다.
+fn heritage_start_fetch(app: &mut StrataAppState) {
+    if heritage_fetch_in_progress() {
+        return;
+    }
+    let sido = app.modals.heritage_sido.clone();
+    let city = app.modals.heritage_city.clone();
+    let survey_dir = app.home_map.real_survey.survey_dir.clone();
+    let have_account = app.accounts.heritage_configured;
+    let survey_arg = (!survey_dir.as_os_str().is_empty()).then_some(survey_dir.clone());
+
+    if let Err(why) = strata_net::heritage_intranet::heritage_preflight(
+        have_account,
+        survey_arg.as_deref(),
+        &sido,
+        &city,
+    ) {
+        app.modals.heritage_stage_idx = HeritageStage::Failed.ui_index();
+        app.modals.heritage_progress_pct = 0.0;
+        app.modals.heritage_status_detail = why;
+        return;
+    }
+
+    let datasets: Vec<(String, String)> = strata_net::heritage_intranet::HERITAGE_TAB_CODES
+        .iter()
+        .map(|(label, tab)| ((*label).to_owned(), (*tab).to_owned()))
+        .collect();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let worker_dir = survey_dir.clone();
+    let worker_sido = sido.clone();
+    let worker_city = city.clone();
+    std::thread::spawn(move || {
+        let mut outcome = match strata_net::heritage_intranet::heritage_http_search(
+            Some(worker_dir.as_path()),
+            have_account,
+            &worker_sido,
+            &worker_city,
+            None,
+        ) {
+            Ok(outcome) => outcome,
+            Err(why) => {
+                let _ = tx.send(Err(why));
+                return;
+            }
+        };
+        let _ = strata_net::heritage_intranet::heritage_http_download(
+            &mut outcome,
+            worker_dir.as_path(),
+            &datasets,
+            None,
+        );
+        let _ = tx.send(Ok(outcome));
+    });
+
+    HERITAGE_FETCH_JOB.with(|job| *job.borrow_mut() = Some(HeritageFetchJob { rx }));
+    app.modals.heritage_stage_idx = HeritageStage::Search.ui_index();
+    app.modals.heritage_progress_pct = 0.2;
+    app.modals.heritage_status_detail =
+        format!("{sido} {city} — 인트라넷에서 자료 목록과 검색 결과를 받는 중입니다.");
+    app.modals.heritage_request_log.clear();
+    app.home_map.draw_guide_message = Some(app.modals.heritage_status_detail.clone());
+}
+
+/// 끝난 작업이 있으면 창에 반영한다. 반영했으면 true.
+fn heritage_poll_fetch(app: &mut StrataAppState) -> bool {
+    let finished = HERITAGE_FETCH_JOB.with(|job| {
+        let mut slot = job.borrow_mut();
+        let running = slot.as_ref()?;
+        match running.rx.try_recv() {
+            Ok(result) => {
+                *slot = None;
+                Some(result)
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => None,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                *slot = None;
+                Some(Err("인트라넷 작업이 중단되었습니다.".to_owned()))
+            }
+        }
+    });
+    let Some(result) = finished else {
+        return false;
+    };
+    match result {
+        Ok(outcome) => {
+            let failed: Vec<String> = outcome.files.iter().filter_map(|f| f.error.clone()).collect();
+            let saved = outcome.files.iter().filter(|f| f.saved_path.is_some()).count();
+            app.modals.heritage_request_log = outcome.request_log.clone();
+            app.modals.heritage_progress_pct = 1.0;
+            if saved > 0 {
+                app.modals.heritage_stage_idx = HeritageStage::Done.ui_index();
+                let mut detail = outcome.detail_ko();
+                if !failed.is_empty() {
+                    detail.push_str(&format!(
+                        " · 받지 못한 자료 {}종: {}",
+                        failed.len(),
+                        failed.join(" / ")
+                    ));
+                }
+                app.modals.heritage_status_detail = detail;
+            } else {
+                // 파일이 하나도 안 왔다: 성공으로 넘기지 않는다(C++ `fail` 과 같은 태도).
+                app.modals.heritage_stage_idx = HeritageStage::Failed.ui_index();
+                app.modals.heritage_progress_pct = 0.0;
+                app.modals.heritage_status_detail = if failed.is_empty() {
+                    outcome.detail_ko()
+                } else {
+                    failed.join("\n")
+                };
+            }
+            app.home_map.draw_guide_message = Some(app.modals.heritage_status_detail.clone());
+        }
+        Err(why) => {
+            app.modals.heritage_stage_idx = HeritageStage::Failed.ui_index();
+            app.modals.heritage_progress_pct = 0.0;
+            app.modals.heritage_status_detail = why.clone();
+            app.home_map.draw_guide_message = Some(why);
+        }
+    }
+    true
+}
+
 /// C++ 자료 받기·시굴격자·도면 인쇄 대화상자 (`KaDownloadUi.cpp`, `KaTrenchDialog.cpp`, `KaPrintDialogPlate.cpp`) 1:1 재현
 pub fn render_download_and_print_dialogs(
     app: &mut StrataAppState,
@@ -37,6 +178,17 @@ pub fn render_download_and_print_dialogs(
     kind: ActiveModalDialog,
     open: &mut bool,
 ) {
+    // 받는 중이면 끝난 결과를 반영하고, 끝날 때까지 화면을 계속 다시 그린다.
+    if matches!(
+        kind,
+        ActiveModalDialog::HeritageBrowser | ActiveModalDialog::HeritageRegionSelect
+    ) && heritage_poll_fetch(app)
+    {
+        ctx.request_repaint();
+    }
+    if heritage_fetch_in_progress() {
+        ctx.request_repaint_after(std::time::Duration::from_millis(200));
+    }
     match kind {
         ActiveModalDialog::HeritageRegionSelect => {
             egui::Window::new("ka_modal_heritage_bg")
@@ -107,25 +259,83 @@ pub fn render_download_and_print_dialogs(
                     render_strata_modal_header(ui, "주변유적 받을 시·군 선택 - Strata", open);
                     ui.label(egui::RichText::new("조사구역이 속한 시·군을 확인하세요.\n자료는 선택한 시·군 단위로만 받습니다.").size(14.5).color(Color32::from_rgb(35, 35, 32)));
                     ui.add_space(12.0);
-                    for (lbl, val, hi) in [("시·도", "경상북도                                                       ▼", true), ("시·군·구", "경주시                                                          ▼", false)] {
-                        ui.horizontal(|ui| {
-                            ui.add_sized([88.0, 32.0], egui::Label::new(egui::RichText::new(lbl).size(14.0).color(Color32::from_rgb(80, 79, 74))));
-                            let stroke = if hi { Stroke::new(1.5, Color32::from_rgb(38, 37, 34)) } else { Stroke::new(1.0, Color32::from_rgb(165, 162, 152)) };
-                            let _ = ui.add(egui::Button::new(egui::RichText::new(val).size(14.0)).fill(Color32::WHITE).stroke(stroke).corner_radius(6.0).min_size(Vec2::new(260.0, 32.0)));
-                        });
-                        ui.add_space(6.0);
-                    }
-                    let mut reuse_recent = false;
+                    // KaHeritageSetupDialogs.cpp:99-107,144-166 — 시·도를 고르면 시·군 목록이 그것만 남는다.
+                    // KoreaRegionCatalog 가 정본이고, 둘 다 골라야 「이 지역 받기」가 열린다(같은 파일 :149-152).
+                    ui.horizontal(|ui| {
+                        ui.add_sized([88.0, 32.0], egui::Label::new(egui::RichText::new("시·도").size(14.0).color(Color32::from_rgb(80, 79, 74))));
+                        egui::ComboBox::from_id_salt("ka_heritage_region_sido")
+                            .selected_text(if app.modals.heritage_sido.is_empty() {
+                                "시·도 선택".to_owned()
+                            } else {
+                                app.modals.heritage_sido.clone()
+                            })
+                            .width(260.0)
+                            .show_ui(ui, |ui| {
+                                let sido_list: Vec<String> =
+                                    strata_net::address_search::KoreaRegionCatalog::all_sido()
+                                        .iter()
+                                        .map(|s| s.name.to_owned())
+                                        .collect();
+                                for name in sido_list {
+                                    if ui
+                                        .selectable_label(app.modals.heritage_sido == name, &name)
+                                        .clicked()
+                                    {
+                                        app.modals.heritage_sido = name;
+                                        // 시·군이 새 시·도에 없으면 비운다.
+                                        if !strata_net::address_search::KoreaRegionCatalog::cities_of(
+                                            &app.modals.heritage_sido,
+                                        )
+                                        .contains(&app.modals.heritage_city)
+                                        {
+                                            app.modals.heritage_city.clear();
+                                        }
+                                    }
+                                }
+                            });
+                    });
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.add_sized([88.0, 32.0], egui::Label::new(egui::RichText::new("시·군·구").size(14.0).color(Color32::from_rgb(80, 79, 74))));
+                        egui::ComboBox::from_id_salt("ka_heritage_region_city")
+                            .selected_text(if app.modals.heritage_city.is_empty() {
+                                "시·군·구 선택".to_owned()
+                            } else {
+                                app.modals.heritage_city.clone()
+                            })
+                            .width(260.0)
+                            .show_ui(ui, |ui| {
+                                for name in strata_net::address_search::KoreaRegionCatalog::cities_of(
+                                    &app.modals.heritage_sido,
+                                ) {
+                                    if ui
+                                        .selectable_label(app.modals.heritage_city == name, &name)
+                                        .clicked()
+                                    {
+                                        app.modals.heritage_city = name;
+                                    }
+                                }
+                            });
+                    });
+                    ui.add_space(6.0);
+                    let mut reuse_recent = app.modals.heritage_reuse_recent;
                     ui.checkbox(&mut reuse_recent, egui::RichText::new("최근 받은 자료 다시 쓰기").size(14.0));
-                    ui.label(egui::RichText::new("2026-10-25 08:52 받음 · 없는 자료만 서버에서 받음").size(12.5).color(Color32::from_rgb(95, 94, 88)));
+                    app.modals.heritage_reuse_recent = reuse_recent;
                     ui.add_space(8.0);
                     ui.label(egui::RichText::new("받기를 누르면 국가유산 인트라넷의 「원본자료 사용 서약서」에 자동으로 동의하고,\n동의 시각과 서약서 원문을 조사폴더 주변유적/receipts 에 남깁니다. 받은 자료는\n동국문화재연구원 소유입니다. 도면·보고서에 넣거나 밖으로 보내기 전에 서약 범위를\n확인하세요.").size(12.5).color(Color32::from_rgb(75, 74, 70)));
                     ui.add_space(12.0);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let cancel_b = egui::Button::new(egui::RichText::new("취소").size(14.0)).fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(145, 142, 134))).corner_radius(6.0).min_size(Vec2::new(66.0, 36.0));
-                        if ui.add(cancel_b).clicked() { app.modals.active = None; }
+                        if ui.add(cancel_b).clicked() {
+                            app.modals.active = None;
+                        }
+                        // :149-152 — 시·도와 시·군·구를 다 고르기 전에는 열리지 않는다.
+                        let ready = !app.modals.heritage_sido.is_empty()
+                            && !app.modals.heritage_city.is_empty();
                         let ok_b = egui::Button::new(egui::RichText::new("이 지역 받기").color(Color32::WHITE).strong().size(14.0)).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(116.0, 36.0));
-                        if ui.add(ok_b).clicked() { app.modals.active = Some(ActiveModalDialog::HeritageBrowser); }
+                        if ui.add_enabled(ready, ok_b).clicked() {
+                            app.modals.active = Some(ActiveModalDialog::HeritageBrowser);
+                        }
                     });
                 });
         }
@@ -133,86 +343,6 @@ pub fn render_download_and_print_dialogs(
             render_topographic_browser(app, ctx, open);
         }
         ActiveModalDialog::CadastralDownload => {
-            egui::Window::new("ka_modal_cadastral")
-                .title_bar(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .default_width(540.0)
-                .show(ctx, |ui| {
-                    render_strata_modal_header(ui, "지적도 다운로드 - Strata", open);
-                    render_ka_download_header(
-                        ui,
-                        "지적도 다운로드",
-                        "VWorld · 조사구역 경계에서 주변 5km의 지적도를 준비합니다.",
-                        508.0,
-                    );
-                    egui::Frame::NONE
-                        .fill(Color32::WHITE)
-                        .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
-                        .corner_radius(8.0)
-                        .inner_margin(egui::Margin::symmetric(16, 14))
-                        .show(ui, |ui| {
-                            ui.set_min_width(508.0);
-                            ui.label(
-                                egui::RichText::new("자료 준비 및 다운로드")
-                                    .size(14.5)
-                                    .strong(),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new("VWorld 계정을 확인하고 있습니다...")
-                                    .size(13.5),
-                            );
-                            ui.add_space(8.0);
-                            let (bar_r, _) = ui
-                                .allocate_exact_size(Vec2::new(492.0, 26.0), egui::Sense::hover());
-                            let p = ui.painter_at(bar_r);
-                            p.rect_filled(bar_r, 4.0, Color32::WHITE);
-                            p.rect_stroke(
-                                bar_r,
-                                4.0,
-                                Stroke::new(1.0, Color32::from_rgb(160, 158, 150)),
-                                egui::StrokeKind::Middle,
-                            );
-                            p.rect_filled(
-                                Rect::from_min_size(
-                                    bar_r.min + Vec2::new(1.0, 1.0),
-                                    Vec2::new(40.0, 24.0),
-                                ),
-                                4.0,
-                                Color32::from_rgb(25, 25, 24),
-                            );
-                            p.text(
-                                bar_r.center(),
-                                egui::Align2::CENTER_CENTER,
-                                "8%",
-                                egui::FontId::proportional(13.0),
-                                Color32::from_rgb(35, 35, 32),
-                            );
-                        });
-                    ui.add_space(12.0);
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new("다운로드 중에도 지도 작업을 계속할 수 있습니다.")
-                                .size(13.5)
-                                .color(Color32::from_rgb(75, 74, 70)),
-                        );
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let cancel_b = egui::Button::new(
-                                egui::RichText::new("취소")
-                                    .color(Color32::WHITE)
-                                    .strong()
-                                    .size(13.5),
-                            )
-                            .fill(Color32::from_rgb(181, 87, 58))
-                            .corner_radius(6.0)
-                            .min_size(Vec2::new(62.0, 34.0));
-                            if ui.add(cancel_b).clicked() {
-                                app.modals.active = None;
-                            }
-                        });
-                    });
-                });
         }
         ActiveModalDialog::TrenchGenerator => {
             egui::Window::new("ka_modal_trench")
@@ -1504,8 +1634,12 @@ pub fn render_download_and_print_dialogs(
                                     .selected_text(&app.modals.heritage_sido)
                                     .width(110.0)
                                     .show_ui(ui, |ui| {
-                                        for s in ["경상북도", "경상남도", "서울특별시", "경기도", "충청남도", "전북특별자치도", "전라남도"] {
-                                            ui.selectable_value(&mut app.modals.heritage_sido, s.to_owned(), s);
+                                        for s in strata_net::address_search::KoreaRegionCatalog::all_sido() {
+                                            ui.selectable_value(
+                                                &mut app.modals.heritage_sido,
+                                                s.name.to_owned(),
+                                                s.name,
+                                            );
                                         }
                                     });
                                 ui.label(egui::RichText::new("시·군·구").size(12.0).strong());
@@ -1513,8 +1647,14 @@ pub fn render_download_and_print_dialogs(
                                     .selected_text(&app.modals.heritage_city)
                                     .width(96.0)
                                     .show_ui(ui, |ui| {
-                                        for c in ["경주시", "포항시", "영천시", "청도군", "안동시"] {
-                                            ui.selectable_value(&mut app.modals.heritage_city, c.to_owned(), c);
+                                        for c in strata_net::address_search::KoreaRegionCatalog::cities_of(
+                                            &app.modals.heritage_sido,
+                                        ) {
+                                            ui.selectable_value(
+                                                &mut app.modals.heritage_city,
+                                                c.clone(),
+                                                &c,
+                                            );
                                         }
                                     });
                                 ui.separator();
@@ -1852,63 +1992,32 @@ pub fn render_download_and_print_dialogs(
                             .corner_radius(6.0)
                             .min_size(Vec2::new(96.0, 32.0));
                             if ui.add(fetch_btn).clicked() {
+                                // KaHeritageBrowser.cpp:571-629 — 막는 조건은 요청 전에 문구로 끝낸다.
                                 if !app.accounts.heritage_configured {
-                                    app.modals.heritage_stage_idx = 11;
+                                    app.modals.heritage_stage_idx =
+                                        HeritageStage::Failed.ui_index();
                                     app.modals.heritage_progress_pct = 0.0;
                                     app.modals.heritage_status_detail =
-                                        "국가유산 인트라넷 계정이 없습니다. [설정] 버튼을 눌러 아이디·비밀번호를 저장하세요."
+                                        strata_net::heritage_intranet::messages::NO_ACCOUNT
                                             .to_owned();
                                 } else {
-                                    // crates/strata-net/src/heritage_intranet.rs 재사용 + 실제 네트워크 연결 수행
-                                    let url_ok = strata_net::heritage_intranet::HeritageIntranetFlow::is_allowed_frame_url(
-                                        strata_net::heritage_intranet::HeritageIntranetFlow::LOGIN_URL,
-                                    )
-                                    .is_ok();
-                                    let _login_js = strata_net::heritage_intranet::HeritageIntranetFlow::login_script(
-                                        &app.accounts.heritage_creds.username,
-                                        &app.accounts.heritage_creds.password,
-                                    );
-                                    let _open_js =
-                                        strata_net::heritage_intranet::HeritageIntranetFlow::open_download_page_script();
-                                    let _search_js =
-                                        strata_net::heritage_intranet::HeritageIntranetFlow::search_script();
-
-                                    // 실제 네트워크 소켓 연결 시도 (intranet.gis-heritage.go.kr:443, 350ms 타임아웃)
-                                    let net_status = std::net::ToSocketAddrs::to_socket_addrs(&(
-                                        "intranet.gis-heritage.go.kr",
-                                        443u16,
-                                    ))
-                                    .ok()
-                                    .and_then(|mut addrs| addrs.next())
-                                    .and_then(|addr| {
-                                        std::net::TcpStream::connect_timeout(
-                                            &addr,
-                                            std::time::Duration::from_millis(350),
-                                        )
-                                        .ok()
-                                    });
-
-                                    app.modals.heritage_request_log.clear();
-                                    app.modals.heritage_request_log.push(
-                                        strata_net::heritage_intranet::HeritageIntranetFlow::redact_request_line(
-                                            "POST",
-                                            strata_net::heritage_intranet::HeritageIntranetFlow::LOGIN_URL,
-                                        ),
-                                    );
-                                    app.modals.heritage_request_log.push(
-                                        strata_net::heritage_intranet::HeritageIntranetFlow::redact_request_line(
-                                            "GET",
-                                            "https://intranet.gis-heritage.go.kr/intranet/codedeta/selectCodeDetaList.do?sido=47&sigungu=47130",
-                                        ),
-                                    );
-                                    app.modals.heritage_request_log.push(
-                                        strata_net::heritage_intranet::HeritageIntranetFlow::redact_request_line(
-                                            "POST",
-                                            "https://intranet.gis-heritage.go.kr/intranet/codedeta/downloadFilesAll.do",
-                                        ),
-                                    );
-
-                                    // 서약서 영수증 파일 기록 (주변유적/receipts/pledge_receipt.txt)
+                                    // 체크된 자료 종류를 지도 레이어 가시성에 반영한다.
+                                    for (di, lname) in [
+                                        "국가등록문화유산",
+                                        "국가지정유산",
+                                        "국가지정유산보호구역",
+                                        "시도지정유산",
+                                        "시도지정유산보호구역",
+                                    ]
+                                    .into_iter()
+                                    .enumerate()
+                                    {
+                                        app.home_map.real_survey.layer_visible.insert(
+                                            lname.to_owned(),
+                                            app.modals.heritage_dataset_checks[di],
+                                        );
+                                    }
+                                    // 서약서 동의 영수증 (MainWindow.cpp:3246-3262).
                                     let receipt_dir = app
                                         .home_map
                                         .real_survey
@@ -1920,46 +2029,8 @@ pub fn render_download_and_print_dialogs(
                                         receipt_dir.join("pledge_receipt.txt"),
                                         "서약서에 자동 동의했습니다. 원문은 조사폴더 주변유적/receipts 에 남습니다.\n받은 자료는 동국문화재연구원 소유입니다.",
                                     );
-
-                                    // 체크된 레이어 지도 가시성 반영
-                                    for (di, lname) in [
-                                        "국가등록문화유산",
-                                        "국가지정유산",
-                                        "국가지정유산보호구역",
-                                        "시도지정유산",
-                                        "시도지정유산보호구역",
-                                    ]
-                                    .into_iter()
-                                    .enumerate()
-                                    {
-                                        app.home_map
-                                            .real_survey
-                                            .layer_visible
-                                            .insert(lname.to_owned(), app.modals.heritage_dataset_checks[di]);
-                                    }
-
-                                    let checked_cnt = app
-                                        .modals
-                                        .heritage_dataset_checks
-                                        .iter()
-                                        .filter(|&&b| b)
-                                        .count();
-                                    app.modals.heritage_stage_idx = 10;
-                                    app.modals.heritage_progress_pct = 1.0;
-                                    let conn_tag = if net_status.is_some() && url_ok {
-                                        "인트라넷 HTTPS 연결됨"
-                                    } else {
-                                        "인트라넷 요청 전송·로컬 캐시 동기화됨"
-                                    };
-                                    app.modals.heritage_status_detail = format!(
-                                        "{} {} — 선택 {}종 ({conn_tag}) · 검색결과 {}건 지도 적재 완료",
-                                        app.modals.heritage_sido,
-                                        app.modals.heritage_city,
-                                        checked_cnt,
-                                        filtered_rows.len()
-                                    );
-                                    app.home_map.draw_guide_message =
-                                        Some(app.modals.heritage_status_detail.clone());
+                                    // 실제 인트라넷 작업: 화면 → 목록 → 폼 → 시·군 검색 → ZIP
+                                    heritage_start_fetch(app);
                                 }
                             }
                         });
@@ -2885,5 +2956,63 @@ mod tests {
             MAP_TAB_ONLY_REASON,
             "「지도」 탭에서 쓸 수 있습니다. 지도 탭으로 옮긴 뒤 누르세요."
         );
+    }
+
+    // R13 — 「유산」 받기 흐름이 C++ 순서·문구를 지키는가 (네트워크 없이 확인)
+    #[test]
+    fn test_r13_heritage_receive_flow_matches_the_cpp_pipeline() {
+        use strata_net::heritage_intranet::{
+            heritage_preflight, messages, HeritageIntranetFlow, HeritageStage,
+            HERITAGE_TAB_CODES,
+        };
+
+        // KaHeritageBrowser.cpp:598 — 계정이 없으면 요청 전에 이 문구로 멈춘다.
+        let dir = std::path::Path::new("C:/survey/r13");
+        assert_eq!(
+            heritage_preflight(false, Some(dir), "경상북도", "경주시"),
+            Err(messages::NO_ACCOUNT.to_owned())
+        );
+        // MainWindow.cpp:3113-3116 — 조사폴더 없이는 받지 않는다.
+        assert!(heritage_preflight(true, None, "경상북도", "경주시")
+            .expect_err("조사폴더 없이 받으면 안 된다")
+            .contains("조사를 먼저 열거나 저장하세요"));
+
+        // KaHeritageBrowser.cpp:571-629 — 로그인 → 다운로드 화면 → 목록 → 시·군 선택 → 검색
+        // → 받기 순서가 단계 이름으로 드러난다.
+        let order = [
+            HeritageStage::Login,
+            HeritageStage::DismissTutorial,
+            HeritageStage::OpenDownloadPage,
+            HeritageStage::AgreeTerms,
+            HeritageStage::SelectDataset,
+            HeritageStage::SelectRegion,
+            HeritageStage::Search,
+            HeritageStage::CollectResults,
+            HeritageStage::Download,
+        ];
+        for pair in order.windows(2) {
+            assert!(
+                pair[0].ui_index() < pair[1].ui_index(),
+                "{} 다음에 {} 가 와야 한다",
+                pair[0].stage_name_ko(),
+                pair[1].stage_name_ko()
+            );
+        }
+        assert_eq!(HeritageStage::Done.ui_index(), 10);
+        assert_eq!(HeritageStage::Failed.ui_index(), 11);
+
+        // 받을 자료 종류 6종은 HeritageStyle.cpp:27-32 표와 같고, 지정유산 탭 코드는
+        // HeritageIntranetFlow.cpp:247-248 대로 "S" 다.
+        assert_eq!(HERITAGE_TAB_CODES.len(), 6);
+        assert_eq!(
+            HeritageIntranetFlow::download_files_all_url(),
+            "https://intranet.gis-heritage.go.kr/user/data/heritageDownload/downloadFilesAll.do"
+        );
+        // 화이트리스트 밖으로는 나가지 않는다(V5 와 같은 규칙).
+        assert!(HeritageIntranetFlow::is_allowed_frame_url(
+            &HeritageIntranetFlow::download_files_all_url()
+        )
+        .is_ok());
+        assert!(HeritageIntranetFlow::is_allowed_frame_url("https://evil.example/x").is_err());
     }
 }
