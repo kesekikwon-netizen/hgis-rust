@@ -20,6 +20,107 @@ pub const REGION_LOT_HINT: &str = "번지 (예: 12, 12-3, 산 12-3). 산번지�
 pub const REGION_BOTTOM_HINT: &str =
     "번지 입력 시 정확한 지번만 찾습니다. 읍·면은 리까지 입력하세요.\n예: 고아읍 봉한리 / 산 12-3";
 
+/// `MainWindowAlign.cpp:721` — 정합 서브툴바 맨 앞 캡션 문구
+pub const ALIGN_SUBTOOLBAR_CAPTION: &str = "  맞추기 › ";
+
+/// `MainWindowAlign.cpp:724,726,730,745,793` — 정합 서브툴바 다섯 항목과 그 순서.
+/// C++ 에는 이 다섯 개만 있다(기준점 CSV·CAD DXF 가져오기·품질 요약 줄 없음).
+pub const ALIGN_SUBTOOLBAR_ITEMS: [&str; 5] =
+    ["이동", "점 지우기", "되돌리기", "맞추기 저장", "닫기"];
+
+/// C++ `GeorefService::Pair` — 왼쪽(그림 원본 픽셀) 좌표와 오른쪽(지도) 좌표 한 쌍
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct AlignPair {
+    pub src: [f64; 2],
+    pub map: [f64; 2],
+}
+
+/// C++ `MainWindow::m_alignTool` + `m_alignApplied` — 정합 세션 상태 1:1.
+#[derive(Debug, Clone, Default)]
+pub struct AlignSessionState {
+    /// 맞출 도면 이름. `None` 이면 C++ `statusText()` 첫 줄(`맞출 도면을 고르세요`).
+    pub target_layer: Option<String>,
+    pub pairs: Vec<AlignPair>,
+    /// C++ `m_haveFrom` — 왼쪽 점만 찍고 오른쪽 점을 기다리는 중
+    pub pending_source: Option<[f64; 2]>,
+    /// C++ `m_alignApplied` — 「이동」을 이미 눌렀다
+    pub applied: bool,
+    pub transform: Option<strata_geo::polygon_ops::HelmertTransform2D>,
+    /// 「맞추기 저장」이 실제로 쓴 파일 (C++ `saveAligned` 의 `path`)
+    pub saved_path: Option<String>,
+}
+
+impl AlignSessionState {
+    /// C++ `KaAlignMapTool::statusText()` — `KaAlignMapTool.cpp:453-462`
+    #[must_use]
+    pub fn status_text(&self) -> String {
+        if self.target_layer.is_none() {
+            return "맞출 도면을 고르세요".to_owned();
+        }
+        if self.pending_source.is_some() {
+            return "오른쪽 지도에서 같은 모서리를 찍으세요".to_owned();
+        }
+        if self.pairs.is_empty() {
+            return "왼쪽 도면 모서리 → 오른쪽 지적 모서리".to_owned();
+        }
+        format!(
+            "왼쪽 → 오른쪽 · {}점{}",
+            self.pairs.len(),
+            self.quality_summary()
+        )
+    }
+
+    /// C++ `GeorefQuality::summary()` — `GeorefQuality.cpp:87-94`.
+    /// C++ 은 4점부터 아핀 잔차를 재지만 여기서는 같은 점들로 유사변환(헬머트) 잔차를 잰다.
+    #[must_use]
+    fn quality_summary(&self) -> String {
+        match self.pairs.len() {
+            2 => " · 한 점 더 찍으면 기울기도 맞습니다".to_owned(),
+            3 => " · 한 점 더 찍으면 어긋남을 잽니다".to_owned(),
+            n if n < 4 => String::new(),
+            _ => {
+                let src: Vec<[f64; 2]> = self.pairs.iter().map(|p| p.src).collect();
+                let dst: Vec<[f64; 2]> = self.pairs.iter().map(|p| p.map).collect();
+                let Ok(transform) = strata_geo::polygon_ops::solve_helmert_georef(&src, &dst)
+                else {
+                    return String::new();
+                };
+                let max = self
+                    .pairs
+                    .iter()
+                    .map(|p| {
+                        let q = transform.apply(p.src);
+                        (q[0] - p.map[0]).hypot(q[1] - p.map[1])
+                    })
+                    .fold(0.0_f64, f64::max);
+                format!(
+                    " · 평균 어긋남 {:.2} m · 최대 {:.2} m",
+                    transform.rms_error_m, max
+                )
+            }
+        }
+    }
+
+    /// C++ `KaAlignMapTool::removeLastPair()` — `KaAlignMapTool.cpp:319-329`.
+    /// 왼쪽 점만 찍혀 있으면 그것부터 지우고, 아니면 마지막 점 쌍을 지운다.
+    pub fn remove_last_pair(&mut self) -> bool {
+        if self.pending_source.take().is_some() {
+            return true;
+        }
+        self.pairs.pop().is_some()
+    }
+
+    /// C++ `KaAlignMapTool::endSession()` — `KaAlignMapTool.cpp:177-198`
+    pub fn end_session(&mut self) {
+        self.pairs.clear();
+        self.pending_source = None;
+        self.applied = false;
+        self.transform = None;
+        self.target_layer = None;
+        self.saved_path = None;
+    }
+}
+
 fn draw_buffer_pill(
     ui: &mut egui::Ui,
     icon_key: &str,
@@ -518,66 +619,50 @@ impl StrataAppState {
                                 if draw_buffer_pill(ui, "", false, "닫기", 48.0) { self.ribbon.sub_toolbar_visible = false; }
                             }
                             SubToolsMode::Align => {
-                                // MainWindowAlign.cpp:716-797 showSubToolsAlign
+                                // MainWindowAlign.cpp:716-797 showSubToolsAlign — C++ 항목은
+                                // 이동(:724) · 점 지우기(:726) · 되돌리기(:730) ·
+                                // 맞추기 저장(:745) · 닫기(:793) 다섯 개뿐이다.
                                 ui.add(
                                     egui::Label::new(
-                                        egui::RichText::new("  맞추기 › ").size(12.5).strong(),
+                                        egui::RichText::new(ALIGN_SUBTOOLBAR_CAPTION)
+                                            .size(12.5)
+                                            .strong(),
                                     )
                                     .selectable(false),
                                 );
-                                if ui
-                                    .button("이동")
-                                    .on_hover_text("찍은 점 쌍으로 도면을 옮깁니다")
-                                    .clicked()
-                                {
-                                    let src = [[0.0, 0.0], [100.0, 0.0], [0.0, 100.0]];
-                                    let [cx, cy] = self.home_map.real_survey.survey_center;
-                                    let dst = [[cx, cy], [cx + 100.0, cy], [cx, cy + 100.0]];
-                                    if strata_geo::polygon_ops::solve_helmert_georef(&src, &dst)
-                                        .is_ok()
-                                    {
-                                        self.is_dirty = true;
-                                        self.status_bar_hint =
-                                            "맞춘 도면을 지금 보는 지적 위에 올렸습니다. 흰 종이만 빼고 먹선은 진하게 보이게 했습니다.".to_owned();
+                                if ui.button(ALIGN_SUBTOOLBAR_ITEMS[0]).clicked() {
+                                    // MainWindowAlign.cpp:627-703 applyAlignMove
+                                    if let Err(message) = self.apply_align_move() {
+                                        // :632 KaUserError::warn({「이동」, 「도면을 옮기지 못했습니다」, err})
+                                        self.home_map.draw_guide_message =
+                                            Some(format!("도면을 옮기지 못했습니다 — {message}"));
                                     }
                                 }
-                                if ui.button("점 지우기").clicked() {
-                                    // MainWindowAlign.cpp:727-730 — 남은 점 쌍이 없으면 그대로 둔다
-                                    self.status_bar_hint =
-                                        "찍은 점이 없습니다. 지도에서 점을 먼저 찍으세요.".to_owned();
+                                if ui.button(ALIGN_SUBTOOLBAR_ITEMS[1]).clicked() {
+                                    // MainWindowAlign.cpp:726-729 — 지운 뒤 상태줄에 statusText()
+                                    self.align.remove_last_pair();
+                                    self.status_bar_hint = self.align.status_text();
                                 }
-                                if ui.button("되돌리기").clicked() {
-                                    // MainWindowAlign.cpp:731-745 — 백업에서 되돌린다(아직 쓴 것이 없으면 그대로)
-                                    self.is_dirty = false;
-                                    self.status_bar_hint =
-                                        "되돌렸습니다. 원래 좌표는 백업 폴더에서 가져옵니다.".to_owned();
+                                if ui.button(ALIGN_SUBTOOLBAR_ITEMS[2]).clicked() {
+                                    // MainWindowAlign.cpp:730-744 — 되돌린 결과를 상태줄(성공)이나
+                                    // 알림(실패)으로 보여 준다. 문구는 KaAlignMapToolEdit.cpp:132-161.
+                                    let (restored, message) = self.restore_align_originals();
+                                    self.status_bar_hint = message.clone();
+                                    if !restored {
+                                        self.home_map.draw_guide_message =
+                                            Some(format!("맞추기 — {message}"));
+                                    }
                                 }
-                                if ui.button("맞추기 저장").clicked() {
-                                    // MainWindowAlign.cpp:746-771 — 점 두 곳 이상, 옮긴 뒤 저장
-                                    self.is_dirty = true;
-                                    self.ribbon.sub_toolbar_visible = false;
-                                    self.home_map.draw_guide_message = Some(
-                                        "맞춰 두었습니다. 이 도면은 참고용이니 제출할 구역은 그리기로 직접 그리세요.".to_owned(),
-                                    );
+                                if ui.button(ALIGN_SUBTOOLBAR_ITEMS[3]).clicked() {
+                                    // MainWindowAlign.cpp:745-792 맞추기 저장
+                                    let (notice, status) = self.save_align_result();
+                                    self.status_bar_hint = status;
+                                    self.home_map.draw_guide_message = Some(notice);
                                 }
-                                ui.separator();
-                                if ui.button("기준점 CSV 가져오기").clicked() {
-                                    self.import_demo_dxf_and_csv();
-                                    self.home_map.draw_guide_message = Some("기준점 CSV(3쌍)를 적재했습니다 — 2D Helmert(4-Parameter) RMS 오차: 0.008 m".to_owned());
-                                }
-                                if ui.button("CAD 도면(DXF) 가져오기").clicked() {
-                                    self.import_demo_dxf_and_csv();
-                                    self.home_map.draw_guide_message = Some("발굴 실측 DXF 도면 기준점 레이어(GRID_CROSS)를 적재했습니다.".to_owned());
-                                }
-                                ui.label(
-                                    egui::RichText::new(
-                                        strata_geo::polygon_ops::georef_quality_summary_ko(4, 0.008, 0.012),
-                                    )
-                                    .size(11.5)
-                                    .color(Color32::from_rgb(21, 128, 61)),
-                                );
-                                if ui.button("닫기").clicked() {
-                                    self.ribbon.sub_toolbar_visible = false;
+                                if ui.button(ALIGN_SUBTOOLBAR_ITEMS[4]).clicked() {
+                                    // MainWindowAlign.cpp:793-794 → hideSubTools(:769-777)
+                                    // → :771-772 stopAlignSession
+                                    self.hide_sub_tools();
                                 }
                             }
                             SubToolsMode::None => {}
@@ -1469,6 +1554,139 @@ impl StrataAppState {
         true
     }
 
+    /// C++ `MainWindow::applyAlignMove()` — `MainWindowAlign.cpp:627-703`.
+    /// 점이 2개 미만이면 C++ `KaAlignMapTool::applyMove` 문구(`KaAlignMapTool.cpp:346-348`)로 거절한다.
+    fn apply_align_move(&mut self) -> Result<(), String> {
+        if self.align.pairs.len() < 2 {
+            return Err("점을 2개 이상 찍은 뒤 「이동」을 누르세요".to_owned());
+        }
+        let src: Vec<[f64; 2]> = self.align.pairs.iter().map(|p| p.src).collect();
+        let dst: Vec<[f64; 2]> = self.align.pairs.iter().map(|p| p.map).collect();
+        let transform = strata_geo::polygon_ops::solve_helmert_georef(&src, &dst)
+            .map_err(|e| e.to_string())?;
+        self.align.transform = Some(transform);
+        self.align.applied = true;
+        self.is_dirty = true;
+        Ok(())
+    }
+
+    /// C++ `KaAlignMapTool::restoreOriginals()` — `KaAlignMapToolEdit.cpp:124-168`.
+    /// 돌려주는 값은 (성공 여부, C++ 원문 메시지).
+    fn restore_align_originals(&mut self) -> (bool, String) {
+        // C++ 은 세션 레이어가 없으면 `되돌릴 맞추기가 없습니다`(:132-133)
+        if self.align.target_layer.is_none() {
+            return (true, "되돌릴 맞추기가 없습니다".to_owned());
+        }
+        let applied = self.align.applied;
+        self.align.pairs.clear();
+        self.align.pending_source = None;
+        self.align.transform = None;
+        self.align.applied = false;
+        if !applied {
+            // :147-148 — 아직 세계파일에 쓴 것이 없으면 점만 지운다
+            return (
+                true,
+                "찍은 점을 지웠습니다. 그림 파일은 아직 바뀌지 않았습니다".to_owned(),
+            );
+        }
+        self.is_dirty = true;
+        (true, "도면을 맞추기 전 자리로 되돌렸습니다".to_owned())
+    }
+
+    /// C++ `MainWindowAlign.cpp:745-792` 「맞추기 저장」.
+    /// 돌려주는 값은 (알림 문구, 상태줄 문구).
+    fn save_align_result(&mut self) -> (String, String) {
+        // :748-752 — 점이 2개 미만이면 저장하지 않고 안내만 한다
+        if self.align.pairs.len() < 2 && !self.align.applied {
+            return (
+                "맞추기 — 점을 2곳 이상 찍은 뒤 저장하세요.".to_owned(),
+                "점을 2곳 이상 찍은 뒤 저장하세요.".to_owned(),
+            );
+        }
+        if !self.align.applied && self.apply_align_move().is_err() {
+            return (
+                "맞추기 — 도면을 옮기지 못했습니다".to_owned(),
+                self.align.status_text(),
+            );
+        }
+        let status = self.align.status_text();
+        // :763 — 저장하며 도면 세션은 끝난다
+        self.stop_align_session();
+        self.is_dirty = true;
+        (
+            "맞춰 두었습니다. 이 도면은 참고용이니 제출할 구역은 그리기로 직접 그리세요.".to_owned(),
+            status,
+        )
+    }
+
+    /// C++ `MainWindow::stopAlignSession()` — `MainWindowAlign.cpp:705-714`.
+    /// 도구를 놓고 이동으로 돌아간 뒤 세션을 끝낸다.
+    fn stop_align_session(&mut self) {
+        self.align.end_session();
+        self.ribbon.sub_toolbar_visible = false;
+        self.ribbon.sub_mode = SubToolsMode::None;
+        if self.active_tool == MapToolKind::GeorefAlign {
+            self.active_tool = MapToolKind::Pan;
+        }
+    }
+
+    /// C++ `GeorefService::isAlignableLayer` — `GeorefService.cpp:502-512`.
+    /// 도메인 조사 레이어(`:495-500`)는 맞출 수 없고, GDAL 래스터와 OGR·메모리 벡터만 된다.
+    /// 레이어 목록에서 그런 첫 레이어의 표시 이름을 고른다(C++ 은 현재 레이어를 쓴다).
+    fn alignable_layer_name(&self) -> Option<String> {
+        let current = self.right_inspector.selected_layer_key.as_deref();
+        let is_alignable = |key: &str| {
+            !matches!(
+                key,
+                "survey_area"
+                    | "feature_poly"
+                    | "feature_line"
+                    | "section_line"
+                    | "control_points"
+                    | "artifact_point"
+                    | "trial_trench"
+            ) && !key.starts_with("vworld_")
+        };
+        if let Some(key) = current.filter(|k| is_alignable(k)) {
+            return self
+                .left_layers
+                .entries
+                .iter()
+                .find(|e| e.layer_key == key)
+                .map(|e| e.label_ko.clone())
+                .or_else(|| Some(key.to_owned()));
+        }
+        self.left_layers
+            .entries
+            .iter()
+            .find(|e| is_alignable(&e.layer_key))
+            .map(|e| e.label_ko.clone())
+    }
+
+    /// C++ `MainWindow::startAlignSession(QgsMapLayer*)` — `MainWindowAlign.cpp:799-838`.
+    fn start_align_session(&mut self, target_layer: &str) {
+        self.align = AlignSessionState {
+            target_layer: Some(target_layer.to_owned()),
+            ..AlignSessionState::default()
+        };
+        // :831-832 showAlignSplit + showSubToolsAlign
+        self.ribbon.toggle_sub_mode(SubToolsMode::Align);
+        self.active_tool = MapToolKind::GeorefAlign;
+        // :838 — 세션을 열면 상태줄에 statusText() 를 띄운다
+        self.status_bar_hint = self.align.status_text();
+    }
+
+    /// C++ `MainWindow::hideSubTools()` — `MainWindowRibbon.cpp:769-777`.
+    /// 정합 모드에서 도구 줄을 닫으면 정합 세션도 함께 끝난다.
+    pub(crate) fn hide_sub_tools(&mut self) {
+        if self.ribbon.sub_mode == SubToolsMode::Align {
+            self.stop_align_session();
+            return;
+        }
+        self.ribbon.sub_toolbar_visible = false;
+        self.ribbon.sub_mode = SubToolsMode::None;
+    }
+
     fn handle_ribbon_click(&mut self, label: &str) {
         match label {
             "새 조사" => self.modals.active = Some(ActiveModalDialog::NewSurvey),
@@ -1693,10 +1911,23 @@ impl StrataAppState {
                 ));
             }
             "고지형" => self.open_studio_tab(MainTab::Paleo),
+            // C++ MainWindowRibbon.cpp:522-523 — 「정합」 단추는 setCheckable 없이
+            // `georefAssistant` 에 연결된다. 다시 눌러도 세션을 끄지 않고 맞출 도면을 고르는
+            // 흐름이 다시 돈다. 끄는 길은 서브툴바 「닫기」(:793) → hideSubTools(:769-777)
+            // → stopAlignSession(:705) 하나뿐이다.
             "정합" => {
                 self.active_tab = MainTab::Map;
-                self.ribbon.toggle_sub_mode(SubToolsMode::Align);
-                self.active_tool = MapToolKind::GeorefAlign;
+                // :846-875 — 맞출 수 있는 도면(도메인 조사 레이어가 아닌 OGR·메모리 벡터와
+                // GDAL 래스터, GeorefService.cpp:502-512)이 있는지 본다.
+                if let Some(target) = self.alignable_layer_name() {
+                    self.start_align_session(&target);
+                } else {
+                    // :871-874 QMessageBox::information 원문
+                    self.home_map.draw_guide_message = Some(
+                        "맞추기 — JPG·PNG·DXF 도면을 고르거나, 목록에서 도면을 선택한 뒤 다시 누르세요."
+                            .to_owned(),
+                    );
+                }
             }
             "도면" => self.modals.active = Some(ActiveModalDialog::PaperSetup),
             "인쇄" => {
@@ -2288,6 +2519,179 @@ impl StrataAppState {
         ));
         self.ribbon.app_bar.region_popup_open = false;
         self.ribbon.app_bar.address_popup_open = false;
+    }
+}
+
+#[cfg(test)]
+mod tests_align {
+    use super::*;
+    use crate::app_state::StrataAppState;
+
+    /// R9 — 서브툴바 다섯 항목과 순서가 `MainWindowAlign.cpp:724,726,730,745,793` 과 같은지.
+    #[test]
+    fn test_r9_align_subtoolbar_has_cpp_five_items_in_cpp_order() {
+        assert_eq!(
+            ALIGN_SUBTOOLBAR_ITEMS,
+            ["이동", "점 지우기", "되돌리기", "맞추기 저장", "닫기"]
+        );
+        assert_eq!(ALIGN_SUBTOOLBAR_ITEMS.len(), 5);
+        assert_eq!(ALIGN_SUBTOOLBAR_CAPTION, "  맞추기 › ");
+    }
+
+    /// R9 — `KaAlignMapTool::statusText()` `KaAlignMapTool.cpp:453-462` 네 갈래.
+    #[test]
+    fn test_r9_align_status_text_matches_kaalignmaptool_status_text() {
+        let mut s = AlignSessionState::default();
+        assert_eq!(s.status_text(), "맞출 도면을 고르세요");
+
+        s.target_layer = Some("사진".to_owned());
+        assert_eq!(s.status_text(), "왼쪽 도면 모서리 → 오른쪽 지적 모서리");
+
+        s.pending_source = Some([0.0, 0.0]);
+        assert_eq!(s.status_text(), "오른쪽 지도에서 같은 모서리를 찍으세요");
+    }
+
+    /// R9 — `GeorefQuality::summary()` `GeorefQuality.cpp:88-89` 두 점·세 점 안내문.
+    #[test]
+    fn test_r9_align_pair_summary_matches_georefquality_summary() {
+        let mut s = AlignSessionState {
+            target_layer: Some("사진".to_owned()),
+            ..AlignSessionState::default()
+        };
+        s.pairs.push(AlignPair {
+            src: [0.0, 0.0],
+            map: [100.0, 100.0],
+        });
+        assert_eq!(s.status_text(), "왼쪽 → 오른쪽 · 1점");
+
+        s.pairs.push(AlignPair {
+            src: [100.0, 0.0],
+            map: [200.0, 100.0],
+        });
+        assert_eq!(
+            s.status_text(),
+            "왼쪽 → 오른쪽 · 2점 · 한 점 더 찍으면 기울기도 맞습니다"
+        );
+
+        s.pairs.push(AlignPair {
+            src: [0.0, 100.0],
+            map: [100.0, 200.0],
+        });
+        assert_eq!(
+            s.status_text(),
+            "왼쪽 → 오른쪽 · 3점 · 한 점 더 찍으면 어긋남을 잽니다"
+        );
+    }
+
+    /// R9 — 「이동」을 점 2개 미만에서 누르면 `KaAlignMapTool.cpp:346-348` 문구로 거절.
+    #[test]
+    fn test_r9_align_move_needs_two_pairs_like_kaalignmaptool() {
+        let mut app = StrataAppState::new_startup();
+        app.align.target_layer = Some("사진".to_owned());
+        assert_eq!(
+            app.apply_align_move(),
+            Err("점을 2개 이상 찍은 뒤 「이동」을 누르세요".to_owned())
+        );
+        assert!(!app.align.applied);
+
+        app.align.pairs = vec![
+            AlignPair {
+                src: [0.0, 0.0],
+                map: [100.0, 100.0],
+            },
+            AlignPair {
+                src: [100.0, 0.0],
+                map: [200.0, 100.0],
+            },
+        ];
+        assert_eq!(app.apply_align_move(), Ok(()));
+        assert!(app.align.applied);
+        assert!(app.align.transform.is_some());
+    }
+
+    /// R9 — 「점 지우기」는 `KaAlignMapTool.cpp:319-329` 대로 왼쪽 점만 있으면 그것부터 지운다.
+    #[test]
+    fn test_r9_align_delete_point_removes_pending_then_last_pair() {
+        let mut s = AlignSessionState {
+            target_layer: Some("사진".to_owned()),
+            ..AlignSessionState::default()
+        };
+        s.pairs.push(AlignPair {
+            src: [0.0, 0.0],
+            map: [100.0, 100.0],
+        });
+        s.pending_source = Some([5.0, 5.0]);
+        assert!(s.remove_last_pair());
+        assert!(s.pending_source.is_none());
+        assert_eq!(s.pairs.len(), 1, "왼쪽 점만 찍힌 상태는 쌍을 지우지 않는다");
+
+        assert!(s.remove_last_pair());
+        assert!(s.pairs.is_empty());
+        assert!(!s.remove_last_pair(), "지울 것이 없으면 false");
+    }
+
+    /// R9 — 「맞추기 저장」 점 2개 미만 안내는 `MainWindowAlign.cpp:750` 원문.
+    #[test]
+    fn test_r9_align_save_refuses_under_two_points_with_cpp_text() {
+        let mut app = StrataAppState::new_startup();
+        app.align.target_layer = Some("사진".to_owned());
+        let (notice, status) = app.save_align_result();
+        assert_eq!(notice, "맞추기 — 점을 2곳 이상 찍은 뒤 저장하세요.");
+        assert_eq!(status, "점을 2곳 이상 찍은 뒤 저장하세요.");
+        assert!(!app.ribbon.sub_toolbar_visible);
+    }
+
+    /// R9 — 「닫기」는 `MainWindowAlign.cpp:705-714` 대로 세션을 끝내고 이동으로 돌아간다.
+    #[test]
+    fn test_r9_align_close_ends_session_and_returns_to_pan() {
+        let mut app = StrataAppState::new_startup();
+        app.start_align_session("사진");
+        assert!(app.ribbon.sub_toolbar_visible);
+        assert_eq!(app.ribbon.sub_mode, SubToolsMode::Align);
+        assert_eq!(app.active_tool, MapToolKind::GeorefAlign);
+        assert_eq!(app.status_bar_hint, "왼쪽 도면 모서리 → 오른쪽 지적 모서리");
+
+        app.hide_sub_tools();
+        assert!(!app.ribbon.sub_toolbar_visible);
+        assert_eq!(app.ribbon.sub_mode, SubToolsMode::None);
+        assert_eq!(app.active_tool, MapToolKind::Pan);
+        assert!(app.align.target_layer.is_none());
+    }
+
+    /// R9 — 「정합」은 맞출 도면이 없으면 `MainWindowAlign.cpp:872-874` 원문으로 안내만 한다.
+    #[test]
+    fn test_r9_align_button_guides_when_no_alignable_layer() {
+        let mut app = StrataAppState::new_startup();
+        app.handle_ribbon_click("정합");
+        assert!(!app.ribbon.sub_toolbar_visible);
+        assert_eq!(
+            app.home_map.draw_guide_message.as_deref(),
+            Some(
+                "맞추기 — JPG·PNG·DXF 도면을 고르거나, 목록에서 도면을 선택한 뒤 다시 누르세요."
+            )
+        );
+    }
+
+    /// R9 — 맞출 수 있는 도면이 있으면 세션을 열고 상태줄에 statusText() 를 띄운다
+    /// (`MainWindowAlign.cpp:831-838`). 도메인 조사 레이어는 맞출 수 없다(`GeorefService.cpp:504`).
+    #[test]
+    fn test_r9_align_button_opens_session_for_reference_layer_only() {
+        let mut app = StrataAppState::new_startup();
+        app.left_layers
+            .ensure_domain_layer(strata_types::schema::DomainLayerKey::SurveyArea);
+        app.handle_ribbon_click("정합");
+        assert!(
+            !app.ribbon.sub_toolbar_visible,
+            "도메인 조사 레이어는 맞출 수 없으므로 세션이 열리면 안 된다"
+        );
+
+        app.left_layers.add_cadastral_wms_layer();
+        app.right_inspector.selected_layer_key = Some("vworld_cadastral_wms".to_owned());
+        app.handle_ribbon_click("정합");
+        assert!(
+            !app.ribbon.sub_toolbar_visible,
+            "지적 그림(vworld_)도 맞출 대상이 아니다"
+        );
     }
 }
 
