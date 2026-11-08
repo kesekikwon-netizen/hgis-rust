@@ -872,7 +872,7 @@ impl CadSessionController {
 
     pub fn on_right_click(&mut self, tool: MapToolKind, scene: &mut MapSceneModel) -> bool {
         if tool == MapToolKind::DrawPolygon && scene.active_rubberband.len() >= 3 {
-            let pts: Vec<[f64; 2]> = scene.active_rubberband.drain(..).collect();
+            let pts: Vec<[f64; 2]> = std::mem::take(&mut scene.active_rubberband);
             let n = pts.len() as f64;
             let cx = pts.iter().map(|p| p[0]).sum::<f64>() / n;
             let cy = pts.iter().map(|p| p[1]).sum::<f64>() / n;
