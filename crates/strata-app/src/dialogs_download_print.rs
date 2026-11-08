@@ -2398,6 +2398,9 @@ pub fn render_download_and_print_dialogs(
                     );
                 });
         }
+        ActiveModalDialog::CadImportNotice => {
+            crate::dialogs_modal::render_cad_import_notice(app, ctx, open);
+        }
         _ => {}
     }
 }

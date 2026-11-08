@@ -123,6 +123,12 @@ pub struct StrataAppState {
     pub layer_context_menu_key: Option<String>,
     /// 라벨 하위 메뉴 펼침 상태 (라벨·명칭 속성 / 투명도 / 깨진 한글)
     pub layer_menu_sub: u8,
+    // MainWindowFiles.cpp:259-289 — 파일 끌어 놓기
+    pub last_drop_message: Option<String>,
+    /// 종료 확인 (KaClosePrompt.cpp)
+    pub close_prompt_open: bool,
+    /// KaCadImportNotice.cpp — 끌어 놓은 CAD 도면 경로
+    pub cad_import_path: String,
     /// `KaStatusBar::showMessage` 대응 — 맞추기 같은 긴 작업의 결과를 상태줄에 남긴다
     pub status_bar_hint: String,
     pub theme_menu_open: bool,
@@ -161,6 +167,9 @@ impl StrataAppState {
             layer_context_menu_pos: [0.0, 0.0],
             layer_context_menu_key: None,
             layer_menu_sub: 0,
+            last_drop_message: None,
+            close_prompt_open: false,
+            cad_import_path: String::new(),
             status_bar_hint: String::new(),
             theme_menu_open: false,
             large_font_mode: false,

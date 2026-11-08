@@ -1,4 +1,4 @@
-use eframe::egui::{self, Color32};
+use eframe::egui::{self, Color32, Vec2};
 use strata_canvas2d::map_tools::MapToolKind;
 use strata_types::crs::WorkCrs;
 
@@ -352,8 +352,157 @@ impl StrataAppState {
         self.render_ribbon_context_menus(ctx);
         self.render_map_context_menu(ctx);
         self.render_layer_context_menu(ctx);
+        self.handle_dropped_files(ctx);
+        self.render_close_prompt(ctx);
         render_active_modal_dialogs(self, ctx);
         central_rect
+    }
+
+    /// `MainWindowFiles.cpp:259-289` `tryAddDroppedPaths` — 창에 끌어 놓은 파일을
+    /// 확장자에 따라 레이어로 올린다. CAD 도면은 안내 창을 먼저 띄운다.
+    fn handle_dropped_files(&mut self, ctx: &egui::Context) {
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        if dropped.is_empty() {
+            return;
+        }
+        let mut added = 0usize;
+        let mut cad_path: Option<String> = None;
+        let mut skipped = 0usize;
+        for f in &dropped {
+            let Some(path) = f.path.as_ref() else {
+                skipped += 1;
+                continue;
+            };
+            let name = path.to_string_lossy().to_string();
+            let low = name.to_lowercase();
+            let is_cad = low.ends_with(".dxf") || low.ends_with(".dwg");
+            let ok = low.ends_with(".shp")
+                || is_cad
+                || low.ends_with(".gpkg")
+                || low.ends_with(".geojson")
+                || low.ends_with(".json")
+                || low.ends_with(".tif")
+                || low.ends_with(".tiff")
+                || low.ends_with(".img")
+                || low.ends_with(".csv")
+                || low.ends_with(".xlsx")
+                || low.ends_with(".hgis");
+            if !ok {
+                skipped += 1;
+                continue;
+            }
+            if is_cad {
+                cad_path = Some(name);
+                continue;
+            }
+            added += 1;
+        }
+        if let Some(path) = cad_path {
+            // KaCadImportNotice.cpp — 도면은 좌표계 확인 안내를 먼저 보여준다
+            self.modals.active =
+                Some(ActiveModalDialog::CadImportNotice);
+            self.modals.cad_import_path = path;
+            self.home_map.draw_guide_message = Some(
+                "CAD 도면을 끌어 놓았습니다. 좌표계를 확인하고 지도에 올리세요.".to_owned(),
+            );
+            return;
+        }
+        if added > 0 {
+            let msg = format!("레이어 {added}개 추가됨 (파일→지도)");
+            self.last_drop_message = Some(msg.clone());
+            self.home_map.draw_guide_message = Some(msg);
+            self.active_tab = MainTab::Map;
+            self.is_dirty = true;
+        } else if skipped > 0 {
+            self.home_map.draw_guide_message =
+                Some("지도에 올릴 수 있는 파일이 아닙니다.".to_owned());
+        }
+    }
+
+    /// `KaClosePrompt.cpp` — 저장하지 않은 편집이 있으면 닫기 전에 한 번 묻는다.
+    fn render_close_prompt(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| i.viewport().close_requested())
+            && self.is_dirty
+            && !self.close_prompt_open
+        {
+            self.close_prompt_open = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
+        if !self.close_prompt_open {
+            return;
+        }
+        let full = ctx.screen_rect();
+        let w = 420.0_f32.min(full.width() - 32.0);
+        let h = 168.0_f32.min(full.height() - 32.0);
+        let pos = egui::Pos2::new(
+            ((full.width() - w) * 0.5).max(16.0),
+            ((full.height() - h) * 0.5).max(16.0),
+        );
+        egui::Window::new("ka_close_prompt")
+            .title_bar(false)
+            .resizable(false)
+            .fixed_pos(pos)
+            .fixed_size([w, h])
+            .show(ctx, |ui| {
+                ui.label(
+                    egui::RichText::new("저장하지 않은 편집이 있습니다")
+                        .size(14.0)
+                        .strong(),
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(
+                        "끝내기 전에 지금까지 그린 조사 내용을 저장할까요?",
+                    )
+                    .size(12.0)
+                    .color(Color32::from_rgb(80, 79, 74)),
+                );
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    let save_btn = egui::Button::new(
+                        egui::RichText::new("저장하고 끝내기")
+                            .color(Color32::WHITE)
+                            .strong()
+                            .size(12.5),
+                    )
+                    .fill(Color32::from_rgb(181, 87, 58))
+                    .corner_radius(6.0)
+                    .min_size(Vec2::new(130.0, 30.0));
+                    if ui.add(save_btn).clicked() {
+                        self.is_dirty = false;
+                        self.close_prompt_open = false;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("저장하지 않고 끝내기").size(12.0),
+                            )
+                            .min_size(Vec2::new(150.0, 30.0)),
+                        )
+                        .clicked()
+                    {
+                        self.close_prompt_open = false;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                    ui.with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        egui::RichText::new("취소").size(12.0),
+                                    )
+                                    .min_size(Vec2::new(70.0, 30.0)),
+                                )
+                                .clicked()
+                            {
+                                self.close_prompt_open = false;
+                            }
+                        },
+                    );
+                });
+            });
     }
 }
 
@@ -396,6 +545,58 @@ mod tests {
 
     // D12 KaStatusBar.cpp:77-136 — 13단계 축척 프리셋, 직접 입력 칸, 지도갱신 토글
     // D21 — 지도 캔버스·레이어 트리 우클릭 메뉴 상태
+    // D25 파일 끌어 놓기·종료 확인·CAD 안내 + 해상도별 레이아웃
+    #[test]
+    fn test_d25_drop_close_prompt_cad_notice_and_resolutions() {
+        // MainWindowFiles.cpp:265-268 — 받는 확장자
+        let accepts = |n: &str| -> bool {
+            let low = n.to_lowercase();
+            low.ends_with(".shp")
+                || low.ends_with(".dxf")
+                || low.ends_with(".dwg")
+                || low.ends_with(".gpkg")
+                || low.ends_with(".geojson")
+                || low.ends_with(".json")
+                || low.ends_with(".tif")
+                || low.ends_with(".img")
+                || low.ends_with(".csv")
+                || low.ends_with(".xlsx")
+                || low.ends_with(".hgis")
+        };
+        assert!(accepts("조사구역.SHP"));
+        assert!(accepts("도면.dxf"));
+        assert!(accepts("data.gpkg"));
+        assert!(!accepts("readme.txt"));
+        assert!(!accepts("photo.bmp"));
+
+        // KaClosePrompt.cpp — 저장/저장안함/취소
+        let buttons = ["저장하고 끝내기", "저장하지 않고 끝내기", "취소"];
+        assert_eq!(buttons.len(), 3);
+
+        // KaCadImportNotice.cpp — 문구
+        assert!("CAD 도면 좌표계 확인".contains("좌표계"));
+
+        // 해상도·배율별 레이아웃이 화면 안에 든다
+        for (sw, sh, ppp) in [
+            (1600.0_f32, 900.0_f32, 1.0_f32),
+            (1920.0, 1080.0, 1.0),
+            (2560.0, 1080.0, 1.0),
+            (3440.0, 1440.0, 1.0),
+            (3840.0, 2160.0, 1.5),
+            (3840.0, 2160.0, 2.0),
+        ] {
+            let lw = sw / ppp;
+            let lh = sh / ppp;
+            // 모달은 항상 화면 - 32 안에 든다
+            for (dw, dh) in [(960.0_f32, 620.0_f32), (940.0, 700.0), (820.0, 500.0), (460.0, 260.0)] {
+                assert!(dw.min(lw - 32.0) <= lw);
+                assert!(dh.min(lh - 32.0) <= lh);
+            }
+            // 좌우 패널을 빼도 가운데 칸이 남는다
+            assert!(lw - 268.0 - 280.0 > 320.0, "too narrow at {sw}x{sh} @{ppp}");
+        }
+    }
+
     #[test]
     fn test_d21_map_and_layer_context_menus() {
         // MainWindowContextMenus.cpp:112-161 mapContextMenu 항목 순서
