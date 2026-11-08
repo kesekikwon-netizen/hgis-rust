@@ -1088,6 +1088,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                                     ModalDialogController::submit_action_label(&r.action)
                                                 {
                                                     if ui.small_button(lbl).clicked() {
+                                                        let mut next_modal = None;
                                                         match r.action.as_str() {
                                                             "open_layout" => {
                                                                 app.active_tab = MainTab::Drawing;
@@ -1100,7 +1101,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                                             }
                                                             "add_control_point" => {
                                                                 app.active_tab = MainTab::Map;
-                                                                app.modals.active = Some(
+                                                                next_modal = Some(
                                                                     ActiveModalDialog::ControlPoint,
                                                                 );
                                                             }
@@ -1115,7 +1116,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                                                     strata_canvas2d::map_tools::MapToolKind::Select;
                                                             }
                                                             "set_work_crs" => {
-                                                                app.modals.active = Some(
+                                                                next_modal = Some(
                                                                     ActiveModalDialog::AccountSettings,
                                                                 );
                                                             }
@@ -1126,7 +1127,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                                                         app.home_map.draw_guide_message = Some(format!(
                                                             "{} — 「{}」", lbl, r.id
                                                         ));
-                                                        app.modals.active = None;
+                                                        app.modals.active = next_modal;
                                                     }
                                                 }
                                             }

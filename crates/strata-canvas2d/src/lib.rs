@@ -1,4 +1,4 @@
-#![allow(unknown_lints, clippy::chunks_exact_to_as_chunks, clippy::drain_collect)]
+#![allow(unknown_lints, float_literal_f32_fallback, clippy::chunks_exact_to_as_chunks, clippy::drain_collect)]
 #![forbid(unsafe_code)]
 
 pub mod cad_interaction;
