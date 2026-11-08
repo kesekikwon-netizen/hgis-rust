@@ -1,3 +1,4 @@
+#![allow(unknown_lints, clippy::chunks_exact_to_as_chunks, clippy::drain_collect)]
 pub mod app_state;
 pub mod debug_control;
 pub mod dialogs_account;
