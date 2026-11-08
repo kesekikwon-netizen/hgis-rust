@@ -2446,6 +2446,7 @@ pub fn render_download_and_print_dialogs(
                                 app.modals.cancel_topo_scan();
                                 app.modals.active = None;
                             }
+                            // KaTopographicImportDialog.cpp:493 — 올릴 항목이 없으면 누를 수 없다.
                             let add_btn = egui::Button::new(
                                 egui::RichText::new("좌표계 확인 완료 · 지도에 추가")
                                     .color(Color32::WHITE)
@@ -2455,7 +2456,7 @@ pub fn render_download_and_print_dialogs(
                             .fill(Color32::from_rgb(181, 87, 58))
                             .corner_radius(6.0)
                             .min_size(Vec2::new(210.0, 32.0));
-                            if ui.add(add_btn).clicked() {
+                            if ui.add_enabled(!rows.is_empty(), add_btn).clicked() {
                                 // KaTopographicImportDialog.cpp:524-537 — 범위·좌표계가 확인된
                                 // 항목만 올린다. 하나라도 걸리면 아무것도 올리지 않고 문구로 끝낸다.
                                 if let Some(reason) = app.modals.topo_blocking_message() {

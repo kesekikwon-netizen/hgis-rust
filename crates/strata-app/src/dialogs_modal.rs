@@ -3348,7 +3348,7 @@ mod tests {
         assert!(!ctrl.topo_scanned);
 
         ctrl.rescan_topo_folder(&folder);
-        assert_eq!(std::fs::remove_dir_all(&folder).is_ok(), true);
+        assert!(std::fs::remove_dir_all(&folder).is_ok());
 
         assert!(ctrl.topo_scanned);
         assert_eq!(ctrl.topo_records.len(), 2);
