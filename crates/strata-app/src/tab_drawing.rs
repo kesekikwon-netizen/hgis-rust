@@ -20,6 +20,8 @@ pub struct DrawingTabState {
     pub stored_sheets: Vec<StoredSheet>,
     /// KaDrawingSheetSet.cpp:135 팝업 열림 상태
     pub sheet_set_menu_open: bool,
+    /// KaTerrain3dLayoutStudio.cpp — 3D 입체지형 조판 모드
+    pub terrain3d_layout_active: bool,
 }
 
 /// KaDrawingCoordCallout.cpp — 용지 위 좌표점 하나
@@ -58,6 +60,7 @@ impl Default for DrawingTabState {
             coord_callouts: Vec::new(),
             stored_sheets: Vec::new(),
             sheet_set_menu_open: false,
+            terrain3d_layout_active: false,
         }
     }
 }

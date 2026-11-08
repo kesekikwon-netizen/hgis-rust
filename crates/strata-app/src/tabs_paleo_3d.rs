@@ -13,6 +13,8 @@ pub struct PaleoTerrain3dTabState {
     pub source_dl_radius_km: f64,
     pub z_exaggeration: f32,
     pub show_imhof_slope_overlay: bool,
+    /// KaTerrain3dStudio.cpp:190-248 — 3D 표면에 입히는 그림(0 위성, 1 음영기복, 2 고지형)
+    pub texture_mode_idx: usize,
     pub declustered_borehole_count: usize,
     pub geology_feature_count: usize,
     pub camera_3d: OrbitCamera3D,
@@ -30,6 +32,7 @@ impl Default for PaleoTerrain3dTabState {
             source_dl_radius_km: 5.0,
             z_exaggeration: 2.0,
             show_imhof_slope_overlay: true,
+            texture_mode_idx: 1,
             declustered_borehole_count: 12,
             geology_feature_count: 4,
             camera_3d: OrbitCamera3D::default(),

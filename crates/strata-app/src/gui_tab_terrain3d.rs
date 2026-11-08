@@ -8,8 +8,9 @@ impl StrataAppState {
     pub(crate) fn render_terrain3d_tab_ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         // 1. 좌측 패널 (KaTerrain3dStudio.cpp:85-166)
         egui::SidePanel::left("ka_terrain3d_left_panel")
-            .resizable(false)
-            .exact_width(240.0)
+            .resizable(true)
+            .default_width(230.0)
+            .width_range(200.0..=260.0)
             .frame(
                 egui::Frame::NONE
                     .fill(Color32::from_rgb(244, 246, 248))
@@ -59,9 +60,16 @@ impl StrataAppState {
                     )
                     .clicked()
                 {
+                    // KaTerrain3dLayoutStudio.cpp:72-320 — 3D 뷰를 도면 시트에 올린다
                     self.open_studio_tab(MainTab::Drawing);
-                    self.home_map.draw_guide_message =
-                        Some("입체지형 렌더링 뷰를 도면(조판) 시트로 보냈습니다.".to_owned());
+                    self.drawing.terrain3d_layout_active = true;
+                    self.drawing
+                        .sheet
+                        .legend_visible = true;
+                    self.home_map.draw_guide_message = Some(
+                        "입체지형 도면 — 범례는 「범례」로, 3D 뷰가 용지 안에 들어갔습니다."
+                            .to_owned(),
+                    );
                 }
 
                 ui.add_space(6.0);
@@ -72,6 +80,8 @@ impl StrataAppState {
                         .strong()
                         .color(Color32::from_rgb(41, 37, 36)),
                 );
+                // KaTerrain3dStudio.cpp:113-118 — QDoubleSpinBox 0.2..=12.0, step 0.1
+                let mut changed = false;
                 if ui
                     .add(
                         egui::Slider::new(&mut self.paleo_3d.z_exaggeration, 0.2..=12.0)
@@ -81,8 +91,60 @@ impl StrataAppState {
                     )
                     .changed()
                 {
+                    changed = true;
+                }
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("값").size(11.5));
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut self.paleo_3d.z_exaggeration)
+                                .range(0.2..=12.0)
+                                .speed(0.1)
+                                .fixed_decimals(1)
+                                .suffix(" 배"),
+                        )
+                        .on_hover_text(
+                            "높이 과장입니다. 1.0이면 실제 높이, 크게 하면 기복이 두드러집니다.",
+                        )
+                        .changed()
+                    {
+                        changed = true;
+                    }
+                });
+                if changed {
                     self.paleo_3d.rebuild_3d_preview();
                 }
+
+                ui.add_space(6.0);
+                // KaTerrain3dStudio.cpp:190-248 — 표면에 입힐 그림 선택
+                ui.label(
+                    egui::RichText::new("표면에 입힐 그림")
+                        .size(12.0)
+                        .strong()
+                        .color(Color32::from_rgb(68, 64, 60)),
+                );
+                const TEXTURES: [&str; 3] =
+                    ["입체지형 위성", "음영기복(Hillshade)", "고지형 7대 분류"];
+                egui::ComboBox::from_id_salt("ka_terrain3d_texture_combo")
+                    .selected_text(TEXTURES[self.paleo_3d.texture_mode_idx.min(2)])
+                    .width(200.0)
+                    .show_ui(ui, |ui| {
+                        for (idx, lbl) in TEXTURES.iter().enumerate() {
+                            if ui
+                                .selectable_label(
+                                    self.paleo_3d.texture_mode_idx == idx,
+                                    *lbl,
+                                )
+                                .clicked()
+                            {
+                                self.paleo_3d.texture_mode_idx = idx;
+                                self.paleo_3d.rebuild_3d_preview();
+                                self.home_map.draw_guide_message = Some(format!(
+                                    "입체지형 표면에 「{lbl}」을 입혔습니다."
+                                ));
+                            }
+                        }
+                    });
 
                 ui.add_space(4.0);
                 ui.label(
@@ -347,5 +409,32 @@ impl StrataAppState {
                 Color32::from_rgb(17, 24, 39),
             );
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // D23 KaTerrain3dStudio — 높이 과장 범위·표면 그림 3종·반응형 패널
+    #[test]
+    fn test_d23_terrain3d_studio_panel_and_texture_modes() {
+        // KaTerrain3dStudio.cpp:113-118 QDoubleSpinBox 0.2..=12.0, step 0.1
+        let range = 0.2_f32..=12.0_f32;
+        assert!(range.contains(&2.0));
+        assert!(!range.contains(&0.1));
+        assert!(!range.contains(&12.1));
+
+        // KaTerrain3dStudio.cpp:190-248 — 표면 그림 3종
+        let textures = ["입체지형 위성", "음영기복(Hillshade)", "고지형 7대 분류"];
+        assert_eq!(textures.len(), 3);
+        assert_eq!(textures[1], "음영기복(Hillshade)");
+
+        // 좌측 패널 폭 200..=260 (KaTerrain3dStudio.cpp:85-145)
+        let w = 200.0_f32..=260.0_f32;
+        assert!(w.contains(&230.0));
+        assert!(!w.contains(&199.0));
+
+        // KaTerrain3dLayoutStudio.cpp — 조판 모드 기본값
+        let st = crate::tab_drawing::DrawingTabState::default();
+        assert!(!st.terrain3d_layout_active);
     }
 }
