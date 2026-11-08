@@ -309,13 +309,25 @@ impl StrataAppState {
             self.open_sample_survey_project(0);
         }
 
-        let area_cnt = format!("{} 곳", self.home_map.real_survey.survey_rings.len().max(1));
+        // KaHomeTitleBlock.cpp:133-137 crsText — 작업 좌표계는 실제 작업 CRS 에서 만든다.
+        let crs_txt = match self.work_crs {
+            strata_types::crs::WorkCrs::Epsg5186 => "5186 중부원점",
+            strata_types::crs::WorkCrs::Epsg5187 => "5187 동부원점",
+        }
+        .to_owned();
+        // KaHomeTitleBlock.cpp:148-152 — 조사구역·유구는 실제 개수, 없으면 「—」.
+        let ring_cnt = self.home_map.real_survey.survey_rings.len();
+        let area_cnt = if ring_cnt > 0 {
+            format!("{ring_cnt} 곳")
+        } else {
+            "—".to_owned()
+        };
         let cells = [
             ("폴더", "문서 › 경주시"),
             ("마지막 열림", "어제 22:26"),
-            ("작업 좌표계", "5187 동부원점"),
+            ("작업 좌표계", crs_txt.as_str()),
             ("조사구역", area_cnt.as_str()),
-            ("유구", "0 기"),
+            ("유구", "—"),
             ("검수", "검수 전"),
         ];
         let cw = rect.width() / 6.0;
@@ -327,15 +339,16 @@ impl StrataAppState {
                     sub_border,
                 );
             }
+            // KaHomeTitleBlock.cpp:88 — contentsMargins(24, 10, 16, 12), spacing 2
             p.text(
-                Pos2::new(x0 + 10.0, y2 + 14.0),
+                Pos2::new(x0 + 24.0, y2 + 10.0 + 5.5),
                 egui::Align2::LEFT_CENTER,
                 *k,
                 egui::FontId::proportional(11.0),
                 Color32::from_rgb(105, 103, 96),
             );
             p.text(
-                Pos2::new(x0 + 10.0, y2 + 33.0),
+                Pos2::new(x0 + 24.0, y2 + 10.0 + 11.0 + 2.0 + 7.0),
                 egui::Align2::LEFT_CENTER,
                 *v,
                 egui::FontId::proportional(12.5),

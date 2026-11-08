@@ -710,8 +710,9 @@ impl StrataAppState {
             raw_rect
         };
         let p = ui.painter_at(rect);
-        let tile_w = (rect.width() - 6.0).clamp(36.0, 44.0);
-        let tile_h = (rect.height() - 25.0).clamp(36.0, 44.0);
+        // KaTheme.h:89 ribbonIconSize = 32 — 칩 안의 아이콘 타일은 32 px
+        let tile_w = (rect.width() - 6.0).clamp(32.0, 44.0);
+        let tile_h = (rect.height() - 25.0).clamp(32.0, 44.0);
         let icon_box = Rect::from_center_size(
             Pos2::new(rect.center().x, rect.top() + tile_h * 0.5 + 2.0),
             Vec2::new(tile_w, tile_h),
@@ -765,7 +766,8 @@ impl StrataAppState {
             Pos2::new(rect.center().x, rect.bottom() - 8.5),
             egui::Align2::CENTER_CENTER,
             label,
-            egui::FontId::proportional(11.5),
+            // KaTheme.h:92 ribbonFontSize = 13
+            egui::FontId::proportional(13.0),
             txt_col,
         );
         let resp = resp.on_hover_text(cpp_ribbon_tooltip(label));
