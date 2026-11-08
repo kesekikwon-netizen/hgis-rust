@@ -5,6 +5,7 @@
     clippy::drain_collect
 )]
 pub mod app_state;
+pub mod cadastral_download_ui;
 pub mod debug_control;
 pub mod dialogs_account;
 pub mod dialogs_download_print;
@@ -19,6 +20,7 @@ pub mod gui_tab_paleo;
 pub mod gui_tab_terrain3d;
 pub mod gui_theme_fonts;
 pub mod left_layer_panel;
+pub mod ngii_topographic_ui;
 pub mod real_survey;
 pub mod ribbon;
 pub mod ribbon_icon_svg;
