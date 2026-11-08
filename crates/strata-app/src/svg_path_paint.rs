@@ -93,9 +93,15 @@ fn draw_path(painter: &egui::Painter, d: &str, to_pt: &dyn Fn(f32, f32) -> Pos2,
             cmd = c;
             i += 1;
             if c == 'Z' || c == 'z' {
-                if !pts.is_empty() {
-                    pts.push(to_pt(start.0, start.1));
-                    painter.add(egui::Shape::line(std::mem::take(&mut pts), stroke));
+                let mut closed = std::mem::take(&mut pts);
+                let s_pt = to_pt(start.0, start.1);
+                if closed.len() >= 2 && (closed[closed.len() - 1] - s_pt).length() < 0.2 {
+                    closed.pop();
+                }
+                if closed.len() >= 3 {
+                    painter.add(egui::Shape::closed_line(closed, stroke));
+                } else if closed.len() == 2 {
+                    painter.add(egui::Shape::line(closed, stroke));
                 }
                 cur = start;
                 last_ctrl = None;
@@ -139,9 +145,7 @@ fn draw_path(painter: &egui::Painter, d: &str, to_pt: &dyn Fn(f32, f32) -> Pos2,
 
         match lower {
             'm' => {
-                if !pts.is_empty() {
-                    painter.add(egui::Shape::line(std::mem::take(&mut pts), stroke));
-                }
+                flush_open_pts(painter, &mut pts, stroke);
                 cur = (ox + f[0], oy + f[1]);
                 start = cur;
                 pts.push(to_pt(cur.0, cur.1));
@@ -208,8 +212,22 @@ fn draw_path(painter: &egui::Painter, d: &str, to_pt: &dyn Fn(f32, f32) -> Pos2,
             _ => {}
         }
     }
-    if pts.len() >= 2 {
-        painter.add(egui::Shape::line(pts, stroke));
+    flush_open_pts(painter, &mut pts, stroke);
+}
+
+fn flush_open_pts(painter: &egui::Painter, pts: &mut Vec<Pos2>, stroke: Stroke) {
+    let seg = std::mem::take(pts);
+    if seg.len() >= 2 {
+        let first = seg[0];
+        let last = seg[seg.len() - 1];
+        if (last - first).length() < 0.25 * stroke.width && seg.len() == 2 {
+            painter.circle_filled(first, stroke.width * 0.55, stroke.color);
+        } else {
+            let cap_r = (stroke.width * 0.42).max(0.5);
+            painter.add(egui::Shape::line(seg, stroke));
+            painter.circle_filled(first, cap_r, stroke.color);
+            painter.circle_filled(last, cap_r, stroke.color);
+        }
     }
 }
 
@@ -221,7 +239,7 @@ fn flatten_cubic(
     p3: (f32, f32),
     to_pt: &dyn Fn(f32, f32) -> Pos2,
 ) {
-    const N: usize = 8;
+    const N: usize = 10;
     for k in 1..=N {
         let t = k as f32 / N as f32;
         let u = 1.0 - t;
@@ -240,7 +258,7 @@ fn flatten_quad(
     p2: (f32, f32),
     to_pt: &dyn Fn(f32, f32) -> Pos2,
 ) {
-    const N: usize = 8;
+    const N: usize = 10;
     for k in 1..=N {
         let t = k as f32 / N as f32;
         let u = 1.0 - t;
@@ -250,43 +268,87 @@ fn flatten_quad(
     }
 }
 
+/// W3C SVG 1.1 Appendix F.6.5 / F.6.6 — 타원 호(endpoint parameterization → center parameterization) 정밀 보간
 #[allow(clippy::too_many_arguments)]
 fn flatten_arc(
     pts: &mut Vec<Pos2>,
     p0: (f32, f32),
-    rx: f32,
-    ry: f32,
-    _rot: f32,
+    rx_in: f32,
+    ry_in: f32,
+    rot_deg: f32,
     large: bool,
     sweep: bool,
     p1: (f32, f32),
     to_pt: &dyn Fn(f32, f32) -> Pos2,
 ) {
-    const N: usize = 10;
-    let rx = rx.abs().max(0.001);
-    let ry = ry.abs().max(0.001);
-    for k in 1..=N {
-        let t = k as f32 / N as f32;
-        // 단순 타원 보간: 시작·끝을 잇는 타원 위 점
-        let mx = (p0.0 + p1.0) * 0.5;
-        let my = (p0.1 + p1.1) * 0.5;
-        let dx = p1.0 - p0.0;
-        let dy = p1.1 - p0.1;
-        let len = (dx * dx + dy * dy).sqrt().max(0.001);
-        let nx = -dy / len;
-        let ny = dx / len;
-        let bulge = if large { 1.0 } else { 0.55 } * if sweep { 1.0 } else { -1.0 } * rx.min(ry);
-        let cx = mx + nx * bulge;
-        let cy = my + ny * bulge;
-        let a0 = (p0.1 - cy).atan2(p0.0 - cx);
-        let mut a1 = (p1.1 - cy).atan2(p1.0 - cx);
-        if sweep && a1 < a0 {
-            a1 += std::f32::consts::TAU;
-        } else if !sweep && a1 > a0 {
-            a1 -= std::f32::consts::TAU;
-        }
-        let a = a0 + (a1 - a0) * t;
-        pts.push(to_pt(cx + rx * a.cos(), cy + ry * a.sin()));
+    let dx2 = (p0.0 - p1.0) * 0.5;
+    let dy2 = (p0.1 - p1.1) * 0.5;
+    if dx2.abs() < 1e-5 && dy2.abs() < 1e-5 {
+        return;
+    }
+    let mut rx = rx_in.abs();
+    let mut ry = ry_in.abs();
+    if rx < 1e-5 || ry < 1e-5 {
+        pts.push(to_pt(p1.0, p1.1));
+        return;
+    }
+    let phi = rot_deg.to_radians();
+    let (sin_phi, cos_phi) = phi.sin_cos();
+
+    // Step 1 (F.6.5.1): (x1', y1')
+    let x1p = cos_phi * dx2 + sin_phi * dy2;
+    let y1p = -sin_phi * dx2 + cos_phi * dy2;
+
+    // F.6.6.3: 반지름 보정
+    let lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+    if lambda > 1.0 {
+        let s = lambda.sqrt();
+        rx *= s;
+        ry *= s;
+    }
+
+    // Step 2 (F.6.5.2): (cx', cy')
+    let rx2 = rx * rx;
+    let ry2 = ry * ry;
+    let x1p2 = x1p * x1p;
+    let y1p2 = y1p * y1p;
+    let num = (rx2 * ry2 - rx2 * y1p2 - ry2 * x1p2).max(0.0);
+    let den = (rx2 * y1p2 + ry2 * x1p2).max(1e-9);
+    let sign = if large == sweep { -1.0 } else { 1.0 };
+    let coef = sign * (num / den).sqrt();
+    let cxp = coef * (rx * y1p / ry);
+    let cyp = coef * (-ry * x1p / rx);
+
+    // Step 3 (F.6.5.3): (cx, cy)
+    let cx = cos_phi * cxp - sin_phi * cyp + (p0.0 + p1.0) * 0.5;
+    let cy = sin_phi * cxp + cos_phi * cyp + (p0.1 + p1.1) * 0.5;
+
+    // Step 4 (F.6.5.5 - F.6.5.6): theta1, dtheta
+    let vec_angle = |ux: f32, uy: f32, vx: f32, vy: f32| -> f32 {
+        let cross = ux * vy - uy * vx;
+        let dot = ux * vx + uy * vy;
+        cross.atan2(dot)
+    };
+    let ux = (x1p - cxp) / rx;
+    let uy = (y1p - cyp) / ry;
+    let vx = (-x1p - cxp) / rx;
+    let vy = (-y1p - cyp) / ry;
+    let theta1 = vec_angle(1.0, 0.0, ux, uy);
+    let mut dtheta = vec_angle(ux, uy, vx, vy);
+    if !sweep && dtheta > 0.0 {
+        dtheta -= std::f32::consts::TAU;
+    } else if sweep && dtheta < 0.0 {
+        dtheta += std::f32::consts::TAU;
+    }
+
+    let steps = ((dtheta.abs() * 10.0).ceil() as usize).clamp(6, 28);
+    for k in 1..=steps {
+        let t = k as f32 / steps as f32;
+        let theta = theta1 + dtheta * t;
+        let (st, ct) = theta.sin_cos();
+        let x = cos_phi * rx * ct - sin_phi * ry * st + cx;
+        let y = sin_phi * rx * ct + cos_phi * ry * st + cy;
+        pts.push(to_pt(x, y));
     }
 }
 
@@ -300,10 +362,14 @@ fn tokenize(d: &str) -> Vec<Tok> {
     let mut out = Vec::new();
     let b: Vec<char> = d.chars().collect();
     let mut i = 0usize;
+    let mut cur_cmd = 'M';
+    let mut arg_idx = 0usize;
     while i < b.len() {
         let c = b[i];
         if c.is_ascii_alphabetic() {
             out.push(Tok::Cmd(c));
+            cur_cmd = c;
+            arg_idx = 0;
             i += 1;
             continue;
         }
@@ -311,12 +377,30 @@ fn tokenize(d: &str) -> Vec<Tok> {
             i += 1;
             continue;
         }
+        // SVG 호(A/a) 명령의 4번째·5번째 인자(large-arc-flag, sweep-flag)는 단일 문자 '0' 또는 '1'
+        if (cur_cmd == 'A' || cur_cmd == 'a')
+            && (arg_idx % 7 == 3 || arg_idx % 7 == 4)
+            && (c == '0' || c == '1')
+        {
+            out.push(Tok::Num(if c == '1' { 1.0 } else { 0.0 }));
+            arg_idx += 1;
+            i += 1;
+            continue;
+        }
         let start = i;
+        let mut seen_dot = false;
         if c == '-' || c == '+' {
             i += 1;
         }
-        while i < b.len() && (b[i].is_ascii_digit() || b[i] == '.') {
-            i += 1;
+        while i < b.len() {
+            if b[i].is_ascii_digit() {
+                i += 1;
+            } else if b[i] == '.' && !seen_dot {
+                seen_dot = true;
+                i += 1;
+            } else {
+                break;
+            }
         }
         if i < b.len() && (b[i] == 'e' || b[i] == 'E') {
             i += 1;
@@ -330,6 +414,7 @@ fn tokenize(d: &str) -> Vec<Tok> {
         let s: String = b[start..i].iter().collect();
         if let Ok(v) = s.parse::<f32>() {
             out.push(Tok::Num(v));
+            arg_idx += 1;
         }
         if i == start {
             i += 1;

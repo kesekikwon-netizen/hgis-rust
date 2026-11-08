@@ -524,15 +524,17 @@ impl StrataAppState {
 
 impl eframe::App for StrataAppState {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // eframe re-applies the OS DPI every frame, so anchor the scale here as
-        // well (not only in the startup hook). Without this the logical canvas
-        // stays at ~2/3 of the window on a 150% display and wide layouts clip
-        // their right column and the bottom of tall content.
-        if !self.large_font_mode {
-            let want = 1.0;
-            if (ctx.pixels_per_point() - want).abs() > 0.001 {
-                ctx.set_pixels_per_point(want);
-            }
+        // OS 모니터 DPI 배율(native_pixels_per_point, 예: 1.5)을 그대로 유지하고
+        // 큰 글씨 모드일 때만 zoom_factor(1.15)를 곱한다.
+        let want_zoom = if self.large_font_mode { 1.15 } else { 1.0 };
+        if (ctx.zoom_factor() - want_zoom).abs() > 0.001 {
+            ctx.set_zoom_factor(want_zoom);
+        }
+        // C++ KaThemeOptions.cpp — 「테마」에서 고른 4대 테마·고대비가 화면 전체에
+        // 즉시 반영되도록, 테마가 바뀐 프레임에 스타일을 다시 적용한다.
+        if self.theme_dirty {
+            crate::gui_theme_fonts::apply_theme_tokens(ctx, &self.theme);
+            self.theme_dirty = false;
         }
         let _ = self.render_workspace_egui(ctx);
     }

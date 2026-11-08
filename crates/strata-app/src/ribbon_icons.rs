@@ -69,9 +69,11 @@ pub fn cpp_icon_id(label: &str) -> Option<&'static str> {
 }
 
 pub fn paint_ribbon_icon(painter: &egui::Painter, rect: Rect, label: &str, stroke_col: Color32) {
-    // C++ KaIconsMockupEngine 은 Lucide 원문 SVG 를 그린다. 같은 id 로 먼저 시도한다.
+    // C++ KaIconsMockupEngine.cpp:68-69 — 타일(px) 안 글리프 상자는 px * (18.0 / 32.0) 정중앙 배치.
     if let Some(id) = cpp_icon_id(label) {
-        if crate::svg_path_paint::paint_svg_icon(painter, rect, id, stroke_col) {
+        let glyph_side = rect.width().min(rect.height()) * crate::svg_path_paint::GLYPH_RATIO;
+        let glyph_rect = Rect::from_center_size(rect.center(), Vec2::splat(glyph_side));
+        if crate::svg_path_paint::paint_svg_icon(painter, glyph_rect, id, stroke_col) {
             return;
         }
     }

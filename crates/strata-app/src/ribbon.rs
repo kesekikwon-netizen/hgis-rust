@@ -175,9 +175,14 @@ pub struct KaAppBarSearch {
     pub query: String,
     pub selected_sido: String,
     pub region_popup_open: bool,
+    pub address_popup_open: bool,
+    pub region_button_rect: Option<[f32; 4]>,
     pub city_input: String,
     pub dong_input: String,
     pub lot_input: String,
+    pub search_results_modal: Vec<strata_net::address_search::LocationHit>,
+    pub selected_hit_idx: usize,
+    pub search_error_modal: Option<String>,
 }
 
 impl Default for KaAppBarSearch {
@@ -186,9 +191,14 @@ impl Default for KaAppBarSearch {
             query: String::new(),
             selected_sido: "경북".to_owned(),
             region_popup_open: false,
+            address_popup_open: false,
+            region_button_rect: None,
             city_input: "경주시".to_owned(),
             dong_input: "인왕동".to_owned(),
             lot_input: "76".to_owned(),
+            search_results_modal: Vec::new(),
+            selected_hit_idx: 0,
+            search_error_modal: None,
         }
     }
 }

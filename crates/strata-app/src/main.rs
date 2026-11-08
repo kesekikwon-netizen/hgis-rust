@@ -58,11 +58,18 @@ fn main() {
         }
         return;
     }
+    const APP_ICON_RGBA: &[u8] = include_bytes!("../../../data/theme/ka-hgis-app-paper-96.rgba");
+    let icon_data = std::sync::Arc::new(eframe::egui::IconData {
+        rgba: APP_ICON_RGBA.to_vec(),
+        width: 96,
+        height: 96,
+    });
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Strata")
+            .with_icon(icon_data)
             .with_position([16.0, 16.0])
-            .with_inner_size([1600.0, 900.0])
+            .with_inner_size([1600.0, 860.0])
             .with_min_inner_size([480.0, 320.0])
             .with_active(true)
             .with_visible(true),

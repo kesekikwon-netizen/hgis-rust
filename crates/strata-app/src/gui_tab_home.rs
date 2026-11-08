@@ -22,8 +22,21 @@ impl StrataAppState {
                     ui.allocate_ui_with_layout(Vec2::new(hero_w, 146.0), egui::Layout::top_down(egui::Align::Min), |ui| {
                         ui.add_space(12.0);
                         ui.horizontal(|ui| {
-                            let (logo_r, _) = ui.allocate_exact_size(Vec2::new(40.0, 40.0), egui::Sense::hover());
-                            paint_strata_logo(&ui.painter_at(logo_r), logo_r);
+                            let (logo_r, _) = ui.allocate_exact_size(Vec2::new(48.0, 48.0), egui::Sense::hover());
+                            const APP_ICON_RGBA: &[u8] =
+                                include_bytes!("../../../data/theme/ka-hgis-app-paper-96.rgba");
+                            let tex = ui.ctx().load_texture(
+                                "ka_app_icon_paper_96",
+                                egui::ColorImage::from_rgba_unmultiplied([96, 96], APP_ICON_RGBA),
+                                egui::TextureOptions::LINEAR,
+                            );
+                            ui.painter_at(logo_r).image(
+                                tex.id(),
+                                logo_r,
+                                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                                Color32::WHITE,
+                            );
+                            let _ = paint_strata_logo;
                             ui.add_space(6.0);
                             ui.label(egui::RichText::new("Strata").size(28.0).strong());
                             ui.label(egui::RichText::new("|").size(20.0).color(Color32::from_rgb(160, 158, 150)));
@@ -194,14 +207,30 @@ impl StrataAppState {
                                         node_size * 0.5,
                                         Stroke::new(1.2, ring_rgb),
                                     );
-                                    let glyph = if step_no == "1" { "✓" } else { step_no };
-                                    np.text(
-                                        c,
-                                        egui::Align2::CENTER_CENTER,
-                                        glyph,
-                                        egui::FontId::proportional(9.5),
-                                        ring_rgb,
-                                    );
+                                    if step_no == "1" {
+                                        np.line_segment(
+                                            [
+                                                Pos2::new(c.x - 3.6, c.y + 0.2),
+                                                Pos2::new(c.x - 1.0, c.y + 2.8),
+                                            ],
+                                            Stroke::new(1.5, ring_rgb),
+                                        );
+                                        np.line_segment(
+                                            [
+                                                Pos2::new(c.x - 1.0, c.y + 2.8),
+                                                Pos2::new(c.x + 3.8, c.y - 2.4),
+                                            ],
+                                            Stroke::new(1.5, ring_rgb),
+                                        );
+                                    } else {
+                                        np.text(
+                                            c,
+                                            egui::Align2::CENTER_CENTER,
+                                            step_no,
+                                            egui::FontId::proportional(9.5),
+                                            ring_rgb,
+                                        );
+                                    }
                                 }
                                 ui.vertical(|ui| {
                                     ui.horizontal(|ui| {
@@ -248,8 +277,24 @@ impl StrataAppState {
 
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("연결 상태").size(14.5).strong());
+                    let (lock_rect, _) =
+                        ui.allocate_exact_size(Vec2::new(10.0, 13.0), egui::Sense::hover());
+                    {
+                        let lp = ui.painter_at(lock_rect);
+                        let lc = Color32::from_rgb(105, 103, 96);
+                        let body = Rect::from_min_max(
+                            Pos2::new(lock_rect.left() + 1.5, lock_rect.top() + 5.5),
+                            Pos2::new(lock_rect.right() - 1.5, lock_rect.bottom() - 1.0),
+                        );
+                        lp.rect_stroke(body, 1.5, Stroke::new(1.1, lc), egui::StrokeKind::Inside);
+                        lp.circle_stroke(
+                            Pos2::new(lock_rect.center().x, lock_rect.top() + 4.5),
+                            2.3,
+                            Stroke::new(1.1, lc),
+                        );
+                    }
                     ui.label(
-                        egui::RichText::new("🔒 비밀값은 표시되지 않습니다")
+                        egui::RichText::new("비밀값은 표시되지 않습니다")
                             .size(12.0)
                             .color(Color32::from_rgb(105, 103, 96)),
                     );
@@ -306,8 +351,7 @@ impl StrataAppState {
                                     egui::Label::new(
                                         egui::RichText::new("설정")
                                             .size(12.0)
-                                            .color(ink_rgb)
-                                            .underline(),
+                                            .color(ink_rgb),
                                     )
                                     .sense(egui::Sense::click()),
                                 );

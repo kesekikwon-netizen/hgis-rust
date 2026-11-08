@@ -136,6 +136,8 @@ pub struct StrataAppState {
     pub display_options: DisplayOptions,
     pub work_crs: WorkCrs,
     pub theme: ThemeTokens,
+    /// C++ `KaThemeOptions.cpp` — 테마·고대비가 바뀌면 다음 프레임에 스타일을 다시 적용한다
+    pub theme_dirty: bool,
     pub paper_look: bool,
     pub project_title: String,
     pub is_dirty: bool,
@@ -180,6 +182,7 @@ impl StrataAppState {
             display_options: default_opts,
             work_crs: WorkCrs::Epsg5187,
             theme: ThemeTokens::for_options(&default_opts),
+            theme_dirty: true,
             paper_look: true,
             project_title: "새 고고학 지표·시굴조사".to_owned(),
             is_dirty: false,

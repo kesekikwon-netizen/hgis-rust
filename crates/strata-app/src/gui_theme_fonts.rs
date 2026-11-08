@@ -2,13 +2,10 @@ use eframe::egui;
 use strata_types::theme_tokens::ThemeTokens;
 
 pub fn configure_korean_fonts_and_theme(ctx: &egui::Context, tokens: &ThemeTokens) {
-    // egui turns logical points into physical pixels with pixels_per_point.
-    // Leaving ppp at the OS value (1.5 here) makes the logical canvas only
-    // ~1529x593 inside a 2293x889 client area, so wide 3-column layouts lose
-    // their right panel and tall content runs under the status bar.
-    // Re-anchor on 96 DPI and let egui keep its own scale, so one logical point
-    // equals one pixel of the window: the layout then has the room it expects.
-    ctx.set_pixels_per_point(1.0);
+    // C++ Qt6 와 동일하게 모니터의 OS DPI 배율(100% / 125% / 150% / 200%)을 그대로 따르며,
+    // 제목 표시줄(Title Bar)도 C++ 앱과 동일하게 밝은(Light) 테마로 고정한다.
+    ctx.set_theme(egui::Theme::Light);
+    ctx.send_viewport_cmd(egui::ViewportCommand::SetTheme(egui::SystemTheme::Light));
     let _ = tokens;
     let mut fonts = egui::FontDefinitions::default();
     let candidate_paths = [
