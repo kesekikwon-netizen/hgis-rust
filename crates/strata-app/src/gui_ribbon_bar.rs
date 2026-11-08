@@ -17,8 +17,7 @@ pub const UX_RIBBON_GROUP_WIDTHS: [f32; 7] = [214.0, 250.0, 156.0, 382.0, 49.0, 
 
 /// `KaRegionLocator.cpp:156, 162-163, 192-194` — 동·읍·면·리 / 지번 칸 안내와 맨 아래 규칙 두 줄
 pub const REGION_LOT_PLACEHOLDER: &str = "산 12-3";
-pub const REGION_LOT_HINT: &str =
-    "번지 (예: 12, 12-3, 산 12-3). 산번지는 ‘산’을 함께 입력하세요.";
+pub const REGION_LOT_HINT: &str = "번지 (예: 12, 12-3, 산 12-3). 산번지는 ‘산’을 함께 입력하세요.";
 pub const REGION_BOTTOM_HINT: &str =
     "번지 입력 시 정확한 지번만 찾습니다. 읍·면은 리까지 입력하세요.\n예: 고아읍 봉한리 / 산 12-3";
 
@@ -112,9 +111,29 @@ impl StrataAppState {
             ("기타", &["더보기"]),
         ];
 
+        // KaBeginnerRibbon.cpp — 1600×900 기준 실측 그룹 좌표(UX_RIBBON_GROUP_XS/WIDTHS)와
+        // 각 버튼 폭을 유지하며, 좁은 모니터에서는 비율 축소해 모든 모니터(1280~4K)에 대응한다.
+        let avail_for_ribbon = (ribbon_rect.width() - 266.0).max(640.0);
+        let h_scale = (avail_for_ribbon / 1328.0).clamp(0.72, 1.0);
+        let chip_base_w = |g_idx: usize, label: &str| -> f32 {
+            match (g_idx, label) {
+                (0, _) => 53.0,
+                (1, "그리기" | "시굴격자") => 51.0,
+                (1, _) => 47.0,
+                (2, "수치지형") => 60.0,
+                (2, _) => 47.0,
+                (3, "옛 지도") => 51.0,
+                (3, _) => 47.0,
+                (4, _) => 47.0,
+                (5, "GeoTIFF" | "검수·제출") => 60.0,
+                (5, _) => 47.0,
+                _ => 48.0,
+            }
+        };
+
         for (g_idx, (g_title, items)) in groups.iter().enumerate() {
-            let gx = ribbon_rect.left() + UX_RIBBON_GROUP_XS[g_idx];
-            let gw = UX_RIBBON_GROUP_WIDTHS[g_idx];
+            let gx = ribbon_rect.left() + UX_RIBBON_GROUP_XS[g_idx] * h_scale;
+            let gw = UX_RIBBON_GROUP_WIDTHS[g_idx] * h_scale;
             let g_rect =
                 Rect::from_min_size(Pos2::new(gx, ribbon_rect.top() + 1.0), Vec2::new(gw, 89.0));
             let gp = ui.painter_at(ribbon_rect);
@@ -132,61 +151,88 @@ impl StrataAppState {
                 egui::Align2::LEFT_CENTER,
                 *g_title,
                 egui::FontId::proportional(11.5),
-                Color32::from_rgb(65, 64, 60),
+                Color32::from_rgb(94, 93, 89),
             );
-            let n = items.len() as f32;
-            let gap = if items.len() > 1 { 2.0 } else { 0.0 };
-            let pad_x = 2.0;
-            let item_w = ((gw - pad_x * 2.0 - gap * (n - 1.0)) / n).max(38.0);
-            let item_h = 69.0;
-            for (i, &label) in items.iter().enumerate() {
-                let bx = g_rect.left() + pad_x + (i as f32) * (item_w + gap);
-                let btn_rect = Rect::from_min_size(
-                    Pos2::new(bx, g_rect.top() + 18.0),
-                    Vec2::new(item_w, item_h),
-                );
-                let muted = is_home && *g_title == "기록";
+            let mut bx = g_rect.left() + 1.0;
+            for &label in items.iter() {
+                let cw = chip_base_w(g_idx, label) * h_scale;
+                let btn_rect =
+                    Rect::from_min_size(Pos2::new(bx, g_rect.top() + 18.0), Vec2::new(cw, 69.0));
+                bx += cw;
+                let muted = is_home && (*g_title == "기록" || label == "GeoTIFF");
                 let highlight_save = label == "저장" && dirty_save;
-                let dark_active = (label == "측거" && self.active_tool == MapToolKind::Measure)
+                let dark_active = (label == "선택" && self.active_tool == MapToolKind::Select)
+                    || (label == "측거" && self.active_tool == MapToolKind::Measure)
                     || (label == "그리기"
                         && (self.active_tool == MapToolKind::Measure
                             || (self.ribbon.sub_toolbar_visible
                                 && self.ribbon.sub_mode == SubToolsMode::Draw)))
                     || (label == "버퍼"
                         && self.ribbon.sub_toolbar_visible
-                        && self.ribbon.sub_mode == SubToolsMode::Buffer);
+                        && self.ribbon.sub_mode == SubToolsMode::Buffer)
+                    || (label == "정합"
+                        && self.ribbon.sub_toolbar_visible
+                        && self.ribbon.sub_mode == SubToolsMode::Align);
                 let warm_active = label == "DEM" && !is_home;
                 let mut chip_ui = ui.new_child(egui::UiBuilder::new().max_rect(btn_rect));
-                  let (chip_clicked, chip_secondary) = self.draw_ribbon_chip(
+                let (chip_clicked, chip_secondary) = self.draw_ribbon_chip(
                     &mut chip_ui,
                     label,
                     muted,
                     highlight_save,
                     dark_active,
                     warm_active,
-                  );
-                  if chip_clicked {
-                      self.handle_ribbon_click(label);
-                  }
-                  // KaPaleoMenu::install — 고지형·지질·DEM 우클릭 팝업
-                  if chip_secondary {
-                      self.open_ribbon_context_menu(label, btn_rect);
-                  }
+                );
+                if chip_clicked {
+                    if label == "옛 지도" || label == "더보기" {
+                        self.open_ribbon_context_menu(label, btn_rect);
+                    } else {
+                        self.handle_ribbon_click(label);
+                    }
+                }
+                // KaPaleoMenu::install 등 우클릭 팝업
+                if chip_secondary {
+                    self.open_ribbon_context_menu(label, btn_rect);
+                }
             }
         }
 
-        let right_left = (ribbon_rect.left() + 1334.0).min(ribbon_rect.right() - 220.0);
+        // KaAppBar.cpp:25-58 — [📍 지역] 버튼 + [🔍 주소·지번 찾기] 입력칸
+        let right_left = (ribbon_rect.left() + 1334.0 * h_scale).max(ribbon_rect.right() - 264.0);
         let right_rect = Rect::from_min_max(
             Pos2::new(right_left, ribbon_rect.top() + 1.0),
             Pos2::new(ribbon_rect.right() - 8.0, ribbon_rect.bottom() - 1.0),
         );
         let mut right_ui = ui.new_child(egui::UiBuilder::new().max_rect(right_rect));
         right_ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let resp = ui.add(
-                egui::TextEdit::singleline(&mut self.ribbon.app_bar.query)
-                    .hint_text("Q 주소·지번 찾기")
-                    .desired_width(142.0),
-            );
+            ui.spacing_mut().item_spacing.x = 8.0;
+            let search_placeholder = if self.display_options.paper_look {
+                "주소·지번 찾기"
+            } else {
+                "도로명·지번 (예: 하회종가길 40)  Ctrl+F"
+            };
+            let resp = ui
+                .add_sized(
+                    [156.0, 32.0],
+                    egui::TextEdit::singleline(&mut self.ribbon.app_bar.query)
+                        .hint_text(format!("     {search_placeholder}"))
+                        .vertical_align(egui::Align::Center),
+                )
+                .on_hover_text("도로명·지번으로 찾습니다 (예: 하회종가길 40) · Ctrl+F");
+            // 검색칸 안쪽 왼쪽 돋보기 아이콘(16px, KaAppBar.cpp:41)
+            {
+                let sp = ui.painter();
+                let c = Pos2::new(resp.rect.left() + 12.0, resp.rect.center().y - 1.0);
+                let ink = Color32::from_rgb(94, 93, 89);
+                sp.circle_stroke(c, 4.8, Stroke::new(1.5, ink));
+                sp.line_segment(
+                    [
+                        Pos2::new(c.x + 3.4, c.y + 3.4),
+                        Pos2::new(c.x + 7.2, c.y + 7.2),
+                    ],
+                    Stroke::new(1.6, ink),
+                );
+            }
             if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 self.active_tab = MainTab::Map;
                 self.home_map.draw_guide_message = Some(format!(
@@ -194,12 +240,53 @@ impl StrataAppState {
                     self.ribbon.app_bar.query
                 ));
             }
-            let reg_btn = egui::Button::new(egui::RichText::new("● 지역").size(12.5).strong())
-                .fill(Color32::WHITE)
-                .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
-                .corner_radius(6.0)
-                .min_size(Vec2::new(68.0, 36.0));
-            if ui.add(reg_btn).clicked() {
+            let (reg_rect, reg_resp) =
+                ui.allocate_exact_size(Vec2::new(76.0, 36.0), egui::Sense::click());
+            {
+                let rp = ui.painter_at(reg_rect);
+                let bg = if reg_resp.hovered() {
+                    Color32::from_rgb(245, 244, 237)
+                } else {
+                    Color32::WHITE
+                };
+                rp.rect_filled(reg_rect, 6.0, bg);
+                rp.rect_stroke(
+                    reg_rect,
+                    6.0,
+                    Stroke::new(1.0, Color32::from_rgb(194, 192, 182)),
+                    egui::StrokeKind::Inside,
+                );
+                // 지도 핀 아이콘 (KaIcons "gps", 16px, KaAppBar.cpp:32)
+                let pin_c = Pos2::new(reg_rect.left() + 19.0, reg_rect.center().y - 2.0);
+                let pin_ink = Color32::from_rgb(94, 93, 89);
+                rp.circle_stroke(pin_c, 4.5, Stroke::new(1.5, pin_ink));
+                rp.circle_filled(pin_c, 1.6, pin_ink);
+                rp.line_segment(
+                    [
+                        Pos2::new(pin_c.x - 3.2, pin_c.y + 3.2),
+                        Pos2::new(pin_c.x, pin_c.y + 8.0),
+                    ],
+                    Stroke::new(1.5, pin_ink),
+                );
+                rp.line_segment(
+                    [
+                        Pos2::new(pin_c.x + 3.2, pin_c.y + 3.2),
+                        Pos2::new(pin_c.x, pin_c.y + 8.0),
+                    ],
+                    Stroke::new(1.5, pin_ink),
+                );
+                rp.text(
+                    Pos2::new(reg_rect.left() + 31.0, reg_rect.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    "지역",
+                    egui::FontId::proportional(13.0),
+                    Color32::from_rgb(20, 20, 19),
+                );
+            }
+            if reg_resp
+                .on_hover_text("시·도를 고른 뒤 시·군·동과 지번으로 찾아갑니다")
+                .clicked()
+            {
                 self.ribbon.app_bar.region_popup_open = !self.ribbon.app_bar.region_popup_open;
             }
         });
@@ -584,14 +671,11 @@ impl StrataAppState {
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let theme_resp = ui.button(egui::RichText::new("테마 ▼").size(12.0));
-                if theme_resp.clicked() {
-                    self.theme_menu_open = !self.theme_menu_open;
-                }
+                ui.spacing_mut().item_spacing.x = 6.0;
                 if self.theme_menu_open {
                     let popup_pos = Pos2::new(
-                        (theme_resp.rect.right() - 210.0).max(16.0),
-                        theme_resp.rect.bottom() + 4.0,
+                        (tabbar_rect.right() - 220.0).max(16.0),
+                        tabbar_rect.bottom() + 4.0,
                     );
                     egui::Area::new(ui.id().with("ka_theme_menu_popup"))
                         .fixed_pos(popup_pos)
@@ -653,9 +737,6 @@ impl StrataAppState {
                                         .changed()
                                     {
                                         self.large_font_mode = self.display_options.large_text;
-                                        // 1.0 is the base layout scale (see
-                                        // gui_theme_fonts::configure_korean_fonts_and_theme);
-                                        // large text multiplies that base.
                                         ctx.set_pixels_per_point(if self.large_font_mode {
                                             1.15
                                         } else {
@@ -674,15 +755,15 @@ impl StrataAppState {
                         );
                     } else {
                         ui.label(
-                            egui::RichText::new("● 저장됨")
+                            egui::RichText::new("저장됨")
                                 .size(12.0)
-                                .color(Color32::from_rgb(21, 128, 61)),
+                                .color(Color32::from_rgb(94, 93, 89)),
                         );
                     }
                     ui.label(
                         egui::RichText::new(&self.project_title)
                             .size(12.0)
-                            .color(Color32::from_rgb(90, 89, 84)),
+                            .color(Color32::from_rgb(94, 93, 89)),
                     );
                 }
             });
@@ -710,51 +791,103 @@ impl StrataAppState {
             raw_rect
         };
         let p = ui.painter_at(rect);
-        // KaTheme.h:89 ribbonIconSize = 32 — 칩 안의 아이콘 타일은 32 px
-        let tile_w = (rect.width() - 6.0).clamp(32.0, 44.0);
-        let tile_h = (rect.height() - 25.0).clamp(32.0, 44.0);
-        let icon_box = Rect::from_center_size(
-            Pos2::new(rect.center().x, rect.top() + tile_h * 0.5 + 2.0),
-            Vec2::new(tile_w, tile_h),
+        // KaBeginnerRibbon.cpp:250 — setIconSize(QSize(tile, tile)).
+        // 모든 칩이 동일한 정사각형 타일(39×39 px, 좁은 창에서는 비례 축소)을 쓴다.
+        let tile_side = (rect.width() - 6.0)
+            .min(rect.height() - 28.0)
+            .clamp(26.0, 39.0);
+        let icon_box = Rect::from_min_size(
+            Pos2::new(rect.center().x - tile_side * 0.5, rect.top() + 3.0),
+            Vec2::new(tile_side, tile_side),
         );
+        let corner = tile_side * 0.25;
         let is_hovered = resp.hovered()
             && ui
                 .input(|i| i.pointer.hover_pos())
                 .is_none_or(|pos| rect.contains(pos));
+        let paper = self.display_options.paper_look;
         if highlight_save {
-            p.rect_filled(icon_box, 7.0, Color32::from_rgb(181, 87, 58));
+            let strong_bg = if paper {
+                Color32::from_rgb(0xB5, 0x57, 0x3A)
+            } else {
+                Color32::from_rgb(0x20, 0x6C, 0xB0)
+            };
+            p.rect_filled(icon_box, corner, strong_bg);
             paint_ribbon_icon(&p, icon_box, label, Color32::WHITE);
             p.circle_filled(
                 Pos2::new(icon_box.right() - 5.5, icon_box.top() + 5.5),
-                4.0,
+                4.2,
                 Color32::WHITE,
             );
             p.circle_filled(
                 Pos2::new(icon_box.right() - 5.5, icon_box.top() + 5.5),
-                2.6,
-                Color32::from_rgb(235, 152, 34),
+                2.8,
+                Color32::from_rgb(0xF2, 0xA3, 0x3A),
             );
         } else if dark_active {
-            p.rect_filled(icon_box, 7.0, Color32::from_rgb(44, 43, 41));
-            paint_ribbon_icon(&p, icon_box, label, Color32::WHITE);
-        } else {
-            // KaTheme.cpp:105-113 — 목업 타일 색 토큰 그대로
-            // tile #E4EAED / tileHover #D9E2E7 / tileOn #E0ECF8(border #1A68B0)
-            // tileDisabled #EEF1F3 / glyph #2B4858 / glyphOn #105088
-            let (bg, stroke_col) = if muted {
+            let (on_bg, on_fg) = if paper {
                 (
-                    Color32::from_rgb(0xEE, 0xF1, 0xF3),
-                    Color32::from_rgb(0x2B, 0x48, 0x58),
+                    Color32::from_rgb(0x30, 0x30, 0x2E),
+                    Color32::from_rgb(0xFA, 0xF9, 0xF5),
                 )
-            } else if warm_active {
+            } else {
                 (
                     Color32::from_rgb(0xE0, 0xEC, 0xF8),
                     Color32::from_rgb(0x10, 0x50, 0x88),
                 )
+            };
+            p.rect_filled(icon_box, corner, on_bg);
+            if !paper {
+                p.rect_stroke(
+                    icon_box,
+                    corner,
+                    Stroke::new(1.5, Color32::from_rgb(0x1A, 0x68, 0xB0)),
+                    egui::StrokeKind::Inside,
+                );
+            }
+            paint_ribbon_icon(&p, icon_box, label, on_fg);
+        } else {
+            // KaThemePaper.cpp:60-70 vs KaTheme.cpp:105-113
+            let (bg, stroke_col) = if muted {
+                if paper {
+                    (
+                        Color32::from_rgb(0xF5, 0xF4, 0xED),
+                        Color32::from_rgb(0x9E, 0x9D, 0x98),
+                    )
+                } else {
+                    (
+                        Color32::from_rgb(0xEE, 0xF1, 0xF3),
+                        Color32::from_rgb(0x8F, 0x98, 0xA3),
+                    )
+                }
+            } else if warm_active {
+                if paper {
+                    (
+                        Color32::from_rgb(0xE3, 0xDA, 0xCC),
+                        Color32::from_rgb(0x14, 0x14, 0x13),
+                    )
+                } else {
+                    (
+                        Color32::from_rgb(0xE0, 0xEC, 0xF8),
+                        Color32::from_rgb(0x10, 0x50, 0x88),
+                    )
+                }
             } else if is_hovered {
+                if paper {
+                    (
+                        Color32::from_rgb(0xE8, 0xE6, 0xDC),
+                        Color32::from_rgb(0x30, 0x30, 0x2E),
+                    )
+                } else {
+                    (
+                        Color32::from_rgb(0xD9, 0xE2, 0xE7),
+                        Color32::from_rgb(0x2B, 0x48, 0x58),
+                    )
+                }
+            } else if paper {
                 (
-                    Color32::from_rgb(0xD9, 0xE2, 0xE7),
-                    Color32::from_rgb(0x2B, 0x48, 0x58),
+                    Color32::from_rgb(0xF0, 0xEE, 0xE6),
+                    Color32::from_rgb(0x30, 0x30, 0x2E),
                 )
             } else {
                 (
@@ -762,38 +895,33 @@ impl StrataAppState {
                     Color32::from_rgb(0x2B, 0x48, 0x58),
                 )
             };
-            // KaIconsMockupEngine.cpp:25 kTileRadius = 0.25, :27 kBorderUnits = 2 / 32
-            let tile_side = icon_box.width().min(icon_box.height());
-            let corner = tile_side * 0.25;
             p.rect_filled(icon_box, corner, bg);
-            if warm_active || muted {
-                let bw = tile_side * 2.0 / 32.0;
-                let border_col = if warm_active {
-                    // KaTheme.cpp:108 tileOnBorder
-                    Color32::from_rgb(0x1A, 0x68, 0xB0)
+            if warm_active {
+                let bw = (tile_side * 2.0 / 32.0).max(1.0);
+                let border_col = if paper {
+                    Color32::from_rgb(0xB0, 0xAE, 0xA5)
                 } else {
-                    Color32::from_rgb(0xD4, 0xD9, 0xDD)
+                    Color32::from_rgb(0x1A, 0x68, 0xB0)
                 };
                 p.rect_stroke(
                     icon_box,
                     corner,
-                    Stroke::new(bw.max(1.0), border_col),
+                    Stroke::new(bw, border_col),
                     egui::StrokeKind::Inside,
                 );
             }
             paint_ribbon_icon(&p, icon_box, label, stroke_col);
         }
         let txt_col = if muted {
-            Color32::from_rgb(150, 148, 140)
+            Color32::from_rgb(0x9E, 0x9D, 0x98)
         } else {
-            Color32::from_rgb(30, 30, 28)
+            Color32::from_rgb(0x14, 0x14, 0x13)
         };
         p.text(
-            Pos2::new(rect.center().x, rect.bottom() - 8.5),
+            Pos2::new(rect.center().x, rect.top() + tile_side + 15.0),
             egui::Align2::CENTER_CENTER,
             label,
-            // KaTheme.h:92 ribbonFontSize = 13
-            egui::FontId::proportional(13.0),
+            egui::FontId::proportional(12.5),
             txt_col,
         );
         let resp = resp.on_hover_text(cpp_ribbon_tooltip(label));
@@ -801,27 +929,35 @@ impl StrataAppState {
             && resp
                 .interact_pointer_pos()
                 .is_none_or(|pos| rect.contains(pos));
-        // KaPaleoMenu::install — 우클릭 팝업 메뉴(고지형·지질·DEM)
         let secondary = resp.secondary_clicked();
         (clicked, secondary)
     }
 
     /// KaPaleoCrossSectionWidget.cpp:99-158 `KaPaleoMenu::install` +
-    /// MainWindowRibbon.cpp:410-423 + MainWindowChrome.cpp:215-223 —
-    /// 리본 `고지형`/`지질`/`DEM` 우클릭 팝업 메뉴.
-    fn open_ribbon_context_menu(&mut self, label: &str, anchor: egui::Rect) {
+    /// MainWindowRibbon.cpp:390-711 —
+    /// 리본 `고지형`/`지질`/`DEM`/`토양`/`지적`/`수치지형`/`옛 지도`/`더보기` 팝업 메뉴.
+    pub(crate) fn open_ribbon_context_menu(&mut self, label: &str, anchor: egui::Rect) {
+        self.ribbon.paleo_menu_open = false;
+        self.ribbon.geology_menu_open = false;
+        self.ribbon.dem_menu_open = false;
+        self.ribbon.soil_menu_open = false;
+        self.ribbon.cadastral_menu_open = false;
+        self.ribbon.topo_menu_open = false;
+        self.ribbon.old_map_menu_open = false;
+        self.ribbon.more_menu_open = false;
+        self.ribbon.context_menu_anchor = Pos2::new(anchor.left(), anchor.bottom() + 2.0);
         match label {
-            "고지형" => {
-                self.ribbon.paleo_menu_open = true;
-                self.ribbon.context_menu_anchor = anchor.min;
-            }
-            "지질" => {
-                self.ribbon.geology_menu_open = true;
-                self.ribbon.context_menu_anchor = anchor.min;
-            }
-            "DEM" => {
-                self.ribbon.dem_menu_open = true;
-                self.ribbon.context_menu_anchor = anchor.min;
+            "고지형" => self.ribbon.paleo_menu_open = true,
+            "지질" => self.ribbon.geology_menu_open = true,
+            "DEM" => self.ribbon.dem_menu_open = true,
+            "토양" => self.ribbon.soil_menu_open = true,
+            "지적" => self.ribbon.cadastral_menu_open = true,
+            "수치지형" => self.ribbon.topo_menu_open = true,
+            "옛 지도" => self.ribbon.old_map_menu_open = true,
+            "더보기" => {
+                self.ribbon.context_menu_anchor =
+                    Pos2::new((anchor.right() - 250.0).max(16.0), anchor.bottom() + 2.0);
+                self.ribbon.more_menu_open = true;
             }
             _ => {}
         }
@@ -944,22 +1080,265 @@ impl StrataAppState {
                 self.run_dem_menu_action(item);
             }
         }
+        // ── 토양 (2항목, MainWindowRibbon.cpp:447-452)
+        if self.ribbon.soil_menu_open {
+            let mut picked: Option<&'static str> = None;
+            egui::Window::new("ka_soil_menu")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(anchor)
+                .show(ctx, |ui| {
+                    for item in [
+                        "분포지형 내려받기 — 현재 화면 범위",
+                        "토양도 파일 불러오기(SHP·GPKG)",
+                    ] {
+                        if ui
+                            .add_sized(
+                                [250.0, 24.0],
+                                egui::Button::new(egui::RichText::new(item).size(12.0))
+                                    .fill(Color32::TRANSPARENT)
+                                    .stroke(Stroke::NONE),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(item);
+                        }
+                    }
+                });
+            if let Some(_item) = picked {
+                self.ribbon.soil_menu_open = false;
+                self.handle_ribbon_click("토양");
+            }
+        }
+        // ── 지적 (2항목, MainWindowRibbon.cpp:477-478)
+        if self.ribbon.cadastral_menu_open {
+            let mut picked: Option<&'static str> = None;
+            egui::Window::new("ka_cadastral_menu")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(anchor)
+                .show(ctx, |ui| {
+                    for item in ["VWorld 계정 설정", "선 색·지번 표시"] {
+                        if ui
+                            .add_sized(
+                                [190.0, 24.0],
+                                egui::Button::new(egui::RichText::new(item).size(12.0))
+                                    .fill(Color32::TRANSPARENT)
+                                    .stroke(Stroke::NONE),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(item);
+                        }
+                    }
+                });
+            if let Some(item) = picked {
+                self.ribbon.cadastral_menu_open = false;
+                if item.contains("계정") {
+                    self.modals.active = Some(ActiveModalDialog::AccountSettings);
+                } else {
+                    self.modals.active = Some(ActiveModalDialog::CadastralDownload);
+                }
+            }
+        }
+        // ── 수치지형 (2항목, MainWindowRibbon.cpp:391-392)
+        if self.ribbon.topo_menu_open {
+            let mut picked: Option<&'static str> = None;
+            egui::Window::new("ka_topo_menu")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(anchor)
+                .show(ctx, |ui| {
+                    for item in ["국토지리정보원에서 내려받기…", "받아 둔 수치지형도 폴더…"]
+                    {
+                        if ui
+                            .add_sized(
+                                [230.0, 24.0],
+                                egui::Button::new(egui::RichText::new(item).size(12.0))
+                                    .fill(Color32::TRANSPARENT)
+                                    .stroke(Stroke::NONE),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(item);
+                        }
+                    }
+                });
+            if let Some(_item) = picked {
+                self.ribbon.topo_menu_open = false;
+                self.modals.active = Some(ActiveModalDialog::NgiiTopoDownload);
+            }
+        }
+        // ── 옛 지도 (2항목, MainWindowRibbon.cpp:492-500 & 12-oldmap.png / 14-drawing.png)
+        if self.ribbon.old_map_menu_open {
+            let mut picked: Option<&'static str> = None;
+            egui::Window::new("ka_old_map_menu")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(anchor)
+                .show(ctx, |ui| {
+                    for item in ["▤  대동여지도", "▤  1919 조선지형도 1:5만"] {
+                        if ui
+                            .add_sized(
+                                [196.0, 26.0],
+                                egui::Button::new(egui::RichText::new(item).size(12.5))
+                                    .fill(Color32::TRANSPARENT)
+                                    .stroke(Stroke::NONE),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(item);
+                        }
+                    }
+                });
+            if let Some(item) = picked {
+                self.ribbon.old_map_menu_open = false;
+                self.active_tab = MainTab::Map;
+                let map_type = if item.contains("대동여지도") {
+                    strata_net::tile_fetcher::HistoricalMapType::Daedongyeojido
+                } else {
+                    strata_net::tile_fetcher::HistoricalMapType::Chosun1919_1to50000
+                };
+                let spec = strata_net::tile_fetcher::build_historical_tms_layer_spec(map_type, 0.8);
+                self.home_map.draw_guide_message = Some(format!(
+                    "{} ({}) 배경을 적용했습니다 (투명도 {:.0}%).",
+                    spec.layer_title_ko,
+                    self.work_crs.auth_id(),
+                    spec.opacity * 100.0
+                ));
+            }
+        }
+        // ── 더보기 (MainWindowRibbon.cpp:628-710 — 불러오기·배경 / 화면 / 계정과 키 / 상태와 정보)
+        if self.ribbon.more_menu_open {
+            let mut picked: Option<&'static str> = None;
+            egui::Window::new("ka_more_menu")
+                .title_bar(false)
+                .resizable(false)
+                .fixed_pos(anchor)
+                .show(ctx, |ui| {
+                    ui.set_min_width(236.0);
+                    ui.label(
+                        egui::RichText::new("불러오기·배경")
+                            .size(11.0)
+                            .strong()
+                            .color(Color32::from_rgb(110, 108, 102)),
+                    );
+                    for item in [
+                        "벡터·도면 불러오기",
+                        "참조 벡터를 조사 파일 밖으로…",
+                        "조사 폴더 임시 자료 정리…",
+                        "토양도 SHP 불러오기",
+                        "CSV 기준점",
+                        "맞추기",
+                        "OSM 배경",
+                        "Google 위성",
+                    ] {
+                        if ui
+                            .add_sized(
+                                [232.0, 22.0],
+                                egui::Button::new(egui::RichText::new(item).size(12.0))
+                                    .fill(Color32::TRANSPARENT)
+                                    .stroke(Stroke::NONE),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(item);
+                        }
+                    }
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new("화면")
+                            .size(11.0)
+                            .strong()
+                            .color(Color32::from_rgb(110, 108, 102)),
+                    );
+                    for item in [
+                        "파일함 보이기/숨기기",
+                        "지도 넓게 보기 (F11)",
+                        "왼쪽 패널 접기/펴기 (F9)",
+                        "화면 보기 (고대비·큰 글씨·테마)…",
+                    ] {
+                        if ui
+                            .add_sized(
+                                [232.0, 22.0],
+                                egui::Button::new(egui::RichText::new(item).size(12.0))
+                                    .fill(Color32::TRANSPARENT)
+                                    .stroke(Stroke::NONE),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(item);
+                        }
+                    }
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new("계정과 키 · 상태와 정보")
+                            .size(11.0)
+                            .strong()
+                            .color(Color32::from_rgb(110, 108, 102)),
+                    );
+                    for item in ["API 키 입력 · 계정 설정…", "자료 준비 상태", "정보"]
+                    {
+                        if ui
+                            .add_sized(
+                                [232.0, 22.0],
+                                egui::Button::new(egui::RichText::new(item).size(12.0))
+                                    .fill(Color32::TRANSPARENT)
+                                    .stroke(Stroke::NONE),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(item);
+                        }
+                    }
+                });
+            if let Some(item) = picked {
+                self.ribbon.more_menu_open = false;
+                if item.contains("화면 보기") {
+                    self.theme_menu_open = !self.theme_menu_open;
+                } else if item.contains("맞추기") {
+                    self.handle_ribbon_click("정합");
+                } else if item.contains("OSM 배경") {
+                    self.active_tab = MainTab::Map;
+                    self.home_map.active_basemap = BasemapSource::VworldBase;
+                } else if item.contains("Google 위성") {
+                    self.active_tab = MainTab::Map;
+                    self.home_map.active_basemap = BasemapSource::VworldSatellite;
+                } else if item.contains("파일함") {
+                    self.home_map.files_open = !self.home_map.files_open;
+                } else if item.contains("벡터·도면") {
+                    self.modals.active = Some(ActiveModalDialog::CadImportNotice);
+                } else {
+                    self.modals.active = Some(ActiveModalDialog::AccountSettings);
+                }
+            }
+        }
         // 바깥을 누르면 닫는다
         if ctx.input(|i| i.pointer.any_click()) {
             let any_open = self.ribbon.paleo_menu_open
                 || self.ribbon.geology_menu_open
-                || self.ribbon.dem_menu_open;
+                || self.ribbon.dem_menu_open
+                || self.ribbon.soil_menu_open
+                || self.ribbon.cadastral_menu_open
+                || self.ribbon.topo_menu_open
+                || self.ribbon.old_map_menu_open
+                || self.ribbon.more_menu_open;
             if any_open {
                 let pos = ctx.input(|i| i.pointer.interact_pos());
                 if let Some(p) = pos {
-                    let near = anchor.x - 4.0 <= p.x
-                        && p.x <= anchor.x + 440.0
-                        && anchor.y - 4.0 <= p.y
-                        && p.y <= anchor.y + 220.0;
+                    let near = anchor.x - 16.0 <= p.x
+                        && p.x <= anchor.x + 450.0
+                        && anchor.y - 36.0 <= p.y
+                        && p.y <= anchor.y + 420.0;
                     if !near {
                         self.ribbon.paleo_menu_open = false;
                         self.ribbon.geology_menu_open = false;
                         self.ribbon.dem_menu_open = false;
+                        self.ribbon.soil_menu_open = false;
+                        self.ribbon.cadastral_menu_open = false;
+                        self.ribbon.topo_menu_open = false;
+                        self.ribbon.old_map_menu_open = false;
+                        self.ribbon.more_menu_open = false;
                     }
                 }
             }
@@ -978,7 +1357,8 @@ impl StrataAppState {
             self.paleo_3d.source_dl_radius_km = 10.0;
             self.modals.active = Some(ActiveModalDialog::PaleoSourceDownload);
         } else if item.contains("포털 열기") {
-            self.home_map.draw_guide_message = Some(format!("{item} — 브라우저에서 이어서 받으세요."));
+            self.home_map.draw_guide_message =
+                Some(format!("{item} — 브라우저에서 이어서 받으세요."));
         }
     }
 
@@ -1226,11 +1606,7 @@ impl StrataAppState {
                             .strong(),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .small_button("✕")
-                            .on_hover_text("닫기 (Esc)")
-                            .clicked()
-                        {
+                        if ui.small_button("✕").on_hover_text("닫기 (Esc)").clicked() {
                             self.ribbon.app_bar.region_popup_open = false;
                         }
                     });

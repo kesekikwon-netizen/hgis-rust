@@ -358,10 +358,7 @@ impl ModalDialogController {
 
     /// C++ `KaPaperDialog.cpp:149-153` `paperScaleNote` — A4 가로만 현장 용지를 쓴다는 안내
     #[must_use]
-    pub fn paper_scale_note(
-        paper: SheetPaperSize,
-        orientation: SheetOrientation,
-    ) -> &'static str {
+    pub fn paper_scale_note(paper: SheetPaperSize, orientation: SheetOrientation) -> &'static str {
         // The field sheet is larger than A4 on purpose. Say so where it is chosen:
         // printed on one A4 sheet it shrinks and the written 1:N no longer holds on paper.
         if paper == SheetPaperSize::A4 && orientation == SheetOrientation::Landscape {
@@ -2574,7 +2571,6 @@ pub(crate) fn render_cad_import_notice(
         });
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2997,7 +2993,10 @@ mod tests {
             "A4 가로는 좌·우·위 1cm를 더 준 현장 용지(317×220mm)입니다. A4 종이 한 장에 찍으면 약 90%로 줄어 종이 위 축척이 달라집니다. 축척대로 찍으려면 인쇄 창에서 A3 또는 여러 장 나눠 찍기를 고르세요."
         );
         assert_eq!(
-            ModalDialogController::paper_scale_note(SheetPaperSize::A3, SheetOrientation::Landscape),
+            ModalDialogController::paper_scale_note(
+                SheetPaperSize::A3,
+                SheetOrientation::Landscape
+            ),
             "기본은 A4 세로입니다. A4 가로는 좌·우·위 1cm를 더 줍니다."
         );
     }

@@ -154,6 +154,10 @@ impl StrataAppState {
     #[must_use]
     pub fn new_startup() -> Self {
         let accounts = AccountDialogState::probe_user_accounts();
+        let default_opts = DisplayOptions {
+            paper_look: true,
+            ..DisplayOptions::default()
+        };
         Self {
             active_tab: MainTab::Home,
             open_studio_tabs: Vec::new(),
@@ -173,9 +177,9 @@ impl StrataAppState {
             status_bar_hint: String::new(),
             theme_menu_open: false,
             large_font_mode: false,
-            display_options: DisplayOptions::default(),
+            display_options: default_opts,
             work_crs: WorkCrs::Epsg5187,
-            theme: ThemeTokens::for_options(&DisplayOptions::default()),
+            theme: ThemeTokens::for_options(&default_opts),
             paper_look: true,
             project_title: "새 고고학 지표·시굴조사".to_owned(),
             is_dirty: false,

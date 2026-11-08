@@ -14,10 +14,8 @@ pub const UX_TAB_BODY_HEIGHT: f32 = 681.0;
 
 /// KaStatusBar.cpp:86-87 — 13개 기본 축척 프리셋
 pub const KA_STATUS_SCALE_PRESETS: [u32; 13] = [
-    100, 200, 250, 500, 1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000,
-    500_000,
+    100, 200, 250, 500, 1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000,
 ];
-
 
 impl StrataAppState {
     /// C++ `MainWindow.cpp` + `MainWindowRibbon.cpp` + `KaShellFocus.h` 단축키 1:1 처리
@@ -147,6 +145,15 @@ impl StrataAppState {
         self.poll_debug_remote_commands(ctx);
         self.handle_cpp_keyboard_shortcuts(ctx);
 
+        let win_title = if self.active_tab == MainTab::Home {
+            "Strata".to_owned()
+        } else if self.is_dirty {
+            format!("{} * - Strata", self.project_title)
+        } else {
+            format!("{} - Strata", self.project_title)
+        };
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(win_title));
+
         if !self.right_inspector.map_focused {
             egui::TopBottomPanel::top("ka_cpp_top_chrome")
                 .frame(egui::Frame::NONE)
@@ -183,6 +190,7 @@ impl StrataAppState {
                                 .color(Color32::from_rgb(75, 74, 70)),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.spacing_mut().item_spacing.x = 6.0;
                             if self.active_tab == MainTab::Map {
                                 // KaStatusBar.cpp:121-134 renderToggle — 지도 다시 그리기를 잠시 멈춘다
                                 let render_lbl = if self.map_rendering_enabled {
@@ -191,7 +199,14 @@ impl StrataAppState {
                                     "지도갱신 멈춤"
                                 };
                                 if ui
-                                    .small_button(render_lbl)
+                                    .add(
+                                        egui::Button::new(
+                                            egui::RichText::new(render_lbl)
+                                                .size(11.5)
+                                                .color(Color32::from_rgb(75, 74, 70)),
+                                        )
+                                        .frame(false),
+                                    )
                                     .on_hover_text(
                                         "지도 다시 그리기를 잠시 멈춥니다. 레이어를 여러 개 켜고 끌 때 편합니다.",
                                     )
@@ -201,28 +216,57 @@ impl StrataAppState {
                                 }
                                 ui.separator();
                             }
-                            if ui.small_button("→ 제출 5179").clicked() {
-                                self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
-                            }
                             if ui
-                                .small_button(match self.work_crs {
-                                    WorkCrs::Epsg5187 => "작업 5187 · 동부원점 ▼",
-                                    WorkCrs::Epsg5186 => "작업 5186 · 중부원점 ▼",
-                                })
+                                .add(
+                                    egui::Button::new(
+                                        egui::RichText::new("→ 제출 5179")
+                                            .size(11.5)
+                                            .color(Color32::from_rgb(94, 93, 89)),
+                                    )
+                                    .frame(false),
+                                )
+                                .on_hover_text("제출 꾸러미는 EPSG:5179(UTM-K)로 자동 변환됩니다.")
                                 .clicked()
                             {
+                                self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
+                            }
+                            let crs_lbl = match self.work_crs {
+                                WorkCrs::Epsg5187 => "작업 5187 · 동부원점 ▼",
+                                WorkCrs::Epsg5186 => "작업 5186 · 중부원점 ▼",
+                            };
+                            let crs_btn = egui::Button::new(
+                                egui::RichText::new(crs_lbl)
+                                    .size(11.5)
+                                    .strong()
+                                    .color(Color32::from_rgb(156, 74, 47)),
+                            )
+                            .fill(Color32::WHITE)
+                            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                            .corner_radius(4.0)
+                            .min_size(Vec2::new(124.0, 22.0));
+                            if ui.add(crs_btn).clicked() {
                                 self.work_crs = match self.work_crs {
                                     WorkCrs::Epsg5187 => WorkCrs::Epsg5186,
                                     WorkCrs::Epsg5186 => WorkCrs::Epsg5187,
                                 };
                             }
+                            ui.separator();
                             let live_scale = if self.active_tab == MainTab::Drawing {
                                 self.drawing.sheet.scale_denominator.max(100)
                             } else {
                                 ((self.home_map.viewport.meters_per_pixel * 3780.0).round() as u32)
                                     .max(100)
                             };
-                            let scale_btn = ui.small_button(format!("1:{live_scale} ▼"));
+                            let scale_btn_widget = egui::Button::new(
+                                egui::RichText::new(format!("1:{live_scale}   ▼"))
+                                    .size(11.5)
+                                    .color(Color32::from_rgb(30, 30, 28)),
+                            )
+                            .fill(Color32::WHITE)
+                            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
+                            .corner_radius(4.0)
+                            .min_size(Vec2::new(82.0, 22.0));
+                            let scale_btn = ui.add(scale_btn_widget);
                             if scale_btn.clicked() {
                                 self.scale_menu_open = !self.scale_menu_open;
                                 if self.scale_menu_open {
@@ -246,8 +290,6 @@ impl StrataAppState {
                                             ))
                                             .inner_margin(egui::Margin::symmetric(8, 6))
                                             .show(ui, |ui| {
-                                                // KaStatusBar.cpp:77-99 — 입력칸과 프리셋 목록이
-                                                // 같은 축척 경로를 탄다. 「1000」도 「1:1000」도 된다.
                                                 let edit = ui.add(
                                                     egui::TextEdit::singleline(
                                                         &mut self.scale_input_buf,
@@ -294,40 +336,25 @@ impl StrataAppState {
                                             });
                                     });
                             }
-                            ui.label(egui::RichText::new("축척").size(11.0));
+                            ui.label(
+                                egui::RichText::new("축척")
+                                    .size(11.5)
+                                    .color(Color32::from_rgb(94, 93, 89)),
+                            );
                             if self.active_tab == MainTab::Map {
                                 ui.separator();
                                 let [cx, cy] = self.home_map.cursor_world_xy;
                                 ui.label(
-                                    egui::RichText::new(format!("X {cx:11.3}    Y {cy:11.3}"))
-                                        .size(11.0),
+                                    egui::RichText::new(format!("X {cx:10.3}   Y {cy:10.3}"))
+                                        .size(11.5)
+                                        .color(Color32::from_rgb(75, 74, 70)),
                                 );
                             }
                             if self.is_dirty {
+                                ui.separator();
                                 ui.colored_label(
                                     Color32::from_rgb(181, 87, 58),
-                                    egui::RichText::new("● 저장 안 됨").size(11.0),
-                                );
-                            } else {
-                                ui.colored_label(
-                                    Color32::from_rgb(21, 128, 61),
-                                    egui::RichText::new("● 저장됨").size(11.0),
-                                );
-                            }
-                            if self.active_tab == MainTab::Map {
-                                let snap_lbl = if self.home_map.cad.snap_enabled {
-                                    "자석 켬"
-                                } else {
-                                    "자석 끔"
-                                };
-                                if ui.small_button(snap_lbl).clicked() {
-                                    self.home_map.cad.snap_enabled =
-                                        !self.home_map.cad.snap_enabled;
-                                }
-                                ui.label(
-                                    egui::RichText::new(self.active_tool.label_ko())
-                                        .size(11.0)
-                                        .strong(),
+                                    egui::RichText::new("● 저장 안 됨").size(11.5),
                                 );
                             }
                         });
@@ -399,12 +426,10 @@ impl StrataAppState {
         }
         if let Some(path) = cad_path {
             // KaCadImportNotice.cpp — 도면은 좌표계 확인 안내를 먼저 보여준다
-            self.modals.active =
-                Some(ActiveModalDialog::CadImportNotice);
+            self.modals.active = Some(ActiveModalDialog::CadImportNotice);
             self.modals.cad_import_path = path;
-            self.home_map.draw_guide_message = Some(
-                "CAD 도면을 끌어 놓았습니다. 좌표계를 확인하고 지도에 올리세요.".to_owned(),
-            );
+            self.home_map.draw_guide_message =
+                Some("CAD 도면을 끌어 놓았습니다. 좌표계를 확인하고 지도에 올리세요.".to_owned());
             return;
         }
         if added > 0 {
@@ -421,9 +446,7 @@ impl StrataAppState {
 
     /// `KaClosePrompt.cpp` — 저장하지 않은 편집이 있으면 닫기 전에 한 번 묻는다.
     fn render_close_prompt(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested())
-            && self.is_dirty
-            && !self.close_prompt_open
+        if ctx.input(|i| i.viewport().close_requested()) && self.is_dirty && !self.close_prompt_open
         {
             self.close_prompt_open = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -451,11 +474,9 @@ impl StrataAppState {
                 );
                 ui.add_space(4.0);
                 ui.label(
-                    egui::RichText::new(
-                        "끝내기 전에 지금까지 그린 조사 내용을 저장할까요?",
-                    )
-                    .size(12.0)
-                    .color(Color32::from_rgb(80, 79, 74)),
+                    egui::RichText::new("끝내기 전에 지금까지 그린 조사 내용을 저장할까요?")
+                        .size(12.0)
+                        .color(Color32::from_rgb(80, 79, 74)),
                 );
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
@@ -485,22 +506,17 @@ impl StrataAppState {
                         self.close_prompt_open = false;
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
-                    ui.with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            if ui
-                                .add(
-                                    egui::Button::new(
-                                        egui::RichText::new("취소").size(12.0),
-                                    )
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("취소").size(12.0))
                                     .min_size(Vec2::new(70.0, 30.0)),
-                                )
-                                .clicked()
-                            {
-                                self.close_prompt_open = false;
-                            }
-                        },
-                    );
+                            )
+                            .clicked()
+                        {
+                            self.close_prompt_open = false;
+                        }
+                    });
                 });
             });
     }
@@ -526,11 +542,11 @@ impl eframe::App for StrataAppState {
 mod tests {
     use super::*;
     use crate::gui_layer_panel::{
-        UX_FILE_DRAWER_HEIGHT, UX_LAYER_CARD_HEIGHT, UX_LEFT_PANEL_WIDTH,
-    };
-    use crate::gui_layer_panel::{
         FILE_BTN_DESK_TIP, FILE_BTN_DOCS_TIP, FILE_BTN_DOWN_TIP, FILE_BTN_PC_TIP,
         FILE_BTN_PICK_TIP, FILE_BTN_UP_TIP, FILE_LIST_TIP,
+    };
+    use crate::gui_layer_panel::{
+        UX_FILE_DRAWER_HEIGHT, UX_LAYER_CARD_HEIGHT, UX_LEFT_PANEL_WIDTH,
     };
     use crate::gui_ribbon_bar::{
         REGION_BOTTOM_HINT, REGION_LOT_HINT, REGION_LOT_PLACEHOLDER, UX_RIBBON_BUTTON_SIZE,
@@ -588,7 +604,12 @@ mod tests {
             let lw = sw / ppp;
             let lh = sh / ppp;
             // 모달은 항상 화면 - 32 안에 든다
-            for (dw, dh) in [(960.0_f32, 620.0_f32), (940.0, 700.0), (820.0, 500.0), (460.0, 260.0)] {
+            for (dw, dh) in [
+                (960.0_f32, 620.0_f32),
+                (940.0, 700.0),
+                (820.0, 500.0),
+                (460.0, 260.0),
+            ] {
                 assert!(dw.min(lw - 32.0) <= lw);
                 assert!(dh.min(lh - 32.0) <= lh);
             }
@@ -618,7 +639,10 @@ mod tests {
         assert!(map_items.contains(&"전체 지도 보기"));
 
         // 좌표 복사 문구 형식 "{N:.3}, {E:.3} ({EPSG})"
-        let txt = format!("{:.3}, {:.3} ({})", 361_622.354_f64, 219_897.093_f64, "EPSG:5187");
+        let txt = format!(
+            "{:.3}, {:.3} ({})",
+            361_622.354_f64, 219_897.093_f64, "EPSG:5187"
+        );
         assert!(txt.starts_with("361622.354, "));
 
         // MainWindowContextMenus.cpp:176-448 layerContextMenu 항목
@@ -772,7 +796,10 @@ mod tests {
         // KaReferenceStatusDialog.cpp:56-60 — 7개 열 폭 합이 창 안에 든다
         let cols = [176.0_f32, 68.0, 96.0, 96.0, 56.0, 150.0, 86.0];
         let sum: f32 = cols.iter().sum::<f32>() + 48.0;
-        assert!(sum <= 776.0, "columns {sum} must fit the 820px dialog inner width");
+        assert!(
+            sum <= 776.0,
+            "columns {sum} must fit the 820px dialog inner width"
+        );
     }
 
     #[test]
@@ -823,7 +850,8 @@ mod tests {
         assert_eq!(GRID_BAND_FILL, egui::Color32::from_rgb(0xF5, 0xF4, 0xED));
         assert_eq!(GRID_BAND_BORDER, egui::Color32::from_rgb(0xDE, 0xDC, 0xD1));
         assert_eq!(GRID_BAND_INK, egui::Color32::from_rgb(0x5E, 0x5D, 0x59));
-        let map_r = egui::Rect::from_min_size(egui::Pos2::new(100.0, 60.0), egui::vec2(400.0, 300.0));
+        let map_r =
+            egui::Rect::from_min_size(egui::Pos2::new(100.0, 60.0), egui::vec2(400.0, 300.0));
         let (top_band, left_band) = grid_band_rects(map_r);
         assert_eq!(top_band.min, egui::Pos2::new(100.0, 60.0));
         assert_eq!(top_band.width(), 400.0);
@@ -905,10 +933,22 @@ mod tests {
         assert!(scale_bar_metres(f64::NAN).is_none());
 
         // 그림(래스터) 레이어만 밝기를 가진다 — KaLayerOpacityRail.cpp:156-173
-        for raster in ["지형 음영", "지표모델(DSM) 30m", "위성사진", "항공사진", "고지형 분류"] {
+        for raster in [
+            "지형 음영",
+            "지표모델(DSM) 30m",
+            "위성사진",
+            "항공사진",
+            "고지형 분류",
+        ] {
             assert!(is_raster_image_layer(raster), "{raster}");
         }
-        for vector in ["조사구역", "시굴격자", "지적도 · 조사 주변 5km", "지정유산", "주변 500m"] {
+        for vector in [
+            "조사구역",
+            "시굴격자",
+            "지적도 · 조사 주변 5km",
+            "지정유산",
+            "주변 500m",
+        ] {
             assert!(!is_raster_image_layer(vector), "{vector}");
             let (txt, tip) = brightness_row_text(0, false);
             assert_eq!(txt, "그림만");

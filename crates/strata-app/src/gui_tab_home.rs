@@ -33,10 +33,74 @@ impl StrataAppState {
                         ui.label(egui::RichText::new("오늘 현장을 새로 만들거나, 지난 조사를 이어서 여세요.").size(13.0).color(Color32::from_rgb(75, 74, 70)));
                         ui.add_space(12.0);
                         ui.horizontal(|ui| {
-                            let b1 = egui::Button::new(egui::RichText::new("⊞ 새 조사").size(13.0).strong()).fill(Color32::WHITE).stroke(Stroke::new(1.2, Color32::from_rgb(65, 64, 60))).corner_radius(6.0).min_size(Vec2::new(88.0, 34.0));
-                            if ui.add(b1).clicked() { self.start_new_survey_project("경주시"); }
-                            let b2 = egui::Button::new(egui::RichText::new("조사 열기").size(13.0).strong()).fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(175, 172, 162))).corner_radius(6.0).min_size(Vec2::new(96.0, 34.0));
-                            if ui.add(b2).clicked() { self.open_sample_survey_project(0); }
+                            let (b1_r, b1_resp) =
+                                ui.allocate_exact_size(Vec2::new(102.0, 36.0), egui::Sense::click());
+                            {
+                                let p = ui.painter_at(b1_r);
+                                p.rect_filled(b1_r, 6.0, Color32::WHITE);
+                                p.rect_stroke(
+                                    b1_r,
+                                    6.0,
+                                    Stroke::new(1.2, Color32::from_rgb(45, 44, 40)),
+                                    egui::StrokeKind::Inside,
+                                );
+                                let ic = Rect::from_center_size(
+                                    Pos2::new(b1_r.left() + 21.0, b1_r.center().y),
+                                    Vec2::new(13.0, 13.0),
+                                );
+                                let ink = Color32::from_rgb(35, 35, 32);
+                                p.rect_stroke(ic, 2.5, Stroke::new(1.4, ink), egui::StrokeKind::Inside);
+                                p.line_segment(
+                                    [Pos2::new(ic.center().x - 3.5, ic.center().y), Pos2::new(ic.center().x + 3.5, ic.center().y)],
+                                    Stroke::new(1.4, ink),
+                                );
+                                p.line_segment(
+                                    [Pos2::new(ic.center().x, ic.center().y - 3.5), Pos2::new(ic.center().x, ic.center().y + 3.5)],
+                                    Stroke::new(1.4, ink),
+                                );
+                                p.text(
+                                    Pos2::new(b1_r.left() + 34.0, b1_r.center().y),
+                                    egui::Align2::LEFT_CENTER,
+                                    "새 조사",
+                                    egui::FontId::proportional(13.0),
+                                    ink,
+                                );
+                            }
+                            if b1_resp.clicked() {
+                                self.modals.active = Some(ActiveModalDialog::NewSurvey);
+                            }
+                            let (b2_r, b2_resp) =
+                                ui.allocate_exact_size(Vec2::new(112.0, 36.0), egui::Sense::click());
+                            {
+                                let p = ui.painter_at(b2_r);
+                                p.rect_filled(b2_r, 6.0, Color32::WHITE);
+                                p.rect_stroke(
+                                    b2_r,
+                                    6.0,
+                                    Stroke::new(1.0, Color32::from_rgb(175, 172, 162)),
+                                    egui::StrokeKind::Inside,
+                                );
+                                let ic = Rect::from_center_size(
+                                    Pos2::new(b2_r.left() + 21.0, b2_r.center().y),
+                                    Vec2::new(22.0, 22.0),
+                                );
+                                crate::ribbon_icons::paint_ribbon_icon(
+                                    &p,
+                                    ic,
+                                    "열기",
+                                    Color32::from_rgb(55, 54, 50),
+                                );
+                                p.text(
+                                    Pos2::new(b2_r.left() + 34.0, b2_r.center().y),
+                                    egui::Align2::LEFT_CENTER,
+                                    "조사 열기",
+                                    egui::FontId::proportional(13.0),
+                                    Color32::from_rgb(35, 35, 32),
+                                );
+                            }
+                            if b2_resp.clicked() {
+                                self.open_sample_survey_project(0);
+                            }
                         });
                     });
                     ui.add_space(16.0);
@@ -61,7 +125,19 @@ impl StrataAppState {
                             ui.label(egui::RichText::new("최근 조사").size(15.0).strong());
                             ui.label(egui::RichText::new("4개").size(12.0).color(Color32::from_rgb(110, 108, 102)));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.add(egui::TextEdit::singleline(&mut self.home_map.recent_filter).hint_text("Q 이름·폴더로 찾기").desired_width(260.0));
+                                let rf = ui.add(
+                                    egui::TextEdit::singleline(&mut self.home_map.recent_filter)
+                                        .hint_text("     이름·폴더로 찾기")
+                                        .desired_width(260.0),
+                                );
+                                let sp = ui.painter();
+                                let c = Pos2::new(rf.rect.left() + 11.0, rf.rect.center().y - 1.0);
+                                let ink = Color32::from_rgb(110, 108, 102);
+                                sp.circle_stroke(c, 4.4, Stroke::new(1.4, ink));
+                                sp.line_segment(
+                                    [Pos2::new(c.x + 3.2, c.y + 3.2), Pos2::new(c.x + 6.6, c.y + 6.6)],
+                                    Stroke::new(1.5, ink),
+                                );
                             });
                         });
                         ui.add_space(6.0);
@@ -248,7 +324,7 @@ impl StrataAppState {
 
     fn paint_home_title_block(&mut self, ui: &mut egui::Ui, rect: Rect) {
         let p = ui.painter_at(rect);
-        let border = Stroke::new(1.0, Color32::from_rgb(90, 88, 82));
+        let border = Stroke::new(1.0, Color32::from_rgb(35, 35, 32));
         let sub_border = Stroke::new(1.0, Color32::from_rgb(185, 182, 172));
         p.rect_filled(rect, 3.0, Color32::WHITE);
         p.rect_stroke(rect, 3.0, border, egui::StrokeKind::Middle);
@@ -291,6 +367,12 @@ impl StrataAppState {
             Vec2::new(178.0, 38.0),
         );
         p.rect_filled(btn_rect, 5.0, Color32::from_rgb(181, 87, 58));
+        p.rect_stroke(
+            btn_rect,
+            5.0,
+            Stroke::new(1.0, Color32::from_rgb(35, 35, 32)),
+            egui::StrokeKind::Inside,
+        );
         p.text(
             btn_rect.center(),
             egui::Align2::CENTER_CENTER,

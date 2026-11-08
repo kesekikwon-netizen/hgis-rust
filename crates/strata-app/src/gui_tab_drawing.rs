@@ -1171,13 +1171,48 @@ impl StrataAppState {
                   ("≡", "도면 목록", "지금 도면을 이름 붙여 보관하고, 보관한 도면을 다시 엽니다. 제출 PDF는 지금 열린 도면입니다"),
               ];
             let bw = bar_w / (btns.len() as f32);
-            for (i, (ico, lbl, tip)) in btns.iter().enumerate() {
+            for (i, (_ico, lbl, tip)) in btns.iter().enumerate() {
                 let x0 = bar_r.left() + bw * (i as f32);
                 if i > 0 {
                     p.line_segment([Pos2::new(x0, bar_r.top() + 4.0), Pos2::new(x0, bar_r.bottom() - 4.0)], Stroke::new(1.0, Color32::from_rgb(222, 220, 210)));
                 }
                 let cell_r = Rect::from_min_size(Pos2::new(x0, bar_r.top()), Vec2::new(bw, bar_h_px));
-                p.text(Pos2::new(cell_r.center().x, cell_r.top() + bar_h_px * 0.32), egui::Align2::CENTER_CENTER, *ico, egui::FontId::proportional(if compact_v { 9.5 } else { 11.0 }), Color32::from_rgb(55, 54, 50));
+                let ic_c = Pos2::new(cell_r.center().x, cell_r.top() + bar_h_px * 0.30);
+                let ic_col = Color32::from_rgb(55, 54, 50);
+                match i {
+                    0 => {
+                        p.circle_stroke(ic_c, 4.5, Stroke::new(1.4, ic_col));
+                        p.circle_filled(ic_c, 1.5, ic_col);
+                    }
+                    1 => {
+                        p.circle_stroke(ic_c, 5.0, Stroke::new(1.3, ic_col));
+                        p.line_segment([Pos2::new(ic_c.x - 6.5, ic_c.y), Pos2::new(ic_c.x + 6.5, ic_c.y)], Stroke::new(1.2, ic_col));
+                        p.line_segment([Pos2::new(ic_c.x, ic_c.y - 6.5), Pos2::new(ic_c.x, ic_c.y + 6.5)], Stroke::new(1.2, ic_col));
+                    }
+                    2 => {
+                        let r = Rect::from_center_size(ic_c, Vec2::new(11.0, 9.0));
+                        p.rect_stroke(r, 1.5, Stroke::new(1.3, ic_col), egui::StrokeKind::Inside);
+                        p.circle_filled(ic_c, 1.8, ic_col);
+                    }
+                    3 => {
+                        let r = Rect::from_center_size(ic_c, Vec2::new(11.0, 9.0));
+                        p.rect_stroke(r, 1.5, Stroke::new(1.3, ic_col), egui::StrokeKind::Inside);
+                        p.rect_filled(r.shrink(2.8), 0.5, ic_col);
+                    }
+                    4 => {
+                        p.line_segment([Pos2::new(ic_c.x - 5.5, ic_c.y), Pos2::new(ic_c.x + 5.5, ic_c.y)], Stroke::new(1.4, ic_col));
+                        p.line_segment([Pos2::new(ic_c.x, ic_c.y - 5.5), Pos2::new(ic_c.x, ic_c.y + 5.5)], Stroke::new(1.4, ic_col));
+                    }
+                    5 => {
+                        let r = Rect::from_center_size(ic_c, Vec2::new(9.0, 11.0));
+                        p.rect_stroke(r, 1.5, Stroke::new(1.3, ic_col), egui::StrokeKind::Inside);
+                    }
+                    _ => {
+                        for dy in [-3.5_f32, 0.0, 3.5] {
+                            p.line_segment([Pos2::new(ic_c.x - 5.5, ic_c.y + dy), Pos2::new(ic_c.x + 5.5, ic_c.y + dy)], Stroke::new(1.4, ic_col));
+                        }
+                    }
+                }
                 p.text(Pos2::new(cell_r.center().x, cell_r.bottom() - bar_h_px * 0.24), egui::Align2::CENTER_CENTER, *lbl, egui::FontId::proportional(if compact_v { 8.0 } else { 10.0 }), Color32::from_rgb(55, 54, 50));
                 let cell_resp = ui
                       .interact(cell_r, ui.id().with(("drawing_toolbar_btn", i)), egui::Sense::click())
@@ -1529,11 +1564,13 @@ mod tests {
         let compact_v = (rect_bottom - rect_top) < 460.0;
         let toolbar_h = if compact_v { 34.0 } else { 42.0 };
         let top_bound = rect_top + 48.0;
-        let bottom_bound =
-            (rect_bottom - toolbar_h - 16.0).max(top_bound + 120.0);
+        let bottom_bound = (rect_bottom - toolbar_h - 16.0).max(top_bound + 120.0);
         let bar_cy = rect_bottom - toolbar_h * 0.5 - 4.0;
         let bar_top = bar_cy - toolbar_h * 0.5;
         // 용지는 툴바 위에서 끝나야 한다.
-        assert!(bottom_bound <= bar_top, "sheet {bottom_bound} vs bar {bar_top}");
+        assert!(
+            bottom_bound <= bar_top,
+            "sheet {bottom_bound} vs bar {bar_top}"
+        );
     }
 }

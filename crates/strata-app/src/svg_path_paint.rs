@@ -58,10 +58,7 @@ pub fn paint_svg_icon(painter: &egui::Painter, rect: egui::Rect, id: &str, ink: 
             }
             SvgPart::Polyline(v) => {
                 let f = nums(v);
-                let pts: Vec<Pos2> = f
-                    .chunks_exact(2)
-                    .map(|c| to_pt(c[0], c[1]))
-                    .collect();
+                let pts: Vec<Pos2> = f.chunks_exact(2).map(|c| to_pt(c[0], c[1])).collect();
                 if pts.len() >= 2 {
                     painter.add(egui::Shape::line(pts, stroke));
                 }
@@ -194,7 +191,17 @@ fn draw_path(painter: &egui::Painter, d: &str, to_pt: &dyn Fn(f32, f32) -> Pos2,
             'a' => {
                 // 호는 타원 근사 대신 끝점만 이어 그린다 (Lucide 아이콘에서 짧은 호)
                 let end = (ox + f[5], oy + f[6]);
-                flatten_arc(&mut pts, cur, f[0], f[1], f[2], f[3] != 0.0, f[4] != 0.0, end, to_pt);
+                flatten_arc(
+                    &mut pts,
+                    cur,
+                    f[0],
+                    f[1],
+                    f[2],
+                    f[3] != 0.0,
+                    f[4] != 0.0,
+                    end,
+                    to_pt,
+                );
                 cur = end;
                 last_ctrl = None;
             }
@@ -218,8 +225,10 @@ fn flatten_cubic(
     for k in 1..=N {
         let t = k as f32 / N as f32;
         let u = 1.0 - t;
-        let x = u * u * u * p0.0 + 3.0 * u * u * t * p1.0 + 3.0 * u * t * t * p2.0 + t * t * t * p3.0;
-        let y = u * u * u * p0.1 + 3.0 * u * u * t * p1.1 + 3.0 * u * t * t * p2.1 + t * t * t * p3.1;
+        let x =
+            u * u * u * p0.0 + 3.0 * u * u * t * p1.0 + 3.0 * u * t * t * p2.0 + t * t * t * p3.0;
+        let y =
+            u * u * u * p0.1 + 3.0 * u * u * t * p1.1 + 3.0 * u * t * t * p2.1 + t * t * t * p3.1;
         pts.push(to_pt(x, y));
     }
 }
@@ -338,11 +347,32 @@ mod tests {
     fn test_svg_icons_tokenize_and_parse() {
         // MainWindowRibbon.cpp 가 쓰는 리본 id 전부
         let ids = [
-            "new", "open", "save", "save_as", "select", "measure", "draw_poly",
-            "trench_grid", "buffer", "cadastral", "topo_download", "heritage",
-            "contour", "dem", "survey_contour", "soil", "paleo", "geology",
-            "river", "old_map", "georef", "pdf", "print", "geotiff",
-            "export_convert", "more",
+            "new",
+            "open",
+            "save",
+            "save_as",
+            "select",
+            "measure",
+            "draw_poly",
+            "trench_grid",
+            "buffer",
+            "cadastral",
+            "topo_download",
+            "heritage",
+            "contour",
+            "dem",
+            "survey_contour",
+            "soil",
+            "paleo",
+            "geology",
+            "river",
+            "old_map",
+            "georef",
+            "pdf",
+            "print",
+            "geotiff",
+            "export_convert",
+            "more",
         ];
         for id in ids {
             let parts = svg_parts(id);

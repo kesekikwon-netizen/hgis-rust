@@ -2772,7 +2772,15 @@ mod tests {
         // 완료/현재/대기 3상태 판정
         let stage = 3_usize;
         let states: Vec<&str> = (0..6)
-            .map(|i| if i < stage { "done" } else if i == stage { "current" } else { "wait" })
+            .map(|i| {
+                if i < stage {
+                    "done"
+                } else if i == stage {
+                    "current"
+                } else {
+                    "wait"
+                }
+            })
             .collect();
         assert_eq!(states.iter().filter(|s| **s == "done").count(), 3);
         assert_eq!(states.iter().filter(|s| **s == "current").count(), 1);

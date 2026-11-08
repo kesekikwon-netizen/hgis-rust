@@ -1,4 +1,9 @@
-#![allow(unknown_lints, float_literal_f32_fallback, clippy::chunks_exact_to_as_chunks, clippy::drain_collect)]
+#![allow(
+    unknown_lints,
+    float_literal_f32_fallback,
+    clippy::chunks_exact_to_as_chunks,
+    clippy::drain_collect
+)]
 pub mod app_state;
 pub mod debug_control;
 pub mod dialogs_account;
@@ -18,8 +23,8 @@ pub mod real_survey;
 pub mod ribbon;
 pub mod ribbon_icon_svg;
 pub mod ribbon_icons;
-pub mod svg_path_paint;
 pub mod right_inspector;
+pub mod svg_path_paint;
 pub mod tab_drawing;
 pub mod tabs_home_map;
 pub mod tabs_paleo_3d;

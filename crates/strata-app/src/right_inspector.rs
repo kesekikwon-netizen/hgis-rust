@@ -42,7 +42,14 @@ pub enum AttributeSaveResult {
 
 /// C++ `FeaturePresets.cpp:19-44` — 기본 유구 종류 8종
 pub const KA_BUILTIN_KINDS: [&str; 8] = [
-    "주거지", "수혈", "구", "분묘", "주초", "가마", "수전", "기타",
+    "주거지",
+    "수혈",
+    "구",
+    "분묘",
+    "주초",
+    "가마",
+    "수전",
+    "기타",
 ];
 
 /// C++ `FeaturePresets.cpp:19-44` — 기본 시대 10종과 시대 띠 색
@@ -127,7 +134,7 @@ impl RightInspectorState {
     pub fn new_default() -> Self {
         Self {
             active_card: InspectorCardTab::FeatureAttributeCard,
-            selected_layer_key: Some("조사구역".to_owned()),
+            selected_layer_key: None,
             selected_feature_id: Some(1),
             survey_name: "경주 월성북편 시굴조사".to_owned(),
             feature_no: "1호 주거지".to_owned(),
@@ -309,8 +316,7 @@ impl StrataAppState {
                     let active_ring = self
                         .home_map
                         .selected_feature_idx
-                        .and_then(|idx| self.home_map.real_survey.survey_rings.get(idx))
-                        .or_else(|| self.home_map.real_survey.survey_rings.last());
+                        .and_then(|idx| self.home_map.real_survey.survey_rings.get(idx));
                     if let Some(ring) = active_ring {
                         let area_m2 = crate::real_survey::ring_area_m2(ring);
                         let pyeong = area_m2 / 3.305_785;
@@ -566,12 +572,18 @@ impl StrataAppState {
                             self.right_inspector.survey_card_modal_open = true;
                         }
                     } else {
+                        let is_drawing = self.ribbon.sub_toolbar_visible
+                            && self.ribbon.sub_mode == crate::ribbon::SubToolsMode::Draw;
+                        let empty_msg = if is_drawing {
+                            "도형을 다 그리면 그 기록이 여기에\n나옵니다."
+                        } else {
+                            "지도에서 도형 하나를 고르면 기록이\n여기에 나옵니다."
+                        };
+                        ui.add_space(4.0);
                         ui.label(
-                            egui::RichText::new(
-                                "지도에서 도형 하나를 고르면 기록이\n여기에 나옵니다.",
-                            )
-                            .size(12.0)
-                            .color(Color32::from_rgb(95, 94, 88)),
+                            egui::RichText::new(empty_msg)
+                                .size(12.0)
+                                .color(Color32::from_rgb(95, 94, 88)),
                         );
                     }
                 } else {
@@ -838,8 +850,15 @@ impl StrataAppState {
                                     .stroke(Stroke::new(1.0, Color32::from_rgb(185, 182, 172)))
                                     .corner_radius(5.0)
                                     .min_size(Vec2::new(66.0, 30.0));
-                            if ui.add(btn).clicked() {
-                                self.home_map.active_basemap = src;
+                            let resp = ui.add(btn);
+                            if resp.clicked() {
+                                if lbl.starts_with("옛 지도") {
+                                    self.ribbon.old_map_menu_open = !self.ribbon.old_map_menu_open;
+                                    self.ribbon.context_menu_anchor =
+                                        Pos2::new((resp.rect.right() - 204.0).max(16.0), resp.rect.top() - 62.0);
+                                } else {
+                                    self.home_map.active_basemap = src;
+                                }
                             }
                         }
                     });
@@ -960,14 +979,25 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "구석기", "신석기", "청동기", "초기철기", "원삼국", "삼국", "통일신라",
-                "고려", "조선", "미상"
+                "구석기",
+                "신석기",
+                "청동기",
+                "초기철기",
+                "원삼국",
+                "삼국",
+                "통일신라",
+                "고려",
+                "조선",
+                "미상"
             ]
         );
         assert_eq!(KA_BUILTIN_PERIODS[0].1, Some((0x53, 0x29, 0x1B)));
         assert_eq!(KA_BUILTIN_PERIODS[9].1, None);
         assert_eq!(
-            KA_BUILTIN_PERIODS.iter().filter(|(_, c)| c.is_some()).count(),
+            KA_BUILTIN_PERIODS
+                .iter()
+                .filter(|(_, c)| c.is_some())
+                .count(),
             9
         );
         assert_eq!(KA_BUILTIN_KINDS.len(), 8);

@@ -233,17 +233,20 @@ impl StrataAppState {
                         if ui.add(f_btn).clicked() {
                             self.home_map.files_open = !self.home_map.files_open;
                         }
+                        let any_on = self
+                            .home_map
+                            .real_survey
+                            .is_layer_visible("지적도 · 조사 주변 5km")
+                            || self.home_map.real_survey.is_layer_visible("조사구역")
+                            || self.home_map.real_survey.is_layer_visible("시굴격자");
+                        let toggle_all_label = if any_on { "전체 끄기" } else { "전체 켜기" };
                         if ui
                             .add(
-                                egui::Button::new(egui::RichText::new("전체 끄기").size(12.0))
+                                egui::Button::new(egui::RichText::new(toggle_all_label).size(12.0))
                                     .frame(false),
                             )
                             .clicked()
                         {
-                            let any_on = self
-                                .home_map
-                                .real_survey
-                                .is_layer_visible("지적도 · 조사 주변 5km");
                             self.home_map.real_survey.set_all_layers_visible(!any_on);
                             self.left_layers.set_all_visible(!any_on);
                         }
@@ -278,16 +281,24 @@ impl StrataAppState {
 
                     if !show_set_btn {
                         ui.add_space(2.0);
-                        ui.add(
+                        let lf = ui.add(
                             egui::TextEdit::singleline(&mut self.home_map.layer_filter)
-                                .hint_text("Q 레이어 찾기")
+                                .hint_text("     레이어 찾기")
                                 .desired_width(f32::INFINITY),
+                        );
+                        let sp = ui.painter();
+                        let c = Pos2::new(lf.rect.left() + 11.0, lf.rect.center().y - 1.0);
+                        let ink = Color32::from_rgb(110, 108, 102);
+                        sp.circle_stroke(c, 4.2, Stroke::new(1.4, ink));
+                        sp.line_segment(
+                            [Pos2::new(c.x + 3.0, c.y + 3.0), Pos2::new(c.x + 6.4, c.y + 6.4)],
+                            Stroke::new(1.5, ink),
                         );
                     }
                     ui.add_space(3.0);
 
                     let tree_box_h =
-                        (layer_card_rect.bottom() - ui.cursor().top() - 22.0).max(360.0);
+                        (layer_card_rect.bottom() - ui.cursor().top() - 24.0).max(180.0);
                     egui::Frame::NONE
                         .fill(Color32::WHITE)
                         .stroke(Stroke::new(1.0, Color32::from_rgb(165, 162, 152)))
@@ -295,6 +306,7 @@ impl StrataAppState {
                         .inner_margin(egui::Margin::symmetric(4, 4))
                         .show(ui, |ui| {
                             ui.set_min_height(tree_box_h - 8.0);
+                            ui.set_max_height(tree_box_h - 8.0);
                             let avail_w = ui.available_width();
                             let (hdr_r, _) =
                                 ui.allocate_exact_size(Vec2::new(avail_w, 22.0), egui::Sense::hover());
@@ -320,7 +332,11 @@ impl StrataAppState {
                                 ],
                                 Stroke::new(1.0, Color32::from_rgb(185, 182, 172)),
                             );
-
+                            egui::ScrollArea::vertical()
+                                .id_salt("ka_layer_rows_scroll")
+                                .max_height((tree_box_h - 32.0).max(120.0))
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
                             let dark = Color32::from_rgb(35, 35, 32);
                             let blue = Color32::from_rgb(38, 72, 132);
                             let purple_grp = Color32::from_rgb(98, 28, 118);
@@ -687,12 +703,13 @@ impl StrataAppState {
                                     );
                                 }
                             }
+                                });
                         });
 
                     ui.add_space(2.0);
                     // KaLayerInformationPanel.cpp:54,132 — clickable collapsible header
                     let open = self.home_map.layer_display_settings_open;
-                    let header = if open { "▾ 표시 설정" } else { "▸ 표시 설정" };
+                    let header = if open { "▼ 표시 설정" } else { "▶ 표시 설정" };
                     let resp = ui.add(
                         egui::Label::new(
                             egui::RichText::new(header)
@@ -1001,11 +1018,9 @@ impl StrataAppState {
                         )
                         .clicked()
                     {
-                        self.home_map.real_survey.layer_opacity =
-                            1.0 - f32::from(pct) / 100.0;
-                        self.home_map.draw_guide_message = Some(format!(
-                            "「{key}」 투명도를 {pct}%로 맞췄습니다."
-                        ));
+                        self.home_map.real_survey.layer_opacity = 1.0 - f32::from(pct) / 100.0;
+                        self.home_map.draw_guide_message =
+                            Some(format!("「{key}」 투명도를 {pct}%로 맞췄습니다."));
                     }
                 }
                 ui.separator();
@@ -1081,8 +1096,7 @@ impl StrataAppState {
                         Some("이름을 바꾸려면 레이어 이름을 두 번 누르세요.".to_owned());
                 }
                 "color" => {
-                    self.modals.active =
-                        Some(crate::dialogs_modal::ActiveModalDialog::LineColor);
+                    self.modals.active = Some(crate::dialogs_modal::ActiveModalDialog::LineColor);
                 }
                 "shape_props" => {
                     self.right_inspector.active_card =
@@ -1129,8 +1143,9 @@ impl StrataAppState {
                 }
                 "offline_save" => {
                     // C++ 는 타일을 바로 받아 저장한다. 여기서는 안내만 남긴다.
-                    self.home_map.draw_guide_message =
-                        Some(format!("「{key}」 지금 화면 범위를 오프라인으로 저장합니다."));
+                    self.home_map.draw_guide_message = Some(format!(
+                        "「{key}」 지금 화면 범위를 오프라인으로 저장합니다."
+                    ));
                 }
                 "submit" => {
                     self.modals.active =
@@ -1144,7 +1159,10 @@ impl StrataAppState {
                         Some("그린 도형을 모두 지웠습니다.".to_owned());
                 }
                 "delete_layer" => {
-                    self.home_map.real_survey.layer_visible.insert(key.clone(), false);
+                    self.home_map
+                        .real_survey
+                        .layer_visible
+                        .insert(key.clone(), false);
                     self.home_map.draw_guide_message =
                         Some(format!("「{key}」 레이어를 숨겼습니다."));
                 }
@@ -1166,5 +1184,4 @@ impl StrataAppState {
             }
         }
     }
-
 }

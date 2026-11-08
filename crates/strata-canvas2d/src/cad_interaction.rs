@@ -939,8 +939,7 @@ impl CadSessionController {
             for i in 0..pts.len() {
                 let j = (i + 1) % pts.len();
                 shoelace += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1];
-                polygon_perimeter_m +=
-                    (pts[j][0] - pts[i][0]).hypot(pts[j][1] - pts[i][1]);
+                polygon_perimeter_m += (pts[j][0] - pts[i][0]).hypot(pts[j][1] - pts[i][1]);
             }
             polygon_area_m2 = 0.5 * shoelace.abs();
         }
@@ -1032,7 +1031,6 @@ pub fn format_drawing_coord_callout(world_xy: [f64; 2], ground_z: f64) -> String
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn cad_left_clicks_and_right_click_commit_new_polygon_and_compute_measure() {

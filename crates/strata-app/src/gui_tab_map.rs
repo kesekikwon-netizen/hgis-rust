@@ -133,7 +133,10 @@ pub fn brightness_row_text(bright_int: i32, is_raster: bool) -> (String, &'stati
         } else {
             format!("{bright_int:+}")
         };
-        (txt, "고른 그림의 밝기. 가운데가 원본입니다. 원본 파일은 바뀌지 않습니다.")
+        (
+            txt,
+            "고른 그림의 밝기. 가운데가 원본입니다. 원본 파일은 바뀌지 않습니다.",
+        )
     } else {
         (
             "그림만".to_owned(),
@@ -178,12 +181,7 @@ pub fn grid_label_decimals(step: f64, origin: f64) -> usize {
 /// `KaCanvasGridOverlay.cpp:166-180` — 회전한 격자는 동쪽 좌표 하나로 줄을 부를 수 없어
 /// 격자 원점에서 잰 거리(`원점` / `+20 m` / `−20 m`)로 적는다.
 #[must_use]
-pub fn grid_label_text(
-    grid_value: f64,
-    origin_value: f64,
-    draw_step: f64,
-    turned: bool,
-) -> String {
+pub fn grid_label_text(grid_value: f64, origin_value: f64, draw_step: f64, turned: bool) -> String {
     if turned {
         if grid_value.abs() < draw_step * 1e-6 {
             return "원점".to_owned();
@@ -591,7 +589,7 @@ impl StrataAppState {
                                 "시굴격자 {name} ({area_m2:.1} m²)을(를) 배치했습니다 — 화살표 키(Shift: 1 m)로 미세 이동할 수 있습니다."
                             ));
                         }
-                        MapToolKind::Select => {
+                        MapToolKind::Select | MapToolKind::Pan => {
                             let mpp = self.home_map.viewport.meters_per_pixel;
                             if let Some((idx, tr)) = self
                                 .home_map
@@ -632,16 +630,37 @@ impl StrataAppState {
                             {
                                 let tr_name = tr.name.clone();
                                 let tr_area = tr.area_m2;
+                                self.home_map.selected_feature_idx = Some(0);
                                 self.right_inspector.selected_layer_key =
                                     Some("시굴격자".to_owned());
                                 self.home_map.draw_guide_message = Some(format!(
                                     "도형 선택: 시굴격자 #{idx} ({tr_name}, {tr_area:.1} m²) — 화살표 키(0.1 m) 또는 Shift+화살표(1.0 m)로 이동"
                                 ));
-                            } else {
+                            } else if let Some((r_idx, _)) = self
+                                .home_map
+                                .real_survey
+                                .survey_rings
+                                .iter()
+                                .enumerate()
+                                .find(|(_, r)| {
+                                    let min_x = r.iter().map(|p| p[0]).fold(f64::INFINITY, f64::min);
+                                    let max_x = r.iter().map(|p| p[0]).fold(f64::NEG_INFINITY, f64::max);
+                                    let min_y = r.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min);
+                                    let max_y = r.iter().map(|p| p[1]).fold(f64::NEG_INFINITY, f64::max);
+                                    wxy[0] >= min_x && wxy[0] <= max_x && wxy[1] >= min_y && wxy[1] <= max_y
+                                })
+                            {
+                                self.home_map.selected_feature_idx = Some(r_idx);
+                                self.right_inspector.selected_layer_key =
+                                    Some("조사구역".to_owned());
+                            } else if effective_tool == MapToolKind::Select {
+                                self.home_map.selected_feature_idx = None;
                                 self.home_map.draw_guide_message = Some(format!(
                                     "클릭 좌표 (X {:.2}, Y {:.2}) 주변 10px 이내에 선택된 도형이 없습니다.",
                                     wxy[0], wxy[1]
                                 ));
+                            } else {
+                                self.home_map.selected_feature_idx = None;
                             }
                         }
                         _ => {}
@@ -1171,9 +1190,9 @@ impl StrataAppState {
         });
     }
 
-    /// `KaDrawGuideBand.cpp:55-69` — `[되돌리기]` · `[다시 실행]` 버튼 쌍 (실제 undo/redo 호출)
+    /// `KaDrawGuideBand.cpp:55-69` — `[↶]` · `[↷]` 정사각형 아이콘 버튼 쌍 (68×34, 실제 undo/redo 호출)
     fn paint_undo_redo_pill(&mut self, ui: &mut egui::Ui, p: &egui::Painter, min: Pos2) {
-        let ur_r = Rect::from_min_size(min, Vec2::new(146.0, 34.0));
+        let ur_r = Rect::from_min_size(min, Vec2::new(68.0, 34.0));
         p.rect_filled(ur_r, 6.0, Color32::WHITE);
         p.rect_stroke(
             ur_r,
@@ -1183,27 +1202,106 @@ impl StrataAppState {
         );
         p.line_segment(
             [
-                Pos2::new(ur_r.center().x, ur_r.top() + 4.0),
-                Pos2::new(ur_r.center().x, ur_r.bottom() - 4.0),
+                Pos2::new(ur_r.center().x, ur_r.top() + 5.0),
+                Pos2::new(ur_r.center().x, ur_r.bottom() - 5.0),
             ],
             Stroke::new(1.0, Color32::from_rgb(212, 209, 200)),
         );
         let undo_r = Rect::from_min_max(ur_r.min, Pos2::new(ur_r.center().x, ur_r.max.y));
         let redo_r = Rect::from_min_max(Pos2::new(ur_r.center().x, ur_r.min.y), ur_r.max);
-        p.text(
-            undo_r.center(),
-            egui::Align2::CENTER_CENTER,
-            "↺ 되돌리기",
-            FontId::proportional(11.5),
-            Color32::from_rgb(45, 44, 40),
-        );
-        p.text(
-            redo_r.center(),
-            egui::Align2::CENTER_CENTER,
-            "↻ 다시 실행",
-            FontId::proportional(11.5),
-            Color32::from_rgb(45, 44, 40),
-        );
+        let arrow_ink = Color32::from_rgb(45, 44, 40);
+        // 벡터 Undo 아이콘 (왼쪽으로 굽은 화살표)
+        {
+            let c = undo_r.center();
+            p.line_segment(
+                [
+                    Pos2::new(c.x - 6.0, c.y - 2.0),
+                    Pos2::new(c.x + 3.0, c.y - 2.0),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+            p.line_segment(
+                [
+                    Pos2::new(c.x + 3.0, c.y - 2.0),
+                    Pos2::new(c.x + 6.0, c.y + 1.0),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+            p.line_segment(
+                [
+                    Pos2::new(c.x + 6.0, c.y + 1.0),
+                    Pos2::new(c.x + 3.0, c.y + 5.0),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+            p.line_segment(
+                [
+                    Pos2::new(c.x + 3.0, c.y + 5.0),
+                    Pos2::new(c.x - 3.0, c.y + 5.0),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+            p.line_segment(
+                [
+                    Pos2::new(c.x - 6.0, c.y - 2.0),
+                    Pos2::new(c.x - 2.5, c.y - 5.5),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+            p.line_segment(
+                [
+                    Pos2::new(c.x - 6.0, c.y - 2.0),
+                    Pos2::new(c.x - 2.5, c.y + 1.5),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+        }
+        // 벡터 Redo 아이콘 (오른쪽으로 굽은 화살표)
+        {
+            let c = redo_r.center();
+            p.line_segment(
+                [
+                    Pos2::new(c.x + 6.0, c.y - 2.0),
+                    Pos2::new(c.x - 3.0, c.y - 2.0),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+            p.line_segment(
+                [
+                    Pos2::new(c.x - 3.0, c.y - 2.0),
+                    Pos2::new(c.x - 6.0, c.y + 1.0),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+            p.line_segment(
+                [
+                    Pos2::new(c.x - 6.0, c.y + 1.0),
+                    Pos2::new(c.x - 3.0, c.y + 5.0),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+            p.line_segment(
+                [
+                    Pos2::new(c.x - 3.0, c.y + 5.0),
+                    Pos2::new(c.x + 3.0, c.y + 5.0),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+            p.line_segment(
+                [
+                    Pos2::new(c.x + 6.0, c.y - 2.0),
+                    Pos2::new(c.x + 2.5, c.y - 5.5),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+            p.line_segment(
+                [
+                    Pos2::new(c.x + 6.0, c.y - 2.0),
+                    Pos2::new(c.x + 2.5, c.y + 1.5),
+                ],
+                Stroke::new(1.6, arrow_ink),
+            );
+        }
 
         if ui
             .interact(
@@ -1211,7 +1309,7 @@ impl StrataAppState {
                 ui.id().with("ka_canvas_undo_btn"),
                 egui::Sense::click(),
             )
-            .on_hover_text("되돌리기 (Ctrl+Z) — 마지막 그리기·정점·삭제를 되돌립니다")
+            .on_hover_text("마지막 그리기·정점·삭제를 되돌립니다 (Ctrl+Z)")
             .clicked()
         {
             if !self.home_map.scene.active_rubberband.is_empty() {
@@ -1486,11 +1584,9 @@ impl StrataAppState {
                 if ui
                     .add_sized(
                         [216.0, 22.0],
-                        egui::Button::new(
-                            egui::RichText::new("이 위치 좌표 복사").size(12.0),
-                        )
-                        .fill(Color32::TRANSPARENT)
-                        .stroke(Stroke::NONE),
+                        egui::Button::new(egui::RichText::new("이 위치 좌표 복사").size(12.0))
+                            .fill(Color32::TRANSPARENT)
+                            .stroke(Stroke::NONE),
                     )
                     .on_hover_text(&coord_txt)
                     .clicked()
@@ -1544,8 +1640,7 @@ impl StrataAppState {
                     self.home_map.fit_to_survey();
                 }
                 "refresh" => {
-                    self.home_map.draw_guide_message =
-                        Some("지도를 새로 그렸습니다.".to_owned());
+                    self.home_map.draw_guide_message = Some("지도를 새로 그렸습니다.".to_owned());
                 }
                 "copy_coords" => {
                     ctx.copy_text(coord_txt.clone());
@@ -1578,7 +1673,7 @@ impl StrataAppState {
         // KaShellGridControls.cpp:120-125 — 세부 설정은 「좌표격자」를 켤 때만 보인다
         let detail_h = if enabled { 60.0 } else { 0.0 };
         let bar_h = 28.0 + detail_h;
-        let bar_w = 344.0;
+        let bar_w = if enabled { 344.0 } else { 96.0 };
         let bar_r = Rect::from_min_size(
             Pos2::new(rect.right() - bar_w - 12.0, rect.bottom() - bar_h - 10.0),
             Vec2::new(bar_w, bar_h),
@@ -1682,7 +1777,11 @@ impl StrataAppState {
             Pos2::new(bar_r.right() - 88.0, bar_r.bottom() - 25.0),
             Vec2::new(82.0, 22.0),
         );
-        let chk_lbl = if enabled { "☑ 좌표격자" } else { "☐ 좌표격자" };
+        let chk_lbl = if enabled {
+            "☑ 좌표격자"
+        } else {
+            "☐ 좌표격자"
+        };
         p.text(
             chk_r.center(),
             egui::Align2::CENTER_CENTER,
