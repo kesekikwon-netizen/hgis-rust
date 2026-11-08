@@ -33,7 +33,48 @@ pub fn paint_strata_logo(painter: &egui::Painter, rect: Rect) {
 }
 
 /// C++ `KaIcons.cpp` 23개 리본 벡터 라인 아이콘 1:1 드로잉
+/// C++ `MainWindowRibbon.cpp` 의 버튼 라벨 → `KaIconsMockupMap.cpp` 아이콘 id.
+/// 리본 칩은 이 id 로 Lucide 원문 SVG 를 그린다.
+#[must_use]
+pub fn cpp_icon_id(label: &str) -> Option<&'static str> {
+    Some(match label {
+        "새 조사" => "new",
+        "열기" => "open",
+        "저장" => "save",
+        "다른 이름" => "save_as",
+        "선택" => "select",
+        "측거" => "measure",
+        "그리기" => "draw_poly",
+        "시굴격자" => "trench_grid",
+        "버퍼" => "buffer",
+        "지적" => "cadastral",
+        "수치지형" => "topo_download",
+        "유산" => "heritage",
+        "지형" => "contour",
+        "DEM" => "dem",
+        "등고선" => "survey_contour",
+        "토양" => "soil",
+        "고지형" => "paleo",
+        "지질" => "geology",
+        "수계" => "river",
+        "옛 지도" => "old_map",
+        "정합" => "georef",
+        "도면" => "pdf",
+        "인쇄" => "print",
+        "GeoTIFF" => "geotiff",
+        "검수·제출" => "export_convert",
+        "더보기" => "more",
+        _ => return None,
+    })
+}
+
 pub fn paint_ribbon_icon(painter: &egui::Painter, rect: Rect, label: &str, stroke_col: Color32) {
+    // C++ KaIconsMockupEngine 은 Lucide 원문 SVG 를 그린다. 같은 id 로 먼저 시도한다.
+    if let Some(id) = cpp_icon_id(label) {
+        if crate::svg_path_paint::paint_svg_icon(painter, rect, id, stroke_col) {
+            return;
+        }
+    }
     let c = rect.center();
     let s = Stroke::new(1.6, stroke_col);
     let s_thin = Stroke::new(1.2, stroke_col);

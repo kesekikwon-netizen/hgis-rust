@@ -738,23 +738,49 @@ impl StrataAppState {
             p.rect_filled(icon_box, 7.0, Color32::from_rgb(44, 43, 41));
             paint_ribbon_icon(&p, icon_box, label, Color32::WHITE);
         } else {
-            let bg = if warm_active || is_hovered {
-                Color32::from_rgb(220, 215, 203)
+            // KaTheme.cpp:105-113 — 목업 타일 색 토큰 그대로
+            // tile #E4EAED / tileHover #D9E2E7 / tileOn #E0ECF8(border #1A68B0)
+            // tileDisabled #EEF1F3 / glyph #2B4858 / glyphOn #105088
+            let (bg, stroke_col) = if muted {
+                (
+                    Color32::from_rgb(0xEE, 0xF1, 0xF3),
+                    Color32::from_rgb(0x2B, 0x48, 0x58),
+                )
+            } else if warm_active {
+                (
+                    Color32::from_rgb(0xE0, 0xEC, 0xF8),
+                    Color32::from_rgb(0x10, 0x50, 0x88),
+                )
+            } else if is_hovered {
+                (
+                    Color32::from_rgb(0xD9, 0xE2, 0xE7),
+                    Color32::from_rgb(0x2B, 0x48, 0x58),
+                )
             } else {
-                Color32::from_rgb(236, 233, 224)
+                (
+                    Color32::from_rgb(0xE4, 0xEA, 0xED),
+                    Color32::from_rgb(0x2B, 0x48, 0x58),
+                )
             };
-            let border = if warm_active {
-                Stroke::new(1.5, Color32::from_rgb(142, 138, 128))
-            } else {
-                Stroke::new(1.0, Color32::from_rgb(212, 209, 199))
-            };
-            p.rect_filled(icon_box, 7.0, bg);
-            p.rect_stroke(icon_box, 7.0, border, egui::StrokeKind::Middle);
-            let stroke_col = if muted {
-                Color32::from_rgb(155, 153, 146)
-            } else {
-                Color32::from_rgb(38, 37, 34)
-            };
+            // KaIconsMockupEngine.cpp:25 kTileRadius = 0.25, :27 kBorderUnits = 2 / 32
+            let tile_side = icon_box.width().min(icon_box.height());
+            let corner = tile_side * 0.25;
+            p.rect_filled(icon_box, corner, bg);
+            if warm_active || muted {
+                let bw = tile_side * 2.0 / 32.0;
+                let border_col = if warm_active {
+                    // KaTheme.cpp:108 tileOnBorder
+                    Color32::from_rgb(0x1A, 0x68, 0xB0)
+                } else {
+                    Color32::from_rgb(0xD4, 0xD9, 0xDD)
+                };
+                p.rect_stroke(
+                    icon_box,
+                    corner,
+                    Stroke::new(bw.max(1.0), border_col),
+                    egui::StrokeKind::Inside,
+                );
+            }
             paint_ribbon_icon(&p, icon_box, label, stroke_col);
         }
         let txt_col = if muted {
