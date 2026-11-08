@@ -529,7 +529,8 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
                         if ui.add(ok_btn).clicked() {
                             app.open_studio_tab(MainTab::Drawing);
                             app.modals.active = None;
-                            app.home_map.draw_guide_message = Some("지도 칸을 만들었습니다. 나침반·좌표계·축척자·축척이 들어갔습니다.".to_owned());
+                            app.home_map.draw_guide_message =
+                                Some(StrataAppState::DRAWING_STUDIO_WELCOME.to_owned());
                         }
                     });
                 });

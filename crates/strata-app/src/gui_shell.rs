@@ -175,7 +175,8 @@ impl StrataAppState {
                         );
                     } else {
                         let msg = if self.active_tab == MainTab::Drawing {
-                            "지도 칸을 만들었습니다. 나침반·좌표계·축척자·축척이 들어갔습니다."
+                            // MainWindowExport.cpp:252 — 도면 탭 안내는 C++ 원문 그대로.
+                            StrataAppState::DRAWING_STUDIO_WELCOME
                         } else if !self.status_bar_hint.is_empty() {
                             self.status_bar_hint.as_str()
                         } else {

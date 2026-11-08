@@ -1599,7 +1599,21 @@ impl StrataAppState {
                 self.ribbon.toggle_sub_mode(SubToolsMode::Align);
                 self.active_tool = MapToolKind::GeorefAlign;
             }
-            "도면" => self.modals.active = Some(ActiveModalDialog::PaperSetup),
+            // MainWindowRibbon.cpp:552-557 「도면」 → MainWindow::openLayoutDesigner (Ctrl+L).
+            // MainWindowExport.cpp:204-213 — the studio tab already exists: go there without
+            // asking for the paper again (re-opening would move the user's sheet view).
+            // MainWindowExport.cpp:216 — only the first open asks, through KaPaperDialog.
+            "도면" => {
+                if self.open_studio_tabs.contains(&MainTab::Drawing) {
+                    self.open_studio_tab(MainTab::Drawing);
+                    // MainWindowExport.cpp:206 `hideSubTools()` — 도면 탭으로 가면 도구 줄을 닫는다.
+                    self.hide_sub_tools();
+                    self.home_map.draw_guide_message =
+                        Some(StrataAppState::DRAWING_STUDIO_WELCOME.to_owned());
+                } else {
+                    self.modals.active = Some(ActiveModalDialog::PaperSetup);
+                }
+            }
             "인쇄" => {
                 self.open_studio_tab(MainTab::Drawing);
                 self.modals.active = Some(ActiveModalDialog::DrawingPrint);

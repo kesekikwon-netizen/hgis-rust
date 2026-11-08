@@ -201,6 +201,10 @@ impl StrataAppState {
         }
     }
 
+    /// `MainWindowExport.cpp:252` — 도면 화면을 처음 열 때 상태줄에 남기는 C++ 원문.
+    pub const DRAWING_STUDIO_WELCOME: &'static str =
+        "도면 화면입니다. 좌표점은 용지 아래 아이콘으로 찍습니다.";
+
     /// C++ `MainWindowChrome::openDrawingStudio` 등 스튜디오 탭 열기 생명주기 1:1
     pub fn open_studio_tab(&mut self, tab: MainTab) {
         if matches!(tab, MainTab::Drawing | MainTab::Paleo | MainTab::Terrain3d)
