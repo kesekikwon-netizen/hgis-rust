@@ -112,6 +112,7 @@ impl StrataAppState {
             (map_bg, rs.survey_center)
         };
         sheet_p.rect_filled(map_rect, 0.0, map_bg);
+        // 2. 실제 조사 레이어(조사구역·시굴격자·지적도·국가유산·500m 버퍼·작도 유구)를 축척(scale_denominator)에 맞춰 렌더링
         let scale_denom = f64::from(self.drawing.sheet.scale_denominator.max(1));
         let px_per_meter = (1000.0 / scale_denom) * f64::from(px_per_mm);
         let half_w_m = f64::from(map_rect.width()) * 0.5 / px_per_meter.max(1e-6) + 250.0;

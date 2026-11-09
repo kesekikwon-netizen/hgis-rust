@@ -132,8 +132,11 @@ mod dialogs_download_print_tests;
 mod modal_control;
 mod modal_downloads;
 mod modal_export;
+mod modal_export_footer;
+mod modal_export_table;
 mod modal_paper_account;
 mod modal_reference;
+mod modal_reference_data;
 mod modal_style;
 mod modal_style_demclass;
 mod modal_survey;
@@ -142,7 +145,14 @@ mod modal_types;
 #[cfg(test)]
 #[path = "dialogs_modal_tests.rs"]
 mod dialogs_modal_tests;
+#[cfg(test)]
+#[path = "dialogs_modal_tests_b.rs"]
+mod dialogs_modal_tests_b;
 
 mod modal_controller_state;
 mod modal_controller_impl;
 mod modal_topo_rows;
+
+#[cfg(test)]
+#[path = "dialogs_modal_tests_c.rs"]
+mod dialogs_modal_tests_c;
