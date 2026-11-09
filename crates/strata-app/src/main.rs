@@ -141,3 +141,7 @@ mod modal_types;
 #[cfg(test)]
 #[path = "dialogs_modal_tests.rs"]
 mod dialogs_modal_tests;
+
+mod modal_controller_state;
+mod modal_controller_impl;
+mod modal_topo_rows;
