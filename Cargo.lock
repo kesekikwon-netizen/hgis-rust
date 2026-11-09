@@ -3373,10 +3373,13 @@ name = "strata-paleo"
 version = "2.0.0"
 dependencies = [
  "rayon",
+ "rusqlite",
  "serde",
  "strata-geo",
  "strata-net",
  "strata-types",
+ "tempfile",
+ "tiff",
 ]
 
 [[package]]

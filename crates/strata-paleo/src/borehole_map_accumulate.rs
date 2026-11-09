@@ -155,13 +155,39 @@ mod tests {
 
     #[test]
     fn bedrock_gl_fallback_uses_weathered_when_present_else_fill_plus_alluv() {
-        // 출현: weathered >= 0 이면 그 값 (`:216`)
+        // 출현: weathered >= 0 이면 그 값을 **그대로** 쓴다 (`:216`)
         assert_eq!(bedrock_gl_with_fallback(8.0, 1.0, 3.0), 8.0);
         assert_eq!(bedrock_gl_with_fallback(0.0, 5.0, 5.0), 0.0);
         // 미출현(-1): fillM + alluvM
         assert_eq!(bedrock_gl_with_fallback(-1.0, 2.0, 4.0), 6.0);
         // 음수 속성은 0 으로 클램프 (`:213-214`)
         assert_eq!(bedrock_gl_with_fallback(-1.0, -2.0, 4.0), 4.0);
+    }
+
+    /// 두 C++ 규칙이 실제로 갈리는 지점을 고정한다.
+    ///
+    /// - 시추 **도면** 경로 `GeoInfoBoreholeMaps.cpp:216`:
+    ///   `bedGl = rawWeathered >= 0.0 ? rawWeathered : (fillM + alluvM)` — 출현하면 그 값.
+    /// - 고지형 **분석** 경로 `HgisPaleoBorehole.cpp:216`:
+    ///   `weathM = std::max(fillM + alluvM, weathered_m)` — 더 깊은 쪽.
+    ///
+    /// 두 식은 `0 <= weathered < fill + alluv` 인 경우에만 값이 다르다.
+    /// 위 `bedrock_gl_fallback_*` 시험의 `(8.0, 1.0, 3.0)` 은 두 규칙이 모두 8.0 이라
+    /// 판별력이 없으므로, 여기서 갈리는 입력을 따로 못박는다.
+    #[test]
+    fn borehole_maps_uses_ternary_rule_not_max_rule() {
+        let (weathered, fill, alluv) = (2.0, 1.0, 3.0);
+        let fill_alluv = fill + alluv; // 4.0
+
+        // 이 크레이트(시추 도면 경로)는 `:216` 삼항식 -> 2.0
+        assert_eq!(bedrock_gl_with_fallback(weathered, fill, alluv), 2.0);
+        // 고지형 분석 경로의 `max()` 식이었다면 4.0 이 나왔을 것이다 -> 두 규칙이 다르다
+        assert_eq!(fill_alluv.max(weathered), 4.0);
+        assert_ne!(
+            bedrock_gl_with_fallback(weathered, fill, alluv),
+            fill_alluv.max(weathered),
+            "시추 도면 경로는 max() 가 아니라 삼항식이어야 한다"
+        );
     }
 
     #[test]
