@@ -5,6 +5,7 @@
     clippy::drain_collect
 )]
 pub mod app_state;
+pub mod borehole_bridge;
 pub mod borehole_card;
 pub mod cadastral_download_ui;
 pub mod debug_control;

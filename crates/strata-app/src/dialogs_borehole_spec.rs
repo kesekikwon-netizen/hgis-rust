@@ -95,6 +95,21 @@ impl BoreholeDialogState {
             .position(|(meters, _)| *meters == self.radius_meters)
             .unwrap_or(1)
     }
+
+    /// C++ `KaBoreholeDialog.cpp:149-160` `readOpts()` — 다섯 체크를 읽어 엔진 옵션을 만든다.
+    /// 4-A 깊이와 4-B 해발고도는 한 카드의 두 체크이므로 서로 독립이다.
+    #[must_use]
+    pub fn to_map_options(&self) -> strata_paleo::borehole_map_options::BoreholeMapOptions {
+        strata_paleo::borehole_map_options::BoreholeMapOptions {
+            radius_meters: self.radius_meters,
+            marker_map: self.marker_map,
+            alluvial_isopach_map: self.alluvial_isopach_map,
+            fill_thickness_map: self.fill_thickness_map,
+            bedrock_depth_map: self.bedrock_depth_map,
+            bedrock_elev_map: self.bedrock_elev_map,
+            groundwater_map: self.groundwater_map,
+        }
+    }
 }
 
 /// C++ `KaBoreholeDialog.cpp:161-166` `refreshCounts()` — 지금 적재된 시추공 수를 보여 준다.

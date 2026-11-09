@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use strata_types::error::{StrataError, StrataResult};
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StratumLayer {
     pub from_m: f64,
@@ -21,6 +20,10 @@ pub struct BoreholeRecord {
     pub alluvial_to_m: f64,
     pub alluvial_thickness_m: f64,
     pub weathered_depth_m: f64,
+    /// 지하수위 깊이(GL-m). C++ `BoreholeRecord::waterLevelM` 대응. 미출현은 0.0 이고
+    /// 소비 측에서 `abs(v) > 0.01` 로 거른다 (`GeoInfoBoreholeMaps.cpp:218, 222`).
+    #[serde(default)]
+    pub water_level_m: f64,
     pub dominant_uscs: String,
     pub paleo_hint: String,
     pub layers: Vec<StratumLayer>,
@@ -48,6 +51,19 @@ struct RawLayerItem {
     layer_name: String,
     #[serde(rename = "USCS", default)]
     uscs: String,
+    /// C++ `GeoInfoBoreholeParser.cpp:82` 의 `"WATER"` 속성 — 숫자·문자열 모두 허용.
+    #[serde(rename = "WATER", default)]
+    water: Option<serde_json::Value>,
+}
+
+/// C++ `toVariant().toString(); toDouble(&ok)` 대응 — 유한 숫자만 인정한다.
+fn json_value_to_f64(v: &serde_json::Value) -> Option<f64> {
+    let parsed = match v {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::String(s) => s.trim().parse::<f64>().ok(),
+        _ => None,
+    };
+    parsed.filter(|x| x.is_finite())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,9 +131,18 @@ impl GeoInfoBoreholeService {
         let mut alluvial_to_m = 0.0_f64;
         let mut weathered_depth_m = -1.0_f64;
         let mut dominant_uscs = String::new();
+        let mut water_level_m = 0.0_f64;
         let mut layers = Vec::with_capacity(items.len());
 
         for item in items {
+            // C++ `parseSichudanJson` 는 `WATER` 를 바깥 객체에서 한 번만 읽는다
+            // (`GeoInfoBoreholeParser.cpp:82-88`). `jsonView` 안쪽 JSON 이 배열이면
+            // 항목마다 실려 올 수 있으므로 첫 유효값을 채택한다.
+            if water_level_m == 0.0 {
+                if let Some(w) = item.water.as_ref().and_then(json_value_to_f64) {
+                    water_level_m = w;
+                }
+            }
             let name = item.layer_name.trim();
             if name.contains("매립") || name.contains("성토") || name.contains("표토") {
                 fill_depth_m = fill_depth_m.max(item.to_depth);
@@ -162,6 +187,7 @@ impl GeoInfoBoreholeService {
             alluvial_to_m,
             alluvial_thickness_m: alluv_thick,
             weathered_depth_m,
+            water_level_m,
             dominant_uscs,
             paleo_hint,
             layers,

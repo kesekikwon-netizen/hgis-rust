@@ -14,3 +14,8 @@ strata-geo.workspace = true
 strata-net.workspace = true
 rayon.workspace = true
 serde.workspace = true
+rusqlite.workspace = true
+tiff = { version = "0.11", default-features = false }
+
+[dev-dependencies]
+tempfile.workspace = true
