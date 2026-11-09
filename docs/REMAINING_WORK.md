@@ -31,30 +31,53 @@ V16 만 있던 동안 왜 초록불이었는가: V16 은 파일이 만들어졌�
 - 같은 제목 레이어 교체(`:55-56`, `:88-89`) — Rust 는 `painted_grids` 를 새로
   덮어쓰므로 결과는 같다(옛 격자가 남지 않는다).
 
-## 2. 300줄 초과 파일 50개 (Phase 5 잔여)
+## 2. 300줄 초과 파일 — **닫힘 (2026-11-09)**
 
-`strata-geo` 는 전부 300줄 이하로 끝냈다(커밋 `198fd20`, `408fec3`).
-남은 것은 앱·네트워크·저장 계층이다.
+> 시작할 때 50개였고, 지금은 **1개**다. 남은 1개는 코드가 아니라 데이터다.
 
-가장 큰 것부터:
+| 줄 | 파일 | 사유 |
+|---|---|---|
+| 316 | `strata-net/src/address_sido_data.rs` | `pub const BUILTIN_KOREA_SIDO` 단일 리터럴. 쪼개면 상수의 의미가 흐려지고 이득이 없다. 바이트 동일 확인(5850/5850). |
 
-| 줄 | 파일 |
-|---|---|
-| 3431 | `crates/strata-app/src/dialogs_modal.rs` |
-| 3060 | `crates/strata-app/src/dialogs_download_print.rs` |
-| 2892 | `crates/strata-app/src/gui_ribbon_bar.rs` |
-| 2286 | `crates/strata-app/src/gui_tab_map.rs` |
-| 1647 | `crates/strata-layout/src/sheet_composer.rs` |
-| 1579 | `crates/strata-app/src/gui_tab_drawing.rs` |
-| 1548 | `crates/strata-net/src/heritage_intranet.rs` |
-| 1372 | `crates/strata-net/src/address_search.rs` |
-| 1362 | `crates/strata-net/src/vworld_client.rs` |
-| 1290 | `crates/strata-check-export/src/checklist_engine.rs` |
+나눈 방식은 전부 같다: 원본 파일을 얇은 facade(`pub use`)로 남기고 내용을
+`#[path]` 서브모듈로 옮겼다. 그래서 **기존 import 경로가 하나도 바뀌지 않았다.**
 
-마스터플랜 Chapter 07 이 제안한 분할 단위를 그대로 쓰면 된다:
-`dialogs_modal` / `dialogs_download_print` → 대화상자별 파일,
-`gui_ribbon_bar` → `ribbon/{mod,layout_metrics,group_*,subtoolbar}`,
-`sheet_composer` → 조판/PDF 분리.
+가장 컸던 것들:
+
+| 원본 | 줄 | 결과 |
+|---|---|---|
+| `dialogs_modal.rs` | 3,431 | 100 facade + 7 `modal_*` + 시험 3 |
+| `dialogs_download_print.rs` | 3,077 | 208 facade + 13 `dlg_*` + 시험 |
+| `gui_ribbon_bar.rs` | 2,892 | 56 facade + 18 `gui_ribbon_*` |
+| `gui_tab_map.rs` | 2,286 | 45 facade + 16 `gui_tab_map_*` |
+| `gui_tab_drawing.rs` | 1,579 | 49 facade + 12 `gui_tab_drawing_*` |
+| `gui_layer_panel.rs` | 1,187 | 21 facade + 7 `gui_layer_panel_*` |
+| `gui_shell.rs` | 1,119 | 160 + `shell_workspace`·`shell_dialogs`·시험 2 |
+| `right_inspector.rs` | 1,079 | 204 + `ri_types`·`ri_body*`·`ri_*_card`·시험 |
+
+### 나누다가 실제로 잡은 버그 (전부 시험·게이트가 못 잡는 것들이었다)
+
+1. **`render_cad_import_notice` 가 자기 자신을 부르는 껍데기**가 되어 있었다.
+   진짜 96줄 본문이 분할 때 사라졌다. 컴파일은 되므로 실행해야만 무한 재귀인 줄 안다.
+2. **`paint_map_overlays` 호출이 사라져** 지도 탭의 줌·축척자·격자 오버레이가
+   렌더되지 않았다. `dead_code` 경고만이 단서였고, V10 은 탭이 rect 를 반환하는지만 본다.
+3. **`sheet_p.rect_filled(map_rect, 0.0, map_bg)` 한 줄이 사라져** 도면 지도 배경
+   채우기가 없어졌다. `unused variable: map_bg` 가 유일한 단서였다.
+4. **리본 match 분할 의미 오류** — `handle_ribbon_click` 을 두 match 로 나누자
+   뒤쪽의 `_ => active_tab = Map` catch-all 이 앞쪽 라벨에도 걸려, 저장·선택·그리기를
+   누르면 조용히 지도 탭으로 튕겼다. clippy `unreachable pattern` 이 유일한 단서였다.
+5. **속성이 이동을 따라가지 않음 — 5건.** `#[derive(Debug, Clone)]` 이 옮겨진
+   구조체를 두고 `pub use` 에 붙어 컴파일 오류가 났고, `ShellGridConfig` 는
+   `Clone` 을 잃어 `egui::IdTypeMap` 이 거부했고, `#[must_use]` 는 `topo_record_key`
+   에서 잘려 나갔다. **속성은 문장이 아니라서 "줄 타일링 감사"가 구조적으로 못 본다.**
+
+공통 교훈: 파일을 옮기는 것 자체는 안전하지만, **옮긴 뒤 그 코드가 "아직 불리는지"**
+는 아무도 검사하지 않는다. 그래서 지금은 잘라낸 조각마다
+`{`−`}` 합이 0 인지 쓰기 전에 단언하고, 옮긴 메서드마다 호출자가 있는지 스크립트로
+확인한다. 그래도 잡히지 않는 마지막 그물은 사람 눈이다.
+
+검증: `cargo clippy --workspace --all-targets -- -D warnings` = 0,
+`cargo test --workspace` = 344 passed, `--verify-all` = V1~V17 PASS.
 
 ## 3. Phase 4 잔여 (정밀 DEM·고지형 동기화)
 
