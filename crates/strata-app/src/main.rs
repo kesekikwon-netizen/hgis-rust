@@ -30,12 +30,15 @@ pub mod ngii_topographic_ui;
 pub mod real_survey;
 pub mod ribbon;
 pub mod ribbon_icon_svg;
+pub mod ribbon_icon_svg_part1;
+pub mod ribbon_icon_svg_part2;
 pub mod ribbon_icons;
 pub mod right_inspector;
 pub mod svg_path_paint;
 pub mod tab_drawing;
 pub mod tabs_home_map;
 pub mod tabs_paleo_3d;
+pub mod tabs_paleo_3d_views;
 pub mod verify_harness;
 
 fn main() {
@@ -97,3 +100,7 @@ fn main() {
         std::process::exit(1);
     }
 }
+
+#[cfg(test)]
+#[path = "tabs_paleo_3d_tests.rs"]
+mod tabs_paleo_3d_tests;

@@ -118,7 +118,6 @@ pub fn render_borehole_map_overlay(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app_state::MainTab;
     use strata_net::geoinfo_borehole::BoreholeRecord;
     use strata_paleo::borehole_map_options::BoreholeMapOptions;
     use strata_paleo::borehole_maps::generate_borehole_gis_maps;

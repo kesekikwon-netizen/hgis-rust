@@ -5,7 +5,7 @@ use strata_paleo::terrain_edt_tpi::{
     compute_imhof_multidirectional_hillshade_and_slope_rgba, GridTransform,
 };
 use strata_terrain3d::quadtree_lod::{build_quadtree_patches, QuadPatch};
-use strata_terrain3d::viewport3d_renderer::{render_terrain3d_rgba, OrbitCamera3D};
+use strata_terrain3d::viewport3d_renderer::OrbitCamera3D;
 
 #[derive(Debug, Clone)]
 pub struct PaleoTerrain3dTabState {
@@ -245,95 +245,5 @@ impl PaleoTerrain3dTabState {
             build_quadtree_patches([center_xy.0, center_xy.1], width as f64 * cell_size, 2);
         self.last_paleo_output = Some(out);
         self.rebuild_3d_preview();
-    }
-
-    pub fn rebuild_3d_preview(&mut self) {
-        self.camera_3d.z_exaggeration = self.z_exaggeration;
-        if let Some(ref out) = self.last_paleo_output {
-            self.terrain3d_rgba = render_terrain3d_rgba(
-                &out.z_paleo,
-                out.transform.width,
-                out.transform.height,
-                &self.camera_3d,
-                320,
-                200,
-            );
-        }
-    }
-
-    pub const HGIS_MIN_CUTLINE_LENGTH_M: f64 = 5.0;
-    pub const HGIS_MAX_SECTION_SAMPLES: usize = 500;
-    pub const HGIS_CORRIDOR_HALF_WIDTH_MIN: f64 = 50.0;
-    pub const HGIS_CORRIDOR_HALF_WIDTH_MAX: f64 = 500.0;
-
-    /// C++ `KaPaleoStudio::generateCrossSection` — 단면 절단선 최소 길이 5.0m 방어, 최대 샘플 개수 500개 제한, 시추공 투영 복도 반폭 `[50.0m, 500.0m]` 클램핑 1:1
-    #[allow(clippy::type_complexity)]
-    pub fn generate_cross_section_samples(
-        cut_line: &[[f64; 2]],
-        search_corridor_half_width: f64,
-        max_sample_count: usize,
-    ) -> Result<(Vec<[f64; 2]>, f64), (PaleoSectionError, String)> {
-        if cut_line.len() < 2 {
-            return Err((
-                PaleoSectionError::CutLineTooShort,
-                "단면 절단선 길이가 너무 짧습니다 (최소 5.0m 이상 작도 필요, 현재: 0.00 m)"
-                    .to_owned(),
-            ));
-        }
-        let mut total_len = 0.0_f64;
-        for pair in cut_line.windows(2) {
-            total_len += (pair[1][0] - pair[0][0]).hypot(pair[1][1] - pair[0][1]);
-        }
-        if total_len < Self::HGIS_MIN_CUTLINE_LENGTH_M {
-            return Err((
-                PaleoSectionError::CutLineTooShort,
-                format!(
-                    "단면 절단선 길이가 너무 짧습니다 (최소 5.0m 이상 작도 필요, 현재: {total_len:.2} m)"
-                ),
-            ));
-        }
-        let corridor = search_corridor_half_width.clamp(
-            Self::HGIS_CORRIDOR_HALF_WIDTH_MIN,
-            Self::HGIS_CORRIDOR_HALF_WIDTH_MAX,
-        );
-        let cap = max_sample_count.clamp(2, Self::HGIS_MAX_SECTION_SAMPLES);
-        let raw_samples = (total_len.floor() as usize + 1).min(cap);
-        let start = cut_line[0];
-        let end = cut_line[cut_line.len() - 1];
-        let mut pts = Vec::with_capacity(raw_samples);
-        for idx in 0..raw_samples {
-            let t = idx as f64 / (raw_samples.saturating_sub(1).max(1) as f64);
-            pts.push([
-                start[0] + (end[0] - start[0]) * t,
-                start[1] + (end[1] - start[1]) * t,
-            ]);
-        }
-        Ok((pts, corridor))
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PaleoSectionError {
-    CutLineTooShort,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_paleo_studio_cutline_under_5m_rejected_and_1000m_clamped_to_500_samples() {
-        let short_line = [[100.0, 100.0], [101.5, 101.3228756]];
-        let err = PaleoTerrain3dTabState::generate_cross_section_samples(&short_line, 100.0, 500)
-            .expect_err("2m line must fail");
-        assert_eq!(err.0, PaleoSectionError::CutLineTooShort);
-        assert!(err.1.contains("최소 5.0m"));
-
-        let long_line = [[0.0, 0.0], [1000.0, 0.0]];
-        let (samples, corridor) =
-            PaleoTerrain3dTabState::generate_cross_section_samples(&long_line, 800.0, 500)
-                .expect("1000m line must succeed");
-        assert_eq!(samples.len(), 500);
-        assert!((corridor - 500.0).abs() < 1e-6);
     }
 }
