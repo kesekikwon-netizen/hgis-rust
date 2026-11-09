@@ -1,0 +1,2811 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="paper">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strata (ka-hgis) — C++ 완성본(d7afcc8) 기반 통합 Rust 전환 개발 마스터 플랜</title>
+  <style>
+
+:root, html[data-theme="paper"] {
+  --ground: #FAF9F5;
+  --surface: #FFFFFF;
+  --wash: #F5F4ED;
+  --desk: #F0EEE6;
+  --press: #E8E6DC;
+  --oat: #E3DACC;
+  --map-ground: #F7F5EE;
+  --ink: #141413;
+  --hand: #30302E;
+  --ink2: #3D3D3A;
+  --muted: #5E5D59;
+  --faint: #73726C;
+  --bedrock: #262624;
+  --line: #DEDCD1;
+  --edge: #C2C0B6;
+  --ring: #B0AEA5;
+  --action: #B5573A;
+  --action-hover: #A44D32;
+  --clay: #D97757;
+  --clay-text: #9C4A2F;
+  --block: #A33B3B;
+  --block-wash: #F3DEDA;
+  --caution: #7A5A00;
+  --caution-wash: #FDF6E2;
+  --done: #3F6B31;
+  --done-wash: #EBF3E8;
+  --tile-bg: #E4EAED;
+  --tile-on: #E0ECF8;
+  --tile-on-edge: #1A68B0;
+  --code-bg: #F3F1E8;
+}
+
+html[data-theme="skysnow"] {
+  --ground: #F4F8FB;
+  --surface: #FFFFFF;
+  --wash: #EAF1F7;
+  --desk: #E2ECF5;
+  --press: #D5E3F0;
+  --oat: #D0E2F2;
+  --map-ground: #EEF4F8;
+  --ink: #102030;
+  --hand: #1B3650;
+  --ink2: #2C4660;
+  --muted: #4D657D;
+  --faint: #6B8299;
+  --line: #CFDCE8;
+  --edge: #B0C4D8;
+  --action: #1B6EC2;
+  --action-hover: #15589C;
+  --clay: #2B82D9;
+  --clay-text: #145596;
+  --code-bg: #EBF2F8;
+}
+
+html[data-theme="dark"] {
+  --ground: #181816;
+  --surface: #22221F;
+  --wash: #2A2A26;
+  --desk: #121210;
+  --press: #33332E;
+  --oat: #3A352C;
+  --map-ground: #1D1D1A;
+  --ink: #F2F0E8;
+  --hand: #E5E2D8;
+  --ink2: #D0CEC4;
+  --muted: #9E9C93;
+  --faint: #78766E;
+  --line: #33322D;
+  --edge: #4A4942;
+  --action: #D46B4A;
+  --action-hover: #E07B5B;
+  --clay: #E58868;
+  --clay-text: #E89578;
+  --block: #E56B6B;
+  --block-wash: #3A2222;
+  --caution: #E6B84D;
+  --caution-wash: #38301C;
+  --done: #68B856;
+  --done-wash: #1F331C;
+  --tile-bg: #2C3033;
+  --tile-on: #1E3448;
+  --tile-on-edge: #4DA3FF;
+  --code-bg: #282824;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; font-size: 14px; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  line-height: 1.6;
+}
+code, pre, .mono {
+  font-family: "Cascadia Mono", "Consolas", "IBM Plex Mono", monospace;
+}
+.serif {
+  font-family: "Noto Serif KR", "Batang", "Georgia", serif;
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* 상단 5단 지층 띠 */
+.strata-band {
+  display: grid;
+  grid-template-columns: 1.2fr 2.2fr 1.8fr 1.4fr 2.4fr;
+  block-size: 6px;
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 100;
+}
+.strata-band .s-topsoil { background: #6E6A5F; }
+.strata-band .s-cultural { background: #B5573A; }
+.strata-band .s-alluvial { background: #C2A878; }
+.strata-band .s-weathered { background: #8C7A6B; }
+.strata-band .s-bedrock { background: #262624; }
+
+/* 상단 유틸리티 바 */
+.top-utility-bar {
+  position: sticky;
+  inset-block-start: 6px;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 10px;
+  padding-inline: 24px;
+  background: var(--surface);
+  border-block-end: 1px solid var(--line);
+}
+.brand-cluster { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.brand-badge {
+  background: var(--hand);
+  color: #FAF9F5;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.brand-title { font-weight: 700; font-size: 14px; color: var(--ink); }
+.utility-Controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.search-box input {
+  inline-size: 320px;
+  padding: 6px 12px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: var(--ground);
+  color: var(--ink);
+  font-size: 12px;
+}
+.search-box input:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+.theme-switcher { display: flex; gap: 4px; }
+.theme-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  border: 1px solid var(--edge);
+  background: var(--ground);
+  color: var(--ink);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.theme-btn.active {
+  background: var(--oat);
+  border-color: var(--ink);
+  font-weight: 700;
+}
+
+/* 전체 레이아웃 */
+.workspace-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  max-inline-size: 1840px;
+  margin-inline: auto;
+}
+@media (max-width: 1120px) {
+  .workspace-shell { grid-template-columns: 1fr; }
+  .toc-sidebar { position: static !important; block-size: auto !important; border-inline-end: none !important; border-block-end: 1px solid var(--line); }
+}
+
+/* 좌측 TOC 사이드바 */
+.toc-sidebar {
+  position: sticky;
+  inset-block-start: 53px;
+  block-size: calc(100vh - 53px);
+  overflow-y: auto;
+  padding: 20px 16px;
+  background: var(--wash);
+  border-inline-end: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.toc-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--clay-text);
+}
+.toc-doc-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-block-start: 4px;
+  line-height: 1.5;
+}
+.toc-nav { display: flex; flex-direction: column; gap: 3px; }
+.toc-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--ink2);
+  text-decoration: none;
+  font-size: 12.5px;
+  transition: background 0.12s;
+}
+.toc-link:hover { background: var(--press); }
+.toc-link.active {
+  background: var(--oat);
+  color: var(--ink);
+  font-weight: 700;
+}
+.toc-num {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 11px;
+  color: var(--clay-text);
+  font-weight: 700;
+}
+.toc-summary-card {
+  margin-block-start: auto;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.toc-summary-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-block-end: 8px;
+  border-block-end: 1px solid var(--line);
+  padding-block-end: 4px;
+}
+.toc-stat-list { margin: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.toc-stat-list > div { display: flex; justify-content: space-between; gap: 8px; }
+.toc-stat-list dt { color: var(--muted); }
+.toc-stat-list dd { margin: 0; font-weight: 700; color: var(--ink); }
+
+/* 본문 */
+.doc-main {
+  padding: 32px 40px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+.doc-section {
+  scroll-margin-block-start: 70px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 28px 32px;
+}
+.sec-header {
+  border-block-end: 2px solid var(--ink);
+  padding-block-end: 12px;
+  margin-block-end: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.sec-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--clay-text);
+  text-transform: uppercase;
+}
+.sec-title {
+  margin: 4px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ink);
+  font-family: "Noto Serif KR", "Batang", serif;
+}
+.sec-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* 그리드·카드·배지 */
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+
+.plate-box {
+  background: var(--ground);
+  border: 1px solid var(--line);
+  padding: 16px 18px;
+}
+.plate-box h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.caption-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-block: 18px 10px;
+}
+.caption-rule::after {
+  content: "";
+  flex: 1;
+  block-size: 1px;
+  background: var(--line);
+}
+
+/* 상태 표시 (조용한 도판: 알약 대신 점·기호+글자) */
+.status-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.dot-clay {
+  inline-size: 7px; block-size: 7px; border-radius: 50%; background: var(--action); display: inline-block;
+}
+.dot-done {
+  inline-size: 7px; block-size: 7px; border-radius: 50%; background: var(--done); display: inline-block;
+}
+.dot-warn {
+  inline-size: 7px; block-size: 7px; border-radius: 50%; background: var(--caution); display: inline-block;
+}
+.tag-code {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 11.5px;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+}
+.badge-state {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  border: 1px solid var(--edge);
+}
+.badge-done { background: var(--done-wash); color: var(--done); border-color: var(--done); }
+.badge-delta { background: var(--caution-wash); color: var(--caution); border-color: var(--caution); }
+.badge-new { background: var(--block-wash); color: var(--action); border-color: var(--action); }
+
+/* 삼선표 (Three-line Table: 윗선 1px --ink, 헤더 밑선 1px --ink, 행선 1px --press, 세로선 없음) */
+.table-scroll {
+  overflow-x: auto;
+  max-inline-size: 100%;
+  border-block-start: 1.5px solid var(--ink);
+  border-block-end: 1.5px solid var(--ink);
+}
+table.three-line {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  text-align: start;
+}
+table.three-line thead th {
+  position: sticky;
+  inset-block-start: 0;
+  background: var(--wash);
+  color: var(--ink);
+  font-weight: 700;
+  padding: 9px 12px;
+  border-block-end: 1px solid var(--ink);
+  white-space: nowrap;
+}
+table.three-line tbody td {
+  padding: 9px 12px;
+  border-block-end: 1px solid var(--press);
+  vertical-align: top;
+}
+table.three-line tbody tr:hover {
+  background: var(--wash);
+}
+table.three-line td.num, table.three-line th.num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+}
+
+/* 필터 바 및 탭 바 */
+.filter-bar, .mockup-tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block-end: 16px;
+}
+.filter-btn, .mockup-tab-btn {
+  padding: 7px 14px;
+  font-size: 12.5px;
+  border: 1px solid var(--edge);
+  background: var(--ground);
+  color: var(--ink2);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.filter-btn:hover, .mockup-tab-btn:hover { background: var(--press); }
+.filter-btn.active, .mockup-tab-btn.active {
+  background: var(--hand);
+  color: #FAF9F5;
+  border-color: var(--hand);
+  font-weight: 700;
+}
+
+/* 점수 막대 */
+.score-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.score-track {
+  flex: 1;
+  block-size: 8px;
+  background: var(--press);
+  position: relative;
+  overflow: hidden;
+}
+.score-fill-old {
+  block-size: 100%;
+  background: var(--ring);
+}
+.score-fill-cpp {
+  block-size: 100%;
+  background: var(--action);
+}
+.score-fill-rust {
+  block-size: 100%;
+  background: var(--done);
+}
+
+/* 코드 블록 */
+pre.code-blueprint {
+  margin: 10px 0 0;
+  padding: 14px 16px;
+  background: #1B1B18;
+  color: #F2F0E6;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-x: auto;
+  border: 1px solid var(--edge);
+}
+pre.code-blueprint .kw { color: #E07B5B; font-weight: 700; }
+pre.code-blueprint .ty { color: #8AB4F8; }
+pre.code-blueprint .cm { color: #8E8C84; }
+pre.code-blueprint .st { color: #A8D59D; }
+
+/* 인터랙티브 앱 목업 프레임 (조용한 도판 실제 규격 재현) */
+.mockup-panel { display: none; }
+.mockup-panel.active { display: block; }
+
+.ka-window {
+  border: 1px solid var(--ink);
+  background: var(--ground);
+  color: var(--ink);
+  user-select: none;
+  overflow: hidden;
+}
+.ka-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--wash);
+  border-block-end: 1px solid var(--line);
+  font-size: 12px;
+}
+.ka-ribbon-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 10px 4px;
+  background: var(--ground);
+  border-block-end: 1px solid var(--line);
+  overflow-x: auto;
+}
+.ka-ribbon-groups {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.ka-rgroup {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-inline: 6px;
+  border-inline-end: 1px solid var(--line);
+}
+.ka-rgroup-title {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-block-end: 3px;
+  font-weight: 600;
+}
+.ka-rgroup-chips {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+}
+.ka-rchip {
+  min-inline-size: 36px;
+  padding: 2px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink);
+}
+.ka-rchip:hover .ka-rtile { background: #D9E2E7; }
+.ka-rtile {
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 8px;
+  background: var(--tile-bg);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #2B4858;
+  position: relative;
+}
+.ka-rchip.primary-unsaved .ka-rtile {
+  background: var(--action);
+  color: #FFFFFF;
+  border-color: var(--action);
+}
+.ka-rchip.hand-active .ka-rtile {
+  background: var(--hand);
+  color: #FFFFFF;
+  border-color: var(--ink);
+}
+.ka-rchip.layer-on .ka-rtile {
+  background: var(--tile-on);
+  border-color: var(--tile-on-edge);
+  color: #105088;
+}
+.ka-rchip.borehole-highlight .ka-rtile {
+  background: var(--oat);
+  border: 1.5px solid var(--action);
+  color: var(--ink);
+}
+.ka-rlabel {
+  font-size: 12px;
+  line-height: 1.15;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.ka-subtoolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: var(--wash);
+  border-block-end: 1px solid var(--line);
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.ka-subbtn {
+  padding: 3px 9px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ka-subbtn.active {
+  background: var(--hand);
+  color: #FFFFFF;
+  border-color: var(--ink);
+}
+.ka-tabstrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 12px;
+  background: var(--ground);
+  border-block-end: 1px solid var(--line);
+  block-size: 36px;
+}
+.ka-tabs-left { display: flex; gap: 16px; align-items: stretch; block-size: 100%; }
+.ka-vtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  border-block-end: 2px solid transparent;
+  padding-inline: 4px;
+}
+.ka-vtab.active {
+  color: var(--ink);
+  font-weight: 700;
+  border-block-end-color: var(--ink);
+}
+.ka-map-body {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 290px;
+  min-block-size: 520px;
+}
+@media (max-width: 1200px) {
+  .ka-map-body { grid-template-columns: 1fr; }
+}
+.ka-left-dock {
+  border-inline-end: 1px solid var(--line);
+  background: var(--ground);
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+}
+.ka-right-dock {
+  border-inline-start: 1px solid var(--line);
+  background: var(--ground);
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+}
+.ka-canvas-area {
+  background: var(--map-ground);
+  position: relative;
+  overflow: hidden;
+  min-block-size: 480px;
+}
+.ka-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  block-size: 32px;
+  background: var(--wash);
+  border-block-start: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--muted);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ka-btn-primary {
+  background: var(--action);
+  color: #FFFFFF;
+  border: 1px solid var(--action);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ka-btn-secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+/* 디렉토리 트리 */
+.dir-tree {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  background: var(--ground);
+  border: 1px solid var(--line);
+  padding: 16px 20px;
+}
+.dir-tree details { margin-inline-start: 14px; }
+.dir-tree summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink);
+  padding-block: 2px;
+}
+.dir-leaf {
+  margin-inline-start: 28px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-block-end: 1px dashed var(--line);
+  padding-block: 2px;
+}
+.dir-leaf-desc {
+  font-family: "Malgun Gothic", sans-serif;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+  </style>
+</head>
+<body>
+  <!-- 상단 5단 고고학 지층(Strata) 밴드 -->
+  <div class="strata-band" role="presentation" aria-hidden="true">
+    <span class="s-topsoil" title="표토·매립층 (Topsoil / Fill)"></span>
+    <span class="s-cultural" title="문화층·유구포함층 (Cultural Layer · Terracotta #B5573A)"></span>
+    <span class="s-alluvial" title="충적·퇴적층 (Alluvial Deposit)"></span>
+    <span class="s-weathered" title="풍화토·풍화암 (Weathered Zone)"></span>
+    <span class="s-bedrock" title="기반암 (Bedrock #262624)"></span>
+  </div>
+
+  <!-- 상단 고정 컨트롤 바 -->
+  <header class="top-utility-bar">
+    <div class="brand-cluster">
+      <span class="brand-badge">STRATA 2.0 · MASTER PLAN</span>
+      <span class="brand-title">C++ 완성본(<code>D:\hgis</code> · <code>d7afcc8</code>) 기반 통합 Rust 전환 개발 계획서</span>
+    </div>
+    <div class="utility-Controls">
+      <div class="search-box">
+        <label for="globalSearch" class="sr-only">문서 내 모듈·기능·파일 검색</label>
+        <input type="search" id="globalSearch" placeholder="모듈·파일·크레이트·기능 검색 (예: 시추, GPKG, 5179, Round)..." autocomplete="off">
+      </div>
+      <div class="theme-switcher" role="group" aria-label="화면 테마 미리보기">
+        <button type="button" class="theme-btn active" data-set-theme="paper">조용한 도판 (기본 상아)</button>
+        <button type="button" class="theme-btn" data-set-theme="skysnow">하늘 눈밭</button>
+        <button type="button" class="theme-btn" data-set-theme="dark">야장 다크</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="workspace-shell">
+    <!-- 좌측 고정 필드 노트 목차 -->
+    <aside class="toc-sidebar" aria-label="마스터 플랜 목차">
+      <div class="toc-header">
+        <div class="toc-kicker">FIELD NOTEBOOK · INDEX</div>
+        <div class="toc-doc-meta">기준: <code>D:\hgis</code> (C++20 완성본)<br>타겟: <code>D:\hgis rust</code> (Pure Rust)</div>
+      </div>
+      <nav class="toc-nav">
+        <a href="#sec-1" class="toc-link active"><span class="toc-num">01</span> 총괄 진단 및 4대 구버전 문서 현행화</a>
+        <a href="#sec-2" class="toc-link"><span class="toc-num">02</span> 도메인 불변 규칙 및 성숙도 대조표</a>
+        <a href="#sec-3" class="toc-link"><span class="toc-num">03</span> C++ ↔ Rust 11대 크레이트 아키텍처 매핑</a>
+        <a href="#sec-4" class="toc-link"><span class="toc-num">04</span> 완성본 기준 UI/UX 인터랙티브 목업 (7종)</a>
+        <a href="#sec-5" class="toc-link"><span class="toc-num">05</span> 「조용한 도판」 디자인 스펙 및 20항목 대장</a>
+        <a href="#sec-6" class="toc-link"><span class="toc-num">06</span> 핵심 공간·수치 알고리즘 Rust 전환 명세</a>
+        <a href="#sec-7" class="toc-link"><span class="toc-num">07</span> <code>D:\hgis rust</code> 디렉토리 구조 및 300줄 분할안</a>
+        <a href="#sec-8" class="toc-link"><span class="toc-num">08</span> 단계별 Rust 전환 로드맵 및 검증 게이트</a>
+      </nav>
+      <div class="toc-summary-card">
+        <div class="toc-summary-title">핵심 전환 지표</div>
+        <dl class="toc-stat-list">
+          <div><dt>C++ 원본 코어/앱</dt><dd>210+ 파일 (10.6만 줄)</dd></div>
+          <div><dt>Rust 워크스페이스</dt><dd>11 Crates (순수 Rust)</dd></div>
+          <div><dt>최신 반영 커밋</dt><dd><code>d7afcc8</code> (시추 5종 포함)</dd></div>
+          <div><dt>외부 런타임 의존</dt><dd>1.2 GB → 0 MB (단일 EXE)</dd></div>
+          <div><dt>파일 길이 상한</dt><dd>전 파일 ≤ 300줄 강제</dd></div>
+        </dl>
+      </div>
+    </aside>
+
+    <!-- 본문 영역 -->
+    <main class="doc-main" id="docMain">
+
+      <!-- ================================================================= -->
+      <!-- SECTION 1: 총괄 진단 및 구버전 HTML 4종 ↔ C++ 완성본(D:\hgis) 현행화 -->
+      <!-- ================================================================= -->
+      <section class="doc-section" id="sec-1">
+        <div class="sec-header">
+          <div>
+            <div class="sec-kicker">CHAPTER 01 · EXECUTIVE SYNTHESIS &amp; BASELINE TRUTH</div>
+            <h1 class="sec-title">현행 C++ 완성본(<code>D:\hgis</code>) 기준 총괄 진단 및 구버전 문서 4종 통합 현행화</h1>
+          </div>
+          <p class="sec-subtitle">최우선 기준점: <code>D:\hgis</code> (HEAD <code>d7afcc8</code>) · 전환 타겟: <code>D:\hgis rust</code> (Cargo 11-Crate Workspace)</p>
+        </div>
+
+        <div class="plate-box" style="margin-block-end: 20px;">
+          <h3>
+            <span>설계 대원칙 — 왜 구버전 HTML 4종을 그대로 합치지 않고 <code>D:\hgis</code> 완성본으로 재정의하는가</span>
+            <span class="status-mark"><span class="dot-clay"></span> 기준 커밋: <code>d7afcc8</code> (2026-11-05)</span>
+          </h3>
+          <p style="margin: 0; font-size: 13px; color: var(--ink2);">
+            과거 기획·평가 과정에서 작성된 4개의 HTML 문서(<code>Strata 종합 평가.html</code>, <code>Strata 개선 목업.html</code>, <code>Strata 디자인 개선안 2차 (1).html</code>, <code>Strata 세부 디자인 보완 계획.html</code>)는 2026년 9월 말~10월 초순의 과도기 산출물입니다.
+            이후 실제 <code>D:\hgis</code> C++20/Qt6/QGIS 코드베이스에서 <strong>① 「조용한 도판(Quiet Plate)」 디자인 시스템 전면 적용 및 3대 추가 테마 탑재</strong>, <strong>② 「검수·제출」 대화상자(<code>KaSubmitDialog</code>) 및 <code>EPSG:5179</code> 제출 꾸러미 완성</strong>, <strong>③ 국토지리정보원 다중 도엽 등고선 기반 무잠금 정밀 DEM 자동 합성</strong>, <strong>④ 반경 5km/10km 4단계 고지형 분석 엔진(Imhof 음영·150m 공간 균형 시추공 클러스터링)</strong>, <strong>⑤ 리본 전체 아이콘 칩 최소 너비 10% 축소(<code>40px → 36px</code>) 및 「시추」 전용 버튼(<code>btnBoreholeFetch</code>) + 5대 지반·시추 GIS 도면 생성기(<code>KaBoreholeDialog</code> / <code>GeoInfoBoreholeMaps.cpp</code>)</strong>까지 모두 개발 완료되었습니다.
+            본 마스터 플랜은 4개 문서의 시각적 틀과 평가 체계를 통합하되, 모든 스펙을 <strong><code>D:\hgis</code> 최신 C++ 완성본(<code>d7afcc8</code>)</strong> 기준으로 100% 최신화하고 이를 <strong><code>D:\hgis rust</code>에서 순수 Rust로 완결</strong>하기 위한 설계도입니다.
+          </p>
+        </div>
+
+        <div class="caption-rule">구버전 참고 HTML 4종 vs <code>D:\hgis</code> C++ 완성본(<code>d7afcc8</code>) vs <code>D:\hgis rust</code> 전환 반영 대조표</div>
+        <div class="table-scroll">
+          <table class="three-line">
+            <thead>
+              <tr>
+                <th>구버전 참고 문서 (작성 시점)</th>
+                <th>구버전 문서의 당시 기록 (과도기 흔적)</th>
+                <th><code>D:\hgis</code> C++ 완성본 실제 구현 상태 (최우선 기준)</th>
+                <th><code>D:\hgis rust</code> 전환 계획 반영 사항</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>① Strata 종합 평가.html</strong><br><span class="mono" style="font-size:11px; color:var(--muted);">2026-09-29 · 평점 62/100</span></td>
+                <td>
+                  • 리본에 「검수·제출」 버튼이 없어 <code>ExportService</code>가 죽은 코드라고 지적<br>
+                  • 구형 파란색 테마(<code>#1F6FB2</code>) 및 2줄 툴바 혼재 지적<br>
+                  • 시굴격자 대각선 방향·정밀 DEM·시추 5종 미구현 상태
+                </td>
+                <td>
+                  <span class="badge-state badge-done">완성 해결 (96/100)</span><br>
+                  • 내보내기 그룹에 <strong>「검수·제출」</strong>(<code>KaSubmitDialog</code>) 연결 완료<br>
+                  • 1줄 리본(7그룹) + 조건부 2열 보조줄(<code>subToolbar</code>) 정착<br>
+                  • <code>20·15·10m</code> 표준 시굴격자 + DEM 사면 방향 자동 정렬 완료
+                </td>
+                <td>
+                  • <code>strata-check-export</code> 크레이트에서 12항목 검수 + <code>EPSG:5179</code> SHP/PDF/MANIFEST/README 비차단 생성<br>
+                  • 11개 영역 성숙도 지표를 완성본 기준(96→100점)으로 전면 재산정
+                </td>
+              </tr>
+              <tr>
+                <td><strong>② Strata 개선 목업.html</strong><br><span class="mono" style="font-size:11px; color:var(--muted);">2026-10-01 · 14개 서브페이지</span></td>
+                <td>
+                  • 구형 스카이 블루(<code>#1F6FB2</code>) 기반 카드형 홈 화면, 참조 자료 센터 통합 창 제안<br>
+                  • 토층도(단면도) 별도 스튜디오 탭 제안<br>
+                  • 「자료 받기」에 DEM·지적·수치지형·유산 4개만 존재
+                </td>
+                <td>
+                  <span class="badge-state badge-done">현행화 완료</span><br>
+                  • 2026-10-10 현장 결정(<code>remove-section-drawing</code>)으로 별도 단면도 작도 탭은 제거하고, <strong>고지형 가상 지층 단면도(<code>A-A'</code>)</strong>와 <strong>3D 트렌치 단면 프로파일</strong>로 실용화<br>
+                  • 「자료 받기」에 <strong>「시추」</strong>(<code>btnBoreholeFetch</code>) 버튼 추가로 <strong>5개 버튼 체제</strong> 완성
+                </td>
+                <td>
+                  • 구형 파란 카드 목업을 폐기하고 <code>KaTheme</code> 「조용한 도판」 + 5버튼 「자료 받기」(<code>DEM·지적·수치지형·유산·시추</code>) 목업으로 통합<br>
+                  • <code>strata-paleo::section_renderer</code> 및 <code>strata-terrain3d::trench_profile3d</code>로 단면 구현
+                </td>
+              </tr>
+              <tr>
+                <td><strong>③ Strata 디자인 개선안 2차 (1).html</strong><br><span class="mono" style="font-size:11px; color:var(--muted);">2026-10-04 · 9개 아트보드</span></td>
+                <td>
+                  • 「조용한 도판(Quiet Plate)」 최초 정립: 바탕 <code>#FAF9F5</code>, 먹 <code>#141413</code>, 손에 든 도구 <code>#30302E</code>, 귀리 <code>#E3DACC</code>, 흙색 주 단추 <code>#B5573A</code><br>
+                  • 리본 칩 최소 너비 <code>40px</code> 기준 설계
+                </td>
+                <td>
+                  <span class="badge-state badge-done">완성 + 확장</span><br>
+                  • <code>KaTheme.h</code> / <code>KaThemePaper.cpp</code>에 토큰 전수 반영 완료<br>
+                  • 우측 상단 <strong>「테마 ▾」</strong>(기본 조용한 도판 / 하늘 눈밭 / 번개 노랑 / 벚꽃 파스텔) 추가<br>
+                  • <code>d7afcc8</code>에서 리본 칩 최소 너비를 <strong>10% 축소(<code>40px → 36px</code>)</strong>하여 1줄 안에 「시추」 버튼까지 무줄바꿈 수용
+                </td>
+                <td>
+                  • <code>strata-types::theme_tokens</code>에 4대 컬러 테마 + <code>paper_look</code> + <code>ButtonMetrics { ribbon_chip_width: 36, ribbon_icon_size: 32 }</code> 1:1 고정
+                </td>
+              </tr>
+              <tr>
+                <td><strong>④ Strata 세부 디자인 보완 계획.html</strong><br><span class="mono" style="font-size:11px; color:var(--muted);">2026-10-11 · 20항목 (H1~R1)</span></td>
+                <td>
+                  • 홈(H1~H6), 지도(M1~M8), 도면(L1~L5), 대화상자(D1~D3), 리본(R1) 총 20개 세부 보완 과제 정의 (당시 미구현 체크리스트)
+                </td>
+                <td>
+                  <span class="badge-state badge-done">20항목 전수 구현 완료</span><br>
+                  • 삼선표, 3행 표제란, 5칸 연결 상태, 통합 되돌리기 덮개(<code>73×36</code>), <code>자석 ▾</code> 메뉴, 파일함 5단추+<code>↑ 상위</code>, 1px 무그림자 도판, <code>96px</code> 검수 수치 대장 등 C++에 모두 구현됨
+                </td>
+                <td>
+                  • 본 문서 <strong>Chapter 05</strong>에 20개 항목(H1~R1) + 최신 확장 항목(B1~B5 시추 5종·정밀 DEM·고지형)의 C++ 구현 위치 및 Rust 대응 모듈 검증 대장을 완비
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- SECTION 2: 도메인 불변 규칙 및 11대 영역 성숙도 대조표               -->
+      <!-- ================================================================= -->
+      <section class="doc-section" id="sec-2">
+        <div class="sec-header">
+          <div>
+            <div class="sec-kicker">CHAPTER 02 · INVARIANT DOMAIN RULES &amp; MATURITY LEDGER</div>
+            <h2 class="sec-title">고고학 현장 GIS 불변 규칙 및 11대 영역 성숙도 현행화 (62점 → 96점 → Rust 100점)</h2>
+          </div>
+          <p class="sec-subtitle">C++ 완성본(<code>D:\hgis</code>)에서 확립된 절대 불변 규칙과 Rust 전환 시의 기술적 도약</p>
+        </div>
+
+        <div class="grid-3" style="margin-block-end: 24px;">
+          <div class="plate-box">
+            <h3><span>1. 7대 도메인 레이어 &amp; 4대 범례 구역</span><span class="tag-code">ka_hgis_layers.yaml v3</span></h3>
+            <ul style="margin:0; padding-inline-start:18px; font-size:12.5px; color:var(--ink2);">
+              <li><strong>7대 도메인 레이어</strong>: <code>survey_area</code>(조사구역), <code>feature_poly</code>(유구 면), <code>feature_line</code>(유구 선), <code>section_line</code>(단면선), <code>control_points</code>(기준점), <code>artifact_point</code>(유물 점), <code>trial_trench</code>(시굴격자).</li>
+              <li>레이어 정체성은 항상 <code>ka_hgis/layer_key</code>로만 식별하며, 오직 <code>ensureDomainLayer</code>로만 추가(빈 레이어 자동 추가 금지).</li>
+              <li>숨겨진 기존 도메인 레이어에 이어 그릴 때는 상위 그룹과 레이어 가시성(<code>setItemVisibilityChecked(true)</code>)을 자동 복구.</li>
+              <li><strong>4대 레이어 구역</strong>: <code>조사 데이터</code> / <code>지적도</code>(루트 배치, WMS 그림은 스냅 제외) / <code>주변·참조</code>(수치지형·토양·지질·고지형·시추 5종·정합 도면, 원본 변형 차단) / <code>배경 지도</code>.</li>
+            </ul>
+          </div>
+          <div class="plate-box">
+            <h3><span>2. 좌표계(CRS) · 36분할 버퍼 · GPKG 무결성</span><span class="tag-code">EPSG:5187/5186 → 5179</span></h3>
+            <ul style="margin:0; padding-inline-start:18px; font-size:12.5px; color:var(--ink2);">
+              <li><strong>작업 좌표계</strong>: <code>EPSG:5187</code>(동부원점, 기본) 또는 <code>EPSG:5186</code>(중부원점). 절대 작업 CRS를 <code>5179</code>로 가정하지 않음.</li>
+              <li><strong>제출 꾸러미 전용 변환</strong>: <code>ExportService</code>(Rust <code>strata-check-export</code>)만 <code>EPSG:5179</code> SHP로 변환해 파일로 내보내며 지도에 재추가하지 않음.</li>
+              <li><strong>500m/1000m 원형 버퍼</strong>: 직각 모서리가 $\sqrt{2}$배(707m) 튀어나가는 <code>Miter</code> 금지 → 항상 <strong>36분할 <code>JoinStyle::Round</code></strong> 및 유클리드 최단거리(<code>sitePoly.distance(g) &lt;= radius</code>) 사용.</li>
+              <li><strong>단일 POLYGON 무결성</strong>: 멀티폴리곤 저장 시 0면적 링 손상을 막기 위해 반드시 조각별 단일 폴리곤 피처로 분해(<code>PolygonPieces</code> / <code>split_polygon_pieces</code>).</li>
+            </ul>
+          </div>
+          <div class="plate-box">
+            <h3><span>3. 크래시 원천 제거 &amp; 보안·원본 보호</span><span class="tag-code">#![forbid(unsafe_code)]</span></h3>
+            <ul style="margin:0; padding-inline-start:18px; font-size:12.5px; color:var(--ink2);">
+              <li>C++/QGIS에서 발생하던 타일 렌더링 경합(<code>0xc0000005</code>, <code>isDrawing()</code> 중 <code>stopRendering</code>), <code>QgsLayout</code> 러버밴드 크래시, OGR GPKG 파일 잠금(<code>MoveFileEx</code> 거부)을 <strong>순수 Rust 비동기 GPU 아키텍처(<code>wgpu</code> + <code>rusqlite</code> 메모리 편집 버퍼 + 세대 교체)</strong>로 구조적 근절.</li>
+              <li><strong>계정·API 키 무중단 승계</strong>: <code>%LOCALAPPDATA%\ka-hgis\*.ini</code>, 레지스트리, Windows DPAPI(엔트로피 <code>"ka-hgis-account-v1"</code> 18바이트), 포터블 XOR-Base64 100% 호환 및 <code>SecretMask</code> 로그 마스킹.</li>
+              <li><strong>원본 절대 보호</strong>: 사용자의 조사 원본(<code>*.gpkg</code>)은 분석·다른 이름 저장 시 SHA-256 지문 불변 보장.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="caption-rule">11대 핵심 영역 성숙도 비교 — 구버전 평가(2026-09-29) vs C++ 완성본(2026-11-05) vs Pure Rust 목표</div>
+        <div class="table-scroll">
+          <table class="three-line">
+            <thead>
+              <tr>
+                <th>평가 영역</th>
+                <th class="num">구버전 (09-29)</th>
+                <th class="num">C++ 완성본 (11-05)</th>
+                <th class="num">Rust 목표 (2.0)</th>
+                <th style="min-inline-size: 200px;">성숙도 추이 (구버전 / C++ 완성 / Rust)</th>
+                <th><code>D:\hgis</code> 완성본 도달 내역 및 <code>D:\hgis rust</code> 최종 고도화 포인트</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>1. 홈 · 시작 · 복구</strong></td>
+                <td class="num">68</td>
+                <td class="num"><strong>98</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-cpp" style="inline-size:98%"></div></div><span class="mono">98→100</span></div>
+                </td>
+                <td>3행 표제란(<code>KaHomeTitleBlock</code>), 삼선표 최근 조사, 5칸 연결 상태, 세대 복구 사본 배지 완성 → Rust <code>gui_tab_home.rs</code> 1:1 이식</td>
+              </tr>
+              <tr>
+                <td><strong>2. 1줄 리본 · 테마 · 탐색</strong></td>
+                <td class="num">64</td>
+                <td class="num"><strong>97</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-cpp" style="inline-size:97%"></div></div><span class="mono">97→100</span></div>
+                </td>
+                <td>칩 최소폭 10% 축소(<code>36px</code>), 7그룹 1줄 고정, <strong>「시추」 버튼 탑재</strong>, 17시도 한반도 팝업, 4종 테마 전환 완성</td>
+              </tr>
+              <tr>
+                <td><strong>3. CAD 그리기 · 스냅 · 편집</strong></td>
+                <td class="num">72</td>
+                <td class="num"><strong>96</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-cpp" style="inline-size:96%"></div></div><span class="mono">96→100</span></div>
+                </td>
+                <td><code>자석 ▾</code> 정점·선분·교차점 스냅, <code>KaUndoGroup</code> 단일 Undo, 폴리곤 나누기·합치기·구멍뚫기 → Rust <code>rstar::RTree</code> 0.1ms 무크래시 스냅</td>
+              </tr>
+              <tr>
+                <td><strong>4. 시굴격자 · 36분할 버퍼</strong></td>
+                <td class="num">70</td>
+                <td class="num"><strong>98</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-cpp" style="inline-size:98%"></div></div><span class="mono">98→100</span></div>
+                </td>
+                <td><code>20·15·10m</code> 표준 길이 고정(임의 축소 금지), DEM 경사 방향 자동 배치, 36분할 <code>Round</code> 500m/1000m 버퍼 및 8방위 주변유적 엑셀 완성</td>
+              </tr>
+              <tr>
+                <td><strong>5. 외부 포털 자료 수집 (4종)</strong></td>
+                <td class="num">65</td>
+                <td class="num"><strong>95</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-cpp" style="inline-size:95%"></div></div><span class="mono">95→100</span></div>
+                </td>
+                <td>VWorld 5km 지적, 국토지리정보원 수치지형도·정밀 DEM 합성, 국가유산청 인트라넷 6종+서약서 영수증, 흙토람·KIGAM 연동 → Rust <code>reqwest</code>+<code>wry</code></td>
+              </tr>
+              <tr>
+                <td><strong>6. 시추자료 전용 5대 GIS 맵</strong></td>
+                <td class="num">0 (미구현)</td>
+                <td class="num"><strong>96</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-cpp" style="inline-size:96%"></div></div><span class="mono">96→100</span></div>
+                </td>
+                <td><code>d7afcc8</code> 신규 완성: <code>KaBoreholeDialog</code>(반경 2/5/10km) + ① 주상도 요약 마커, ② 충적층 등층후선(Isopach IDW+0.5m 등치선), ③ 성토·매립층, ④ 기반암 깊이/표고, ⑤ 평균 지하수위</td>
+              </tr>
+              <tr>
+                <td><strong>7. 고지형 4단계 분석 · 단면도</strong></td>
+                <td class="num">45</td>
+                <td class="num"><strong>96</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-cpp" style="inline-size:96%"></div></div><span class="mono">96→100</span></div>
+                </td>
+                <td>EDT 하천거리 + 적분영상 다중 TPI + Imhof 다방향 음영 + 7대 미지형 분류 + <code>A-A'</code> 가상 지층 단면도 → Rust <code>rayon</code> 고속 병렬화</td>
+              </tr>
+              <tr>
+                <td><strong>8. CAD 2점 정합 · 래스터 GCP</strong></td>
+                <td class="num">68</td>
+                <td class="num"><strong>95</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-cpp" style="inline-size:95%"></div></div><span class="mono">95→100</span></div>
+                </td>
+                <td>중심화 최소제곱(Centered Least-Squares) 헬머트·아핀 정합, 잔차 요약(<code>GeorefQuality</code>), 월드파일·사본 보존(<code>GeorefBackup</code>) 완성</td>
+              </tr>
+              <tr>
+                <td><strong>9. 도면 스튜디오 · 분할 인쇄</strong></td>
+                <td class="num">60</td>
+                <td class="num"><strong>96</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-cpp" style="inline-size:96%"></div></div><span class="mono">96→100</span></div>
+                </td>
+                <td>1px 종이 도판, 하단 장식 띠 고정, 용지 밖 범례 허용, 지시선 없는 유적 번호 배지, 프린터 용지/방향 불일치 사전 차단(<code>TilePrint</code>)</td>
+              </tr>
+              <tr>
+                <td><strong>10. 검수 · EPSG:5179 제출 꾸러미</strong></td>
+                <td class="num">35 (UI 미연결)</td>
+                <td class="num"><strong>98</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-cpp" style="inline-size:98%"></div></div><span class="mono">98→100</span></div>
+                </td>
+                <td><code>KaSubmitDialog</code>(96px 수치 대장 + 필수 도면 띠 + 12항목 삼선표) + 비차단 <code>README_submit.txt</code> 기록 + <code>EPSG:5179</code> SHP + <code>MANIFEST.sha256</code></td>
+              </tr>
+              <tr>
+                <td><strong>11. 런타임 경량화 · 메모리 안전성</strong></td>
+                <td class="num">55</td>
+                <td class="num"><strong>88</strong></td>
+                <td class="num"><strong>100</strong></td>
+                <td>
+                  <div class="score-meter"><div class="score-track"><div class="score-fill-rust" style="inline-size:100%"></div></div><span class="mono">88→100</span></div>
+                </td>
+                <td>C++은 OSGeo4W/Qt6 외부 DLL(~1.2GB) 및 <code>dev-env.ps1</code> 필수 → <strong>Rust 전환 시 외부 런타임 0MB 단일 네이티브 EXE + <code>#![forbid(unsafe_code)]</code> 달성</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- SECTION 3: 현행 C++(D:\hgis) ↔ Rust(D:\hgis rust) 크레이트 매핑도 -->
+      <!-- ================================================================= -->
+      <section class="doc-section" id="sec-3">
+        <div class="sec-header">
+          <div>
+            <div class="sec-kicker">CHAPTER 03 · C++ TO RUST ARCHITECTURE &amp; CRATE MAPPING</div>
+            <h2 class="sec-title">현행 C++(<code>D:\hgis</code>) 모듈 ↔ Rust(<code>D:\hgis rust</code>) 11대 크레이트 아키텍처 매핑도</h2>
+          </div>
+          <p class="sec-subtitle"><code>src/core</code> (95 파일) + <code>src/app</code> (115 파일) 전수 분석 기반 1:1 모듈 대응 설계</p>
+        </div>
+
+        <!-- 아키텍처 다이어그램 (SVG) -->
+        <div class="plate-box" style="margin-block-end: 24px;">
+          <h3>
+            <span>Strata Pure Rust 11-Crate 계층 아키텍처 다이어그램 (C++ <code>ka_core</code> / <code>ka-hgis</code> 대응)</span>
+            <span class="tag-code">Cargo Workspace (Edition 2021 · wgpu 24 · egui 0.31)</span>
+          </h3>
+          <div style="overflow-x:auto;">
+            <svg viewBox="0 0 1160 430" style="inline-size:100%; max-inline-size:1160px; block-size:auto; display:block; margin-inline:auto; background:var(--surface); border:1px solid var(--line);" role="img" aria-label="C++ 모듈과 대응하는 Rust 11개 크레이트 계층 아키텍처 다이어그램">
+              <defs>
+                <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#5E5D59"/>
+                </marker>
+              </defs>
+              <!-- Layer Labels -->
+              <rect x="12" y="14" width="130" height="76" fill="#F5F4ED" stroke="#DEDCD1"/>
+              <text x="24" y="42" font-size="12" font-weight="700" fill="#141413">L4. 데스크톱 앱 셸</text>
+              <text x="24" y="62" font-size="11" fill="#5E5D59">C++: src/app (MainWindow*)</text>
+
+              <rect x="12" y="104" width="130" height="92" fill="#F5F4ED" stroke="#DEDCD1"/>
+              <text x="24" y="136" font-size="12" font-weight="700" fill="#141413">L3. 렌더링 · 조판 · 검수</text>
+              <text x="24" y="156" font-size="11" fill="#5E5D59">C++: Studio / Layout /</text>
+              <text x="24" y="172" font-size="11" fill="#5E5D59">Checklist / Export</text>
+
+              <rect x="12" y="210" width="130" height="102" fill="#F5F4ED" stroke="#DEDCD1"/>
+              <text x="24" y="244" font-size="12" font-weight="700" fill="#141413">L2. 도메인 · 공간 · 분석</text>
+              <text x="24" y="264" font-size="11" fill="#5E5D59">C++: src/core (Buffer,</text>
+              <text x="24" y="280" font-size="11" fill="#5E5D59">Paleo, Borehole, Portal)</text>
+
+              <rect x="12" y="326" width="130" height="88" fill="#F5F4ED" stroke="#DEDCD1"/>
+              <text x="24" y="358" font-size="12" font-weight="700" fill="#141413">L1. 스토리지 · 기반 타입</text>
+              <text x="24" y="378" font-size="11" fill="#5E5D59">C++: SurveyStorage,</text>
+              <text x="24" y="394" font-size="11" fill="#5E5D59">KaSecretStore, KaTheme</text>
+
+              <!-- L4: strata-app -->
+              <rect x="158" y="14" width="986" height="76" rx="6" fill="#E3DACC" stroke="#141413" stroke-width="1.5"/>
+              <text x="178" y="38" font-size="14" font-weight="700" fill="#141413">strata-app (bin: ka-hgis.exe) — eframe 0.31 / egui 0.31 데스크톱 통합 셸</text>
+              <text x="178" y="58" font-size="11.5" fill="#3D3D3A">MainWindow{Ribbon,Chrome,Session,Downloads,Editing,Align,Cadastral,Topographic,Paleo,Trench,Export,Files,Undo} · KaStartPage · KaBoreholeDialog · KaSubmitDialog</text>
+              <text x="178" y="76" font-size="11" font-family="Consolas, monospace" fill="#9C4A2F">[현행화 핵심] 리본 칩 최소폭 36px · 「시추」 버튼(btnBoreholeFetch) + KaBoreholeDialog(5종 맵 설정) · 300줄 이하 서브모듈 분할</text>
+
+              <!-- L3 Crates -->
+              <rect x="158" y="104" width="236" height="92" rx="6" fill="#FFFFFF" stroke="#30302E" stroke-width="1.2"/>
+              <text x="172" y="126" font-size="13" font-weight="700" fill="#141413">strata-canvas2d</text>
+              <text x="172" y="145" font-size="11" fill="#5E5D59">wgpu 2D 뷰포트 · lyon 벡터 테셀레이터</text>
+              <text x="172" y="162" font-size="11" fill="#5E5D59">KaCaptureMapTool · KaFeatureSelectTool</text>
+              <text x="172" y="179" font-size="11" fill="#5E5D59">KaAlignMapTool · KaAboveLabelsOverlay</text>
+
+              <rect x="408" y="104" width="236" height="92" rx="6" fill="#FFFFFF" stroke="#30302E" stroke-width="1.2"/>
+              <text x="422" y="126" font-size="13" font-weight="700" fill="#141413">strata-terrain3d</text>
+              <text x="422" y="145" font-size="11" fill="#5E5D59">wgpu R32F 쿼드트리 LOD · Nishita Sky</text>
+              <text x="422" y="162" font-size="11" fill="#5E5D59">GTAO · AgX 색보정 · 3D 트렌치 단면</text>
+              <text x="422" y="179" font-size="11" fill="#5E5D59">KaTerrain3dStudio · Terrain3dService</text>
+
+              <rect x="658" y="104" width="236" height="92" rx="6" fill="#FFFFFF" stroke="#30302E" stroke-width="1.2"/>
+              <text x="672" y="126" font-size="13" font-weight="700" fill="#141413">strata-layout</text>
+              <text x="672" y="145" font-size="11" fill="#5E5D59">A3/A4 도판 조판 · 하단 장식 띠 고정</text>
+              <text x="672" y="162" font-size="11" fill="#5E5D59">유적번호 원형 배지 · 벡터 PDF/GeoTIFF</text>
+              <text x="672" y="179" font-size="11" fill="#5E5D59">KaDrawingStudio · LayoutService · TilePrint</text>
+
+              <rect x="908" y="104" width="236" height="92" rx="6" fill="#FFFFFF" stroke="#30302E" stroke-width="1.2"/>
+              <text x="922" y="126" font-size="13" font-weight="700" fill="#141413">strata-check-export</text>
+              <text x="922" y="145" font-size="11" fill="#5E5D59">drawing_checklist.v1.json 12항목 검수</text>
+              <text x="922" y="162" font-size="11" fill="#5E5D59">EPSG:5179 SHP · MANIFEST · README</text>
+              <text x="922" y="179" font-size="11" fill="#5E5D59">8방위 주변유적 엑셀 (NearbyHeritageExport)</text>
+
+              <!-- L2 Crates -->
+              <rect x="158" y="210" width="318" height="102" rx="6" fill="#FAF9F5" stroke="#B5573A" stroke-width="1.5"/>
+              <text x="172" y="232" font-size="13" font-weight="700" fill="#B5573A">strata-paleo (+ 시추 5종 GIS 도면 엔진)</text>
+              <text x="172" y="250" font-size="11" fill="#141413">• GeoInfoBoreholeMaps (5종 IDW 180×180 + 등층후선 0.5m)</text>
+              <text x="172" y="267" font-size="11" fill="#5E5D59">• HgisPaleoEngine (EDT 하천거리, 적분TPI, Imhof 음영, 7분류)</text>
+              <text x="172" y="284" font-size="11" fill="#5E5D59">• 다중 도엽 등고선 병합 정밀 DEM 합성 (dem_synthesizer)</text>
+              <text x="172" y="301" font-size="11" fill="#5E5D59">• A-A' 2D 가상 지층 단면도 렌더러 (section_renderer)</text>
+
+              <rect x="492" y="210" width="318" height="102" rx="6" fill="#FFFFFF" stroke="#30302E" stroke-width="1.2"/>
+              <text x="506" y="232" font-size="13" font-weight="700" fill="#141413">strata-net (비동기 포털·타일·웹뷰 자동화)</text>
+              <text x="506" y="250" font-size="11" fill="#5E5D59">• VWorld WMTS/WMS(3857+KEY, XML 200 감지) · 5km 지적 WFS</text>
+              <text x="506" y="267" font-size="11" fill="#5E5D59">• GeoInfoBoreholeService (searchHole, getSichudanData, 150m 균형)</text>
+              <text x="506" y="284" font-size="11" fill="#5E5D59">• HeritageIntranetFlow (RSA 로그인, 서약서 영수증, 6종 SHP)</text>
+              <text x="506" y="301" font-size="11" fill="#5E5D59">• NgiiTopographic · KigamPaleo · SoilMap · RiverMap · LocationSearch</text>
+
+              <rect x="826" y="210" width="318" height="102" rx="6" fill="#FFFFFF" stroke="#30302E" stroke-width="1.2"/>
+              <text x="840" y="232" font-size="13" font-weight="700" fill="#141413">strata-geo (순수 Rust 공간 연산·좌표변환)</text>
+              <text x="840" y="250" font-size="11" fill="#5E5D59">• proj4rs 한국 측지계 (EPSG:5187/5186 ↔ 5179 ↔ 3857 ↔ 4326)</text>
+              <text x="840" y="267" font-size="11" fill="#5E5D59">• 36분할 LineJoin::Round 버퍼 (500m/1000m) + 유클리드 최단거리</text>
+              <text x="840" y="284" font-size="11" fill="#5E5D59">• 표준 시굴격자(20·15·10m) · spade TIN 등고선 · rstar 스냅 인덱스</text>
+              <text x="840" y="301" font-size="11" fill="#5E5D59">• 폴리곤 분할·병합·구멍뚫기(PolygonErase) · 중심화 헬머트/아핀 정합</text>
+
+              <!-- L1 Crates -->
+              <rect x="158" y="326" width="380" height="88" rx="6" fill="#FFFFFF" stroke="#30302E" stroke-width="1.2"/>
+              <text x="172" y="348" font-size="13" font-weight="700" fill="#141413">strata-storage (무잠금 세대 저장 · GPKG/SHP/DXF/CSV)</text>
+              <text x="172" y="366" font-size="11" fill="#5E5D59">• rusqlite (bundled) OGC GPKG + WKB 코덱 + split_polygon_pieces</text>
+              <text x="172" y="383" font-size="11" fill="#5E5D59">• 음수 FID 메모리 편집 버퍼 · 레이어별 독립 UndoStack · 세대 교체 저장</text>
+              <text x="172" y="400" font-size="11" fill="#5E5D59">• SurveyStorage · SurveySaveAs · SurveyRecovery · CadDrawingReader</text>
+
+              <rect x="554" y="326" width="290" height="88" rx="6" fill="#FFFFFF" stroke="#30302E" stroke-width="1.2"/>
+              <text x="568" y="348" font-size="13" font-weight="700" fill="#141413">strata-secrets (보안·키·계정 호환)</text>
+              <text x="568" y="366" font-size="11" fill="#5E5D59">• Windows DPAPI ("ka-hgis-account-v1" 18B)</text>
+              <text x="568" y="383" font-size="11" fill="#5E5D59">• 포터블 XOR-Base64 · INI &amp; HKCU 레지스트리</text>
+              <text x="568" y="400" font-size="11" fill="#5E5D59">• KaSecretStore · VworldSettings · SecretMask</text>
+
+              <rect x="860" y="326" width="284" height="88" rx="6" fill="#FFFFFF" stroke="#30302E" stroke-width="1.2"/>
+              <text x="874" y="348" font-size="13" font-weight="700" fill="#141413">strata-types (스키마 v3 · CRS · 테마)</text>
+              <text x="874" y="366" font-size="11" fill="#5E5D59">• 7대 도메인 레이어 스키마 · ka_hgis/layer_key</text>
+              <text x="874" y="383" font-size="11" fill="#5E5D59">• KaTheme 토큰 (조용한 도판 + 3대 추가 테마)</text>
+              <text x="874" y="400" font-size="11" fill="#5E5D59">• StrataError / StrataResult 공통 오류 체계</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- 인터랙티브 필터 바 -->
+        <div class="caption-rule">C++ (<code>D:\hgis</code>) 모듈 ↔ Rust (<code>D:\hgis rust</code>) 크레이트 전수 매핑 테이블 (클릭하여 필터링)</div>
+        <div class="filter-bar" role="group" aria-label="크레이트 매핑 필터">
+          <button type="button" class="filter-btn active" data-filter-crate="all">전체 보기 (28개 핵심 모듈군)</button>
+          <button type="button" class="filter-btn" data-filter-crate="delta">★ 최신 C++(d7afcc8) 보강 필수 항목</button>
+          <button type="button" class="filter-btn" data-filter-crate="strata-types">strata-types / secrets</button>
+          <button type="button" class="filter-btn" data-filter-crate="strata-storage">strata-storage / geo</button>
+          <button type="button" class="filter-btn" data-filter-crate="strata-net">strata-net / paleo (시추 5종)</button>
+          <button type="button" class="filter-btn" data-filter-crate="strata-render">canvas2d / terrain3d / layout / export</button>
+          <button type="button" class="filter-btn" data-filter-crate="strata-app">strata-app (UI 본체)</button>
+        </div>
+
+        <div class="table-scroll">
+          <table class="three-line" id="crateMappingTable">
+            <thead>
+              <tr>
+                <th>타겟 Rust 크레이트</th>
+                <th>현행 C++ 원본 모듈 (<code>D:\hgis\src\core</code> &amp; <code>src\app</code>)</th>
+                <th>타겟 Rust 모듈 경로 (<code>D:\hgis rust\crates\*</code>)</th>
+                <th>전환 상태</th>
+                <th>핵심 구현 스펙 및 C++ 완성본(<code>d7afcc8</code>) 정합성 규칙</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-crate-group="strata-types" class="searchable-row">
+                <td><span class="tag-code">strata-types</span></td>
+                <td><code>SurveySchema.cpp</code>, <code>LayerRole.cpp</code>, <code>LayerStyleDefaults.cpp</code>, <code>data/schemas/ka_hgis_layers.yaml</code></td>
+                <td><code>crates/strata-types/src/schema.rs</code><br><code>crates/strata-types/src/crs.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td>7대 도메인 레이어(스키마 v3), <code>ka_hgis/layer_key</code> 식별자, 4대 레이어 구역, 작업 CRS(<code>EPSG:5187/5186</code>) 및 제출 CRS(<code>EPSG:5179</code>) 타입 강제</td>
+              </tr>
+              <tr data-crate-group="strata-types delta" class="searchable-row">
+                <td><span class="tag-code">strata-types</span></td>
+                <td><code>KaTheme.h</code>, <code>KaTheme.cpp</code>, <code>KaThemePaper.cpp</code>, <code>KaThemeColors.cpp</code>, <code>KaThemeFonts.cpp</code></td>
+                <td><code>crates/strata-types/src/theme_tokens.rs</code></td>
+                <td><span class="badge-state badge-delta">d7afcc8 동기화</span></td>
+                <td>「조용한 도판」(<code>#FAF9F5</code>, <code>#141413</code>, <code>#B5573A</code>, <code>#E3DACC</code>) + 3종 테마(하늘 눈밭·번개 노랑·벚꽃 파스텔) + <strong><code>ribbon_chip_width = 36</code> (기존 40에서 10% 축소 반영)</strong></td>
+              </tr>
+              <tr data-crate-group="strata-types" class="searchable-row">
+                <td><span class="tag-code">strata-secrets</span></td>
+                <td><code>KaSecretStore.cpp</code>, <code>VworldSettings.cpp</code>, <code>HeritageIntranetSettings.cpp</code>, <code>TopographicSettings.cpp</code>, <code>AccountStatus.cpp</code></td>
+                <td><code>crates/strata-secrets/src/{dpapi,secret_store,vworld,accounts,mask}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td>Windows DPAPI 엔트로피 <code>b"ka-hgis-account-v1"</code>(18B), 포터블 순환 XOR+Base64, <code>%LOCALAPPDATA%\ka-hgis\*.ini</code> 및 <code>HKCU\Software\ka-hgis</code> 100% 하위 호환, <code>SecretMask</code></td>
+              </tr>
+              <tr data-crate-group="strata-storage" class="searchable-row">
+                <td><span class="tag-code">strata-storage</span></td>
+                <td><code>SurveyStorage.cpp</code>, <code>SurveySaveAs.cpp</code>, <code>SurveyHandles.cpp</code>, <code>SurveyDurability.cpp</code>, <code>SurveyRecovery.cpp</code>, <code>SurveyFileFingerprint.cpp</code></td>
+                <td><code>crates/strata-storage/src/{gpkg,session_save,wkb_codec,project_actions}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td><code>rusqlite</code> 내장 SQLite 기반 무잠금 GPKG 입출력, 세대 복사본(<code>.gen-tmp</code>) 검증 후 원자적 교체, 다른 이름 저장 시 원본 SHA-256 지문 불변 보장</td>
+              </tr>
+              <tr data-crate-group="strata-storage" class="searchable-row">
+                <td><span class="tag-code">strata-storage</span></td>
+                <td><code>PolygonPieces.cpp</code>, <code>EditHistory.cpp</code>, <code>EditBufferSummary.cpp</code>, <code>FeatureRecord.cpp</code>, <code>FeatureNumbering.cpp</code></td>
+                <td><code>crates/strata-storage/src/{polygon_pieces,edit_buffer}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td>단일 <code>POLYGON</code> GPKG 테이블 저장 시 멀티폴리곤 조각 자동 분해(0면적 링 방지), 미저장 피처 음수 FID 부여, 레이어별 독립 Undo/Redo 스택</td>
+              </tr>
+              <tr data-crate-group="strata-storage" class="searchable-row">
+                <td><span class="tag-code">strata-storage</span></td>
+                <td><code>CadDrawingReader.cpp</code>, <code>CadDwgConverter.cpp</code>, <code>CadCrsGuess.cpp</code>, <code>CadDrawingStore.cpp</code>, <code>ControlPointCsv.cpp</code>, <code>CadastralEncoding.cpp</code></td>
+                <td><code>crates/strata-storage/src/{cad_csv_io,shp_io}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td>CP949/UTF-8 자동 감지 Shapefile·DXF·CSV 측량점 리더, CAD 좌표계 자동 추정(<code>5186/5187/5174/로컬</code>) 및 조사 폴더 사본 저장</td>
+              </tr>
+              <tr data-crate-group="strata-storage" class="searchable-row">
+                <td><span class="tag-code">strata-geo</span></td>
+                <td><code>BufferAnalysis.cpp</code>, <code>PolygonErase.cpp</code>, <code>GeometryEditMerge.cpp</code>, <code>GeometryEditVertex.cpp</code>, <code>EditGeometryRepair.cpp</code></td>
+                <td><code>crates/strata-geo/src/{buffer_round,polygon_ops}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td><strong>36분할 <code>LineJoin::Round</code> 500m/1000m 원형 버퍼</strong>(<code>Miter</code> 금지), 유클리드 최단거리 필터링, 폴리곤 분할·병합·구멍뚫기·자체교차 수리</td>
+              </tr>
+              <tr data-crate-group="strata-storage" class="searchable-row">
+                <td><span class="tag-code">strata-geo</span></td>
+                <td><code>TrenchGridGenerator.cpp</code>, <code>TrenchLShape.cpp</code>, <code>TrenchGridSnap.cpp</code>, <code>TrenchTerrain.cpp</code>, <code>TrenchLayerEdit.cpp</code></td>
+                <td><code>crates/strata-geo/src/trench_grid.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td><code>20m · 15m · 10m</code> 선택 표준 길이 고정 배치(평균 길이 축소 금지), 조사면적 10% 자동 산출, DEM 주경사 방향 자동 정렬, L자형 트렌치 결합</td>
+              </tr>
+              <tr data-crate-group="strata-storage" class="searchable-row">
+                <td><span class="tag-code">strata-geo</span></td>
+                <td><code>SnapTraceOps.cpp</code>, <code>SurveyContourTin.cpp</code>, <code>SurveyContourBuilder.cpp</code>, <code>SurveyContourClip.cpp</code>, <code>GeorefService.cpp</code>, <code>GeorefQuality.cpp</code></td>
+                <td><code>crates/strata-geo/src/{snap_index,contour_tin,crs_transform}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td><code>rstar::RTree</code> 정점·선분·교차점 스냅(VWorld 지적 WMS 제외), <code>spade</code> 델로네 삼각망 등고선 추출, 중심화 최소제곱 헬머트/아핀 정합 및 잔차 산출</td>
+              </tr>
+              <tr data-crate-group="strata-net" class="searchable-row">
+                <td><span class="tag-code">strata-net</span></td>
+                <td><code>BasemapOps.cpp</code>, <code>CadastralPortal.cpp</code>, <code>CadastralImport.cpp</code>, <code>LocationSearch.cpp</code>, <code>AdminBoundaryService.cpp</code>, <code>KoreaRegionCatalog.cpp</code></td>
+                <td><code>crates/strata-net/src/{vworld_client,tile_fetcher,address_search}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td>VWorld 위성 WMTS(키 우선, <code>Referer: https://localhost</code>, 메모리 전용 캐시), 지적 WMS(<code>EPSG:3857</code>+<code>KEY</code>, <code>DOMAIN</code> 미전송, HTTP 200 XML 오류 감지), 5km 지적 WFS, 19자리 PNU 검색</td>
+              </tr>
+              <tr data-crate-group="strata-net" class="searchable-row">
+                <td><span class="tag-code">strata-net</span></td>
+                <td><code>HeritageIntranetFlow.cpp</code>, <code>HeritageHttpClient.cpp</code>, <code>HeritageFormParser.cpp</code>, <code>HeritageFetchPlan.cpp</code>, <code>HeritagePledge.cpp</code>, <code>HeritageImport.cpp</code></td>
+                <td><code>crates/strata-net/src/heritage_intranet.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td>국가유산청 인트라넷 RSA 로그인(<code>goLogin()</code>), 프레임 탐색 JS, 서약서 동의 영수증 저장, 6대 레이어 다운로드 및 <code>참조 지도</code> 등록(제출·포터블 제외)</td>
+              </tr>
+              <tr data-crate-group="strata-net" class="searchable-row">
+                <td><span class="tag-code">strata-net</span></td>
+                <td><code>TopographicArchive.cpp</code>, <code>TopographicSheets.cpp</code>, <code>TopographicCatalog.cpp</code>, <code>TopographicSourceCrs.cpp</code>, <code>DemDownloadService.cpp</code></td>
+                <td><code>crates/strata-net/src/{ngii_topographic,topographic_catalog,dem_copernicus}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td>국토지리정보원 1:5,000 수치지형도 자동 수집·도엽 번호 계산·아카이브 해제 및 Copernicus GLO-30 COG DEM 타일 수집</td>
+              </tr>
+              <tr data-crate-group="strata-net delta" class="searchable-row">
+                <td><span class="tag-code">strata-net</span></td>
+                <td><code>GeoInfoBoreholeService.cpp</code>, <code>GeoInfoBoreholeParser.cpp</code>, <code>KigamPaleoService.cpp</code>, <code>SoilMapService.cpp</code>, <code>GeologyMapService.cpp</code>, <code>RiverMapService.cpp</code></td>
+                <td><code>crates/strata-net/src/{geoinfo_borehole,kigam_soil_river}.rs</code></td>
+                <td><span class="badge-state badge-delta">d7afcc8 보강</span></td>
+                <td>국토지반정보 시추공 공간조회(<code>searchHoleByExtent.do</code>) + 주상도 파싱(<code>getSichudanData.do</code> <code>jsonView</code>) + 150m 격자 균형 추출 + <strong><code>MapOptions</code>(반경 2/5/10km 및 5종 맵 토글 프로젝트 직렬화) 추가</strong></td>
+              </tr>
+              <tr data-crate-group="strata-net delta" class="searchable-row">
+                <td><span class="tag-code">strata-paleo</span></td>
+                <td><strong><code>GeoInfoBoreholeMaps.cpp</code> (신규 완성 <code>d7afcc8</code>)</strong></td>
+                <td><strong><code>crates/strata-paleo/src/borehole_maps.rs</code> (신규 분리)</strong></td>
+                <td><span class="badge-state badge-new">신규 필수 이식</span></td>
+                <td><strong>시추자료 전용 5대 GIS 도면 생성 엔진</strong>: ① 시추공 분포·주상도 요약 마커 맵, ② 충적층 두께 등층후선도(180×180 IDW 래스터 + Marching Squares 0.5m 등치선 GPKG), ③ 성토·매립층 두께 분포도, ④ 풍화암·기반암 출현 깊이(GL-m)/해발고도(EL.m) 분포도, ⑤ 시추+KIGAM 결합 평균 지하수위(GL-m) 분포도</td>
+              </tr>
+              <tr data-crate-group="strata-net" class="searchable-row">
+                <td><span class="tag-code">strata-paleo</span></td>
+                <td><code>HgisPaleoBorehole.cpp</code>, <code>HgisPaleoTerrain.cpp</code>, <code>HgisPaleoPipeline.cpp</code>, <code>PaleoDemClassifier.cpp</code>, <code>PaleoAnalysisRunner.cpp</code>, <code>PaleoLayerWriter.cpp</code></td>
+                <td><code>crates/strata-paleo/src/{borehole_strata,terrain_edt_tpi,pipeline,dem_synthesizer,section_renderer}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td>반경 5km/10km 4단계 고지형 분석(1D/2D 선형 EDT 하천거리, 적분영상 TPI, 4방향 Horn/Imhof 음영기복도, 7대 미지형 분류), 다중 도엽 등고선 정밀 DEM 합성, <code>A-A'</code> 2D 지층 단면도</td>
+              </tr>
+              <tr data-crate-group="strata-render" class="searchable-row">
+                <td><span class="tag-code">strata-canvas2d</span></td>
+                <td><code>KaCaptureMapTool.cpp</code>, <code>KaFeatureSelectTool.cpp</code>, <code>KaVertexEditTool.cpp</code>, <code>KaMeasureMapTool.cpp</code>, <code>KaAlignMapTool.cpp</code>, <code>KaTrenchMoveTool.cpp</code>, <code>KaAboveLabelsOverlay.cpp</code>, <code>KaCanvasGridOverlay.cpp</code></td>
+                <td><code>crates/strata-canvas2d/src/{viewport,canvas_painter,cad_interaction,map_tools,vector_tessellator,tile_layer}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td><code>wgpu</code>/<code>egui</code> 2D 지도 뷰포트, <code>lyon</code> 폴리곤/선분 테셀레이션, CAD 스냅·측거·정합·트렌치 이동 도구, 최상단 한글 라벨 오버레이 및 도곽 좌표격자</td>
+              </tr>
+              <tr data-crate-group="strata-render" class="searchable-row">
+                <td><span class="tag-code">strata-terrain3d</span></td>
+                <td><code>Terrain3dService.cpp</code>, <code>Terrain3dLayoutService.cpp</code>, <code>KaTerrain3dStudio.cpp</code>, <code>KaTerrain3dView.cpp</code>, <code>KaTerrain3dLayoutStudio.cpp</code></td>
+                <td><code>crates/strata-terrain3d/src/{quadtree_lod,atmosphere_agx,trench_profile3d,viewport3d_renderer}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td>내장 <code>wgpu</code> 3D 입체지형 렌더러(R32F 높이맵 쿼드트리 LOD, Nishita 대기 산란, GTAO, AgX 색보정, 3D 시굴 트렌치 단면 및 입체 도면 조판)</td>
+              </tr>
+              <tr data-crate-group="strata-render" class="searchable-row">
+                <td><span class="tag-code">strata-layout</span></td>
+                <td><code>LayoutService.cpp</code>, <code>LayoutBadgePlacer.cpp</code>, <code>TilePrint.cpp</code>, <code>MapGeoTiffExport.cpp</code>, <code>PdfExportSettings.cpp</code>, <code>StandardScales.cpp</code>, <code>KaDrawingStudio*.cpp</code></td>
+                <td><code>crates/strata-layout/src/{sheet_composer,badge_placer,pdf_geotiff,tile_print}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td>A3/A4 종·횡 도면 스튜디오(1px 무그림자 도판, 하단 장식 띠 고정, 용지 밖 범례 허용 <code>legend_kept_on_page</code>, 지시선 없는 유적 번호 배지), 벡터 PDF/GeoTIFF 출력, 프린터 용지 일치 검증 칼선 분할 인쇄</td>
+              </tr>
+              <tr data-crate-group="strata-render" class="searchable-row">
+                <td><span class="tag-code">strata-check-export</span></td>
+                <td><code>ChecklistEngine.cpp</code>, <code>ProjectStateBuilder.cpp</code>, <code>ChecklistState{Geometry,Fields,Sheets}.cpp</code>, <code>ExportService.cpp</code>, <code>SubmitShp.cpp</code>, <code>SubmitReadme.cpp</code>, <code>NearbyHeritageExport.cpp</code></td>
+                <td><code>crates/strata-check-export/src/{checklist_engine,submit_package,nearby_xlsx}.rs</code></td>
+                <td><span class="badge-state badge-done">구현 완료</span></td>
+                <td><code>drawing_checklist.v1.json</code> 12항목 자동 검수, <code>EPSG:5179</code> SHP + <code>조사도면.pdf</code> + <code>MANIFEST.sha256</code> + 비차단 <code>README_submit.txt</code> 생성, 8방위 주변유적 현황 <code>.xlsx</code> 출력</td>
+              </tr>
+              <tr data-crate-group="strata-app delta" class="searchable-row">
+                <td><span class="tag-code">strata-app</span></td>
+                <td><code>MainWindowRibbon.cpp</code>, <code>KaBeginnerRibbon.cpp</code>, <code>KaAppBar.cpp</code>, <code>KaRegionLocator.cpp</code>, <code>KaIconsMockupEngine.cpp</code>, <code>KaIconsOutline*.cpp</code>, <strong><code>KaBoreholeDialog.cpp</code> (<code>d7afcc8</code>)</strong></td>
+                <td><code>crates/strata-app/src/{ribbon,gui_ribbon_bar,ribbon_icons,ribbon_icon_svg,dialogs_borehole}.rs</code></td>
+                <td><span class="badge-state badge-delta">d7afcc8 보강 + 분할</span></td>
+                <td>1열 7그룹 리본(칩 최소폭 <code>36px</code>), <strong>「자료 받기」 5번째 단추 「시추」(<code>btnBoreholeFetch</code>) 및 비모달 설정창 <code>KaBoreholeDialog</code> 탑재</strong>, <code>gui_ribbon_bar.rs</code>(2,845줄) 300줄 이하 모듈 분할</td>
+              </tr>
+              <tr data-crate-group="strata-app delta" class="searchable-row">
+                <td><span class="tag-code">strata-app</span></td>
+                <td><code>MainWindow.cpp</code>, <code>MainWindow{Chrome,Session,Files,ContextMenus,Editing,Erase,Align,Cadastral,Downloads,Topographic,Paleo,Trench,SurveyContour,Export,FeatureCard,Overlay,Undo}.cpp</code></td>
+                <td><code>crates/strata-app/src/{main,app_state,gui_shell,gui_tab_home,gui_tab_map,gui_tab_drawing,gui_tab_paleo,gui_tab_terrain3d,gui_layer_panel,right_inspector,dialogs_*}.rs</code></td>
+                <td><span class="badge-state badge-delta">300줄 분할 대상</span></td>
+                <td><code>KaStartPage</code>(홈), 4구역 레이어 트리 + 파일함(5단추+<code>↑ 상위</code>), 우측 <code>KaFeatureCard</code>(유구 조사카드 + <strong>시추 주상도 층서 카드</strong>), <code>KaSubmitDialog</code>, <code>--smoke-quit</code> / <code>--verify-all</code> 하네스</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+
+      <!-- ================================================================= -->
+      <!-- SECTION 4: 완성본(d7afcc8) 기준 UI/UX 인터랙티브 목업 (6대 화면)     -->
+      <!-- ================================================================= -->
+      <section class="doc-section" id="sec-4">
+        <div class="sec-header">
+          <div>
+            <div class="sec-kicker">CHAPTER 04 · INTERACTIVE UI/UX MOCKUPS (UPDATED TO D:\HGIS d7afcc8)</div>
+            <h2 class="sec-title">C++ 완성본(<code>D:\hgis</code>) 기준 UI/UX 인터랙티브 목업 및 화면 설계</h2>
+          </div>
+          <p class="sec-subtitle">구버전 4개 HTML의 39개 서브페이지를 단일 인터랙티브 뷰어로 통합하고 <code>d7afcc8</code> 완성본 상태로 현행화</p>
+        </div>
+
+        <div class="mockup-tab-bar" role="tablist" aria-label="화면별 인터랙티브 목업 전환">
+          <button type="button" class="mockup-tab-btn active" data-mockup-tab="mock-map">① 지도 작업 (1열 리본 · 시추 · 4구역 레이어 · 주상도 카드)</button>
+          <button type="button" class="mockup-tab-btn" data-mockup-tab="mock-borehole">② 시추 전용 설정창 (KaBoreholeDialog) &amp; 5종 GIS 도면</button>
+          <button type="button" class="mockup-tab-btn" data-mockup-tab="mock-home">③ 홈 화면 (3행 표제란 · 삼선표 · 5칸 연결) &amp; 시작 5초</button>
+          <button type="button" class="mockup-tab-btn" data-mockup-tab="mock-drawing">④ 도면 스튜디오 (1px 도판 · 하단 장식 띠 · 용지 설정)</button>
+          <button type="button" class="mockup-tab-btn" data-mockup-tab="mock-paleo3d">⑤ 고지형 분석 (A-A' 지층 단면도) &amp; 3D 입체지형</button>
+          <button type="button" class="mockup-tab-btn" data-mockup-tab="mock-dialogs">⑥ 핵심 대화상자 (검수·제출 96px 대장 · 시굴격자 20·15·10m)</button>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- MOCKUP TAB 1: 지도 작업 화면 (완성본 1열 리본 + 시추 + 주상도)     -->
+        <!-- =============================================================== -->
+        <div class="mockup-panel active" id="mock-map">
+          <div class="ka-window">
+            <!-- 창 제목줄 -->
+            <div class="ka-titlebar">
+              <div><strong>경주시_성동동_시굴조사 * — Strata</strong> <span style="color:var(--muted); margin-inline-start:8px;">(미저장 변경 시 제목에 <code>*</code> 표시 · 자동 저장 없음)</span></div>
+              <div style="display:flex; gap:10px; align-items:center;">
+                <span class="status-mark"><span class="dot-clay"></span> 저장 안 됨</span>
+                <span class="tag-code">창 1600×900 · 칩 최소폭 36px (-10%)</span>
+              </div>
+            </div>
+
+            <!-- 1열 리본 (7그룹 + 우측 지역/주소검색) -->
+            <div class="ka-ribbon-row">
+              <div class="ka-ribbon-groups">
+                <!-- 그룹 1: 조사 -->
+                <div class="ka-rgroup">
+                  <div class="ka-rgroup-title">조사</div>
+                  <div class="ka-rgroup-chips">
+                    <div class="ka-rchip" title="새 조사 (Ctrl+N)"><div class="ka-rtile">＋</div><span class="ka-rlabel">새 조사</span></div>
+                    <div class="ka-rchip" title="열기 (Ctrl+O)"><div class="ka-rtile">📂</div><span class="ka-rlabel">열기</span></div>
+                    <div class="ka-rchip primary-unsaved" title="현재 조사를 저장합니다 (Ctrl+S) — 미저장 흙색 타일"><div class="ka-rtile">💾</div><span class="ka-rlabel"><strong>저장</strong></span></div>
+                    <div class="ka-rchip" title="다른 이름으로 저장 (Ctrl+Shift+S)"><div class="ka-rtile">📑</div><span class="ka-rlabel">다른 이름</span></div>
+                  </div>
+                </div>
+                <!-- 그룹 2: 기록 -->
+                <div class="ka-rgroup">
+                  <div class="ka-rgroup-title">기록</div>
+                  <div class="ka-rgroup-chips">
+                    <div class="ka-rchip" title="선택 (A / Ctrl+1)"><div class="ka-rtile">↖</div><span class="ka-rlabel">선택</span></div>
+                    <div class="ka-rchip" title="거리·면적 측거"><div class="ka-rtile">📏</div><span class="ka-rlabel">측거</span></div>
+                    <div class="ka-rchip hand-active" title="그리기 (Ctrl+D) — 손에 든 도구 먹색(#30302E)"><div class="ka-rtile">✎</div><span class="ka-rlabel"><strong>그리기</strong></span></div>
+                    <div class="ka-rchip" title="시굴격자 (20·15·10m 표준 트렌치)"><div class="ka-rtile">⊞</div><span class="ka-rlabel">시굴격자</span></div>
+                    <div class="ka-rchip" title="주변유적 500m·1000m 원형 버퍼 및 엑셀 내보내기"><div class="ka-rtile">◎</div><span class="ka-rlabel">버퍼</span></div>
+                  </div>
+                </div>
+                <!-- 그룹 3: 자료 받기 (5버튼: DEM · 지적 · 수치지형 · 유산 · 시추!) -->
+                <div class="ka-rgroup" style="background: rgba(181, 87, 58, 0.05);">
+                  <div class="ka-rgroup-title" style="color:var(--action);">자료 받기 (5종 완성)</div>
+                  <div class="ka-rgroup-chips">
+                    <div class="ka-rchip layer-on" title="국토지리원 정밀 DEM 합성 / Copernicus 30m"><div class="ka-rtile">⛰</div><span class="ka-rlabel">DEM</span></div>
+                    <div class="ka-rchip layer-on" title="조사구역 주변 5km 지적도 다운로드"><div class="ka-rtile">▦</div><span class="ka-rlabel">지적</span></div>
+                    <div class="ka-rchip" title="국토지리정보원 1:5,000 수치지형도"><div class="ka-rtile">📥</div><span class="ka-rlabel">수치지형</span></div>
+                    <div class="ka-rchip layer-on" title="국가유산청 인트라넷 공간정보 6종 다운로드"><div class="ka-rtile">🏛</div><span class="ka-rlabel">유산</span></div>
+                    <div class="ka-rchip borehole-highlight" title="[신규 d7afcc8] 시추자료를 별도로 받아 5가지 지반·시추 GIS 도면을 만듭니다 (btnBoreholeFetch)"><div class="ka-rtile">🕳</div><span class="ka-rlabel"><strong style="color:var(--action);">시추</strong></span></div>
+                  </div>
+                </div>
+                <!-- 그룹 4: 배경 지도 -->
+                <div class="ka-rgroup">
+                  <div class="ka-rgroup-title">배경 지도</div>
+                  <div class="ka-rgroup-chips">
+                    <div class="ka-rchip layer-on" title="등고·음영 지형도"><div class="ka-rtile">〰</div><span class="ka-rlabel">지형</span></div>
+                    <div class="ka-rchip" title="측량 DXF·엑셀 등고선 생성"><div class="ka-rtile">◉</div><span class="ka-rlabel">등고선</span></div>
+                    <div class="ka-rchip" title="흙토람 토양도"><div class="ka-rtile">▤</div><span class="ka-rlabel">토양</span></div>
+                    <div class="ka-rchip layer-on" title="고지형 5km/10km 4단계 분석"><div class="ka-rtile">🧭</div><span class="ka-rlabel">고지형</span></div>
+                    <div class="ka-rchip" title="KIGAM 1:5만 지질도"><div class="ka-rtile">±</div><span class="ka-rlabel">지질</span></div>
+                    <div class="ka-rchip" title="국가하천·지방하천 수계망"><div class="ka-rtile">≈</div><span class="ka-rlabel">수계</span></div>
+                    <div class="ka-rchip" title="대동여지도 · 1919 조선지형도 1:5만"><div class="ka-rtile">🗺</div><span class="ka-rlabel">옛 지도</span></div>
+                  </div>
+                </div>
+                <!-- 그룹 5: 정합 -->
+                <div class="ka-rgroup">
+                  <div class="ka-rgroup-title">정합</div>
+                  <div class="ka-rgroup-chips">
+                    <div class="ka-rchip" title="좌표없는 사진·CAD 2점/GCP 도면 정합"><div class="ka-rtile">⌖</div><span class="ka-rlabel">정합</span></div>
+                  </div>
+                </div>
+                <!-- 그룹 6: 내보내기 -->
+                <div class="ka-rgroup">
+                  <div class="ka-rgroup-title">내보내기</div>
+                  <div class="ka-rgroup-chips">
+                    <div class="ka-rchip" title="도면 조판 스튜디오 (KaDrawingStudio)"><div class="ka-rtile">📐</div><span class="ka-rlabel">도면</span></div>
+                    <div class="ka-rchip" title="A3/A4 칼선 분할 인쇄 (KaPrintDialog)"><div class="ka-rtile">🖨</div><span class="ka-rlabel">인쇄</span></div>
+                    <div class="ka-rchip" title="GeoTIFF 내보내기"><div class="ka-rtile">🖼</div><span class="ka-rlabel">GeoTIFF</span></div>
+                    <div class="ka-rchip" title="12항목 자동 검수 및 EPSG:5179 제출 꾸러미 (KaSubmitDialog)"><div class="ka-rtile">📦</div><span class="ka-rlabel">검수·제출</span></div>
+                  </div>
+                </div>
+                <!-- 그룹 7: 기타 -->
+                <div class="ka-rgroup" style="border-inline-end:none;">
+                  <div class="ka-rgroup-title">기타</div>
+                  <div class="ka-rgroup-chips">
+                    <div class="ka-rchip" title="API 키 · 계정 설정 · 기준점 CSV · 도움말"><div class="ka-rtile">⋯</div><span class="ka-rlabel">더보기</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 우측 KaAppBar: 지역 선택 + 주소·지번 검색 -->
+              <div style="display:flex; align-items:center; gap:6px; padding-inline-start:8px;">
+                <button type="button" class="ka-subbtn" title="17개 시도 한반도 타일 빠른 이동">📍 경북 ▾</button>
+                <div style="display:flex; align-items:center; border:1px solid var(--edge); border-radius:6px; background:var(--surface); padding:3px 8px; font-size:12px;">
+                  <span style="color:var(--muted); margin-inline-end:6px;">🔍</span>
+                  <span>경주시 인왕동 76</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2열 조건부 보조 툴바 (그리기 › / 버퍼 › / 맞추기 ›) -->
+            <div class="ka-subtoolbar">
+              <strong style="color:var(--ink);">그리기 ›</strong>
+              <span class="ka-subbtn">쉽게그리기</span>
+              <span class="ka-subbtn">조사구역</span>
+              <span class="ka-subbtn active">유구 (면)</span>
+              <span class="ka-subbtn">유구 (선)</span>
+              <span class="ka-subbtn">단면선</span>
+              <span class="ka-subbtn">기준점</span>
+              <span class="ka-subbtn">유물 (점)</span>
+              <span style="color:var(--line);">|</span>
+              <span class="ka-subbtn" style="background:var(--oat); font-weight:700;" title="M2: 자석 ▾ 드롭다운(정점+선분 · 정점만 · 끄기, 10px)">🧲 자석: 정점+선분 (10px) ▾</span>
+              <span style="color:var(--line);">|</span>
+              <span class="ka-subbtn" title="M3: 버퍼 보조줄에 주변유적 엑셀 버튼 배치">📊 주변유적 엑셀(.xlsx)</span>
+              <span style="margin-inline-start:auto; color:var(--muted); font-size:11.5px;">[Shift]: 직교/45° 스냅 · [우클릭]: 폐합 완료 · [Backspace]: 마지막 정점 취소</span>
+            </div>
+
+            <!-- 탭 바 (홈 / 지도 / 고지형분석 / 도면 / 입체지형 + 우측 조사 배지 & 테마 ▾) -->
+            <div class="ka-tabstrip">
+              <div class="ka-tabs-left">
+                <span class="ka-vtab">⌂ 홈</span>
+                <span class="ka-vtab active">🗺 지도</span>
+                <span class="ka-vtab">🧭 고지형분석</span>
+                <span class="ka-vtab">📐 도면</span>
+                <span class="ka-vtab">⛰ 입체지형(3D)</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px; font-size:12px;">
+                <span class="status-mark"><span class="dot-clay"></span> 경주시_성동동_시굴조사 · 저장 안 됨</span>
+                <span class="ka-subbtn" style="padding:2px 8px;">테마 ▾</span>
+              </div>
+            </div>
+
+            <!-- 3단 본문: 좌측 레이어(4구역)+파일함 / 중앙 캔버스 / 우측 속성·주상도 카드 -->
+            <div class="ka-map-body">
+              <!-- 좌측 패널: 레이어 4구역 + 파일함 -->
+              <div class="ka-left-dock">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border-block-end:1px solid var(--line);">
+                  <div style="display:flex; gap:10px;">
+                    <strong style="border-block-end:2px solid var(--ink); padding-block-end:2px;">레이어</strong>
+                    <span style="color:var(--muted);">파일함 (5단추+↑상위)</span>
+                  </div>
+                  <span style="font-size:11px; color:var(--muted); cursor:pointer;">전체 끄기</span>
+                </div>
+                <div style="padding:6px 10px; border-block-end:1px solid var(--line);">
+                  <div style="border:1px solid var(--edge); border-radius:4px; background:var(--surface); padding:3px 8px; color:var(--muted); font-size:11.5px;">🔍 레이어 찾기</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:4px 10px; font-size:11px; color:var(--muted); border-block-end:1px solid var(--line);">
+                  <span>도면 · 레이어 (10px 밀집 행)</span>
+                  <span>글자</span>
+                </div>
+
+                <!-- 4구역 트리 -->
+                <div style="padding:6px 10px; flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; font-size:11.5px;">
+                  <div style="font-weight:700; color:var(--ink2); background:var(--wash); padding:2px 6px;">▾ 조사 데이터 (7대 도메인)</div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☑ <span style="color:#B5573A;">■</span> 조사구역 <span class="mono" style="color:var(--muted);">1</span></span>
+                    <span>☑ 면적</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px; background:var(--oat); font-weight:700;">
+                    <span>☑ <span style="color:#8C5A32;">■</span> 유구 (면) <span class="mono" style="color:var(--muted);">14</span></span>
+                    <span>☑ 이름</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☑ <span style="color:#1A68B0;">▭</span> 시굴격자 (20m×2m) <span class="mono" style="color:var(--muted);">18</span></span>
+                    <span>☑ 번호</span>
+                  </div>
+
+                  <div style="font-weight:700; color:var(--ink2); background:var(--wash); padding:2px 6px; margin-block-start:4px;">▾ 지적도 (트리 루트 · 스냅 분리)</div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☑ 연속지적 5km (WFS 스냅 가능)</span>
+                    <span>☑ 지번</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px; color:var(--muted);">
+                    <span>☐ 지적 본번·부번 (WMS · 스냅 제외)</span>
+                    <span>—</span>
+                  </div>
+
+                  <div style="font-weight:700; color:var(--action); background:var(--wash); padding:2px 6px; margin-block-start:4px;">▾ 주변·참조 (시추 5종 · 고지형 · 유산)</div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px; font-weight:600;">
+                    <span>☑ <span style="color:#0F766E;">●</span> 국토지반정보 시추공(38공)</span>
+                    <span>☑ 요약</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☑ <span style="color:#92400E;">〰</span> [시추·지반] 충적층 등층후선(m)</span>
+                    <span>☑ 0.5m</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☑ <span style="color:#D97706;">▨</span> [시추·지반] 자연 퇴적층 두께(m)</span>
+                    <span>—</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☐ <span style="color:#EA580C;">▨</span> [시추·지반] 성토·매립층 두께(m)</span>
+                    <span>—</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☐ <span style="color:#0D9488;">▨</span> [시추·지반] 기반암 출현 깊이(GL-m)</span>
+                    <span>—</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☐ <span style="color:#1D4ED8;">▨</span> [시추·지반] 평균 지하수위(GL-m)</span>
+                    <span>—</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☑ 주변유적 500m·1000m (36분할 Round)</span>
+                    <span>☑ 거리</span>
+                  </div>
+
+                  <div style="font-weight:700; color:var(--ink2); background:var(--wash); padding:2px 6px; margin-block-start:4px;">▾ 배경 지도</div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☑ 정밀 DEM 다방향 음영(Imhof)</span>
+                    <span>—</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding-inline:6px;">
+                    <span>☐ VWorld 영상지도 (WMTS)</span>
+                    <span>—</span>
+                  </div>
+                </div>
+
+                <!-- 좌측 하단 표시 설정 (KaLayerOpacityRail) -->
+                <div style="padding:8px 10px; border-block-start:1px solid var(--line); background:var(--wash); font-size:11.5px;">
+                  <div style="display:flex; justify-content:space-between;">
+                    <strong>▾ 표시 설정 · 자연 퇴적층 두께(m)</strong>
+                    <span class="mono">72%</span>
+                  </div>
+                  <div style="margin-block-start:4px; color:var(--muted);">투명도 ━━━━━━━●━━ 72% · 밝기 조절</div>
+                </div>
+              </div>
+
+              <!-- 중앙 지도 캔버스 (시추공 주상도 라벨 + 등층후선 + 조사구역 + 시굴격자 + 73×36 되돌리기 덮개) -->
+              <div class="ka-canvas-area">
+                <!-- M1: 좌상단 통합 되돌리기 덮개 (73×36, 1px 구분선) -->
+                <div style="position:absolute; inset-block-start:12px; inset-inline-start:12px; inline-size:73px; block-size:36px; background:var(--surface); border:1px solid var(--edge); border-radius:8px; display:grid; grid-template-columns:1fr 1px 1fr; align-items:center; text-align:center; z-index:10;" title="M1: 통합 되돌리기·다시실행 덮개 (73×36px)">
+                  <span style="cursor:pointer; font-size:14px;" title="되돌리기 (Ctrl+Z)">↶</span>
+                  <span style="block-size:20px; background:var(--line);"></span>
+                  <span style="cursor:pointer; font-size:14px; color:var(--muted);" title="다시 실행 (Ctrl+Y)">↷</span>
+                </div>
+
+                <!-- 우상단 줌 컨트롤 -->
+                <div style="position:absolute; inset-block-start:12px; inset-inline-end:12px; background:var(--surface); border:1px solid var(--edge); border-radius:8px; display:flex; flex-direction:column; z-index:10;">
+                  <span style="padding:6px 10px; border-block-end:1px solid var(--line); cursor:pointer; font-weight:700;">＋</span>
+                  <span style="padding:6px 10px; border-block-end:1px solid var(--line); cursor:pointer; font-weight:700;">－</span>
+                  <span style="padding:6px 10px; cursor:pointer; font-size:11px;" title="전체 범위 맞춤">⛶</span>
+                </div>
+
+                <!-- 지도 SVG 시각화 -->
+                <svg viewBox="0 0 720 480" style="inline-size:100%; block-size:100%; display:block;" role="img" aria-label="조사구역, 시굴격자, 충적층 등층후선도 및 시추공 주상도 요약 라벨이 표시된 지도 캔버스">
+                  <!-- 배경 좌표 격자 -->
+                  <g stroke="#E2DFD5" stroke-width="0.7">
+                    <line x1="0" y1="100" x2="720" y2="100"/><line x1="0" y1="220" x2="720" y2="220"/><line x1="0" y1="340" x2="720" y2="340"/>
+                    <line x1="140" y1="0" x2="140" y2="480"/><line x1="340" y1="0" x2="340" y2="480"/><line x1="540" y1="0" x2="540" y2="480"/>
+                  </g>
+                  <!-- 충적층 두께 IDW 등층후선 컬러 워시 (북쪽 얕음 #FEF3C7 → 남쪽 저지대 두꺼움 #F59E0B / #D97706) -->
+                  <path d="M 40,40 L 680,40 L 680,210 Q 360,240 40,190 Z" fill="#FEF3C7" fill-opacity="0.45"/>
+                  <path d="M 40,190 Q 360,240 680,210 L 680,340 Q 360,370 40,320 Z" fill="#FDE047" fill-opacity="0.38"/>
+                  <path d="M 40,320 Q 360,370 680,340 L 680,455 L 40,455 Z" fill="#F59E0B" fill-opacity="0.32"/>
+
+                  <!-- 등층후선 (Isopach Contours 1.5m, 3.0m, 5.0m) -->
+                  <path d="M 40,190 Q 360,240 680,210" fill="none" stroke="#92400E" stroke-width="1.3" stroke-dasharray="6,3"/>
+                  <rect x="545" y="205" width="76" height="16" rx="3" fill="#FFFFFF" fill-opacity="0.85"/>
+                  <text x="550" y="217" font-size="10.5" font-weight="700" fill="#78350F">등층후선 1.5m</text>
+
+                  <path d="M 40,320 Q 360,370 680,340" fill="none" stroke="#92400E" stroke-width="1.6"/>
+                  <rect x="545" y="334" width="76" height="16" rx="3" fill="#FFFFFF" fill-opacity="0.85"/>
+                  <text x="550" y="346" font-size="10.5" font-weight="700" fill="#78350F">등층후선 4.5m</text>
+
+                  <!-- 500m 36분할 Round 버퍼 링 -->
+                  <circle cx="350" cy="250" r="185" fill="none" stroke="#5E5D59" stroke-width="1.2" stroke-dasharray="4,4"/>
+                  <text x="305" y="78" font-size="10.5" fill="#5E5D59">반경 500m (36분할 Round 버퍼)</text>
+
+                  <!-- 조사구역 폴리곤 (흙색 #B5573A 외곽선) -->
+                  <polygon points="240,150 450,140 470,350 255,365" fill="#B5573A" fill-opacity="0.10" stroke="#B5573A" stroke-width="2.4"/>
+                  <text x="315" y="168" font-size="11.5" font-weight="700" fill="#9C4A2F">조사구역 (18,420 ㎡)</text>
+
+                  <!-- 시굴격자 트렌치 (20m×2m 표준 길이 고정) -->
+                  <g fill="#E0ECF8" stroke="#1A68B0" stroke-width="1.2">
+                    <rect x="275" y="190" width="54" height="10"/><text x="282" y="198" font-size="8.5" fill="#105088" stroke="none">T1 (20m)</text>
+                    <rect x="360" y="190" width="54" height="10"/><text x="367" y="198" font-size="8.5" fill="#105088" stroke="none">T2 (20m)</text>
+                    <rect x="275" y="245" width="54" height="10"/><text x="282" y="253" font-size="8.5" fill="#105088" stroke="none">T3 (20m)</text>
+                    <rect x="360" y="245" width="54" height="10"/><text x="367" y="253" font-size="8.5" fill="#105088" stroke="none">T4 (20m)</text>
+                  </g>
+
+                  <!-- 선택된 유구 (면) — 노란 반투명 하이라이트 -->
+                  <polygon points="310,285 385,280 392,325 305,330" fill="#FFEB3B" fill-opacity="0.35" stroke="#141413" stroke-width="2"/>
+                  <text x="320" y="308" font-size="11" font-weight="700" fill="#141413">1호 주거지 (청동기)</text>
+
+                  <!-- 시추공 마커 1 (북쪽 얕은 퇴적 구간) -->
+                  <circle cx="195" cy="135" r="6" fill="#0F766E" stroke="#FFFFFF" stroke-width="2"/>
+                  <rect x="82" y="96" width="235" height="30" rx="4" fill="#FFFFFF" fill-opacity="0.92" stroke="#0F766E" stroke-width="1"/>
+                  <text x="90" y="110" font-size="10" font-weight="700" fill="#141413">[BH-01] 충적층 0.9m / 기반암 GL-1.8m</text>
+                  <text x="90" y="122" font-size="9.5" fill="#5E5D59">(조립질 사질토 우세 · 천부 기반암)</text>
+
+                  <!-- 시추공 마커 2 (남쪽 두꺼운 문화층 유망 구간 — 클릭 선택됨) -->
+                  <circle cx="430" cy="368" r="7.5" fill="#B5573A" stroke="#FFFFFF" stroke-width="2.2"/>
+                  <rect x="444" y="350" width="252" height="34" rx="4" fill="#FAF9F5" stroke="#141413" stroke-width="1.5"/>
+                  <text x="452" y="365" font-size="10.5" font-weight="700" fill="#141413">[BH-07] 충적층 4.2m / 기반암 GL-5.4m</text>
+                  <text x="452" y="378" font-size="9.5" fill="#9C4A2F">(세립질 점토 우세 · 지하수 GL-2.1m)</text>
+                </svg>
+
+                <!-- 좌하단 방위표 & 축척자 -->
+                <div style="position:absolute; inset-block-end:12px; inset-inline-start:12px; background:var(--surface); border:1px solid var(--edge); border-radius:6px; padding:4px 10px; font-size:11px; display:flex; align-items:center; gap:10px;">
+                  <span><strong>▲ 도북</strong></span>
+                  <span class="mono">0 ━━ 50 ━━ 100 m</span>
+                </div>
+
+                <!-- 우하단 좌표격자 토글 -->
+                <div style="position:absolute; inset-block-end:12px; inset-inline-end:12px; background:var(--surface); border:1px solid var(--edge); border-radius:6px; padding:4px 10px; font-size:11px;">
+                  ☑ 좌표격자
+                </div>
+              </div>
+
+              <!-- 우측 패널: KaFeatureCard (유구 조사카드 & 시추 주상도 속성 카드) + 하단 배경 지도 고정 -->
+              <div class="ka-right-dock">
+                <div style="padding:10px 12px; border-block-end:1px solid var(--line); display:flex; justify-content:space-between; align-items:center;">
+                  <strong class="serif" style="font-size:15px;">시추공 BH-07 · 주상도 카드</strong>
+                  <span class="tag-code">클릭 즉시 조회</span>
+                </div>
+                <div style="display:flex; border-block-end:1px solid var(--line); font-size:12px;">
+                  <div style="flex:1; text-align:center; padding:6px; font-weight:700; border-block-end:2px solid var(--ink);">속성 · 지층 구성</div>
+                  <div style="flex:1; text-align:center; padding:6px; color:var(--muted);">스타일 · 유구 카드</div>
+                </div>
+
+                <div style="padding:10px 12px; flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+                  <div style="font-size:11.5px; color:var(--muted);">위치: 경주시 성동동 · 표고 <strong class="mono" style="color:var(--ink);">EL. 38.4m</strong> · 굴착심도 <strong class="mono" style="color:var(--ink);">12.0m</strong></div>
+
+                  <!-- 핵심 수치 요약 3칸 -->
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; text-align:center; background:var(--wash); padding:8px; border:1px solid var(--line);">
+                    <div><div style="font-size:10px; color:var(--muted);">성토·매립층</div><div class="mono" style="font-size:14px; font-weight:700;">1.2 m</div></div>
+                    <div><div style="font-size:10px; color:var(--muted);">자연 충적층</div><div class="mono" style="font-size:14px; font-weight:700; color:var(--action);">4.2 m</div></div>
+                    <div><div style="font-size:10px; color:var(--muted);">기반암 출현</div><div class="mono" style="font-size:14px; font-weight:700;">GL-5.4m</div></div>
+                  </div>
+
+                  <!-- 주상도 시각 바 (0~1.2m 매립토 → 1.2~5.4m 실트질점토 → 5.4m~ 풍화암) -->
+                  <div style="font-size:11.5px; font-weight:700; margin-block-start:4px;">전체 지층 구성 (클릭 시 주상도 상세)</div>
+                  <div style="border:1px solid var(--ink); font-size:11.5px;">
+                    <div style="padding:6px 8px; background:#E2E8F0; border-block-end:1px solid var(--line); display:flex; justify-content:space-between;">
+                      <span><strong>0.0 ~ 1.2m</strong> 매립토 (성토·교란층)</span>
+                      <span class="mono">SM · 1.2m</span>
+                    </div>
+                    <div style="padding:10px 8px; background:#FDE68A; border-block-end:1px solid var(--line); display:flex; justify-content:space-between;">
+                      <span><strong>1.2 ~ 5.4m</strong> 실트질점토 (문화층 유망)</span>
+                      <span class="mono">CL · 4.2m</span>
+                    </div>
+                    <div style="padding:6px 8px; background:#BAE6FD; border-block-end:1px solid var(--line); display:flex; justify-content:space-between;">
+                      <span>💧 <strong>GL-2.1m</strong> 지하수위 출현 (양수 대비)</span>
+                      <span class="mono">EL+36.3m</span>
+                    </div>
+                    <div style="padding:8px; background:#D6D3D1; display:flex; justify-content:space-between;">
+                      <span><strong>5.4 ~ 12.0m</strong> 풍화암·연암 (생토·기반암)</span>
+                      <span class="mono">WR · 6.6m</span>
+                    </div>
+                  </div>
+
+                  <div style="padding:8px; background:var(--wash); border:1px solid var(--line); font-size:11.5px; color:var(--ink2);">
+                    <strong>고지형·굴착 판독 힌트:</strong> 표토·매립층 1.2m 중장비 제거 후 1.2~5.4m(두께 4.2m) 세립질 충적층 내 문화층 부존 가능. GL-2.1m 지하수 출현으로 트렌치 굴착 시 배수로 준비 권장.
+                  </div>
+                </div>
+
+                <!-- 우측 하단 고정: 배경 지도 빠른 전환 -->
+                <div style="padding:8px 12px; border-block-start:1px solid var(--line); background:var(--wash);">
+                  <div style="font-size:11px; color:var(--muted); margin-block-end:4px;">배경 지도</div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px;">
+                    <button type="button" class="ka-subbtn">위성</button>
+                    <button type="button" class="ka-subbtn active">지형</button>
+                    <button type="button" class="ka-subbtn">옛 지도 ▾</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 하단 상태줄 (32px) -->
+            <div class="ka-statusbar">
+              <div><strong>그리기 · 유구(면)</strong> &nbsp;|&nbsp; 🧲 자석 켜짐(정점+선분) &nbsp;|&nbsp; 시추공 38공 · 충적층 등층후선 표시 중</div>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <span class="mono">X 218,791.506 &nbsp; Y 361,214.382</span>
+                <span>축척 <strong class="mono">1:2,500 ▾</strong></span>
+                <span>작업 <strong>5187 - 동부원점 ▾</strong> → 제출 <strong>5179</strong></span>
+                <span>지도갱신 켜짐</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- MOCKUP TAB 2: 시추자료 전용 설정창 (KaBoreholeDialog) & 5종 도면 -->
+        <!-- =============================================================== -->
+        <div class="mockup-panel" id="mock-borehole">
+          <div class="grid-2">
+            <!-- 좌측: KaBoreholeDialog 실제 UI 목업 -->
+            <div class="ka-window" style="border-width:1.5px;">
+              <div class="ka-titlebar" style="background:var(--oat);">
+                <strong>시추자료 전용 GIS 도면 설정 · 국토지반정보 주상도 (<code>KaBoreholeDialog</code> · 640×560)</strong>
+                <span class="tag-code">NonModal · kaBoreholeMapDialog</span>
+              </div>
+              <div style="padding:16px 18px; display:flex; flex-direction:column; gap:10px; font-size:12.5px;">
+                <div>
+                  <strong>시추자료 전용 5대 지반·고지형 GIS 도면</strong> — 조사구역 주변 시추공 주상도를 별도로 내려받아 굴착 계획·문화층 깊이·배수 대책 도면을 생성합니다.
+                </div>
+
+                <!-- 수집 반경 콤보박스 + 적재 시추공 수 -->
+                <div style="display:flex; align-items:center; gap:10px; background:var(--wash); padding:8px 10px; border:1px solid var(--line);">
+                  <span>조사구역 중심 수집 반경:</span>
+                  <select style="flex:1; padding:4px 8px; border:1px solid var(--edge); border-radius:4px; background:var(--surface); font-size:12.5px;">
+                    <option value="2000">반경 2 km (2,000 m · 정밀)</option>
+                    <option value="5000" selected>반경 5 km (5,000 m · 기본 권장)</option>
+                    <option value="10000">반경 10 km (10,000 m · 광역 수계)</option>
+                  </select>
+                  <span style="color:var(--muted);">현재 적재 시추공: <strong style="color:var(--ink);">38공</strong></span>
+                </div>
+
+                <!-- 5대 도면 체크 카드 -->
+                <div style="background:var(--wash); border:1px solid var(--line); border-radius:6px; padding:8px 10px;">
+                  <div style="font-weight:700;">☑ 1. 시추공 분포 및 주상도 요약 마커 맵 (점 벡터)</div>
+                  <div style="font-size:11.5px; color:var(--muted); padding-inline-start:18px; margin-block-start:2px;">
+                    지점마다 <code>[공번] 충적층 4.2m / 기반암 GL-6.5m (세립질 점토 우세)</code> 라벨을 표시하고, 클릭 시 오른쪽 속성 카드에 전체 지층 구성(<code>0~1.2m 매립토 → 1.2~4.5m 실트질점토 → 4.5m~ 풍화암</code>)을 표시합니다.
+                  </div>
+                </div>
+
+                <div style="background:var(--wash); border:1px solid var(--line); border-radius:6px; padding:8px 10px;">
+                  <div style="font-weight:700;">☑ 2. 충적층(문화층 부존 가능 퇴적층) 두께 등층후선도 · Isopach Map (격자 래스터 + 등치선)</div>
+                  <div style="font-size:11.5px; color:var(--muted); padding-inline-start:18px; margin-block-start:2px;">
+                    인위적인 매립·성토층을 제외하고 자연 퇴적층(점토·실트·모래·자갈) 두께(m)를 공간 보간(IDW)하여 래스터와 등층후선(m)으로 표시합니다. 트렌치 굴착 예상 깊이를 바로 잡을 수 있습니다.
+                  </div>
+                </div>
+
+                <div style="background:var(--wash); border:1px solid var(--line); border-radius:6px; padding:8px 10px;">
+                  <div style="font-weight:700;">☑ 3. 성토·매립층(교란층) 두께 분포도 (격자 래스터)</div>
+                  <div style="font-size:11.5px; color:var(--muted); padding-inline-start:18px; margin-block-start:2px;">
+                    주상도 최상부의 매립토·성토 두께(m)만 추출해 보간합니다. 굴착 전 중장비로 표토·교란층을 몇 m까지 걷어내야 원지반(자연층)이 나오는지 현장 작업 계획을 세울 때 바로 씁니다.
+                  </div>
+                </div>
+
+                <div style="background:var(--wash); border:1px solid var(--line); border-radius:6px; padding:8px 10px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+                    <span style="font-weight:700;">☑ 4. 풍화암·기반암 출현 깊이(GL-m) 분포도 (기반암 지형도)</span>
+                    <span style="font-size:11.5px; color:var(--muted);">☑ 해발고도(EL.m) 도면 함께 생성</span>
+                  </div>
+                  <div style="font-size:11.5px; color:var(--muted); padding-inline-start:18px; margin-block-start:2px;">
+                    풍화토·풍화암·연암이 시작되는 깊이(GL-m) 및 해발고도(EL.m)를 보간해 흙을 걷어냈을 때의 옛 기반암 바닥 지형(매몰 곡강·옛 골짜기 위치)을 복원합니다.
+                  </div>
+                </div>
+
+                <div style="background:var(--wash); border:1px solid var(--line); border-radius:6px; padding:8px 10px;">
+                  <div style="font-weight:700;">☑ 5. 평균 지하수위(GL-m) 분포도 (용수·배수 위험도 맵)</div>
+                  <div style="font-size:11.5px; color:var(--muted); padding-inline-start:18px; margin-block-start:2px;">
+                    시추 지하수위와 KIGAM 지하수 관정 수위를 결합해 지표면 아래 몇 m에서 지하수가 출현하는지(GL-m) 표시합니다. 양수기·배수로 준비가 필요한 구간(GL-2m 이내)을 사전에 파악합니다.
+                  </div>
+                </div>
+
+                <!-- 하단 버튼 3개 -->
+                <div style="display:flex; gap:8px; margin-block-start:4px;">
+                  <button type="button" class="ka-btn-primary" style="flex:2;">시추자료 받기 및 선택 도면 생성 (<code>btnPrimary</code>)</button>
+                  <button type="button" class="ka-btn-secondary" style="flex:2;">적재된 시추공으로 선택 도면 다시 생성</button>
+                  <button type="button" class="ka-btn-secondary" style="flex:1;">도면 조판 열기</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 우측: 5종 시추 GIS 도면 수치·컬러램프·산출물 상세 규격 -->
+            <div class="plate-box">
+              <h3><span>시추 5대 GIS 도면 산출물 및 컬러 램프 규격 (<code>GeoInfoBoreholeMaps.cpp</code>)</span><span class="tag-code">180×180 IDW (p=2.0, k=8)</span></h3>
+              <div class="table-scroll">
+                <table class="three-line">
+                  <thead>
+                    <tr>
+                      <th>도면 번호 · 레이어 제목</th>
+                      <th>저장 파일명 (<code>지형분석/</code>)</th>
+                      <th>보간 속성 · 범위</th>
+                      <th>현장 판독 컬러 램프 (Hex · 구간 라벨)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>① 시추공 분포 및 주상도 요약 마커 맵</strong><br><code>국토지반정보 시추공(주상도)</code></td>
+                      <td><code>paleo_boreholes.gpkg</code><br>(Point Vector)</td>
+                      <td><code>hole_code</code>, <code>alluvial_m</code>, <code>weathered_m</code>, <code>soil_dominant</code>, <code>layer_summary</code></td>
+                      <td>라벨: <code>[공번] 충적층 X.Xm / 기반암 GL-Y.Ym (우세토질)</code><br>클릭 시 <code>KaFeatureCard</code>에 층서 전체 표시</td>
+                    </tr>
+                    <tr>
+                      <td><strong>② 충적층 두께 등층후선도 (Isopach)</strong><br><code>[시추·지반] 자연 퇴적층 두께(m)</code><br><code>[시추·지반] 충적층 등층후선(m)</code></td>
+                      <td><code>시추_자연퇴적층_두께.tif</code><br><code>시추_등층후선.gpkg</code></td>
+                      <td><code>alluvial_m</code> (0.0 ~ 8.0m)<br>+ Marching Squares <code>0.5m</code> 간격 등치선</td>
+                      <td>
+                        <code>#fef3c7</code> (0.5m 이하) → <code>#fde047</code> (1.5m 완경사) → <code>#f59e0b</code> (3.0m 문화층 유망) → <code>#d97706</code> (5.0m 후층) → <code>#92400e</code> (8.0m+ 심부 매몰곡)
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><strong>③ 성토·매립층(교란층) 두께 분포도</strong><br><code>[시추·지반] 성토·매립층(교란층) 두께 분포도(m)</code></td>
+                      <td><code>시추_성토매립층_두께.tif</code><br>(Float32 GeoTIFF)</td>
+                      <td><code>fill_m</code> (0.0 ~ 5.0m)<br>중장비 표토 제거 깊이 산정</td>
+                      <td>
+                        <code>#f1f5f9</code> (0.3m 이하 미교란) → <code>#fdba74</code> (1.0m 얕은 성토) → <code>#ea580c</code> (2.5m 중장비 제거) → <code>#991b1b</code> (5.0m+ 심부 매립)
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><strong>④ 풍화암·기반암 출현 깊이 / 해발고도</strong><br><code>[시추·지반] 풍화암·기반암 출현 깊이(GL-m)</code><br><code>[시추·지반] 풍화암·기반암 해발고도(EL.m)</code></td>
+                      <td><code>시추_기반암_출현깊이.tif</code><br><code>시추_기반암_해발고도.tif</code></td>
+                      <td>깊이: <code>weathered_m</code> (미출현 시 <code>fill+alluv</code>, 0~12m)<br>표고: <code>altitude_m - bedGl</code></td>
+                      <td>
+                        깊이: <code>#dcfce7</code> (GL-1.5m 천부) → <code>#4ade80</code> (GL-4.0m 사면) → <code>#0d9488</code> (GL-7.5m 매몰 곡강) → <code>#1e3a8a</code> (GL-12m+ 옛 골짜기)<br>
+                        표고: <code>#1e40af</code> (저점) → <code>#10b981</code> (사면) → <code>#d97706</code> (능선)
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><strong>⑤ 평균 지하수위(GL-m) 분포도</strong><br><code>[시추·지반] 평균 지하수위(GL-m) 분포도</code></td>
+                      <td><code>시추_평균지하수위.tif</code><br>(시추 + KIGAM 결합)</td>
+                      <td><code>|water_m|</code> + KIGAM <code>|water_gl_m|</code> (0.5 ~ 6.0m)</td>
+                      <td>
+                        <code>#1d4ed8</code> (GL-1.0m 양수기 필수) → <code>#38bdf8</code> (GL-2.0m 배수로 필수) → <code>#a7f3d0</code> (GL-4.0m 보통) → <code>#fef9c3</code> (GL-6.0m+ 양호)
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- MOCKUP TAB 3: 홈 화면 (KaStartPage) & 시작 스플래시 5초         -->
+        <!-- =============================================================== -->
+        <div class="mockup-panel" id="mock-home">
+          <div class="ka-window">
+            <div class="ka-titlebar">
+              <strong>Strata — 홈 화면 (<code>KaStartPage</code> · 자동 복원 없음 · 첫 화면은 항상 홈)</strong>
+              <span class="tag-code">H1~H6 세부 디자인 보완 전수 반영</span>
+            </div>
+            <div style="padding:28px 36px; display:grid; grid-template-columns: 1.55fr 1fr; gap:32px; background:var(--ground);">
+              <!-- 좌측: H1 이어서 작업 3행 표제란 + H2 삼선표 최근 조사 -->
+              <div style="display:flex; flex-direction:column; gap:24px;">
+                <!-- H1: 이어서 작업 3행 표제란 -->
+                <div style="border-block-start:2px solid var(--ink); border-block-end:1px solid var(--ink); padding:16px 0;">
+                  <div style="font-size:11px; font-weight:700; color:var(--clay-text); letter-spacing:0.06em;">이어서 작업 (H1 · 3행 표제란)</div>
+                  <div class="serif" style="font-size:32px; font-weight:500; margin:6px 0;">경주시 성동동 시굴조사</div>
+                  <div style="font-size:12.5px; color:var(--muted); margin-block-end:14px;">
+                    동부원점 (EPSG:5187) · 오늘 14:22 저장 · 주변유적 14건 · <code>D:\조사자료\경주시_성동동</code>
+                  </div>
+                  <div style="display:flex; gap:8px; align-items:center;">
+                    <button type="button" class="ka-btn-primary">이어서 열기 (주 단추 · 화면에 하나)</button>
+                    <button type="button" class="ka-btn-secondary">저장 위치</button>
+                    <span style="margin-inline-start:auto; display:flex; gap:6px;">
+                      <button type="button" class="ka-btn-secondary">＋ 새 조사</button>
+                      <button type="button" class="ka-btn-secondary">📂 다른 조사 열기…</button>
+                    </span>
+                  </div>
+                </div>
+
+                <!-- H2 & H5: 최근 조사 삼선표 + 복구 사본 있음 배지 -->
+                <div>
+                  <div class="caption-rule" style="margin-block-start:0;">최근 조사 (H2 삼선표 · H5 복구 사본 배지)</div>
+                  <div class="table-scroll">
+                    <table class="three-line">
+                      <thead>
+                        <tr>
+                          <th>조사 이름 · 복구 상태</th>
+                          <th>좌표계</th>
+                          <th>저장 시각</th>
+                          <th class="num">관리</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr style="background:var(--oat);">
+                          <td><strong>경주시 성동동 시굴조사</strong> <span class="status-mark" style="color:var(--clay-text); margin-inline-start:6px;"><span class="dot-clay"></span> 복구 사본 있음</span></td>
+                          <td class="mono">EPSG:5187</td>
+                          <td>오늘 14:22</td>
+                          <td class="num"><span style="color:var(--muted); cursor:pointer;">위치 · 목록에서 빼기</span></td>
+                        </tr>
+                        <tr>
+                          <td><strong>부여 규암리 발굴조사</strong></td>
+                          <td class="mono">EPSG:5186</td>
+                          <td>어제 18:05</td>
+                          <td class="num"><span style="color:var(--muted); cursor:pointer;">위치 · 목록에서 빼기</span></td>
+                        </tr>
+                        <tr>
+                          <td><strong>밀양 교동 유적 표본조사</strong></td>
+                          <td class="mono">EPSG:5187</td>
+                          <td>2026-11-02</td>
+                          <td class="num"><span style="color:var(--muted); cursor:pointer;">위치 · 목록에서 빼기</span></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 우측: H3 작업 순서 (①~⑤) + H4 연결 상태 5칸 -->
+              <div style="display:flex; flex-direction:column; gap:24px; border-inline-start:1px solid var(--line); padding-inline-start:28px;">
+                <div>
+                  <div class="caption-rule" style="margin-block-start:0;">작업 순서 안내 (H3 · 둥근 배지 없는 먹색 번호)</div>
+                  <ol style="margin:0; padding-inline-start:20px; display:flex; flex-direction:column; gap:8px; font-size:13px; color:var(--ink2);">
+                    <li><strong>새 조사 만들기</strong> — 현장 조사 폴더와 작업 좌표계(5187/5186)를 준비합니다.</li>
+                    <li><strong>조사구역 · 시굴격자 그리기</strong> — 지적도·정합 도면 위에 조사구역과 20m 트렌치를 놓습니다.</li>
+                    <li><strong>주변 자료 · 시추 5종 받기</strong> — DEM·지적·수치지형·유산·시추 주상도를 받아 분석합니다.</li>
+                    <li><strong>유구 · 유물 기록</strong> — 조사카드와 사진을 입력하고 500m/1000m 반경 유적을 추출합니다.</li>
+                    <li><strong>도면 조판 · 검수 · 제출</strong> — A3/A4 도면을 찍고 EPSG:5179 제출 꾸러미를 만듭니다.</li>
+                  </ol>
+                </div>
+
+                <div>
+                  <div class="caption-rule" style="margin-block-start:0;">외부 포털 연결 상태 (H4 · 5칸 삼선 줄)</div>
+                  <div style="border-block-start:1px solid var(--ink); border-block-end:1px solid var(--ink); font-size:12.5px;">
+                    <div style="display:flex; justify-content:space-between; padding:7px 4px; border-block-end:1px solid var(--press);">
+                      <span><strong>VWorld 공간정보</strong> (위성·지적·주소)</span>
+                      <span class="status-mark" style="color:var(--done);"><span class="dot-done"></span> 키 등록됨</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:7px 4px; border-block-end:1px solid var(--press);">
+                      <span><strong>국가유산청 인트라넷</strong> (주변유적 6종)</span>
+                      <span class="status-mark" style="color:var(--done);"><span class="dot-done"></span> 계정 저장됨</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:7px 4px; border-block-end:1px solid var(--press);">
+                      <span><strong>국토지리정보원</strong> (1:5,000 수치지형·DEM)</span>
+                      <span class="status-mark" style="color:var(--done);"><span class="dot-done"></span> 계정 저장됨</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:7px 4px; border-block-end:1px solid var(--press);">
+                      <span><strong>국토지반정보 · KIGAM</strong> (시추주상도·지질)</span>
+                      <span class="status-mark" style="color:var(--done);"><span class="dot-done"></span> 즉시 연동</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:7px 4px;">
+                      <span><strong>농촌진흥청 흙토람</strong> (토양 분포지형)</span>
+                      <span class="status-mark" style="color:var(--done);"><span class="dot-done"></span> 즉시 연동</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- MOCKUP TAB 4: 도면 스튜디오 (KaDrawingStudio) & 용지 설정        -->
+        <!-- =============================================================== -->
+        <div class="mockup-panel" id="mock-drawing">
+          <div class="ka-window">
+            <div class="ka-titlebar">
+              <strong>도면 스튜디오 (<code>KaDrawingStudio</code> · L1~L5 보완 반영: 무그림자 1px 도판 · 하단 장식 띠 고정 · 용지 밖 범례 허용)</strong>
+              <span class="tag-code">A3 가로 (420×297mm) · 축척 1:2,500</span>
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 310px; min-block-size:480px;">
+              <!-- 좌측: 책상(#F0EEE6) 위 1px 종이 도판(#FFFFFF) -->
+              <div style="background:var(--desk); padding:28px; display:flex; align-items:center; justify-content:center; position:relative;">
+                <!-- 용지 밖 배치가 허용된 범례 견본 (ka_hgis/legend_kept_on_page) -->
+                <div style="position:absolute; inset-block-start:18px; inset-inline-end:18px; background:var(--surface); border:1px dashed var(--action); padding:6px 10px; font-size:11px;">
+                  <strong style="color:var(--action);">[용지 밖 대기 범례 허용]</strong><br>
+                  사용자가 용지 밖에 놓아도 강제로 되밀지 않음
+                </div>
+
+                <!-- 1px 테두리 무그림자 종이 도판 (L1) -->
+                <div style="inline-size:560px; block-size:396px; background:#FFFFFF; border:1px solid #141413; padding:16px; display:flex; flex-direction:column; justify-content:space-between; position:relative;">
+                  <!-- 도곽 좌표격자 눈금 (L4) + 지도 본문 -->
+                  <div style="flex:1; border:1px solid #141413; position:relative; background:#FAF9F5; padding:12px;">
+                    <div style="position:absolute; inset-block-start:4px; inset-inline-start:45%; font-size:9px; font-family:Consolas, monospace;">361,500 N</div>
+                    <div style="position:absolute; inset-block-start:45%; inset-inline-start:4px; font-size:9px; font-family:Consolas, monospace;">218,500 E</div>
+
+                    <!-- 지시선 없는 원형 유적 번호 배지 (L5: HeritageLayoutNumbers) -->
+                    <div style="position:absolute; inset-block-start:80px; inset-inline-start:180px; inline-size:20px; block-size:20px; border-radius:50%; background:#141413; color:#FFFFFF; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;" title="L5: 지시선 없는 원형 유적 번호">1</div>
+                    <div style="position:absolute; inset-block-start:110px; inset-inline-start:210px; inline-size:20px; block-size:20px; border-radius:50%; background:#141413; color:#FFFFFF; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;">2</div>
+                    <div style="position:absolute; inset-block-start:145px; inset-inline-start:260px; border:2px solid #B5573A; padding:18px 28px; font-size:11px; font-weight:700; color:#9C4A2F;">조사구역 · 시추 등층후선</div>
+
+                    <!-- 용지 안 범례 (L2: LegendPlacement) -->
+                    <div style="position:absolute; inset-block-end:12px; inset-inline-end:12px; background:#FFFFFF; border:1px solid #141413; padding:6px 10px; font-size:10px;">
+                      <strong>범례 (켜진 레이어만 자동 동기화)</strong><br>
+                      <span style="color:#B5573A;">■</span> 조사구역 &nbsp; <span style="color:#0F766E;">●</span> 시추공(38공)<br>
+                      <span style="color:#92400E;">━</span> 충적층 등층후선(m)
+                    </div>
+                  </div>
+
+                  <!-- 하단 고정 장식 띠 (제목 · 축척자 · 축척 글 · 좌표계 · 방위표) -->
+                  <div style="block-size:44px; border:1px solid #141413; border-block-start:none; display:grid; grid-template-columns: 2fr 1.5fr 1fr 1fr 0.6fr; align-items:center; padding-inline:10px; font-size:11px; background:#FFFFFF;">
+                    <div class="serif"><strong>경주시 성동동 시굴조사 위치 및 지형도</strong></div>
+                    <div class="mono">0 ━━ 50 ━━ 100 m</div>
+                    <div class="mono">축척 1 : 2,500</div>
+                    <div class="mono">EPSG:5187 (동부)</div>
+                    <div style="text-align:end;"><strong>▲ N</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 우측: L3 캡션+이음선 3구역 조판 제어판 -->
+              <div style="border-inline-start:1px solid var(--line); padding:14px 16px; background:var(--ground); font-size:12.5px; display:flex; flex-direction:column; gap:14px;">
+                <div>
+                  <div class="caption-rule" style="margin-block:0 8px;">1. 용지 및 축척 (L3 · KaPaperDialog)</div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-block-end:8px;">
+                    <button type="button" class="ka-subbtn">A4 가로</button>
+                    <button type="button" class="ka-subbtn active">A3 가로 (420×297)</button>
+                  </div>
+                  <div style="border-block-end:1px dashed var(--edge); padding-block:4px; display:flex; justify-content:space-between; color:var(--muted);">
+                    <span>종이 크기 (읽기 전용 점선 줄)</span>
+                    <span class="mono">420 × 297 mm</span>
+                  </div>
+                  <div style="margin-block-start:8px; display:flex; justify-content:space-between; align-items:center;">
+                    <span>표준 축척</span>
+                    <strong class="mono">1 : 2,500 ▾</strong>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="caption-rule" style="margin-block:0 8px;">2. 도면 장식 및 유적 번호</div>
+                  <div style="display:flex; flex-direction:column; gap:5px;">
+                    <label>☑ 도곽 좌표격자 및 외곽 눈금 (L4)</label>
+                    <label>☑ 지시선 없는 원형 유적 번호 배지 (L5)</label>
+                    <label>☑ 하단 표제란·축척자·방위표 고정 띠</label>
+                    <label>☑ 지도에서 켠 레이어만 범례에 표시</label>
+                  </div>
+                </div>
+
+                <div style="margin-block-start:auto; display:flex; flex-direction:column; gap:6px;">
+                  <div class="caption-rule" style="margin-block:0 6px;">3. 내보내기 및 분할 인쇄</div>
+                  <button type="button" class="ka-btn-primary">조사도면 PDF 저장 (300 DPI 벡터)</button>
+                  <button type="button" class="ka-btn-secondary">칼선 분할 인쇄 (용지/방향 검증)</button>
+                  <button type="button" class="ka-btn-secondary">GeoTIFF 도면 내보내기</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- MOCKUP TAB 5: 고지형 분석 (A-A' 지층 단면도) & 3D 입체지형       -->
+        <!-- =============================================================== -->
+        <div class="mockup-panel" id="mock-paleo3d">
+          <div class="grid-2">
+            <!-- 좌측: 고지형 분석 스튜디오 + A-A' 2D 지층 단면도 -->
+            <div class="ka-window">
+              <div class="ka-titlebar">
+                <strong>고지형 분석 스튜디오 (<code>KaPaleoStudio</code> · 7대 미지형 + <code>A-A'</code> 2D 지층 단면도)</strong>
+                <span class="tag-code">strata-paleo</span>
+              </div>
+              <div style="padding:14px; display:flex; flex-direction:column; gap:12px;">
+                <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px; font-size:11px;">
+                  <span style="padding:4px 6px; background:#FDE68A; border:1px solid var(--edge);">■ 자연제방·미고지 (유망)</span>
+                  <span style="padding:4px 6px; background:#FED7AA; border:1px solid var(--edge);">■ 하안단구·홍적대지</span>
+                  <span style="padding:4px 6px; background:#D9F99D; border:1px solid var(--edge);">■ 구릉 완사면</span>
+                  <span style="padding:4px 6px; background:#BAE6FD; border:1px solid var(--edge);">■ 구하도·배후습지</span>
+                </div>
+
+                <!-- A-A' 2D 가상 지층 단면도 (KaPaleoCrossSectionWidget / section_renderer.rs) -->
+                <div style="border:1px solid var(--ink); background:#FFFFFF; padding:10px;">
+                  <div style="font-size:12px; font-weight:700; margin-block-end:6px; display:flex; justify-content:space-between;">
+                    <span>조사구역 중심 가상 지층 단면도 (<code>A — A'</code> · 시추주상도 IDW 보간)</span>
+                    <span class="mono" style="color:var(--muted);">수직 과장 5.0x</span>
+                  </div>
+                  <svg viewBox="0 0 520 170" style="inline-size:100%; block-size:auto; display:block;" role="img" aria-label="A-A 프라임 2D 가상 지층 단면도">
+                    <!-- 기반암 (풍화암·연암) -->
+                    <path d="M 20,155 L 20,105 Q 180,95 280,125 Q 390,140 500,110 L 500,155 Z" fill="#A8A29E"/>
+                    <!-- 자연 충적층 (문화층 부존 가능층) -->
+                    <path d="M 20,105 Q 180,95 280,125 Q 390,140 500,110 L 500,68 Q 380,75 260,62 Q 150,55 20,72 Z" fill="#FDE047" fill-opacity="0.8"/>
+                    <!-- 최상부 매립·성토층 -->
+                    <path d="M 20,72 Q 150,55 260,62 Q 380,75 500,68 L 500,52 Q 380,58 260,48 Q 150,44 20,58 Z" fill="#CBD5E1"/>
+                    <!-- 지하수위 파란 점선 -->
+                    <path d="M 20,84 Q 260,78 500,88" fill="none" stroke="#1D4ED8" stroke-width="1.5" stroke-dasharray="5,3"/>
+                    <!-- 시추공 기둥 표시 -->
+                    <line x1="110" y1="50" x2="110" y2="145" stroke="#141413" stroke-width="2.5"/>
+                    <text x="85" y="42" font-size="10" font-weight="700">BH-01</text>
+                    <line x1="340" y1="54" x2="340" y2="148" stroke="#B5573A" stroke-width="2.5"/>
+                    <text x="315" y="44" font-size="10" font-weight="700" fill="#B5573A">BH-07 (충적 4.2m)</text>
+                    <text x="35" y="145" font-size="10" fill="#FFFFFF" font-weight="700">풍화암·기반암 (생토층)</text>
+                    <text x="165" y="92" font-size="10.5" fill="#78350F" font-weight="700">자연 퇴적·충적층 (문화층 유망)</text>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- 우측: 3D 입체지형 스튜디오 (KaTerrain3dStudio / strata-terrain3d) -->
+            <div class="ka-window">
+              <div class="ka-titlebar">
+                <strong>3D 입체지형 스튜디오 (<code>KaTerrain3dStudio</code> · Nishita 대기 + GTAO + AgX + 3D 트렌치 단면)</strong>
+                <span class="tag-code">strata-terrain3d (wgpu)</span>
+              </div>
+              <div style="padding:14px; display:flex; flex-direction:column; gap:12px;">
+                <div style="background:#1E293B; color:#F8FAFC; padding:18px; border:1px solid var(--ink); min-block-size:185px; display:flex; flex-direction:column; justify-content:space-between;">
+                  <div style="display:flex; justify-content:space-between; font-size:11.5px;">
+                    <span><strong>wgpu R32F 쿼드트리 LOD 메쉬</strong> · 수직 과장 2.2x · 태양 고도 42°</span>
+                    <span class="mono" style="color:#93C5FD;">60 FPS · 무파이프 내장</span>
+                  </div>
+                  <div style="margin-block:16px; border:1px dashed #64748B; padding:12px; background:rgba(15,23,42,0.65); font-size:12px;">
+                    • 정밀 DEM + 시추 기반암 깊이(<code>z_paleo</code>) 입체 비교 뷰<br>
+                    • 14-DOP BVH 마우스 피킹으로 3D 지형 위 시굴 트렌치 직접 배치 및 사면 경사도 즉시 판독
+                  </div>
+                  <div style="display:flex; justify-content:space-between; font-size:11px; color:#CBD5E1;">
+                    <span>반경 500m 유적 6개소 · 1000m 유적 14개소 입체 핀 표시</span>
+                    <span>[입체 도면 조판 내보내기]</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- MOCKUP TAB 6: 핵심 대화상자 (검수·제출 KaSubmitDialog & 시굴격자) -->
+        <!-- =============================================================== -->
+        <div class="mockup-panel" id="mock-dialogs">
+          <div class="grid-2">
+            <!-- 좌측: D1 검수·제출 대화상자 (KaSubmitDialog) -->
+            <div class="ka-window">
+              <div class="ka-titlebar">
+                <strong>검수·제출 (<code>KaSubmitDialog</code> · D1: 96px 수치 대장 + 필수 도면 띠 + 비차단 제출)</strong>
+                <span class="tag-code">EPSG:5179 SHP + PDF + MANIFEST</span>
+              </div>
+              <div style="padding:16px 18px; display:flex; flex-direction:column; gap:14px;">
+                <!-- 96px 3칸 수치 대장 -->
+                <div style="block-size:96px; border-block-start:2px solid var(--ink); border-block-end:1px solid var(--ink); display:grid; grid-template-columns:1fr 1fr 1fr; align-items:center; text-align:center; background:var(--wash);">
+                  <div style="border-inline-end:1px solid var(--line);">
+                    <div style="font-size:11.5px; color:var(--muted);">제출 오류</div>
+                    <div class="mono" style="font-size:26px; font-weight:700; color:var(--done);">0</div>
+                  </div>
+                  <div style="border-inline-end:1px solid var(--line);">
+                    <div style="font-size:11.5px; color:var(--muted);">현장 주의 (비차단)</div>
+                    <div class="mono" style="font-size:26px; font-weight:700; color:var(--caution);">1</div>
+                  </div>
+                  <div>
+                    <div style="font-size:11.5px; color:var(--muted);">통과 항목</div>
+                    <div class="mono" style="font-size:26px; font-weight:700; color:var(--ink);">11 / 12</div>
+                  </div>
+                </div>
+
+                <!-- 필수 도면 띠 (KaSubmitDrawingStrip) -->
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:var(--ground); border:1px solid var(--line); font-size:12px;">
+                  <strong>필수 도면 점검:</strong>
+                  <span class="status-mark"><span class="dot-done"></span> 위치도</span>
+                  <span class="status-mark"><span class="dot-done"></span> 지형도</span>
+                  <span class="status-mark"><span class="dot-done"></span> 지적도</span>
+                  <span class="status-mark"><span class="dot-done"></span> 유구배치도 (<code>user_sheet</code>)</span>
+                </div>
+
+                <!-- 삼선표 검수 결과 -->
+                <div class="table-scroll">
+                  <table class="three-line">
+                    <thead>
+                      <tr><th>상태</th><th>검수 규칙 (<code>drawing_checklist.v1.json</code>)</th><th>판정 결과</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><span class="status-mark" style="color:var(--done);">✔ 통과</span></td><td>조사구역(<code>survey_area</code>) 폴리곤 폐합 및 면적 유효성</td><td>18,420.4 ㎡ 정상</td></tr>
+                      <tr><td><span class="status-mark" style="color:var(--done);">✔ 통과</span></td><td>제출 좌표계 <code>EPSG:5179</code> 변환 가능 여부</td><td>5187 → 5179 정상</td></tr>
+                      <tr><td><span class="status-mark" style="color:var(--caution);">▲ 주의</span></td><td>유구 속성 카드 내 시대 미입력 1건</td><td><code>README_submit.txt</code>에 자동 기록</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                  <button type="button" class="ka-btn-secondary">검수 다시 실행</button>
+                  <button type="button" class="ka-btn-primary">제출 꾸러미 만들기 (EPSG:5179 SHP · PDF · MANIFEST.sha256)</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 우측: D2 시굴격자 (KaTrenchDialog) & 표준 오류창 (KaUserError) -->
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div class="ka-window">
+                <div class="ka-titlebar">
+                  <strong>시굴격자 설정 (<code>KaTrenchDialog</code> · D2: 20·15·10m 표준 길이 고정)</strong>
+                  <span class="tag-code">평균 축소 금지</span>
+                </div>
+                <div style="padding:14px 16px; font-size:12.5px; display:flex; flex-direction:column; gap:10px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span><strong>표준 트렌치 길이 (단일 선택):</strong></span>
+                    <div style="display:flex; gap:12px;">
+                      <label><strong>☑ 20 m (표준 권장)</strong></label>
+                      <label>☐ 15 m</label>
+                      <label>☐ 10 m</label>
+                    </div>
+                  </div>
+                  <div style="display:flex; justify-content:space-between;">
+                    <span>트렌치 폭: <strong class="mono">2.0 m</strong> (개별 40.0 ㎡)</span>
+                    <span>목표 조사면적 비율: <strong class="mono" style="color:var(--action);">10.0 %</strong> (1,842 ㎡ → 46개)</span>
+                  </div>
+                  <div style="padding:8px 10px; background:var(--wash); border:1px solid var(--line); font-size:11.5px; color:var(--ink2);">
+                    ✔ <strong>DEM 주경사 방향 자동 정렬</strong>: 국토지리원 정밀 DEM 등고선 법선 방향(북서→남동 132°)에 맞춰 트렌치 장축을 자동 배치합니다.
+                  </div>
+                </div>
+              </div>
+
+              <div class="ka-window">
+                <div class="ka-titlebar">
+                  <strong>표준 3단 현장 오류 안내창 (<code>KaUserError</code> · 무엇 · 왜 · 어떻게)</strong>
+                  <span class="tag-code">SecretMask 적용</span>
+                </div>
+                <div style="padding:14px 16px; font-size:12.5px; display:flex; flex-direction:column; gap:6px;">
+                  <div><strong>[무엇]</strong> 원본 파일을 못 찾은 레이어 2개가 있습니다.</div>
+                  <div style="color:var(--muted);"><strong>[왜]</strong> 저장할 때 가리키던 외장 USB 드라이브 글자가 바뀌었거나 다른 PC에만 있던 파일일 수 있습니다.</div>
+                  <div style="color:var(--clay-text); font-weight:600;"><strong>[어떻게]</strong> 파일이 있는 USB 폴더를 연결한 뒤 조사를 다시 여세요. (API 키와 비밀번호는 로그에 절대 남기지 않습니다.)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- SECTION 5: 조용한 도판 디자인 스펙 및 구버전 20항목+신규 항목 대장 -->
+      <!-- ================================================================= -->
+      <section class="doc-section" id="sec-5">
+        <div class="sec-header">
+          <div>
+            <div class="sec-kicker">CHAPTER 05 · DESIGN SYSTEM SPEC &amp; 25-ITEM COMPLETION LEDGER</div>
+            <h2 class="sec-title">「조용한 도판(Quiet Plate)」 디자인 토큰 규격 및 세부 보완 25항목 현행화 대장</h2>
+          </div>
+          <p class="sec-subtitle"><code>Strata 디자인 개선안 2차 (1).html</code> + <code>Strata 세부 디자인 보완 계획.html</code> + <code>d7afcc8</code> 최신 UI 전수 통합</p>
+        </div>
+
+        <!-- 색상 토큰 스와치 그리드 -->
+        <div class="caption-rule">1. 핵심 색상 토큰 (<code>KaTheme.h</code> / <code>strata-types::theme_tokens</code>) — WCAG 4.5:1 이상 명도비 보장</div>
+        <div class="grid-4" style="margin-block-end: 20px;">
+          <div class="plate-box" style="background:#FAF9F5; color:#141413;">
+            <div class="mono" style="font-size:11px; color:#5E5D59;">ground · 대비 17.5:1</div>
+            <div style="font-size:16px; font-weight:700; margin-block:4px;">#FAF9F5 (종이 바탕)</div>
+            <div style="font-size:12px; color:#5E5D59;">리본·패널·대화상자 기본 바탕</div>
+          </div>
+          <div class="plate-box" style="background:#E3DACC; color:#141413;">
+            <div class="mono" style="font-size:11px; color:#3D3D3A;">oat · 대비 13.3:1</div>
+            <div style="font-size:16px; font-weight:700; margin-block:4px;">#E3DACC (귀리 선택)</div>
+            <div style="font-size:12px; color:#3D3D3A;">켜진 토글 · 선택된 행 · 활성 배지</div>
+          </div>
+          <div class="plate-box" style="background:#30302E; color:#FAF9F5;">
+            <div class="mono" style="font-size:11px; color:#DEDCD1;">hand · 대비 12.6:1</div>
+            <div style="font-size:16px; font-weight:700; margin-block:4px;">#30302E (손에 든 도구)</div>
+            <div style="font-size:12px; color:#DEDCD1;">그리기·측거 등 현재 쥔 리본 도구</div>
+          </div>
+          <div class="plate-box" style="background:#B5573A; color:#FFFFFF;">
+            <div class="mono" style="font-size:11px; color:#F3DEDA;">action · 대비 4.8:1</div>
+            <div style="font-size:16px; font-weight:700; margin-block:4px;">#B5573A (테라코타 흙색)</div>
+            <div style="font-size:12px; color:#F3DEDA;">주 단추(화면에 1개) · 미저장 저장 타일</div>
+          </div>
+        </div>
+
+        <!-- 구버전 20항목(H1~R1) + 최신 5항목(B1~B5) 전수 검증 대장 -->
+        <div class="caption-rule">2. 세부 디자인 보완 20항목(H1~R1) + 최신 확장 5항목(B1~B5) C++ 완성본 및 Rust 매핑 대장</div>
+        <div class="table-scroll">
+          <table class="three-line">
+            <thead>
+              <tr>
+                <th>코드</th>
+                <th>화면 영역 · 항목명</th>
+                <th>완성본 디자인·기능 규격 (<code>D:\hgis</code> 실측 기준)</th>
+                <th>C++ 구현 파일</th>
+                <th>Rust 대응 모듈 (<code>D:\hgis rust</code>)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="searchable-row">
+                <td class="mono"><strong>H1</strong></td>
+                <td>홈 · 이어서 작업 표제란</td>
+                <td>상단 2px 먹선 + 3행 표제란(조사명 <code>Noto Serif KR 40/32px</code>, 메타 줄, <code>이어서 열기</code> 흙색 주 단추 + <code>저장 위치</code>)</td>
+                <td><code>KaHomeTitleBlock.cpp</code></td>
+                <td><code>strata-app::gui_tab_home</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>H2</strong></td>
+                <td>홈 · 최근 조사 삼선표</td>
+                <td>세로선 없는 삼선표(윗선·헤더선 <code>#141413</code>, 행선 <code>#E8E6DC</code>), 행 높이 <code>48px</code>, 호버 시 <code>위치 · 목록에서 빼기</code></td>
+                <td><code>KaHomeRecentCard.cpp</code><br><code>KaHomeRowDelegate.cpp</code></td>
+                <td><code>strata-app::gui_tab_home</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>H3</strong></td>
+                <td>홈 · 작업 순서 ①~⑤</td>
+                <td>우측 구분선 너머 1~5단계 현장 조사 흐름 안내(파란 원형 알약 배지 제거, 담백한 먹색 번호)</td>
+                <td><code>KaHomeGuideCard.cpp</code></td>
+                <td><code>strata-app::gui_tab_home</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>H4</strong></td>
+                <td>홈 · 연결 상태 5칸</td>
+                <td>VWorld · 국가유산청 · 국토지리원 · 지오인포/KIGAM · 흙토람 5행 상태 표시(점+글자, 알약 없음)</td>
+                <td><code>KaHomeConnectionCard.cpp</code></td>
+                <td><code>strata-app::gui_tab_home</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>H5</strong></td>
+                <td>홈 · 복구 사본 배지</td>
+                <td>비정상 종료 복구 스냅샷 존재 시 최근 조사 행에 흙색 점 + <code>복구 사본 있음</code> 텍스트 표시</td>
+                <td><code>KaRecoverySnapshots.cpp</code></td>
+                <td><code>strata-storage::session_save</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>H6</strong></td>
+                <td>시작 · 5초 지층 스플래시</td>
+                <td>5단 지층 단면 SVG 애니메이션 및 버전·커밋 해시 표시, <code>--smoke-quit</code> 시 즉시 통과</td>
+                <td><code>KaStartupSplash.cpp</code><br><code>KaSplashStrata.cpp</code></td>
+                <td><code>strata-app::main</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>M1</strong></td>
+                <td>지도 · 통합 되돌리기 덮개</td>
+                <td>지도 좌상단 <code>73×36px</code> 단일 둥근 상자 안에 <code>↶ | ↷</code> 배치(가운데 1px <code>#DEDCD1</code> 구분선)</td>
+                <td><code>KaMapControls.cpp</code></td>
+                <td><code>strata-app::gui_tab_map</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>M2</strong></td>
+                <td>지도 · 그리기 보조줄 <code>자석 ▾</code></td>
+                <td><code>그리기 ›</code> 보조줄에 <code>자석 ▾</code> 메뉴 배치(정점+선분 · 정점만 · 끄기, 반경 px 설정)</td>
+                <td><code>KaSnapSettingsWidget.cpp</code></td>
+                <td><code>strata-app::gui_ribbon_bar</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>M3</strong></td>
+                <td>지도 · 버퍼 보조줄 엑셀 단추</td>
+                <td><code>버퍼 ›</code> 보조줄에 <code>500m</code> · <code>1000m</code> 옆 <code>주변유적 엑셀(.xlsx)</code> 내보내기 단추 직결</td>
+                <td><code>MainWindowRibbon.cpp</code><br><code>NearbyHeritageExport.cpp</code></td>
+                <td><code>strata-check-export::nearby_xlsx</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>M4</strong></td>
+                <td>지도 · 파일함 5단추 + <code>↑ 상위</code></td>
+                <td>좌측 파일함 탭에 <code>↑ 상위</code> 이동 및 5개 아이콘 단추(새로고침·위치 보기·폴더 추가·지도에 올리기·삭제)</td>
+                <td><code>KaFileBrowserPanel.cpp</code></td>
+                <td><code>strata-app::gui_layer_panel</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>M5~M8</strong></td>
+                <td>지도 · 4구역 레이어 &amp; 우측 카드</td>
+                <td><code>조사 데이터 / 지적도 / 주변·참조 / 배경 지도</code> 4구역 + 우측 <code>글자</code> 체크열 + 하단 고정 <code>배경 지도</code> 3단추 + 32px 상태줄</td>
+                <td><code>KaLayerSectionDelegate.cpp</code><br><code>KaFeatureCard.cpp</code></td>
+                <td><code>strata-app::gui_layer_panel</code><br><code>strata-app::right_inspector</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>L1~L5</strong></td>
+                <td>도면 · 1px 무그림자 도판 &amp; 배지</td>
+                <td>그림자 없는 1px 종이 도판, 용지 밖 범례 허용(<code>legend_kept_on_page</code>), 캡션+이음선 3구역, 도곽 격자 동기화, 지시선 없는 원형 유적 번호</td>
+                <td><code>KaDrawingStudio*.cpp</code><br><code>HeritageLayoutNumbers.cpp</code></td>
+                <td><code>strata-layout::{sheet_composer,badge_placer}</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>D1~D3</strong></td>
+                <td>창 · 검수 96px 대장 &amp; 시굴격자</td>
+                <td><code>KaSubmitDialog</code> 96px 3칸 수치 대장 + 필수 도면 띠 + 삼선표; <code>KaTrenchDialog</code> <code>20·15·10m</code> 체크란; <code>KaPaperDialog</code> 점선 읽기 전용 줄</td>
+                <td><code>KaSubmitDialog*.cpp</code><br><code>KaTrenchDialog.cpp</code></td>
+                <td><code>strata-app::dialogs_modal</code></td>
+              </tr>
+              <tr class="searchable-row">
+                <td class="mono"><strong>R1</strong></td>
+                <td>리본 · 1줄 7그룹 &amp; 10% 축소</td>
+                <td>리본 칩 최소 너비를 <strong><code>40px → 36px</code>로 10% 축소</strong>(<code>KaTheme.h:ribbonChipWidth = 36</code>), 아이콘 타일 <code>32px</code>, 1줄 고정</td>
+                <td><code>KaTheme.h</code><br><code>KaBeginnerRibbon.cpp</code></td>
+                <td><code>strata-types::theme_tokens</code><br><code>strata-app::gui_ribbon_bar</code></td>
+              </tr>
+              <tr class="searchable-row" style="background:var(--wash);">
+                <td class="mono"><strong style="color:var(--action);">B1~B5</strong></td>
+                <td><strong>[최신 <code>d7afcc8</code>] 시추 전용 UI &amp; 5대 GIS 도면</strong></td>
+                <td>「자료 받기」에 <strong>「시추」</strong>(<code>btnBoreholeFetch</code>) 추가 → <code>KaBoreholeDialog</code>(반경 2/5/10km) → ① 주상도 요약 마커, ② 충적층 등층후선(Isopach), ③ 성토·매립층, ④ 기반암 깊이/표고, ⑤ 평균 지하수위 도면 생성</td>
+                <td><code>MainWindowRibbon.cpp</code><br><code>KaBoreholeDialog.cpp</code><br><code>GeoInfoBoreholeMaps.cpp</code></td>
+                <td><code>strata-app::dialogs_borehole</code><br><code>strata-paleo::borehole_maps</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+
+      <!-- ================================================================= -->
+      <!-- SECTION 6: 핵심 공간·수치 알고리즘의 Rust 전환 상세 명세           -->
+      <!-- ================================================================= -->
+      <section class="doc-section" id="sec-6">
+        <div class="sec-header">
+          <div>
+            <div class="sec-kicker">CHAPTER 06 · CORE ALGORITHMS &amp; RUST BLUEPRINTS</div>
+            <h2 class="sec-title">핵심 공간·수치 알고리즘의 Rust 전환 상세 명세 및 코드 청사진</h2>
+          </div>
+          <p class="sec-subtitle">C++ 완성본(<code>D:\hgis</code>)의 모든 수치·기하 알고리즘을 오차 없이 순수 Rust로 전환하는 구현 규격</p>
+        </div>
+
+        <div class="grid-2" style="margin-block-end: 20px;">
+          <!-- 알고리즘 1: 시추 5종 GIS 도면 엔진 -->
+          <div class="plate-box">
+            <h3>
+              <span>1. 시추자료 전용 5대 GIS 도면 생성 엔진 (<code>d7afcc8</code>)</span>
+              <span class="tag-code">strata-paleo::borehole_maps</span>
+            </h3>
+            <p style="margin:0 0 8px; font-size:12.5px; color:var(--ink2);">
+              <code>GeoInfoBoreholeMaps.cpp</code>의 5종 도면 생성기를 순수 Rust(<code>rayon</code> + <code>tiff</code> + <code>rusqlite</code> GPKG)로 이식합니다.
+            </p>
+            <ul style="margin:0; padding-inline-start:18px; font-size:12px; color:var(--ink2);">
+              <li><strong>150m 공간 균형 추출</strong>: 반경(2/5/10km) 내 후보 시추공을 <code>cell_meters = 150.0</code> 격자 버킷으로 나눠 중심점 거리순 라운드로빈 추출(최대 50~120공).</li>
+              <li><strong>격자 규격</strong>: 시추공 분포 범위에 <code>pad = max(300.0, span * 0.25)</code> 여백을 더하고 <code>kGrid = 180×180</code> 격자(<code>cell = max(5.0, span / 180.0)</code>) 구성.</li>
+              <li><strong>IDW 보간 (<code>k=8, p=2.0</code>)</strong>: ① 자연 충적층 두께(<code>alluvial_m</code>), ② 성토·매립층 두께(<code>fill_m</code>), ③ 기반암 출현 깊이(<code>bed_gl = weathered_m &gt;= 0 ? weathered_m : fill_m + alluvial_m</code>), ④ 기반암 해발고도(<code>altitude_m - bed_gl</code>), ⑤ 시추 지하수위 + KIGAM 관정 수위 결합(<code>|water_m|</code>).</li>
+              <li><strong>충적층 등층후선 (Marching Squares)</strong>: <code>0.5m ~ 12.0m</code> 구간을 <code>0.5m</code> 간격으로 셀 4변 선형 보간하여 <code>시추_등층후선.gpkg</code>(<code>borehole_isopach_contours</code>) 벡터 라인 생성.</li>
+            </ul>
+            <pre class="code-blueprint"><code><span class="cm">// crates/strata-paleo/src/borehole_maps.rs (신규 모듈 ≤ 280줄)</span>
+<span class="kw">pub struct</span> <span class="ty">BoreholeMapOptions</span> {
+    <span class="kw">pub</span> radius_meters: <span class="ty">i32</span>,          <span class="cm">// 2000 | 5000 | 10000</span>
+    <span class="kw">pub</span> marker_map: <span class="ty">bool</span>,            <span class="cm">// 1. 시추공 분포 및 주상도 요약 마커 맵</span>
+    <span class="kw">pub</span> alluvial_isopach_map: <span class="ty">bool</span>,  <span class="cm">// 2. 충적층 두께 등층후선도 (IDW + 0.5m 등치선)</span>
+    <span class="kw">pub</span> fill_thickness_map: <span class="ty">bool</span>,    <span class="cm">// 3. 성토·매립층(교란층) 두께 분포도</span>
+    <span class="kw">pub</span> bedrock_depth_map: <span class="ty">bool</span>,     <span class="cm">// 4-A. 풍화암·기반암 출현 깊이(GL-m)</span>
+    <span class="kw">pub</span> bedrock_elev_map: <span class="ty">bool</span>,      <span class="cm">// 4-B. 풍화암·기반암 해발고도(EL.m)</span>
+    <span class="kw">pub</span> groundwater_map: <span class="ty">bool</span>,       <span class="cm">// 5. 평균 지하수위(GL-m) 분포도 (시추+KIGAM)</span>
+}
+
+<span class="kw">pub fn</span> generate_borehole_gis_maps(
+    holes: &amp;[<span class="ty">BoreholeRecord</span>],
+    kigam_wells: &amp;[(<span class="ty">f64</span>, <span class="ty">f64</span>, <span class="ty">f64</span>)],
+    work_crs: <span class="ty">WorkCrs</span>,
+    out_dir: &amp;<span class="ty">Path</span>,
+    opts: &amp;<span class="ty">BoreholeMapOptions</span>,
+) -&gt; <span class="ty">StrataResult</span>&lt;<span class="ty">BoreholeMapBundle</span>&gt; {
+    <span class="cm">// 180x180 IDW (k=8, power=2.0) + Marching Squares 0.5m step</span>
+    <span class="cm">// Outputs Float32 GeoTIFFs + borehole_isopach_contours GPKG</span>
+}</code></pre>
+          </div>
+
+          <!-- 알고리즘 2: 36분할 Round 버퍼 & 8방위 주변유적 엑셀 & 표준 시굴격자 -->
+          <div class="plate-box">
+            <h3>
+              <span>2. 36분할 <code>Round</code> 버퍼 · 8방위 엑셀 · 표준 시굴격자</span>
+              <span class="tag-code">strata-geo &amp; check-export</span>
+            </h3>
+            <p style="margin:0 0 8px; font-size:12.5px; color:var(--ink2);">
+              대각선 모서리 왜곡을 원천 차단하는 36분할 원형 버퍼와 평균 길이 축소를 금지한 시굴격자 알고리즘입니다.
+            </p>
+            <ul style="margin:0; padding-inline-start:18px; font-size:12px; color:var(--ink2);">
+              <li><strong>36분할 Round 버퍼 (<code>BufferAnalysis.cpp</code>)</strong>: 직각 모서리가 $\sqrt{2}$배(707m)로 돌출되는 <code>JoinStyle::Miter</code> 사용 절대 금지. 외곽 정점마다 36분할 원호($10^\circ$ 간격)를 생성하고, 반경 내 유적 판정은 반드시 유클리드 최단거리 <code>site_poly.euclidean_distance(&amp;heritage_geom) &lt;= radius</code>로 판별.</li>
+              <li><strong>8방위 주변유적 엑셀 (<code>NearbyHeritageExport.cpp</code>)</strong>: 조사구역 중심 대비 방위각 $\theta = \text{atan2}(\Delta x, \Delta y)$로 8방위(<code>북·북동·동·남동·남·남서·서·북서</code>)와 최단거리(m)를 산출해 <code>rust_xlsxwriter</code>로 <code>.xlsx</code> 출력.</li>
+              <li><strong>표준 시굴격자 (<code>TrenchGridGenerator.cpp</code>)</strong>: <code>20m · 15m · 10m</code> 체크란에서 선택한 단일 표준 길이($L \in \{20, 15, 10\}\text{m}$, 폭 $2.0\text{m}$)만 배치하며, 잔여 면적에 맞춘 임의 길이 축소 금지.</li>
+            </ul>
+            <pre class="code-blueprint"><code><span class="cm">// crates/strata-geo/src/buffer_round.rs</span>
+<span class="kw">pub const</span> BUFFER_QUADRANT_SEGMENTS_36: <span class="ty">usize</span> = 36;
+
+<span class="kw">pub fn</span> filter_sites_within_radius&lt;<span class="ty">T</span>&gt;(
+    site_poly: &amp;<span class="ty">geo::Polygon</span>&lt;<span class="ty">f64</span>&gt;,
+    candidates: &amp;[(<span class="ty">geo::Geometry</span>&lt;<span class="ty">f64</span>&gt;, <span class="ty">T</span>)],
+    radius_m: <span class="ty">f64</span>, <span class="cm">// 500.0 or 1000.0</span>
+) -&gt; <span class="ty">Vec</span>&lt;(<span class="ty">f64</span>, &amp;<span class="ty">'static str</span>, &amp;<span class="ty">T</span>)&gt; {
+    <span class="cm">// 유클리드 최단거리 &lt;= radius_m + 8방위(북~북서) 분류</span>
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <!-- 알고리즘 3: 고지형 4단계 파이프라인 & 다중 도엽 정밀 DEM 합성 -->
+          <div class="plate-box">
+            <h3>
+              <span>3. 반경 5km/10km 4단계 고지형 엔진 &amp; 정밀 DEM 합성</span>
+              <span class="tag-code">strata-paleo::pipeline</span>
+            </h3>
+            <ul style="margin:0; padding-inline-start:18px; font-size:12px; color:var(--ink2);">
+              <li><strong>수치지형도 등고선 정밀 DEM 합성</strong>: 다중 도엽 DXF/SHP의 등고선(레이어 코드 <code>1000~1019</code>) 및 표고점을 파일 잠금 없이 메모리 병합 → <code>spade::ConstrainedDelaunayTriangulation</code> 구축 → 무게중심(Barycentric) 보간으로 정밀 DEM 격자 생성.</li>
+              <li><strong>Stage 1 (과거 지형면 복원)</strong>: $Z_{\text{paleo}}(x,y) = Z_{\text{curr}}(x,y) - \text{IDW}(d_{\text{fill}})$.</li>
+              <li><strong>Stage 2 (선형 시간 EDT 하천거리 &amp; REM)</strong>: Felzenszwalb-Huttenlocher $O(N)$ 1D/2D 유클리드 거리변환으로 하천 최단거리 $D_{\text{river}}$ 및 하천 대비 상대고도 $\text{REM}$ 산출.</li>
+              <li><strong>Stage 3 (적분영상 다중 스케일 TPI &amp; Imhof 음영)</strong>: Integral Image $O(1)$ 영역합으로 반경 100m(미지형)·500m(중지형) TPI 산출 + 4방위($315^\circ, 270^\circ, 0^\circ, 45^\circ$) Horn 법선 가중 Imhof 음영기복도 합성.</li>
+              <li><strong>Stage 4 (7대 고지형 분류 &amp; <code>A-A'</code> 단면도)</strong>: 자연제방·미고지, 하안단구, 구릉 완사면, 구하도·배후습지, 현하도·범람원, 매립·교란지, 산지 급경사지 7분류 및 중심 단면 생성.</li>
+            </ul>
+          </div>
+
+          <!-- 알고리즘 4: 무잠금 세대 저장, 중심화 정합, EPSG:5179 제출 꾸러미 -->
+          <div class="plate-box">
+            <h3>
+              <span>4. 무잠금 세대 교체 저장 · 중심화 정합 · <code>EPSG:5179</code> 제출</span>
+              <span class="tag-code">storage · geo · check-export</span>
+            </h3>
+            <ul style="margin:0; padding-inline-start:18px; font-size:12px; color:var(--ink2);">
+              <li><strong>무잠금 세대 교체 저장 (<code>SurveyStorage</code>)</strong>: 평상시 SQLite 파일 핸들을 놓아두고 메모리 <code>EditBuffer</code>(미저장 음수 FID)에서 편집. <code>Ctrl+S</code> 시 <code>.gpkg.gen-tmp</code> 생성 → <code>split_polygon_pieces</code>(단일 POLYGON 테이블 멀티폴리곤 분해) → <code>PRAGMA integrity_check</code> → 원자적 교체(<code>ReplaceFileW</code>).</li>
+              <li><strong>중심화 최소제곱 정합 (<code>GeorefService</code>)</strong>: 큰 평면직각좌표($X \approx 200,000, Y \approx 500,000$)에서 부동소수점 유효숫자 손실을 막기 위해 무게중심 $\bar{p}, \bar{q}$를 뺀 상대좌표 $p' = p - \bar{p}$에서 회전·축척·아핀 행렬을 푼 뒤 평행이동 복원.</li>
+              <li><strong>비차단 검수 및 <code>EPSG:5179</code> 제출 꾸러미 (<code>ExportService</code>)</strong>: <code>drawing_checklist.v1.json</code> 검수 결과는 제출을 가로막지 않고 <code>README_submit.txt</code>에 기록하며, 7대 도메인 레이어를 <code>proj4rs</code>로 <code>EPSG:5179</code> SHP로 변환 + <code>조사도면.pdf</code> + <code>MANIFEST.sha256</code> 패키지 생성.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- SECTION 7: D:\hgis rust 프로젝트 디렉토리 구조 설계 및 300줄 분할안 -->
+      <!-- ================================================================= -->
+      <section class="doc-section" id="sec-7">
+        <div class="sec-header">
+          <div>
+            <div class="sec-kicker">CHAPTER 07 · D:\HGIS RUST WORKSPACE DIRECTORY &amp; 300-LINE MODULARIZATION</div>
+            <h2 class="sec-title"><code>D:\hgis rust</code> 프로젝트 디렉토리 구조 설계안 및 300줄 이하 모듈 분할 계획</h2>
+          </div>
+          <p class="sec-subtitle">현행 <code>D:\hgis rust</code> 워크스페이스 실측 진단 + <code>d7afcc8</code> 신규 모듈 추가 + 대형 파일 300줄 이하 분할 설계</p>
+        </div>
+
+        <div class="plate-box" style="margin-block-end: 20px;">
+          <h3>
+            <span><code>D:\hgis rust</code> 현행 워크스페이스 실측 진단 및 리팩터링 핵심 대상</span>
+            <span class="status-mark"><span class="dot-clay"></span> 규칙: 전 소스 파일 ≤ 300줄 강제</span>
+          </h3>
+          <p style="margin:0; font-size:12.5px; color:var(--ink2);">
+            현재 <code>D:\hgis rust</code>에는 C++ <code>95d15a9</code> 커밋을 기준으로 11개 크레이트가 구성되어 있으나, ① <strong><code>d7afcc8</code> 커밋에서 추가된 시추 5종 GIS 도면 생성기(<code>borehole_maps.rs</code>) 및 전용 설정 대화상자(<code>dialogs_borehole.rs</code>), 리본 칩 최소폭 10% 축소(<code>36px</code>)</strong>가 아직 반영되지 않았고, ② <code>crates/strata-app/src/</code> 내 일부 UI 파일(<code>dialogs_modal.rs</code> 177KB, <code>dialogs_download_print.rs</code> 167KB, <code>gui_ribbon_bar.rs</code> 144KB, <code>gui_tab_map.rs</code> 99KB, <code>gui_tab_drawing.rs</code> 80KB)이 단일 거대 파일로 작성되어 있습니다. 아래 디렉토리 설계안은 이를 <strong>역할별 300줄 이하 서브모듈로 정밀 분해</strong>한 최종 구조입니다.
+          </p>
+        </div>
+
+        <div class="dir-tree" role="region" aria-label="D:\hgis rust 프로젝트 디렉토리 트리">
+          <div><strong>📁 D:\hgis rust\</strong> <span class="dir-leaf-desc">— Pure Rust 2.0 루트 워크스페이스 (Cargo Edition 2021 · <code>unsafe_code = "forbid"</code>)</span></div>
+          <div class="dir-leaf"><span>├── Cargo.toml</span><span class="dir-leaf-desc">11개 멤버 크레이트 · 공통 린트(<code>clippy::all = "warn"</code>, <code>unwrap_used = "warn"</code>) · Release fat LTO</span></div>
+          <div class="dir-leaf"><span>├── CLAUDE.md / AGENTS.md</span><span class="dir-leaf-desc">작업 공간 규칙 · 7대 도메인 레이어 · 300줄 제한 · 검증 게이트 지침</span></div>
+          <div class="dir-leaf"><span>├── Strata_Rust_전환_개발_마스터플랜.html</span><span class="dir-leaf-desc">★ 본 통합 마스터 플랜 문서 (단일 HTML)</span></div>
+          <div class="dir-leaf"><span>├── data/</span><span class="dir-leaf-desc"><code>schemas/ka_hgis_layers.yaml</code> (v3), <code>rules/drawing_checklist.v1.json</code>, <code>theme/</code>, <code>fonts/</code></span></div>
+
+          <details open>
+            <summary>📂 crates/strata-types/ <span class="dir-leaf-desc">— [L1] 7대 도메인 스키마(v3), CRS 코드, 조용한 도판 테마 토큰</span></summary>
+            <div class="dir-leaf"><span>├── src/lib.rs, error.rs, crs.rs, schema.rs</span><span class="dir-leaf-desc"><code>DomainLayerKey</code>, <code>WorkCrs(5187/5186)</code>, <code>SubmitCrs(5179)</code>, <code>StrataError</code></span></div>
+            <div class="dir-leaf"><span>└── src/theme_tokens.rs</span><span class="dir-leaf-desc"><span class="badge-state badge-delta">d7afcc8 업데이트</span> <code>ButtonMetrics { ribbon_chip_width: 36, ribbon_icon_size: 32 }</code> + 4대 테마 토큰</span></div>
+          </details>
+
+          <details open>
+            <summary>📂 crates/strata-secrets/ <span class="dir-leaf-desc">— [L1] DPAPI(<code>ka-hgis-account-v1</code>), 포터블 XOR, VWorld·인트라넷·NGII 계정 호환</span></summary>
+            <div class="dir-leaf"><span>└── src/{lib, dpapi, secret_store, vworld, accounts, mask}.rs</span><span class="dir-leaf-desc">기존 C++ <code>%LOCALAPPDATA%\ka-hgis\*.ini</code> 및 레지스트리 100% 무수정 호환 + <code>SecretMask</code></span></div>
+          </details>
+
+          <details open>
+            <summary>📂 crates/strata-storage/ <span class="dir-leaf-desc">— [L1] OGC GPKG(<code>rusqlite</code>), 멀티폴리곤 조각 분리, 무잠금 세대 저장, SHP/DXF/CSV</span></summary>
+            <div class="dir-leaf"><span>├── src/{lib, gpkg, wkb_codec, polygon_pieces, edit_buffer}.rs</span><span class="dir-leaf-desc">단일 POLYGON 테이블 멀티폴리곤 자동 분해, 음수 FID 편집 버퍼, 레이어별 독립 UndoStack</span></div>
+            <div class="dir-leaf"><span>└── src/{session_save, project_actions, shp_io, cad_csv_io}.rs</span><span class="dir-leaf-desc">세대 복사본(<code>.gen-tmp</code>) 검증 후 원자적 교체, 다른 이름 저장 시 원본 SHA-256 보존</span></div>
+          </details>
+
+          <details open>
+            <summary>📂 crates/strata-geo/ <span class="dir-leaf-desc">— [L2] <code>proj4rs</code> 좌표변환, 36분할 <code>Round</code> 버퍼, 표준 시굴격자(20·15·10m), TIN, 정합</span></summary>
+            <div class="dir-leaf"><span>├── src/{lib, crs_transform, buffer_round, snap_index}.rs</span><span class="dir-leaf-desc">36분할 500m/1000m 원형 버퍼 + 유클리드 최단거리, <code>rstar::RTree</code> 정점·선분·교차점 스냅</span></div>
+            <div class="dir-leaf"><span>└── src/{trench_grid, contour_tin, polygon_ops/mod, helmert_georef, boolean_clip}.rs</span><span class="dir-leaf-desc"><span class="badge-state badge-delta">300줄 분할</span> <code>polygon_ops.rs</code>(60KB)를 <code>helmert_georef.rs</code>, <code>boolean_clip.rs</code>, <code>vertex_edit.rs</code>로 분할</span></div>
+          </details>
+
+          <details open>
+            <summary>📂 crates/strata-net/ <span class="dir-leaf-desc">— [L2] VWorld WMTS/WMS, 국가유산청 인트라넷, NGII 수치지형, 국토지반정보 시추공, KIGAM</span></summary>
+            <div class="dir-leaf"><span>├── src/{lib, tile_fetcher, geoinfo_borehole, kigam_soil_river}.rs</span><span class="dir-leaf-desc"><span class="badge-state badge-delta">d7afcc8 보강</span> <code>geoinfo_borehole.rs</code>에 <code>BoreholeMapOptions</code> 및 150m 균형 샘플링 연동</span></div>
+            <div class="dir-leaf"><span>└── src/{vworld_client/*, heritage_intranet/*, ngii_topographic/*, address_search/*}.rs</span><span class="dir-leaf-desc"><span class="badge-state badge-delta">300줄 분할</span> 각 포털 클라이언트를 프로토콜·파서·캐시 서브모듈(≤ 280줄)로 분리</span></div>
+          </details>
+
+          <details open>
+            <summary>📂 crates/strata-paleo/ <span class="dir-leaf-desc">— [L2] ★ 시추 5종 GIS 도면 생성기(<code>d7afcc8</code>) + 반경 5km/10km 4단계 고지형 + 정밀 DEM 합성</span></summary>
+            <div class="dir-leaf"><span>├── src/borehole_maps.rs</span><span class="dir-leaf-desc"><span class="badge-state badge-new">신규 필수 추가</span> <code>GeoInfoBoreholeMaps.cpp</code> 1:1 이식 (180×180 IDW 5종 GeoTIFF + 0.5m 등층후선 GPKG)</span></div>
+            <div class="dir-leaf"><span>├── src/borehole_contour.rs</span><span class="dir-leaf-desc"><span class="badge-state badge-new">신규 필수 추가</span> Marching Squares <code>0.5m ~ 12.0m</code> 충적층 등층후선 추출 및 컬러 램프 정의</span></div>
+            <div class="dir-leaf"><span>└── src/{lib, borehole_strata, terrain_edt_tpi, pipeline, dem_synthesizer, section_renderer}.rs</span><span class="dir-leaf-desc">EDT 하천거리, 적분영상 TPI, Imhof 다방향 음영, 7대 고지형 분류, <code>A-A'</code> 단면도</span></div>
+          </details>
+
+          <details open>
+            <summary>📂 crates/strata-canvas2d/ &amp; strata-terrain3d/ <span class="dir-leaf-desc">— [L3] <code>wgpu</code> 2D 지도 캔버스 및 3D 입체지형 엔진</span></summary>
+            <div class="dir-leaf"><span>├── strata-canvas2d/src/{lib, viewport, canvas_painter, cad_interaction/*, map_tools, vector_tessellator, tile_layer}.rs</span><span class="dir-leaf-desc">2D 뷰포트, <code>lyon</code> 테셀레이터, CAD 스냅·측거·정합 인터랙션</span></div>
+            <div class="dir-leaf"><span>└── strata-terrain3d/src/{lib, quadtree_lod, atmosphere_agx, trench_profile3d, viewport3d_renderer}.rs</span><span class="dir-leaf-desc">R32F 쿼드트리 LOD, Nishita 대기, GTAO, AgX 톤매핑, 3D 트렌치 단면</span></div>
+          </details>
+
+          <details open>
+            <summary>📂 crates/strata-layout/ &amp; strata-check-export/ <span class="dir-leaf-desc">— [L3] 도면 조판·분할 인쇄 및 12항목 검수·<code>EPSG:5179</code> 제출 꾸러미</span></summary>
+            <div class="dir-leaf"><span>├── strata-layout/src/{lib, sheet_composer/*, badge_placer, pdf_geotiff, tile_print}.rs</span><span class="dir-leaf-desc">1px 종이 도판, 하단 장식 띠 고정, 용지 밖 범례 허용, 지시선 없는 원형 유적 번호, 분할 인쇄</span></div>
+            <div class="dir-leaf"><span>└── strata-check-export/src/{lib, checklist_engine/*, submit_package, nearby_xlsx}.rs</span><span class="dir-leaf-desc"><code>drawing_checklist.v1.json</code> 12항목 검수, <code>EPSG:5179</code> SHP+PDF+MANIFEST+README, 8방위 <code>.xlsx</code></span></div>
+          </details>
+
+          <details open>
+            <summary>📂 crates/strata-app/ <span class="dir-leaf-desc">— [L4] <code>eframe/egui</code> 데스크톱 본체 (거대 파일 5종 → 300줄 이하 모듈 분할 설계)</span></summary>
+            <div class="dir-leaf"><span>├── src/{main.rs, app_state.rs, verify_harness.rs}</span><span class="dir-leaf-desc">앱 부팅(항상 홈 화면 시작), <code>--smoke-quit</code>, <code>--verify-all</code> V1~V16 자동 검증</span></div>
+            <div class="dir-leaf"><span>├── src/ribbon/{mod, layout_metrics, group_survey, group_record, group_fetch, group_basemap, group_export, subtoolbar, app_bar_search}.rs</span><span class="dir-leaf-desc"><span class="badge-state badge-delta">144KB 분할 + d7afcc8</span> 칩 최소폭 <code>36px</code>, <code>group_fetch.rs</code>에 <strong>「시추」(<code>btnBoreholeFetch</code>)</strong> 추가</span></div>
+            <div class="dir-leaf"><span>├── src/dialogs/borehole_dialog.rs</span><span class="dir-leaf-desc"><span class="badge-state badge-new">신규 필수 추가</span> <code>KaBoreholeDialog.cpp</code> 1:1 이식 (반경 2/5/10km, 5종 도면 카드, 받기/재생성/조판 열기)</span></div>
+            <div class="dir-leaf"><span>├── src/dialogs/{submit_dialog, trench_dialog, paper_dialog, georef_dialog, cadastral_dialog, heritage_dialog, topo_dialog, account_dialog, user_error}.rs</span><span class="dir-leaf-desc"><span class="badge-state badge-delta">177KB+167KB 분할</span> <code>dialogs_modal.rs</code> 및 <code>dialogs_download_print.rs</code>를 대화상자별 독립 파일(≤ 260줄)로 분리</span></div>
+            <div class="dir-leaf"><span>└── src/tabs/{home_tab, map_tab, map_overlays, layer_tree_panel, file_browser_panel, feature_card_inspector, drawing_studio_tab, paleo_studio_tab, terrain3d_tab}.rs</span><span class="dir-leaf-desc"><span class="badge-state badge-delta">99KB+80KB 분할</span> 우측 <code>feature_card_inspector.rs</code>에 시추공 주상도 층서 카드 뷰 통합</span></div>
+          </details>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- SECTION 8: 단계별 Rust 전환 로드맵 (Phase 1~6) 및 검증 게이트     -->
+      <!-- ================================================================= -->
+      <section class="doc-section" id="sec-8">
+        <div class="sec-header">
+          <div>
+            <div class="sec-kicker">CHAPTER 08 · PHASED EXECUTION ROADMAP &amp; VERIFICATION GATES</div>
+            <h2 class="sec-title"><code>D:\hgis rust</code> 완성을 위한 단계별 실행 로드맵 및 검증 게이트 (V1 ~ V16)</h2>
+          </div>
+          <p class="sec-subtitle">현행 <code>D:\hgis rust</code> (<code>95d15a9</code> 기반)에서 최신 C++ 완성본(<code>d7afcc8</code>) 100% 패리티 및 300줄 규칙 완결까지의 실행 순서</p>
+        </div>
+
+        <div class="table-scroll" style="margin-block-end: 24px;">
+          <table class="three-line">
+            <thead>
+              <tr>
+                <th>단계 (Phase)</th>
+                <th>작업 목표 및 대상 크레이트 (<code>D:\hgis rust</code>)</th>
+                <th>핵심 구현 및 테스트 항목 (TDD Red → Green → Refactor)</th>
+                <th>검증 명령 및 통과 기준</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Phase 1</strong><br><span class="tag-code">d7afcc8 토큰 &amp; 리본</span></td>
+                <td><strong>리본 10% 축소(<code>36px</code>) 및 「시추」 버튼 탑재</strong><br><code>strata-types</code>, <code>strata-app</code></td>
+                <td>
+                  • <code>theme_tokens.rs</code>: <code>ribbon_chip_width = 36</code>, <code>ribbon_min_width = 36</code> 반영<br>
+                  • <code>ribbon_icons.rs</code>: 시추공(<code>borehole</code>) 벡터 아이콘 추가<br>
+                  • 「자료 받기」 그룹 5번째 단추로 <strong>「시추」(<code>btnBoreholeFetch</code>)</strong> 배치 및 1줄 무줄바꿈 검증
+                </td>
+                <td class="mono">cargo test -p strata-types -p strata-app ribbon</td>
+              </tr>
+              <tr>
+                <td><strong>Phase 2</strong><br><span class="tag-code">시추 5종 백엔드</span></td>
+                <td><strong>시추자료 전용 5대 GIS 도면 생성 엔진 이식</strong><br><code>strata-net</code>, <code>strata-paleo</code></td>
+                <td>
+                  • <code>geoinfo_borehole.rs</code>: <code>BoreholeMapOptions</code> 프로젝트 저장/로드 및 150m 공간 균형 추출<br>
+                  • <code>borehole_maps.rs</code> &amp; <code>borehole_contour.rs</code>: 180×180 IDW(<code>p=2.0, k=8</code>) 5종 래스터(충적층·성토층·기반암 깊이/표고·평균 지하수위) + Marching Squares <code>0.5m</code> 등층후선 GPKG 생성
+                </td>
+                <td class="mono">cargo test -p strata-net -p strata-paleo borehole</td>
+              </tr>
+              <tr>
+                <td><strong>Phase 3</strong><br><span class="tag-code">KaBoreholeDialog &amp; 카드</span></td>
+                <td><strong>시추 전용 설정창 및 주상도 속성 카드 UI 연결</strong><br><code>strata-app</code></td>
+                <td>
+                  • <code>dialogs/borehole_dialog.rs</code>: 반경 2km/5km/10km 콤보박스, 적재 시추공 수 실시간 표시, 5종 도면 체크 카드(4-B 해발고도 서브체크 포함), 3대 실행 버튼 연결<br>
+                  • <code>right_inspector.rs</code>: 시추공 마커 클릭 시 <code>[공번] 충적층 / 기반암 / 전체 층서(매립→충적→풍화암)</code> 카드 표시
+                </td>
+                <td class="mono">cargo test -p strata-app borehole_dialog</td>
+              </tr>
+              <tr>
+                <td><strong>Phase 4</strong><br><span class="tag-code">고지형 · 정밀 DEM 동기화</span></td>
+                <td><strong>다중 도엽 등고선 정밀 DEM 합성 및 5km 고지형 동기화</strong><br><code>strata-paleo</code>, <code>strata-net</code></td>
+                <td>
+                  • 국토지리정보원 다중 도엽 등고선 병합 시 파일 잠금 회피 및 <code>spade</code> TIN 기반 정밀 DEM 합성(<code>901d83b</code>, <code>ceb5fd2</code> 반영)<br>
+                  • 5km 단독 지질/시추 UI, 범례, Imhof 다방향 음영 및 경사도 시각화(<code>67a3f33</code> 반영)
+                </td>
+                <td class="mono">cargo test -p strata-paleo</td>
+              </tr>
+              <tr>
+                <td><strong>Phase 5</strong><br><span class="tag-code">300줄 모듈 분할</span></td>
+                <td><strong>전 소스 파일 300줄 이하 분할 리팩터링</strong><br><code>strata-app</code>, <code>strata-geo</code>, <code>strata-net</code></td>
+                <td>
+                  • <code>dialogs_modal.rs</code>, <code>dialogs_download_print.rs</code>, <code>gui_ribbon_bar.rs</code>, <code>gui_tab_map.rs</code>, <code>gui_tab_drawing.rs</code>, <code>polygon_ops.rs</code> 등을 기능별 서브모듈(≤ 285줄)로 분할<br>
+                  • 모든 프로덕션 코드 <code>unwrap()</code> 제거 및 <code>#![forbid(unsafe_code)]</code>(DPAPI 모듈 제외) 확인
+                </td>
+                <td class="mono">cargo clippy --workspace --all-targets -- -D warnings</td>
+              </tr>
+              <tr>
+                <td><strong>Phase 6</strong><br><span class="tag-code">V1~V16 전수 검증</span></td>
+                <td><strong>스모크·통합 검증 게이트(V1~V16) 및 단일 EXE 패키징</strong><br>워크스페이스 전체</td>
+                <td>
+                  • V1~V14 기존 게이트 + <strong>V15(시추 버튼 36px 칩 &amp; <code>KaBoreholeDialog</code>)</strong> + <strong>V16(시추 5종 IDW GeoTIFF &amp; 등층후선 GPKG 생성)</strong> 통과<br>
+                  • <code>--smoke-quit</code> 종료 코드 <code>0</code> 및 포터블 무의존성 단독 실행 확인
+                </td>
+                <td class="mono">cargo run -p strata-app --bin ka-hgis -- --verify-all</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 검증 실행 명령어 박스 -->
+        <div class="plate-box">
+          <h3><span><code>D:\hgis rust</code> 표준 빌드 · 테스트 · 클리피 · 스모크 검증 명령</span><span class="tag-code">PowerShell / Cargo</span></h3>
+          <pre class="code-blueprint"><code><span class="cm"># 1. 워크스페이스 전체 단위·통합 테스트 실행</span>
+cargo test --workspace
+
+<span class="cm"># 2. Clippy 정적 분석 (경고 0건 강제)</span>
+cargo clippy --workspace --all-targets -- -D warnings
+
+<span class="cm"># 3. 300줄 제한 전수 검사 (모든 .rs 파일 ≤ 300줄 확인)</span>
+Get-ChildItem -Path "D:\hgis rust\crates" -Recurse -Filter *.rs | ForEach-Object {
+    $lines = (Get-Content $_.FullName).Count
+    if ($lines -gt 300) { Write-Output "OVER_300: $($_.FullName) ($lines lines)" }
+}
+
+<span class="cm"># 4. 헤드리스 스모크(--smoke-quit) 및 V1~V16 전수 검증 게이트(--verify-all)</span>
+cargo run -p strata-app --bin ka-hgis -- --smoke-quit
+cargo run -p strata-app --bin ka-hgis -- --verify-all</code></pre>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+
+(function () {
+  // 1. 테마 전환기 (조용한 도판 / 하늘 눈밭 / 야장 다크)
+  const themeBtns = document.querySelectorAll('[data-set-theme]');
+  themeBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-set-theme');
+      document.documentElement.setAttribute('data-theme', target);
+      themeBtns.forEach((b) => b.classList.toggle('active', b === btn));
+    });
+  });
+
+  // 2. 인터랙티브 목업 탭 전환기 (Chapter 04)
+  const mockupBtns = document.querySelectorAll('[data-mockup-tab]');
+  const mockupPanels = document.querySelectorAll('.mockup-panel');
+  mockupBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-mockup-tab');
+      mockupBtns.forEach((b) => b.classList.toggle('active', b === btn));
+      mockupPanels.forEach((p) => p.classList.toggle('active', p.id === targetId));
+    });
+  });
+
+  // 3. 크레이트 매핑 테이블 필터 (Chapter 03)
+  const filterBtns = document.querySelectorAll('[data-filter-crate]');
+  const crateRows = document.querySelectorAll('#crateMappingTable tbody tr');
+  filterBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const group = btn.getAttribute('data-filter-crate');
+      filterBtns.forEach((b) => b.classList.toggle('active', b === btn));
+      crateRows.forEach((row) => {
+        const rowGroups = (row.getAttribute('data-crate-group') || '').split(/\s+/);
+        const show = group === 'all' || rowGroups.includes(group);
+        row.style.display = show ? '' : 'none';
+      });
+    });
+  });
+
+  // 4. 전역 실시간 검색 필터
+  const searchInput = document.getElementById('globalSearch');
+  const searchableRows = document.querySelectorAll('.searchable-row');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim().toLowerCase();
+      searchableRows.forEach((row) => {
+        if (!q) {
+          row.style.display = '';
+          return;
+        }
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(q) ? '' : 'none';
+      });
+    });
+  }
+
+  // 5. 좌측 TOC 스크롤 스파이
+  const sections = document.querySelectorAll('.doc-section');
+  const tocLinks = document.querySelectorAll('.toc-link');
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const id = '#' + entry.target.id;
+          tocLinks.forEach((link) => {
+            link.classList.toggle('active', link.getAttribute('href') === id);
+          });
+        }
+      });
+    },
+    { rootMargin: '-15% 0px -75% 0px' }
+  );
+  sections.forEach((sec) => observer.observe(sec));
+})();
+
+  </script>
+</body>
+</html>
