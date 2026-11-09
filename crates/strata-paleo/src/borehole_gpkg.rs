@@ -45,7 +45,17 @@ pub fn write_isopach_contours_gpkg(
     let conn = Connection::open(out_path)
         .map_err(|e| StrataError::Storage(format!("GPKG 생성 실패: {e}")))?;
     create_gpkg_schema(&conn, srs_id)?;
-    insert_contour_features(&conn, srs_id, segments)?;
+    // 등층후선은 한 번에 1,000줄이 넘는다. 트랜잭션 없이 한 줄씩 넣으면
+    // 줄마다 암묵 트랜잭션이 열려 fsync 가 1,000번 넘게 일어나고,
+    // 3공짜리 시험 하나가 160초를 넘겼다. 한 트랜잭션으로 묶는다.
+    {
+        let tx = conn
+            .unchecked_transaction()
+            .map_err(|e| StrataError::Storage(format!("GPKG 트랜잭션 시작 실패: {e}")))?;
+        insert_contour_features(&tx, srs_id, segments)?;
+        tx.commit()
+            .map_err(|e| StrataError::Storage(format!("GPKG 트랜잭션 커밋 실패: {e}")))?;
+    }
     conn.close()
         .map_err(|(_, e)| StrataError::Storage(format!("GPKG 닫기 실패: {e}")))?;
     Ok(())

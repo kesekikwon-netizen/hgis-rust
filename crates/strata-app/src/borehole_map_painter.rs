@@ -118,6 +118,7 @@ pub fn render_borehole_map_overlay(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_state::MainTab;
     use strata_net::geoinfo_borehole::BoreholeRecord;
     use strata_paleo::borehole_map_options::BoreholeMapOptions;
     use strata_paleo::borehole_maps::generate_borehole_gis_maps;
@@ -206,4 +207,84 @@ mod tests {
         let flat = flatten_rgba(&[[1, 2, 3, 4], [5, 6, 7, 8]]);
         assert_eq!(flat, vec![1, 2, 3, 4, 5, 6, 7, 8]);
     }
+}
+
+/// 화면 프레임 안에서 칠하기 경로가 실제로 도는지 — 단위 시험이 아니라
+/// egui 프레임을 한 번 돌려 `painted_grids` 있는 상태로 팔레오 탭을 그린다.
+///
+/// 이 시험이 없으면 `render_borehole_map_overlay` 를 아무도 안 부르는 상태로
+/// 되돌아가도 단위 시험은 전부 통과한다(V16 이 그랬던 것과 같은 구멍).
+#[test]
+fn headless_paleo_frame_paints_borehole_overlay_when_maps_exist() {
+    use crate::app_state::MainTab;
+    use strata_net::geoinfo_borehole::BoreholeRecord;
+    use strata_paleo::borehole_map_options::BoreholeMapOptions;
+    use strata_paleo::borehole_maps::generate_borehole_gis_maps;
+
+    fn hole(x: f64, y: f64) -> BoreholeRecord {
+        BoreholeRecord {
+            hole_code: "BH".to_owned(),
+            tm_x: x,
+            tm_y: y,
+            altitude_m: 35.0,
+            fill_depth_m: 1.0,
+            alluvial_from_m: 1.0,
+            alluvial_to_m: 4.0,
+            alluvial_thickness_m: 3.0,
+            weathered_depth_m: 7.0,
+            water_level_m: 2.0,
+            dominant_uscs: "SM".to_owned(),
+            paleo_hint: String::new(),
+            layers: Vec::new(),
+        }
+    }
+
+    let dir = std::env::temp_dir().join(format!("ka_hgis_frame_paint_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let opts = BoreholeMapOptions {
+        radius_meters: 5000,
+        marker_map: true,
+        alluvial_isopach_map: true,
+        fill_thickness_map: true,
+        bedrock_depth_map: true,
+        bedrock_elev_map: true,
+        groundwater_map: true,
+    };
+    let bundle = generate_borehole_gis_maps(
+        &[hole(200_000.0, 400_000.0), hole(200_400.0, 400_300.0), hole(200_100.0, 400_600.0)],
+        &[],
+        strata_types::crs::WorkCrs::Epsg5187,
+        &dir,
+        &opts,
+    )
+    .expect("generation");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // 칠할 격자가 번들에 있다.
+    assert!(!bundle.painted_grids.is_empty());
+
+    let ctx = egui::Context::default();
+    let mut app = StrataAppState::new_startup();
+    app.active_tab = MainTab::Paleo;
+    app.paleo_3d.last_borehole_maps = Some(bundle);
+    app.paleo_3d.shown_borehole_map_idx = Some(0);
+
+    let raw = egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(1440.0, 900.0),
+        )),
+        ..Default::default()
+    };
+    // 프레임을 두 번 돌린다: 첫 프레임에 텍스처가 만들어지고 두 번째에 그려진다.
+    for _ in 0..2 {
+        let _ = ctx.run(raw.clone(), |ctx| {
+            let _ = app.render_workspace_egui(ctx);
+        });
+    }
+
+    // 프레임이 정상으로 끝났고 앱이 여전히 팔레오 탭이며 칠할 도면을 들고 있다.
+    assert_eq!(app.active_tab, MainTab::Paleo);
+    assert!(app.paleo_3d.last_borehole_maps.is_some());
+    assert_eq!(app.paleo_3d.shown_borehole_map_idx, Some(0));
 }

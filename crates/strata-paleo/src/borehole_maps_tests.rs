@@ -237,3 +237,33 @@ fn painted_grids_rasterize_with_their_ramps_to_visible_rgba() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+
+/// 등층후선 GPKG 를 한 트랜잭션으로 묶지 않으면 3공짜리 도면 하나에 160초가 걸렸다.
+/// 그 회귀를 막는다 — 지금은 0.2초대다.
+#[test]
+fn timing_all_five_maps_for_three_holes() {
+    use std::time::Instant;
+    let dir = std::env::temp_dir().join(format!("ka_hgis_timing_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let holes = vec![
+        hole(200_000.0, 400_000.0, 35.0, 1.0, 3.0, 7.0, 2.0),
+        hole(200_400.0, 400_300.0, 35.0, 1.0, 3.0, 7.0, 2.0),
+        hole(200_100.0, 400_600.0, 35.0, 1.0, 3.0, 7.0, 2.0),
+    ];
+    let t0 = Instant::now();
+    let opts = BoreholeMapOptions {
+        radius_meters: 5000,
+        marker_map: true,
+        alluvial_isopach_map: true,
+        fill_thickness_map: true,
+        bedrock_depth_map: true,
+        bedrock_elev_map: true,
+        groundwater_map: true,
+    };
+    let b = generate_borehole_gis_maps(&holes, &[], WorkCrs::Epsg5187, &dir, &opts).expect("gen");
+    let dt = t0.elapsed();
+    eprintln!("TIMING paleo generate: {:?} (created={}, grids={})", dt, b.created_count, b.painted_grids.len());
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(dt.as_secs() < 10, "generation too slow ({:?}) — GPKG 삽입이 트랜잭션 하나인지 확인하라", dt);
+}
