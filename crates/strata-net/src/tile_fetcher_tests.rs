@@ -4,9 +4,6 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use super::tile_cache_consts::*;
-use super::tile_layers::*;
-
 use super::*;
 
 #[test]
