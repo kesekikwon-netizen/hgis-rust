@@ -27,6 +27,42 @@ impl BoreholeColorRamp {
     }
 }
 
+/// C++ `GeoInfoBoreholeMaps.cpp:71` `rl->setOpacity(0.72)`.
+/// 시추 도면 래스터는 지도 위에 72% 불투명도로 얹힌다.
+pub const BOREHOLE_RASTER_OPACITY: f32 = 0.72;
+
+/// C++ `GeoInfoBoreholeMaps.cpp:58` `PaleoAnalysisRunner::writeFloatGeoTiff` + `:70`
+/// `QgsSingleBandPseudoColorRenderer` — Float32 격자를 램프로 칠해 RGBA 로 바꾼다.
+///
+/// C++ 은 QGIS 에 셰이더를 맡기지만 Rust 는 화면에 그릴 픽셀을 직접 만든다.
+/// 규칙은 같다: 값이 램프 범위를 벗어나면 양끝 색, 사이는 선형 보간,
+/// 그리고 레이어 불투명도 `0.72` 를 알파에 곱한다.
+///
+/// `grid` 값이 `f64::NAN` 이거나 무한이면 투명 픽셀(`[0,0,0,0]`)로 둔다 —
+/// C++ 의 NoData 셀과 같은 뜻이다.
+#[must_use]
+pub fn rasterize_ramp_rgba(grid: &[f64], ramp: &BoreholeColorRamp) -> Vec<[u8; 4]> {
+    let alpha = (BOREHOLE_RASTER_OPACITY * 255.0).round().clamp(0.0, 255.0) as u8;
+    grid.iter()
+        .map(|&v| {
+            if !v.is_finite() {
+                return [0, 0, 0, 0];
+            }
+            let [r, g, b] = interpolate_ramp_color(ramp, v);
+            [r, g, b, alpha]
+        })
+        .collect()
+}
+
+/// `rasterize_ramp_rgba` 결과를 egui 가 먹는 RGBA8 버퍼로 펴 바친다.
+#[must_use]
+pub fn rasterize_ramp_rgba8(grid: &[f64], ramp: &BoreholeColorRamp) -> Vec<u8> {
+    rasterize_ramp_rgba(grid, ramp)
+        .into_iter()
+        .flat_map(|p| p.into_iter())
+        .collect()
+}
+
 /// `#rrggbb` 16진 표기를 RGB 로 변환한다.
 #[must_use]
 pub fn parse_hex_rgb(hex: &str) -> Option<[u8; 3]> {

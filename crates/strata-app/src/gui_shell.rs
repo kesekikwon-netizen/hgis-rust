@@ -478,14 +478,24 @@ impl StrataAppState {
             &out_dir,
             &opts,
         ) {
-            Ok(bundle) => bundle.created_count,
+            Ok(bundle) => {
+                let created = bundle.created_count;
+                // 파일만 만들고 끝내면 지도에 색이 안 칠해진다. 화면에 그릴 격자·램프를
+                // 함께 들고 있어야 `gui_tab_paleo` 가 실제로 칠할 수 있다.
+                if !bundle.painted_grids.is_empty() {
+                    self.paleo_3d.shown_borehole_map_idx = Some(0);
+                }
+                self.paleo_3d.last_borehole_maps = Some(bundle);
+                created
+            }
             Err(_) => 0,
         }
     }
 
     /// `MainWindowFiles.cpp:259-289` `tryAddDroppedPaths` — 창에 끌어 놓은 파일을
     /// 확장자에 따라 레이어로 올린다. CAD 도면은 안내 창을 먼저 띄운다.
-    fn handle_dropped_files(&mut self, ctx: &egui::Context) {        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+    fn handle_dropped_files(&mut self, ctx: &egui::Context) {
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
         if dropped.is_empty() {
             return;
         }

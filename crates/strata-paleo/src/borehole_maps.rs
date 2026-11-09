@@ -50,6 +50,12 @@ pub struct BoreholeMapBundle {
     pub grid: GridTransform,
     /// 도면별 생성 결과(C++ `:189-197` 의 토글별 생성/제거 대응).
     pub layers: Vec<BoreholeMapLayerResult>,
+    /// 화면에 칠할 IDW 격자들(각각 180×180). `layers[i].ramp` 와 순서가 같다.
+    ///
+    /// C++ 은 `addMapLayer` 로 레이어를 프로젝트에 넣어 QGIS 가 격자를 들고 있지만
+    /// (`GeoInfoBoreholeMaps.cpp:75`), Rust 에는 레이어 계층이 없어 여기 담아 넘긴다.
+    /// 이것이 없으면 파일만 만들어지고 지도에는 아무 색도 칠해지지 않는다.
+    pub painted_grids: Vec<Vec<f64>>,
 }
 
 /// 한 도면의 생성 결과.
@@ -87,6 +93,7 @@ pub fn generate_borehole_gis_maps(
             written_files: Vec::new(),
             grid: empty_grid(),
             layers: Vec::new(),
+            painted_grids: Vec::new(),
         });
     }
 
@@ -105,6 +112,7 @@ pub fn generate_borehole_gis_maps(
         written_files: Vec::new(),
         grid: tf,
         layers: Vec::new(),
+        painted_grids: Vec::new(),
     };
     if opts.marker_map {
         bundle.layers.push(BoreholeMapLayerResult {
@@ -265,6 +273,9 @@ fn write_idw_layer(
         std::fs::remove_file(&path)?;
     }
     write_float32_geotiff(&path, tf, work_crs.epsg_code(), &grid)?;
+    // C++ 은 QGIS 가 레이어를 직접 들고 있어 격자가 프로젝트에 남는다(`:75` addMapLayer).
+    // Rust 는 레이어 계층이 없으므로 화면에 칠할 수 있도록 격자를 번들에 함께 담는다.
+    bundle.painted_grids.push(grid.clone());
     bundle.created_count += 1;
     bundle.written_files.push(path.clone());
     bundle.layers.push(BoreholeMapLayerResult {

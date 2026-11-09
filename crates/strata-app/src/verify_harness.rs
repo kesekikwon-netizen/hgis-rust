@@ -38,7 +38,7 @@ pub struct GateResult {
 
 #[must_use]
 pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
-    let mut gates = Vec::with_capacity(15);
+    let mut gates = Vec::with_capacity(17);
 
     // V1: 7대 도메인 레이어 스키마 v3 및 KaTheme 조용한 도판 대비비
     let schema = SurveySchemaV3::default();
@@ -314,6 +314,7 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
 
     gates.push(v15_borehole_ribbon_and_dialog_gate());
     gates.push(v16_borehole_maps_generation_gate());
+    gates.push(v17_borehole_maps_are_painted_gate());
 
     gates
 }
@@ -520,6 +521,106 @@ pub fn v16_borehole_maps_generation_gate() -> GateResult {
     }
 }
 
+/// V17: 시추 도면이 **화면에 실제로 칠해지는지** 확인한다 (`d7afcc8` Phase 3 후속).
+///
+/// V16 은 파일이 만들어졌는지만 본다. 그래서 램프가 계산만 되고 지도에 안 칠해져도
+/// V16 은 통과했다 — 실제로 그런 상태로 한동안 초록불이었다. 이 게이트는 그 구멍을 막는다:
+/// 격자가 번들에 남아 있는지, 램프로 칠했을 때 불투명 픽셀이 나오는지,
+/// C++ `setOpacity(0.72)` 알파가 지켜지는지 본다.
+#[must_use]
+pub fn v17_borehole_maps_are_painted_gate() -> GateResult {
+    use strata_net::geoinfo_borehole::BoreholeRecord;
+    use strata_paleo::borehole_color_ramp::{rasterize_ramp_rgba, BOREHOLE_RASTER_OPACITY};
+    use strata_paleo::borehole_map_options::BoreholeMapOptions;
+    use strata_paleo::borehole_maps::generate_borehole_gis_maps;
+
+    fn hole(code: &str, x: f64, y: f64, fill: f64, alluv: f64, weath: f64) -> BoreholeRecord {
+        BoreholeRecord {
+            hole_code: code.to_owned(),
+            tm_x: x,
+            tm_y: y,
+            altitude_m: 40.0,
+            fill_depth_m: fill,
+            alluvial_from_m: fill,
+            alluvial_to_m: fill + alluv,
+            alluvial_thickness_m: alluv,
+            weathered_depth_m: weath,
+            water_level_m: 2.4,
+            dominant_uscs: "CL".to_owned(),
+            paleo_hint: String::new(),
+            layers: Vec::new(),
+        }
+    }
+
+    let holes = [
+        hole("BH-01", 218_500.0, 361_400.0, 1.2, 4.2, 5.4),
+        hole("BH-02", 218_900.0, 361_600.0, 0.8, 3.1, -1.0),
+        hole("BH-03", 219_300.0, 361_200.0, 2.0, 6.5, 8.5),
+    ];
+    let dir = std::env::temp_dir().join(format!("ka_hgis_v17_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let opts = BoreholeMapOptions {
+        radius_meters: 5000,
+        marker_map: true,
+        alluvial_isopach_map: true,
+        fill_thickness_map: true,
+        bedrock_depth_map: true,
+        bedrock_elev_map: true,
+        groundwater_map: true,
+    };
+
+    let result = generate_borehole_gis_maps(&holes, &[], WorkCrs::Epsg5187, &dir, &opts);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let Ok(bundle) = result else {
+        return GateResult {
+            gate_id: "V17",
+            title_ko: "시추 도면 화면 칠하기(램프 래스터화 · 알파 0.72)",
+            passed: false,
+            detail: "generate_borehole_gis_maps returned Err".to_owned(),
+        };
+    };
+
+    // 1) 칠할 격자가 번들에 남아 있어야 한다(이게 없으면 화면이 빈다).
+    let ramp_layers: Vec<&strata_paleo::borehole_maps::BoreholeMapLayerResult> =
+        bundle.layers.iter().filter(|l| l.ramp.is_some()).collect();
+    let grids_ok = bundle.painted_grids.len() == ramp_layers.len() && !bundle.painted_grids.is_empty();
+
+    // 2) 각 격자가 램프로 칠해져 불투명 픽셀을 낸다.
+    let expected_alpha = (BOREHOLE_RASTER_OPACITY * 255.0).round() as u8;
+    let mut painted_ok = grids_ok;
+    let mut visible_total = 0usize;
+    for (grid, layer) in bundle.painted_grids.iter().zip(ramp_layers.iter()) {
+        let Some(ramp) = layer.ramp.as_ref() else {
+            painted_ok = false;
+            continue;
+        };
+        let rgba = rasterize_ramp_rgba(grid, ramp);
+        let visible = rgba.iter().filter(|p| p[3] > 0).count();
+        if visible == 0 {
+            painted_ok = false;
+        }
+        // 보이는 픽셀의 알파는 C++ `setOpacity(0.72)` 값과 같아야 한다.
+        if rgba.iter().filter(|p| p[3] > 0).any(|p| p[3] != expected_alpha) {
+            painted_ok = false;
+        }
+        visible_total += visible;
+    }
+
+    GateResult {
+        gate_id: "V17",
+        title_ko: "시추 도면 화면 칠하기(램프 래스터화 · 알파 0.72)",
+        passed: grids_ok && painted_ok && expected_alpha == 184,
+        detail: format!(
+            "grids={} ramps={} alpha={} visible_px={}",
+            bundle.painted_grids.len(),
+            ramp_layers.len(),
+            expected_alpha,
+            visible_total
+        ),
+    }
+}
+
 /// C++ `hgis.exe --smoke` 3단계 코어 무결성(`CrsRegistry`, `WkbCodec`, `GpkgStorage`) 검증 보고서 1:1
 #[must_use]
 pub fn run_cpp_smoke_suite_report() -> (bool, String) {
@@ -557,9 +658,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn v1_to_v16_verification_harness_passes_all_sixteen_gates() {
+    fn v1_to_v17_verification_harness_passes_all_seventeen_gates() {
         let gates = run_v1_to_v10_verification_harness();
-        assert_eq!(gates.len(), 16);
+        assert_eq!(gates.len(), 17);
         for g in &gates {
             assert!(g.passed, "Gate {} failed: {}", g.gate_id, g.detail);
         }

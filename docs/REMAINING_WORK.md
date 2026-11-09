@@ -5,25 +5,31 @@
 이 파일은 **아직 끝나지 않은 것**만 적는다. 끝난 일은 커밋 메시지와
 `Strata_Rust_전환_개발_마스터플랜.html` 에 있다.
 
-## 1. 시추 도면 레이어 스타일 미적용 (열린 항목 — 반드시 남길 것)
+## 1. 시추 도면 레이어 스타일 — **닫힘 (2026-11-09)**
 
-`strata-paleo::borehole_maps` 는 다섯 컬러 램프를 **계산해서 돌려주지만**,
-`crates/strata-app/src/borehole_bridge.rs` 는 그 램프를 지도 레이어에 **칠하지 않는다**.
+> 이 항목은 **해결됐다.** 아래 기록은 "테스트는 통과하는데 화면은 비어 있었다"는
+> 사실을 지우지 않으려고 남긴다. 같은 실수가 다른 곳에서 반복될 수 있기 때문이다.
 
-C++ `GeoInfoBoreholeMaps.cpp:45-81`(`addIdwMap`)과 `:83-166`(`addIsopachContourLayer`)이
-하는 일 중 아직 옮기지 않은 것:
+닫은 방법:
+- `strata-paleo::borehole_color_ramp` 에 `rasterize_ramp_rgba` / `rasterize_ramp_rgba8` 추가 —
+  Float32 격자를 램프로 칠해 RGBA 로 바꾼다. 알파는 C++ `:71` `setOpacity(0.72)` = 184.
+- `borehole_maps::BoreholeMapBundle` 에 `painted_grids` 추가 — C++ 은 QGIS 레이어가
+  격자를 들고 있지만(`:75` `addMapLayer`) Rust 는 그 계층이 없어 번들로 넘긴다.
+- `strata-app::borehole_map_painter` 신설 — 격자를 egui 텍스처로 지도 위에 실제로 그린다.
+  `gui_tab_paleo` 가 이 함수를 매 프레임 부른다.
+- **V17 게이트** 추가 — 격자가 남았는지·불투명 픽셀이 나오는지·알파가 184 인지 확인한다.
+  현재 출력: `grids=5 ramps=5 alpha=184 visible_px=162000`.
 
-- `QgsColorRampShader` 로 래스터에 의사색 부여 (`minVal`/`maxVal` + `ColorRampItem` 목록)
-- 레이어 불투명도 `0.72` (`:71`)
-- 등층후선 선 색 `#92400e`, 굵기 `0.42` (`:143-144`)
-- 등층후선 라벨 7.8pt, 색 `rgb(120,53,15)`, 흰색 버퍼 0.8 (`:149-154`)
-- `QgsBilinearRasterResampler` 확대 보간 (`:72`)
-- 범례 그룹 「참조 지도」 배치, `markReferenceLayer` (`:73-79`, `:158-164`)
-- 같은 제목 레이어가 이미 있으면 지우고 새로 넣기 (`:55-56`, `:88-89`)
+V16 만 있던 동안 왜 초록불이었는가: V16 은 파일이 만들어졌는지만 봤다.
+**파일 생성과 화면 표시는 다른 일이다.** 게이트를 만들 때 "무엇이 만들어졌나"와
+"사용자가 무엇을 보나"를 함께 물어야 한다.
 
-이 항목이 위험한 이유: 테스트는 전부 통과한다. 램프 값이 맞는지 보고,
-파일이 만들어졌는지만 보기 때문이다. **화면에 색이 안 칠해져도 초록불이 뜬다.**
-사람이 앱을 열어 확인하기 전에는 닫지 말 것.
+아직 남은 스타일 세부(사소하지만 C++ 과 다름):
+- `QgsBilinearRasterResampler` (`:72`) — Rust 는 `TextureOptions::LINEAR` 로 근사한다.
+- 등층후선 **벡터** 레이어를 지도에 칠하는 것(`:143-164` 선 색·라벨) — GPKG 파일은
+  만들지만 화면에 선을 그리는 경로는 아직 없다(래스터 5종만 칠한다).
+- 같은 제목 레이어 교체(`:55-56`, `:88-89`) — Rust 는 `painted_grids` 를 새로
+  덮어쓰므로 결과는 같다(옛 격자가 남지 않는다).
 
 ## 2. 300줄 초과 파일 50개 (Phase 5 잔여)
 

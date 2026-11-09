@@ -165,3 +165,75 @@ fn geotiff_output_is_readable_and_carries_work_crs() -> StrataResult<()> {
     assert_eq!(bundle.grid.width, 180);
     Ok(())
 }
+
+/// 화면에 칠할 격자가 실제로 번들에 담겨 오는지 — 이게 없으면 파일만 생기고
+/// 지도에는 색이 안 칠해진다(초록불인데 화면은 비어 있는 상태).
+#[test]
+fn painted_grids_are_retained_for_every_raster_layer() {
+    let dir = std::env::temp_dir().join(format!("ka_hgis_paint_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let opts = BoreholeMapOptions {
+        radius_meters: 5000,
+        marker_map: true,
+        alluvial_isopach_map: true,
+        fill_thickness_map: true,
+        bedrock_depth_map: true,
+        bedrock_elev_map: true,
+        groundwater_map: true,
+    };
+    let bundle = generate_borehole_gis_maps(&sample_holes(), &[], WorkCrs::Epsg5187, &dir, &opts)
+        .expect("borehole maps generation");
+
+    // 다섯 램프 레이어 -> 격자 다섯 장.
+    let ramp_layer_count = bundle.layers.iter().filter(|l| l.ramp.is_some()).count();
+    assert_eq!(ramp_layer_count, 5);
+    assert_eq!(
+        bundle.painted_grids.len(),
+        ramp_layer_count,
+        "every ramp layer must carry a grid for painting"
+    );
+
+    // 각 격자는 180x180 이고 유한값을 담는다.
+    let expected_len = bundle.grid.width * bundle.grid.height;
+    assert_eq!(expected_len, 180 * 180);
+    for (i, grid) in bundle.painted_grids.iter().enumerate() {
+        assert_eq!(grid.len(), expected_len, "grid {i} length");
+        assert!(grid.iter().any(|v| v.is_finite()), "grid {i} must hold data");
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 격자가 램프와 짝을 이뤄 실제 색 픽셀로 바뀐다(칠하기 경로의 끝단 검증).
+#[test]
+fn painted_grids_rasterize_with_their_ramps_to_visible_rgba() {
+    let dir = std::env::temp_dir().join(format!("ka_hgis_paint_rgba_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let opts = BoreholeMapOptions {
+        radius_meters: 5000,
+        marker_map: false,
+        alluvial_isopach_map: true,
+        fill_thickness_map: false,
+        bedrock_depth_map: false,
+        bedrock_elev_map: false,
+        groundwater_map: false,
+    };
+    let bundle = generate_borehole_gis_maps(&sample_holes(), &[], WorkCrs::Epsg5187, &dir, &opts)
+        .expect("borehole maps generation");
+
+    let ramp = bundle
+        .layers
+        .iter()
+        .find_map(|l| l.ramp.as_ref())
+        .expect("alluvial ramp");
+    let grid = bundle.painted_grids.first().expect("painted grid");
+    let rgba = crate::borehole_color_ramp::rasterize_ramp_rgba(grid, ramp);
+
+    assert_eq!(rgba.len(), grid.len());
+    let opaque = rgba.iter().filter(|p| p[3] > 0).count();
+    assert!(opaque > 0, "at least some cells must be visible");
+    // C++ `setOpacity(0.72)` — 보이는 픽셀의 알파는 184.
+    assert!(rgba.iter().filter(|p| p[3] > 0).all(|p| p[3] == 184));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

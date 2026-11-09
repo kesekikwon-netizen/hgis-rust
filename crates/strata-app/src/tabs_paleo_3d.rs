@@ -23,6 +23,11 @@ pub struct PaleoTerrain3dTabState {
     pub cross_section_rgba: Vec<u8>,
     pub imhof_slope_rgba: Vec<u8>,
     pub terrain3d_rgba: Vec<u8>,
+    /// C++ `GeoInfoBoreholeMaps.cpp:179-294` 로 마지막에 만든 시추 도면들.
+    /// 파일만 만들고 끝내면 지도에 색이 안 칠해지므로, 화면에 그릴 격자와 램프를 함께 들고 있다.
+    pub last_borehole_maps: Option<strata_paleo::borehole_maps::BoreholeMapBundle>,
+    /// 지금 화면에 칠하고 있는 시추 도면 번호(0부터). `None` 이면 칠하지 않는다.
+    pub shown_borehole_map_idx: Option<usize>,
 }
 
 impl Default for PaleoTerrain3dTabState {
@@ -41,6 +46,8 @@ impl Default for PaleoTerrain3dTabState {
             cross_section_rgba: Vec::new(),
             imhof_slope_rgba: Vec::new(),
             terrain3d_rgba: Vec::new(),
+            last_borehole_maps: None,
+            shown_borehole_map_idx: None,
         };
         s.run_sample_10km_analysis();
         s

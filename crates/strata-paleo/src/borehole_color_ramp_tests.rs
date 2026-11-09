@@ -66,3 +66,67 @@ fn hex_parser_and_linear_interpolation_between_stops() {
     // 중간값 선형 보간 (1.0 -> 50%)
     assert_eq!(interpolate_ramp_color(&ramp, 1.0), [128, 128, 128]);
 }
+
+/// C++ `GeoInfoBoreholeMaps.cpp:71` `setOpacity(0.72)` — 래스터 알파가 72%다.
+#[test]
+fn rasterize_uses_cpp_opacity_72_percent_and_transparent_nodata() {
+    let ramp = alluvial_isopach_ramp();
+    // 0.5m 이하 구간값 + NoData
+    let grid = [0.0_f64, 1.5, f64::NAN, f64::INFINITY];
+    let rgba = rasterize_ramp_rgba(&grid, &ramp);
+
+    assert_eq!(rgba.len(), 4);
+    let expected_alpha = (BOREHOLE_RASTER_OPACITY * 255.0).round() as u8;
+    assert_eq!(expected_alpha, 184, "0.72 * 255 = 183.6 -> 184");
+    // 실제 값 셀은 모두 72% 알파
+    assert_eq!(rgba[0][3], 184);
+    assert_eq!(rgba[1][3], 184);
+    // NoData 는 투명
+    assert_eq!(rgba[2], [0, 0, 0, 0]);
+    assert_eq!(rgba[3], [0, 0, 0, 0]);
+}
+
+/// 램프 양 끝을 벗어난 값은 양끝 색으로 잘린다(C++ QgsColorRampShader 와 같다).
+#[test]
+fn rasterize_clamps_to_ends_and_packs_rgba8() {
+    let ramp = BoreholeColorRamp {
+        min_value: 0.0,
+        max_value: 2.0,
+        stops: vec![
+            RampStop { value: 0.0, color_hex: "#000000", label: "a" },
+            RampStop { value: 2.0, color_hex: "#ffffff", label: "b" },
+        ],
+    };
+    let rgba = rasterize_ramp_rgba(&[-5.0, 99.0, 1.0], &ramp);
+    assert_eq!([rgba[0][0], rgba[0][1], rgba[0][2]], [0, 0, 0]);
+    assert_eq!([rgba[1][0], rgba[1][1], rgba[1][2]], [255, 255, 255]);
+    assert_eq!([rgba[2][0], rgba[2][1], rgba[2][2]], [128, 128, 128]);
+
+    let packed = rasterize_ramp_rgba8(&[-5.0, 99.0, 1.0], &ramp);
+    assert_eq!(packed.len(), 3 * 4);
+    assert_eq!(&packed[0..4], &[0, 0, 0, 184]);
+    assert_eq!(&packed[4..8], &[255, 255, 255, 184]);
+}
+
+/// 다섯 램프 모두 한 픽셀 이상 실제 색을 낸다(빈 램프가 아님).
+#[test]
+fn all_five_borehole_ramps_rasterize_to_visible_colors() {
+    for (name, ramp) in [
+        ("alluvial", alluvial_isopach_ramp()),
+        ("fill", fill_thickness_ramp()),
+        ("bedrock_depth", bedrock_depth_ramp()),
+        ("bedrock_elev", bedrock_elev_ramp(10.0, 30.0)),
+        ("groundwater", groundwater_ramp()),
+    ] {
+        let mid = (ramp.min_value + ramp.max_value) * 0.5;
+        let px = rasterize_ramp_rgba(&[mid], &ramp);
+        assert_eq!(px.len(), 1, "{name}");
+        assert_eq!(px[0][3], 184, "{name}: alpha");
+        // u8 세 개를 그냥 더하면 넘친다(#f59e0b = 245+158+11 = 414). u32 로 넓혀 더한다.
+        let luma = u32::from(px[0][0]) + u32::from(px[0][1]) + u32::from(px[0][2]);
+        assert!(
+            luma > 0,
+            "{name}: rasterized colour must not be pure black"
+        );
+    }
+}
