@@ -8,7 +8,7 @@ use crate::app_state::StrataAppState;
 use eframe::egui::{self, Color32, Pos2, Stroke};
 
 
-pub(crate) fn render_reference_status(app: &mut StrataAppState, ctx: &egui::Context, mut mut open: &mut bool) {
+pub(crate) fn render_reference_status(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
     // KaReferenceStatusDialog.cpp:31-112 & ReferenceInventory.cpp:140-189 — "자료 준비 상태"
     let full = ctx.screen_rect();
     // screen_rect is already logical points (Task D7)

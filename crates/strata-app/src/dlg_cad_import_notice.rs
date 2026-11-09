@@ -10,7 +10,7 @@ use crate::dialogs_modal::render_strata_modal_header;
 pub(crate) fn render_cad_import_notice(
     app: &mut crate::app_state::StrataAppState,
     ctx: &egui::Context,
-    mut open: &mut bool,
+    open: &mut bool,
 ) {
     let full = ctx.screen_rect();
     let w = 460.0_f32.min(full.width() - 32.0);

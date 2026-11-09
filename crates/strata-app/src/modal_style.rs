@@ -8,7 +8,7 @@ use crate::modal_types::ModalDialogController;
 use crate::app_state::StrataAppState;
 
 
-pub(crate) fn render_line_color(app: &mut StrataAppState, ctx: &egui::Context, mut mut open: &mut bool) {
+pub(crate) fn render_line_color(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
     // KaLineColorDialog.cpp:25-75 — 선 색 및 선 굵기 다이얼로그
     let full = ctx.screen_rect();
     // screen_rect is already logical points (Task D7)
@@ -180,7 +180,7 @@ pub(crate) fn render_line_color(app: &mut StrataAppState, ctx: &egui::Context, m
         });
 }
 
-pub(crate) fn render_dem_class(app: &mut StrataAppState, ctx: &egui::Context, mut mut open: &mut bool) {
+pub(crate) fn render_dem_class(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
     // KaDemClassDialog.cpp:91-170 — DEM 표현 다이얼로그
     let full = ctx.screen_rect();
     // screen_rect is already logical points (Task D7)

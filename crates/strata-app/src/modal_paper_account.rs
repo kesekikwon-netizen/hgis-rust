@@ -9,7 +9,7 @@ use crate::dialogs_modal::render_strata_modal_header;
 use crate::modal_types::ModalDialogController;
 
 
-pub(crate) fn render_paper_setup(app: &mut StrataAppState, ctx: &egui::Context, mut mut open: &mut bool) {
+pub(crate) fn render_paper_setup(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
     egui::Window::new("ka_modal_paper_setup")
         .title_bar(false)
         .resizable(false)
@@ -112,7 +112,7 @@ pub(crate) fn render_paper_setup(app: &mut StrataAppState, ctx: &egui::Context, 
         });
 }
 
-pub(crate) fn render_account_settings(app: &mut StrataAppState, ctx: &egui::Context, mut mut open: &mut bool) {
+pub(crate) fn render_account_settings(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
     egui::Window::new("ka_modal_account")
         .title_bar(false)
         .resizable(false)

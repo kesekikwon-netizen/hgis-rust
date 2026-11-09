@@ -7,7 +7,7 @@ use crate::app_state::StrataAppState;
 use eframe::egui::{self, Color32, Vec2};
 
 
-pub(crate) fn render_dem_download(app: &mut StrataAppState, ctx: &egui::Context, mut mut open: &mut bool) {
+pub(crate) fn render_dem_download(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
     // C++ `MainWindowDownloads.cpp:123-197` `startDemDownload` — 조사 폴더
     // `DEM/원본` 에 Copernicus 30m 타일을 실제로 받는다. 타일 규칙·상한·404
     // 건너뛰기는 `DemDownloadService.cpp:85-305` 를 `strata-net::dem_copernicus`
@@ -15,7 +15,7 @@ pub(crate) fn render_dem_download(app: &mut StrataAppState, ctx: &egui::Context,
     crate::dem_download_ui::render_dem_download(app, ctx, open);
 }
 
-pub(crate) fn render_paleo_source_download(app: &mut StrataAppState, ctx: &egui::Context, mut mut open: &mut bool) {
+pub(crate) fn render_paleo_source_download(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
     // KaPaleoStudio / MainWindowPaleo.cpp:115-173 (commit ceb5fd2)
     // 창 520x250, 반경 ComboBox 3항목(2/5/10 km, 기본 5), 3개 개별 버튼 순서 고정.
     egui::Window::new("ka_modal_paleo_sources")

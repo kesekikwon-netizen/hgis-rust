@@ -7,7 +7,7 @@ use crate::app_state::StrataAppState;
 use eframe::egui::{self, Color32, Pos2};
 
 
-pub(crate) fn render_control_point(app: &mut StrataAppState, ctx: &egui::Context, mut mut open: &mut bool) {
+pub(crate) fn render_control_point(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
     // KaControlPointDialog.cpp:40-120 — GPS 기준점
     let full = ctx.screen_rect();
     // screen_rect is already logical points (Task D7)

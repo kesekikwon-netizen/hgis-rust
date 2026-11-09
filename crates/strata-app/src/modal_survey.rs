@@ -7,7 +7,7 @@ use crate::app_state::StrataAppState;
 use eframe::egui::{self, Color32, Pos2, Stroke, Vec2};
 
 
-pub(crate) fn render_survey_area(app: &mut StrataAppState, ctx: &egui::Context, mut mut open: &mut bool) {
+pub(crate) fn render_survey_area(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
     // KaSurveyAreaDialog.cpp:45-160 — 조사구역 그리기 설정
     let full = ctx.screen_rect();
     // screen_rect is already logical points (Task D7)

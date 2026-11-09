@@ -11,7 +11,7 @@ use crate::dialogs_modal::ActiveModalDialog;
 use eframe::egui::{self, Color32, Pos2, Stroke, Vec2};
 
 
-pub(crate) fn render_export_submit_package(app: &mut StrataAppState, ctx: &egui::Context, mut mut open: &mut bool) {
+pub(crate) fn render_export_submit_package(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
     let full = ctx.screen_rect();
     // screen_rect is already in logical points, so dividing by the native
     // scale again shrank the modal on 150% displays (Task D5).
