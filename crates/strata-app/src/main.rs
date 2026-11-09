@@ -128,3 +128,16 @@ mod dlg_trench_generator;
 #[cfg(test)]
 #[path = "dialogs_download_print_tests.rs"]
 mod dialogs_download_print_tests;
+
+mod modal_control;
+mod modal_downloads;
+mod modal_export;
+mod modal_paper_account;
+mod modal_reference;
+mod modal_style;
+mod modal_survey;
+mod modal_types;
+
+#[cfg(test)]
+#[path = "dialogs_modal_tests.rs"]
+mod dialogs_modal_tests;
