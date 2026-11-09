@@ -57,6 +57,13 @@ impl StrataAppState {
             );
         }
 
+        // KA_HGIS_DEBUG_RIBBON=1 이면 첫 프레임의 실제 배치 값을 찍는다.
+        if std::env::var("KA_HGIS_DEBUG_RIBBON").is_ok() {
+            let full = ui.ctx().screen_rect();
+            eprintln!("[RIBBON] screen={:.1}x{:.1} ppp={:.4} avail={:.1} h_scale={:.4} ribbon_rect.l={:.1} w={:.1}",
+                full.width(), full.height(), ui.ctx().pixels_per_point(),
+                ui.available_width(), h_scale, ribbon_rect.left(), ribbon_rect.width());
+        }
         let group_layout = ribbon_group_layout();
         let frame = RibbonFrame {
             ribbon_rect,
@@ -122,6 +129,10 @@ impl StrataAppState {
                     Pos2::new(bx, g_rect.top() + 18.0),
                     Vec2::new(cw, 69.0 + extra_h),
                 );
+                if std::env::var("KA_HGIS_DEBUG_RIBBON").is_ok() {
+                    eprintln!("[CHIP] {:<10} bx={:7.1} cw={:6.1} rect=({:.1}..{:.1})",
+                        label, bx, cw, btn_rect.left(), btn_rect.right());
+                }
                 bx += cw;
                 // MainWindowRibbon.cpp:572 / MainWindow.cpp:1086 — GeoTIFF 는 「지도」 탭에서만
                 // 켜진다. 다른 탭(홈·도면·고지형·입체지형)에서는 흐리게 그린다.

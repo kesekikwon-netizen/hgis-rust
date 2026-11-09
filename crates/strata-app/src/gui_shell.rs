@@ -145,6 +145,35 @@ impl StrataAppState {
 
 impl eframe::App for StrataAppState {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // 첫 프레임에 창이 화면보다 크면 화면 안으로 줄인다.
+        //
+        // C++ `MainWindow.cpp:277` 은 `showMaximized()` 로 시작한다. 그런데 Windows
+        // 배율이 200% 인 화면에서 eframe/winit 은 요청한 inner_size 를 물리 픽셀로
+        // 잡아, 논리 1280×900 이 3866×2090 창이 되어 리본 오른쪽 절반이 화면 밖으로
+        // 나간다(사용자 지적 2026-11-09: 「배경 지도」 뒤 그룹이 안 보인다).
+        // OS 최대화에 기대지 않고, 실제 모니터 작업영역 안으로 직접 맞춘다.
+        if !self.startup_window_fitted {
+            self.startup_window_fitted = true;
+            let full = ctx.screen_rect();
+            let dbg_mon = ctx.input(|i| i.viewport().monitor_size);
+            if std::env::var("KA_HGIS_DEBUG_WIN").is_ok() {
+                eprintln!("[WIN] screen_rect={:.1}x{:.1} monitor={:?} ppp={:.3}",
+                    full.width(), full.height(), dbg_mon, ctx.pixels_per_point());
+            }
+            if let Some(mon) = dbg_mon {
+                // 창이 모니터보다 크면 작업영역(대략 모니터 - 작업표시줄 48px)에 맞춘다.
+                let max_w = mon.x;
+                let max_h = (mon.y - 48.0).max(600.0);
+                if full.width() > max_w + 1.0 || full.height() > max_h + 1.0 {
+                    let new_w = full.width().min(max_w);
+                    let new_h = full.height().min(max_h);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
+                        new_w, new_h,
+                    )));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
+                }
+            }
+        }
         // OS 모니터 DPI 배율(native_pixels_per_point, 예: 1.5)을 그대로 유지하고
         // 큰 글씨 모드일 때만 zoom_factor(1.15)를 곱한다.
         let want_zoom = if self.large_font_mode { 1.15 } else { 1.0 };
@@ -158,5 +187,7 @@ impl eframe::App for StrataAppState {
             self.theme_dirty = false;
         }
         let _ = self.render_workspace_egui(ctx);
+        // --snap 검증 모드: 액션→캡처를 프레임마다 하나씩 처리한다.
+        self.snap_tick(ctx);
     }
 }

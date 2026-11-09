@@ -72,6 +72,12 @@ pub struct StrataAppState {
     pub paper_look: bool,
     pub project_title: String,
     pub is_dirty: bool,
+    /// 첫 프레임에 창 크기를 모니터 작업영역 안으로 맞췄는지.
+    /// 200% 배율 화면에서 eframe 이 inner_size 를 물리 픽셀로 잡아 창이 화면을
+    /// 넘는 문제를 막는다(`gui_shell::update` 참조).
+    pub startup_window_fitted: bool,
+    /// --snap 검증 모드 상태(없으면 None). 실행 중에는 항상 None.
+    pub snap: Option<crate::snap_shot::SnapRequest>,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,

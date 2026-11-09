@@ -55,6 +55,10 @@ fn main() {
         }
         return;
     }
+    if args.iter().any(|a| a == "--diag-layout") {
+        diag_layout::run();
+        return;
+    }
     if args.iter().any(|a| a == "--verify-all") {
         let gates = verify_harness::run_v1_to_v10_verification_harness();
         for g in &gates {
@@ -71,21 +75,43 @@ fn main() {
         }
         return;
     }
+    // --snap <폴더> --snap-steps 액션:이름,액션:이름 이면 스스로 캡처하고 끝난다.
+    let snap_dir = args
+        .iter()
+        .position(|a| a == "--snap")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
+    let snap_steps = args
+        .iter()
+        .position(|a| a == "--snap-steps")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .unwrap_or_default();
+
     const APP_ICON_RGBA: &[u8] = include_bytes!("../../../data/theme/ka-hgis-app-paper-96.rgba");
     let icon_data = std::sync::Arc::new(eframe::egui::IconData {
         rgba: APP_ICON_RGBA.to_vec(),
         width: 96,
         height: 96,
     });
+    // C++ `MainWindow.cpp:243,277` — `resize(1280, 900)` 뒤 `showMaximized()`.
+    // 화면 배율이 200% 인 노트북에서는 논리 1600×860 이 실제 3200×1720 픽셀이 되어
+    // 화면(1920×1080)을 넘고, 리본 오른쪽 절반이 화면 밖으로 나간다.
+    // 최대화로 시작해 화면 안에 항상 들어오게 한다.
+    let start_maximized = std::env::var("KA_HGIS_WINDOWED").is_err();
+    let mut viewport = eframe::egui::ViewportBuilder::default()
+        .with_title("Strata")
+        .with_icon(icon_data)
+        .with_position([16.0, 16.0])
+        .with_inner_size([1280.0, 900.0])
+        .with_min_inner_size([960.0, 600.0])
+        .with_active(true)
+        .with_visible(true);
+    if start_maximized {
+        viewport = viewport.with_maximized(true);
+    }
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("Strata")
-            .with_icon(icon_data)
-            .with_position([16.0, 16.0])
-            .with_inner_size([1600.0, 860.0])
-            .with_min_inner_size([480.0, 320.0])
-            .with_active(true)
-            .with_visible(true),
+        viewport,
         renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
@@ -93,8 +119,11 @@ fn main() {
         "Strata",
         options,
         Box::new(|cc| {
-            let state = app_state::StrataAppState::new_startup();
+            let mut state = app_state::StrataAppState::new_startup();
             gui_theme_fonts::configure_korean_fonts_and_theme(&cc.egui_ctx, &state.theme);
+            if let Some(dir) = snap_dir.clone() {
+                state.snap = Some(snap_shot::SnapRequest::parse(&dir, &snap_steps));
+            }
             Ok(Box::new(state))
         }),
     ) {
@@ -111,6 +140,9 @@ mod tabs_paleo_3d_tests;
 #[path = "svg_path_paint_tests.rs"]
 mod svg_path_paint_tests;
 
+mod diag_layout;
+mod snap_shot;
+mod snap_shot_run;
 mod dlg_cad_import_notice;
 mod dlg_cadastral_download;
 mod dlg_drawing_print;
