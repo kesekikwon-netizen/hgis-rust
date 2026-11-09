@@ -157,3 +157,26 @@ mod modal_topo_rows;
 #[path = "dialogs_modal_tests_c.rs"]
 mod dialogs_modal_tests_c;
 
+mod shell_workspace;
+mod shell_dialogs;
+
+#[cfg(test)]
+#[path = "gui_shell_tests_a.rs"]
+mod gui_shell_tests_a;
+#[cfg(test)]
+#[path = "gui_shell_tests_b.rs"]
+mod gui_shell_tests_b;
+
+mod ri_body;
+
+mod ri_body_bottom;
+
+mod ri_body_cards;
+
+mod ri_attr_card;
+mod ri_layer_card;
+
+mod ri_types;
+#[cfg(test)]
+#[path = "ri_tests.rs"]
+mod ri_tests;
