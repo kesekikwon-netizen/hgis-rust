@@ -103,6 +103,9 @@ impl DemExtent {
 }
 
 /// C++ `:185-191` `densifyByDistance(40.0)` 후 짝수 번째 정점만 상자 안에서 모은다.
+///
+/// C++ 은 `(step++ % 2) == 0` 으로 한 정점 걸러 하나만 쓰고, 상자 밖은 버린다.
+/// 여기서도 순서를 유지한 채 같은 규칙을 쓴다.
 pub fn densify_and_sample_vertices(
     vertices: &[[f64; 2]],
     elevation_m: f64,
@@ -111,43 +114,18 @@ pub fn densify_and_sample_vertices(
     out: &mut Vec<[f64; 3]>,
     max_points: usize,
 ) {
+    let mut dense: Vec<[f64; 2]> = Vec::new();
     let step_m = if spacing_m > 0.0 { spacing_m } else { NGII_DEM_DENSIFY_M };
-    let mut parity = 0_usize;
-    let mut push = |p: [f64; 2], z: f64, out: &mut Vec<[f64; 3]>| {
+    densify_into(vertices, step_m, &mut dense);
+    for (order, p) in dense.into_iter().enumerate() {
         if out.len() >= max_points {
             return;
         }
-        if parity % 2 == 0 && extent.contains(p) {
-            out.push([p[0], p[1], z]);
-        }
-        parity += 1;
-    };
-    if vertices.len() < 2 {
-        for &v in vertices {
-            push(v, elevation_m, out);
-        }
-        return;
-    }
-    for pair in vertices.windows(2) {
-        let (a, b) = (pair[0], pair[1]);
-        let dx = b[0] - a[0];
-        let dy = b[1] - a[1];
-        let seg_len = dx.hypot(dy);
-        // C++ `densifyByDistance` 는 간격마다 정점을 심고 끝점을 유지한다.
-        let n = if seg_len > step_m {
-            (seg_len / step_m).ceil() as usize
-        } else {
-            1
-        };
-        for i in 0..n {
-            let t = i as f64 / n as f64;
-            push([a[0] + dx * t, a[1] + dy * t], elevation_m, out);
-            if out.len() >= max_points {
-                return;
-            }
+        // `(step++ % 2) == 0` (`:188`)
+        if order.is_multiple_of(2) && extent.contains(p) {
+            out.push([p[0], p[1], elevation_m]);
         }
     }
-    push(vertices[vertices.len() - 1], elevation_m, out);
 }
 
 /// C++ `:200-203` 격자 변환을 만든다.
@@ -191,15 +169,14 @@ pub fn build_ngii_dem_from_topographic(
         // C++ 은 정점마다 표고가 같은 등고선을 40m 간격으로 채운다.
         densify_into(&f.vertices_xy, NGII_DEM_DENSIFY_M, &mut dense);
         let z = f.elevation_m;
-        let mut parity = 0_usize;
-        for p in dense {
+        for (order, p) in dense.into_iter().enumerate() {
             if pts.len() >= NGII_DEM_MAX_POINTS {
                 break;
             }
-            if parity % 2 == 0 && extent.contains(p) {
+            // C++ :188 (step++ % 2) == 0
+            if order.is_multiple_of(2) && extent.contains(p) {
                 pts.push([p[0], p[1], z]);
             }
-            parity += 1;
         }
         if pts.len() >= NGII_DEM_MAX_POINTS {
             break;

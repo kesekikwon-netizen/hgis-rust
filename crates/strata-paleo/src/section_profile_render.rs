@@ -1,0 +1,190 @@
+//! 단면 표고 범위·픽셀 변환·좌표 투영·RGBA 렌더.
+//!
+//! `section_renderer` 에서 분리했다.
+
+use crate::pipeline::CrossSectionProfile;
+
+/// C++ `HGIS_MIN_SECTION_VERT_RANGE_M` (10.0m) — 완전 평지(`z_max == z_min`) 시 최소 수직 표고 범위 보장
+pub const HGIS_MIN_SECTION_VERT_RANGE_M: f32 = 10.0;
+
+/// C++ `KaSectionRenderer2D` 4대 표준 지층 및 지하수위 RGB 색상 상수 (`kyi/main`)
+pub const HGIS_STRATUM_FILL_COLOR: [u8; 3] = [194, 158, 120]; // 성토층 (Warm Earth)
+
+pub const HGIS_STRATUM_ALLUVIUM_COLOR: [u8; 3] = [222, 203, 166]; // 충적층 (Sand/Silt)
+
+pub const HGIS_STRATUM_WEATHERED_COLOR: [u8; 3] = [168, 160, 144]; // 풍화암 (Grayish Khaki)
+
+pub const HGIS_STRATUM_BEDROCK_COLOR: [u8; 3] = [120, 115, 108]; // 기반암 (Dark Stone Gray)
+
+pub const HGIS_WATER_TABLE_COLOR: [u8; 3] = [41, 128, 185]; // 지하수위 (Sky Blue)
+
+/// C++ `KaSectionRenderer2D::renderSection` 수직 범위 정규화:
+/// `z_max - z_min < 10.0m` 인 평지 단면일 때 중심 표고를 기준으로 상하 `±5.0m` 확장하여 최소 `10.0m` 수직 범위를 보장한다.
+#[must_use]
+pub fn compute_section_vertical_bounds(z_values_m: &[f32]) -> (f32, f32) {
+    let mut z_min = f32::INFINITY;
+    let mut z_max = f32::NEG_INFINITY;
+    for &z in z_values_m {
+        if z.is_finite() {
+            z_min = z_min.min(z);
+            z_max = z_max.max(z);
+        }
+    }
+    if !z_min.is_finite() || !z_max.is_finite() {
+        return (0.0, HGIS_MIN_SECTION_VERT_RANGE_M);
+    }
+    if (z_max - z_min) < HGIS_MIN_SECTION_VERT_RANGE_M {
+        let center = 0.5 * (z_min + z_max);
+        let half = 0.5 * HGIS_MIN_SECTION_VERT_RANGE_M;
+        (center - half, center + half)
+    } else {
+        (z_min, z_max)
+    }
+}
+
+/// C++ `KaSectionRenderer2D::renderSection` 표고 `z` -> 화면 픽셀 `Y` 변환 수식 (0 나눗셈/NaN 방어 포함)
+#[must_use]
+pub fn section_elevation_to_pixel_y(
+    z_m: f32,
+    z_min_m: f32,
+    z_max_m: f32,
+    viewport_height_px: f32,
+    top_padding_px: f32,
+) -> f32 {
+    let span = (z_max_m - z_min_m).max(HGIS_MIN_SECTION_VERT_RANGE_M);
+    let norm = ((z_max_m - z_m) / span).clamp(0.0, 1.0);
+    top_padding_px + norm * viewport_height_px.max(1.0)
+}
+
+pub const HGIS_CROSS_VIEW_THROTTLE_MS: u64 = 16;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MultiElevationProbeResult {
+    pub has_valid_sample: bool,
+    pub current_elevation_m: f64,
+    pub paleo_elevation_m: f64,
+    pub fill_depth_m: f64,
+    pub section_distance_d: f64,
+}
+
+/// C++ `KaCrossViewCursorSync` — 2D 월드 좌표 `world_xy`를 단면선 `[start, end]` 위로 내적 투영하여 거리 `d ∈ [0, L]` 산출 (`L <= 1e-6` 시 0.0 반환)
+#[must_use]
+pub fn project_world_coord_to_section_distance(
+    world_xy: [f64; 2],
+    section_start_xy: [f64; 2],
+    section_end_xy: [f64; 2],
+) -> f64 {
+    let vx = section_end_xy[0] - section_start_xy[0];
+    let vy = section_end_xy[1] - section_start_xy[1];
+    let len = vx.hypot(vy);
+    if len <= 1e-6 {
+        return 0.0;
+    }
+    let ux = world_xy[0] - section_start_xy[0];
+    let uy = world_xy[1] - section_start_xy[1];
+    let proj = (ux * vx + uy * vy) / len;
+    proj.clamp(0.0, len)
+}
+
+/// C++ `KaElevationTooltipProbe::probeAtWorldCoord` — 단면선 투영 거리 `d` 및 현 지표고·고지표고·성토심(`fillDepthM = Z_curr - Z_paleo`) 동시 산출
+#[must_use]
+pub fn probe_multi_elevation_at_world_coord(
+    world_xy: [f64; 2],
+    section_start_xy: [f64; 2],
+    section_end_xy: [f64; 2],
+    current_elevation_m: Option<f64>,
+    paleo_elevation_m: Option<f64>,
+) -> MultiElevationProbeResult {
+    let section_distance_d =
+        project_world_coord_to_section_distance(world_xy, section_start_xy, section_end_xy);
+    match (current_elevation_m, paleo_elevation_m) {
+        (Some(zc), Some(zp))
+            if zc.is_finite() && zp.is_finite() && zc > -9000.0 && zp > -9000.0 =>
+        {
+            MultiElevationProbeResult {
+                has_valid_sample: true,
+                current_elevation_m: zc,
+                paleo_elevation_m: zp,
+                fill_depth_m: zc - zp,
+                section_distance_d,
+            }
+        }
+        _ => MultiElevationProbeResult {
+            has_valid_sample: false,
+            current_elevation_m: f64::NAN,
+            paleo_elevation_m: f64::NAN,
+            fill_depth_m: 0.0,
+            section_distance_d,
+        },
+    }
+}
+
+#[must_use]
+pub fn render_cross_section_rgba(
+    profile: &CrossSectionProfile,
+    width: u32,
+    height: u32,
+) -> Vec<u8> {
+    let w = width.max(16) as usize;
+    let h = height.max(16) as usize;
+    // 기본 종이 배경 (#FAF6EE)
+    let mut buf = vec![0_u8; w * h * 4];
+    for px in buf.chunks_exact_mut(4) {
+        px.copy_from_slice(&[250, 246, 238, 255]);
+    }
+    let n = profile.dist_m.len();
+    if n < 2 {
+        return buf;
+    }
+
+    let mut min_z = f64::INFINITY;
+    let mut max_z = f64::NEG_INFINITY;
+    for (&zs, (&zp, &zb)) in profile.z_surface_curr_m.iter().zip(
+        profile
+            .z_paleo_top_m
+            .iter()
+            .zip(profile.z_bedrock_base_m.iter()),
+    ) {
+        min_z = min_z.min(zb).min(zp).min(zs);
+        max_z = max_z.max(zs).max(zp).max(zb);
+    }
+    let z_span = (max_z - min_z).max(2.0);
+    let z_to_y = |z: f64| -> usize {
+        let norm = ((max_z - z) / z_span).clamp(0.05, 0.95);
+        (norm * (h as f64)) as usize
+    };
+
+    for col in 0..w {
+        let t = (col as f64 / (w.saturating_sub(1).max(1) as f64)) * ((n - 1) as f64);
+        let idx = (t.floor() as usize).min(n - 2);
+        let frac = t - (idx as f64);
+        let lerp = |a: f64, b: f64| a + (b - a) * frac;
+
+        let zs = lerp(
+            profile.z_surface_curr_m[idx],
+            profile.z_surface_curr_m[idx + 1],
+        );
+        let zp = lerp(profile.z_paleo_top_m[idx], profile.z_paleo_top_m[idx + 1]);
+        let zb = lerp(
+            profile.z_bedrock_base_m[idx],
+            profile.z_bedrock_base_m[idx + 1],
+        );
+
+        let ys = z_to_y(zs).min(h - 1);
+        let yp = z_to_y(zp).min(h - 1);
+        let yb = z_to_y(zb).min(h - 1);
+
+        for row in ys..h {
+            let color = if row < yp {
+                [156, 163, 175, 255] // 매립·표토층 (회갈색)
+            } else if row < yb {
+                [217, 119, 6, 230] // 충적·고지형 퇴적층 (황토색)
+            } else {
+                [120, 113, 108, 255] // 풍화대·기반암 (암회색)
+            };
+            let off = (row * w + col) * 4;
+            buf[off..off + 4].copy_from_slice(&color);
+        }
+    }
+    buf
+}

@@ -94,9 +94,7 @@ pub fn render_borehole_map_overlay(
     painter: &egui::Painter,
     map_rect: Rect,
 ) -> Option<String> {
-    let Some(bundle) = app.paleo_3d.last_borehole_maps.as_ref() else {
-        return None;
-    };
+    let bundle = app.paleo_3d.last_borehole_maps.as_ref()?;
     let idx = app.paleo_3d.shown_borehole_map_idx?;
     let maps = paintable_maps(bundle);
     let map = maps.get(idx)?;

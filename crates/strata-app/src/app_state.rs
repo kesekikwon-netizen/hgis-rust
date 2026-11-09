@@ -580,7 +580,12 @@ mod tests {
             .ensure_domain_layer(DomainLayerKey::SurveyArea);
         app.is_dirty = true;
 
-        let dir = std::env::temp_dir().join("strata_r3_save_test");
+        // 시험마다 다른 폴더를 쓴다. 고정 이름은 병렬 실행이나 동시 빌드에서
+        // 다른 프로세스와 부딪혀 간헐적으로 실패한다(실제로 한 번 그렇게 실패했다).
+        let dir = std::env::temp_dir().join(format!(
+            "strata_r3_save_test_{}",
+            std::process::id()
+        ));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("병산동.gpkg");
         let _ = std::fs::remove_file(&path);
