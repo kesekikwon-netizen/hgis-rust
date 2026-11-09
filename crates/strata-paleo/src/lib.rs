@@ -19,6 +19,7 @@ pub mod borehole_map_options;
 pub mod borehole_maps;
 pub mod borehole_strata;
 pub mod dem_synthesizer;
+pub mod ngii_dem;
 pub mod pipeline;
 pub mod section_renderer;
 pub mod terrain_edt_tpi;
@@ -30,3 +31,7 @@ mod borehole_color_ramp_tests;
 #[cfg(test)]
 #[path = "borehole_maps_tests.rs"]
 mod borehole_maps_tests;
+
+#[cfg(test)]
+#[path = "ngii_dem_tests.rs"]
+mod ngii_dem_tests;
