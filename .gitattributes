@@ -18,3 +18,8 @@ third_party/** -text
 .cursor/cloud-install.sh text eol=lf
 .cursor/hooks/dev-loop.mjs text eol=lf
 *.qgz binary
+
+# Rust 소스는 저장소·체크아웃 모두 LF (마스터플랜 규칙).
+*.rs text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
