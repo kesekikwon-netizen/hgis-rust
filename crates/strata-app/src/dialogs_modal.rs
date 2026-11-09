@@ -73,7 +73,7 @@ pub(crate) use crate::modal_export::render_export_submit_package;
 pub(crate) use crate::modal_control::render_control_point;
 pub(crate) use crate::modal_survey::render_survey_area;
 pub(crate) use crate::modal_style::render_line_color;
-pub(crate) use crate::modal_style::render_dem_class;
+pub(crate) use crate::modal_style_demclass::render_dem_class;
 pub(crate) use crate::modal_reference::render_reference_status;
 
 pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context) {

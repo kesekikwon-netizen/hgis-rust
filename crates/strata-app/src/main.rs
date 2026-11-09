@@ -135,6 +135,7 @@ mod modal_export;
 mod modal_paper_account;
 mod modal_reference;
 mod modal_style;
+mod modal_style_demclass;
 mod modal_survey;
 mod modal_types;
 

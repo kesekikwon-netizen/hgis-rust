@@ -1,14 +1,31 @@
 //! `dialogs_download_print` 에서 옮긴 「TopographicImport」 대화상자.
 //!
 //! 분할 전에는 `render_download_and_print_dialogs` 의 match arm 이었다.
+//! 300줄 규칙에 맞춰 스캔 결과 표(`dlg_topo_import_table`), 정합 미리보기
+//! (`dlg_topo_import_preview`), 하단 단추·진행률(`dlg_topo_import_actions`)로 나눴다.
+//! `crate::dlg_topographic_import::render_topographic_import` 경로와 위젯 순서는 그대로다.
 
-use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+use eframe::egui::{self, Color32, Pos2, Stroke};
 
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::render_strata_modal_header;
-use crate::dialogs_modal::TOPO_CRS_UNKNOWN;
 
-pub(crate) fn render_topographic_import(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
+#[path = "dlg_topo_import_actions.rs"]
+mod dlg_topo_import_actions;
+#[path = "dlg_topo_import_preview.rs"]
+mod dlg_topo_import_preview;
+#[path = "dlg_topo_import_table.rs"]
+mod dlg_topo_import_table;
+
+use dlg_topo_import_actions::render_topo_import_actions;
+use dlg_topo_import_preview::render_topo_import_preview;
+use dlg_topo_import_table::render_topo_import_table;
+
+pub(crate) fn render_topographic_import(
+    app: &mut StrataAppState,
+    ctx: &egui::Context,
+    open: &mut bool,
+) {
     // KaTopographicImportDialog.cpp:287-497 — "수치지형도 — 좌표계 확인과 지도 추가"
     // 받은 폴더는 C++ 처럼 실제로 훑는다(MainWindowTopographic.cpp:131-148
     // → TopographicCatalog::scan → populate). 하드코딩 목록은 없다.
@@ -144,346 +161,11 @@ pub(crate) fn render_topographic_import(app: &mut StrataAppState, ctx: &egui::Co
                         });
                 });
 
-            // 스캔 결과 표 (KaTopographicImportDialog.cpp:460-492 populate)
-            egui::ScrollArea::vertical()
-                .max_height(190.0)
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    if rows.is_empty() {
-                        ui.add_space(6.0);
-                        let empty_text = if app.modals.topo_folder.is_empty() {
-                            "받은 수치지형도 폴더를 고르면 그 안의 .shp · .ngi · .dxf · .gpkg 를 확인합니다."
-                        } else {
-                            "받은 폴더에서 .shp · .ngi · .dxf · .gpkg 파일을 찾지 못했습니다. 하위 폴더까지 확인했으니 다른 폴더를 고르세요."
-                        };
-                        ui.label(
-                            egui::RichText::new(empty_text)
-                                .size(11.5)
-                                .color(Color32::from_rgb(120, 53, 15)),
-                        );
-                    }
-                    for (ri, row) in rows.iter().enumerate() {
-                        let already = app
-                            .modals
-                            .topo_row_already_loaded
-                            .get(ri)
-                            .copied()
-                            .unwrap_or(false);
-                        let is_selected = app.modals.topo_selected_row == ri;
-                        let row_bg = if is_selected {
-                            Color32::from_rgb(225, 240, 218)
-                        } else if row.review_reason.is_some() && !already {
-                            Color32::from_rgb(255, 251, 235)
-                        } else if ri % 2 == 0 {
-                            Color32::from_rgb(252, 251, 247)
-                        } else {
-                            Color32::WHITE
-                        };
-                        egui::Frame::NONE
-                            .fill(row_bg)
-                            .stroke(Stroke::new(0.5, Color32::from_rgb(220, 218, 210)))
-                            .inner_margin(egui::Margin::symmetric(8, 3))
-                            .show(ui, |ui| {
-                                egui::Grid::new(("ka_topo_import_row", ri))
-                                    .num_columns(4)
-                                    .spacing([10.0, 3.0])
-                                    .show(ui, |ui| {
-                                        // 1) 추가 / 레이어 + [이미 있음] / [검토 필요]
-                                        ui.horizontal(|ui| {
-                                            ui.set_min_width(250.0);
-                                            let mut checked = app
-                                                .modals
-                                                .topo_row_checks
-                                                .get(ri)
-                                                .copied()
-                                                .unwrap_or(false);
-                                            if ui.checkbox(&mut checked, "").changed() {
-                                                if let Some(slot) =
-                                                    app.modals.topo_row_checks.get_mut(ri)
-                                                {
-                                                    *slot = checked;
-                                                }
-                                            }
-                                            let tag = if already {
-                                                format!("{} [이미 있음]", row.label)
-                                            } else if row.review_reason.is_some() {
-                                                format!("{} [검토 필요]", row.label)
-                                            } else {
-                                                row.label.clone()
-                                            };
-                                            let tag_col = if already {
-                                                Color32::from_rgb(21, 128, 61)
-                                            } else if row.review_reason.is_some() {
-                                                Color32::from_rgb(180, 83, 9)
-                                            } else {
-                                                Color32::from_rgb(25, 25, 24)
-                                            };
-                                            if ui
-                                                .selectable_label(
-                                                    is_selected,
-                                                    egui::RichText::new(tag)
-                                                        .size(11.5)
-                                                        .strong()
-                                                        .color(tag_col),
-                                                )
-                                                .clicked()
-                                            {
-                                                app.modals.topo_selected_row = ri;
-                                                if let Some(reason) =
-                                                    row.review_reason.clone()
-                                                {
-                                                    // KaTopographicImportDialog.cpp:323-325
-                                                    app.modals.topo_status_text = format!(
-                                                        "검토 필요: {reason}. 자동으로 지도에 추가하지 않습니다."
-                                                    );
-                                                }
-                                            }
-                                        });
+            render_topo_import_table(app, ui, &rows);
 
-                                        // 2) 파일 이름 (KaTopographicImportDialog.cpp:473-474)
-                                        ui.add_sized(
-                                            [175.0, 22.0],
-                                            egui::Label::new(
-                                                egui::RichText::new(&row.file_name)
-                                                    .monospace()
-                                                    .size(11.0),
-                                            ),
-                                        );
+            let (sel_crs_idx, sel_crs_lbl) =
+                render_topo_import_preview(app, ui, modal_w, &rows, sel_ri, row_count);
 
-                                        // 3) 확인할 원본 좌표계 콤보 (KaTopographicImportDialog.cpp:475-487)
-                                        let crs_idx = app
-                                            .modals
-                                            .topo_row_crs_idx
-                                            .get(ri)
-                                            .copied()
-                                            .unwrap_or(0);
-                                        let mut choice = crs_idx;
-                                        egui::ComboBox::from_id_salt((
-                                            "ka_topo_crs_combo",
-                                            ri,
-                                        ))
-                                        .selected_text(row.choice_label(crs_idx))
-                                        .width(230.0)
-                                        .show_ui(ui, |ui| {
-                                            for ci in 0..row.choices.len() {
-                                                ui.selectable_value(
-                                                    &mut choice,
-                                                    ci,
-                                                    row.choice_label(ci),
-                                                );
-                                            }
-                                        });
-                                        if choice != crs_idx {
-                                            if let Some(slot) =
-                                                app.modals.topo_row_crs_idx.get_mut(ri)
-                                            {
-                                                *slot = choice;
-                                            }
-                                            app.modals.topo_selected_row = ri;
-                                        }
-
-                                        // 4) 좌표 범위 (KaTopographicImportDialog.cpp:488-491)
-                                        ui.add_sized(
-                                            [215.0, 22.0],
-                                            egui::Label::new(
-                                                egui::RichText::new(&row.extent_label)
-                                                    .monospace()
-                                                    .size(10.5),
-                                            )
-                                            .truncate(),
-                                        );
-                                        ui.end_row();
-                                    });
-                            });
-                    }
-                });
-
-            ui.add_space(6.0);
-            // 정합 미리보기 캔버스 (m_preview, KaTopographicImportDialog.cpp:304-306, 498-522)
-            let sel_crs_idx = app
-                .modals
-                .topo_row_crs_idx
-                .get(sel_ri)
-                .copied()
-                .unwrap_or(0);
-            let sel_crs_lbl = rows
-                .get(sel_ri)
-                .map_or_else(|| TOPO_CRS_UNKNOWN.to_owned(), |row| row.choice_label(sel_crs_idx));
-            let aligned = rows
-                .get(sel_ri)
-                .is_some_and(|row| row.choice_is_work_crs_family(sel_crs_idx));
-            let (prev_r, _) = ui.allocate_exact_size(
-                Vec2::new(modal_w - 28.0, 125.0),
-                egui::Sense::hover(),
-            );
-            let pp = ui.painter_at(prev_r);
-            pp.rect_filled(prev_r, 5.0, Color32::from_rgb(248, 247, 243));
-            pp.rect_stroke(
-                prev_r,
-                5.0,
-                Stroke::new(1.0, Color32::from_rgb(185, 182, 172)),
-                egui::StrokeKind::Inside,
-            );
-            // 기준 지적·조사구역 (정위치)
-            let pc = prev_r.center();
-            for gx in -4..=4 {
-                let x = pc.x + (gx as f32) * 85.0;
-                pp.line_segment(
-                    [
-                        Pos2::new(x, prev_r.top() + 6.0),
-                        Pos2::new(x, prev_r.bottom() - 6.0),
-                    ],
-                    Stroke::new(0.6, Color32::from_rgb(218, 215, 206)),
-                );
-            }
-            let survey_box = Rect::from_center_size(pc, Vec2::new(120.0, 74.0));
-            pp.rect_filled(
-                survey_box,
-                2.0,
-                Color32::from_rgba_unmultiplied(234, 88, 12, 55),
-            );
-            pp.rect_stroke(
-                survey_box,
-                2.0,
-                Stroke::new(2.0, Color32::from_rgb(234, 88, 12)),
-                egui::StrokeKind::Middle,
-            );
-            // C++ `previewCurrent(:498-522)` 는 실제 도엽을 좌표변환해 겹쳐 그린다.
-            // 여기서는 WGSL/지도 캔버스 없이 같은 판단(원점대가 작업 좌표계 계열인가)만 보인다.
-            let shift_x: f32 = if aligned { 0.0 } else { 90.0 };
-            let topo_col = if aligned {
-                Color32::from_rgb(21, 128, 61)
-            } else {
-                Color32::from_rgb(185, 28, 28)
-            };
-            for dy in [-26.0_f32, 0.0, 24.0] {
-                pp.line_segment(
-                    [
-                        Pos2::new(pc.x - 160.0 + shift_x, pc.y + dy - 12.0),
-                        Pos2::new(pc.x + 160.0 + shift_x, pc.y + dy + 14.0),
-                    ],
-                    Stroke::new(1.8, topo_col),
-                );
-            }
-            pp.text(
-                Pos2::new(prev_r.left() + 10.0, prev_r.top() + 14.0),
-                egui::Align2::LEFT_CENTER,
-                format!(
-                    "정합 미리보기 — 선택 행 #{}: {} ({})",
-                    if row_count == 0 { 0 } else { sel_ri + 1 },
-                    sel_crs_lbl,
-                    if aligned {
-                        "● 기존 조사구역·지적도와 정합 일치"
-                    } else {
-                        "▲ 좌표계 원점 불일치로 도엽 위치가 어긋남 — 원본 좌표계를 확인하세요"
-                    }
-                ),
-                egui::FontId::proportional(11.5),
-                topo_col,
-            );
-
-            ui.add_space(6.0);
-            // 하단 컨트롤 행 (KaTopographicImportDialog.cpp:307-318)
-            ui.horizontal(|ui| {
-                if ui
-                    .checkbox(&mut app.modals.topo_maps_enabled, "수치지형도 표시")
-                    .changed()
-                {
-                    app.home_map.real_survey.layer_visible.insert(
-                        "수치지형도 1:5,000 (합침)".to_owned(),
-                        app.modals.topo_maps_enabled,
-                    );
-                }
-                if ui.button("선택 도엽 정합 미리보기").clicked() {
-                    if rows.is_empty() {
-                        app.modals.topo_status_text =
-                            "먼저 받은 폴더를 골라 자료를 확인하세요.".to_owned();
-                    } else if sel_crs_idx == 0 {
-                        app.modals.topo_status_text =
-                            "먼저 미리 볼 원본 좌표계를 선택하세요.".to_owned();
-                    } else {
-                        app.modals.topo_status_text = format!(
-                            "선택 좌표계({sel_crs_lbl})의 미리보기입니다. 위성·지적과 정합을 확인한 뒤 추가하세요."
-                        );
-                    }
-                }
-
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("닫기").clicked() {
-                        app.modals.active = None;
-                    }
-                    if ui.button("색인 취소").clicked() {
-                        app.modals.cancel_topo_scan();
-                        app.modals.active = None;
-                    }
-                    // KaTopographicImportDialog.cpp:493 — 올릴 항목이 없으면 누를 수 없다.
-                    let add_btn = egui::Button::new(
-                        egui::RichText::new("좌표계 확인 완료 · 지도에 추가")
-                            .color(Color32::WHITE)
-                            .strong()
-                            .size(13.0),
-                    )
-                    .fill(Color32::from_rgb(181, 87, 58))
-                    .corner_radius(6.0)
-                    .min_size(Vec2::new(210.0, 32.0));
-                    if ui.add_enabled(!rows.is_empty(), add_btn).clicked() {
-                        // KaTopographicImportDialog.cpp:524-537 — 범위·좌표계가 확인된
-                        // 항목만 올린다. 하나라도 걸리면 아무것도 올리지 않고 문구로 끝낸다.
-                        if let Some(reason) = app.modals.topo_blocking_message() {
-                            app.modals.topo_status_text = reason.to_owned();
-                        } else {
-                            let picked = app.modals.topo_checked_rows();
-                            for row in &picked {
-                                if let Some(slot) =
-                                    app.modals.topo_row_already_loaded.get_mut(*row)
-                                {
-                                    *slot = true;
-                                }
-                            }
-                            app.modals.topo_imported_count = picked.len();
-                            if picked.is_empty() {
-                                // C++ `:524-527` — 체크가 없으면 올릴 것이 없다.
-                                app.modals.topo_status_text =
-                                    "추가할 항목에 체크하세요.".to_owned();
-                            } else {
-                                app.modals.topo_maps_enabled = true;
-                                app.home_map.real_survey.layer_visible.insert(
-                                    "수치지형도 1:5,000 (합침)".to_owned(),
-                                    true,
-                                );
-                                app.modals.topo_status_text = format!(
-                                    "수치지형도 레이어 {}개를 작업 좌표계(EPSG:5187)로 정합 변환하여 지도에 추가했습니다 ([이미 있음] 표시).",
-                                    picked.len()
-                                );
-                                app.home_map.draw_guide_message =
-                                    Some(app.modals.topo_status_text.clone());
-                            }
-                        }
-                    }
-                });
-            });
-
-            ui.add_space(4.0);
-            // 진행률 바 + 상태 문구 (KaTopographicImportDialog.cpp:319-321, 494-495)
-            let (pbar_r, _) = ui
-                .allocate_exact_size(Vec2::new(modal_w - 28.0, 14.0), egui::Sense::hover());
-            let bp = ui.painter_at(pbar_r);
-            bp.rect_filled(pbar_r, 3.0, Color32::from_rgb(232, 229, 220));
-            bp.rect_filled(
-                Rect::from_min_size(
-                    pbar_r.min,
-                    Vec2::new(
-                        pbar_r.width() * app.modals.topo_progress_pct.clamp(0.0, 1.0),
-                        pbar_r.height(),
-                    ),
-                ),
-                3.0,
-                Color32::from_rgb(44, 43, 41),
-            );
-            ui.label(
-                egui::RichText::new(&app.modals.topo_status_text)
-                    .size(11.0)
-                    .color(Color32::from_rgb(55, 54, 50)),
-            );
+            render_topo_import_actions(app, ui, modal_w, &rows, sel_crs_idx, &sel_crs_lbl);
         });
 }
