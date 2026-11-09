@@ -24,20 +24,40 @@ impl StrataAppState {
     ) {
         self.reset_survey_workspace(name);
         self.work_crs = work_crs;
+
+        // C++ `loadSurveyLayers` → `addNonEmptyDomainLayers`: 빈 GPKG 이므로
+        // 도메인 레이어는 0개다. 파일에 실제로 들어 있는 레이어만 되살린다.
+        let mut restored = 0usize;
         if let Ok(ws) = strata_storage::gpkg::GpkgRepository::open_read_only(path) {
             for key_name in ws.layers.keys() {
                 if let Some(key) = DomainLayerKey::from_id(key_name.as_str()) {
                     self.left_layers.ensure_domain_layer(key);
+                    restored += 1;
                 }
             }
         }
+
+        // C++ `applyStartupMap` → `ensureDefaultBasemaps`: 위성 + 지적 딱 두 개.
+        // (사용자 지적 2026-11-09: 최초 화면에 이 둘만 떠야 한다)
+        self.left_layers.apply_default_basemaps();
+        let total = self.left_layers.entries.len();
+
         self.survey_path = Some(path.to_path_buf());
         self.active_tab = MainTab::Map;
         self.home_map.draw_guide_message = Some(format!(
-            "새 조사 '{}' ({}) 프로젝트를 생성했습니다.",
+            "새 조사 '{}' ({}) 프로젝트를 생성했습니다. 배경지도 2개(위성·지적)를 켰습니다{}.",
             self.project_title,
-            self.work_crs.auth_id()
+            self.work_crs.auth_id(),
+            if restored == 0 {
+                String::new()
+            } else {
+                format!(", 조사 레이어 {restored}개 복원")
+            }
         ));
+        debug_assert!(
+            total >= 2,
+            "새 조사에는 위성·지적 배경지도가 최소 2개 있어야 한다"
+        );
     }
 
     /// `start_new_survey_project` 의 예전 시험·시연용 입구(임시 폴더에 만든다).
@@ -50,12 +70,17 @@ impl StrataAppState {
 
     /// 이전 조사의 지도·레이어·편집 상태를 모두 비운다(C++ `kaSafeClearQgisProject` 자리).
     /// 조사 파일 자체는 건드리지 않는다 — 저장하지 않은 편집은 호출자가 먼저 확인한다.
+    ///
+    /// C++ 은 `removeSurveyDomainLayers` 로 **조사 데이터 레이어만** 지우고 배경지도는
+    /// `ensureDefaultBasemaps` 가 다시 맞춘다. 여기서도 패널을 통째로 비우지 않고
+    /// 조사 데이터 그룹만 지운다(사용자 지적 2026-11-09: 레이어가 남아 있었다).
     fn reset_survey_workspace(&mut self, name: &str) {
         self.project_title = name.to_owned();
         self.survey_path = None;
         self.is_dirty = false;
         self.active_tool = MapToolKind::Pan;
-        self.left_layers = crate::left_layer_panel::LeftLayerPanel::new_empty();
+        // 조사 데이터 레이어만 제거. 배경지도·지적은 호출부가 다시 보장한다.
+        self.left_layers.remove_survey_domain_layers();
         self.right_inspector = crate::right_inspector::RightInspectorState::new_default();
         self.home_map.scene = strata_canvas2d::painter_scene::MapSceneModel::default();
         self.home_map.selected_feature_idx = None;
@@ -78,7 +103,7 @@ impl StrataAppState {
             self.project_title = "경주시".to_owned();
             self.left_layers
                 .ensure_domain_layer(DomainLayerKey::SurveyArea);
-            self.left_layers.add_cadastral_wms_layer();
+            self.left_layers.apply_default_basemaps();
             self.home_map.fit_to_survey();
             self.active_tab = MainTab::Map;
             self.home_map.draw_guide_message =
@@ -148,7 +173,8 @@ impl StrataAppState {
                         self.left_layers.ensure_domain_layer(key);
                     }
                 }
-                self.left_layers.add_cadastral_wms_layer();
+                // C++ `ensureDefaultBasemaps` — 열기 직후에도 위성·지적 두 개.
+                self.left_layers.apply_default_basemaps();
                 self.survey_path = Some(target.clone());
                 self.home_map.fit_to_survey();
                 self.active_tab = MainTab::Map;

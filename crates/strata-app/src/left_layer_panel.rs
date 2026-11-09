@@ -72,6 +72,55 @@ impl LeftLayerPanel {
         });
     }
 
+    /// 위성 배경지도 레이어. C++ `LayerOps::addVworldSatelliteMap`.
+    pub fn add_satellite_basemap_layer(&mut self) {
+        self.ensure_basemap_layer(
+            "vworld_satellite",
+            "위성지도 (VWorld)",
+            1.0,
+        );
+    }
+
+    /// 일반(백지도) 배경지도 레이어. C++ `LayerOps::addVworldBaseMap`.
+    pub fn add_vworld_base_layer(&mut self) {
+        self.ensure_basemap_layer("vworld_base", "일반지도 (VWorld)", 1.0);
+    }
+
+    /// 배경지도 레이어를 하나 보장한다. 이미 있으면 아무 것도 하지 않는다.
+    fn ensure_basemap_layer(&mut self, key: &str, label_ko: &str, opacity: f32) {
+        if self.entries.iter().any(|e| e.layer_key == key) {
+            return;
+        }
+        // 배경지도는 항상 트리 맨 아래(C++ `ensureSatelliteAtBottom`).
+        self.entries.push(LayerTreeEntry {
+            layer_key: key.to_owned(),
+            label_ko: label_ko.to_owned(),
+            group: LegendGroup::Basemap,
+            visible: true,
+            opacity,
+            read_only: true,
+            snap_enabled: false, // 배경지도 그림에는 스냅하지 않는다
+            feature_count: 0,
+        });
+    }
+
+    /// 새 조사·조사 열기 직후의 기본 배경지도.
+    ///
+    /// C++ `ensureDefaultBasemaps`(`MainWindow.cpp:1320-1366`) 는 **위성 1 + 지적 1**
+    /// 두 개만 올린다. 조사 데이터 레이어는 GPKG 에 실제로 들어 있는 것만
+    /// (`addNonEmptyDomainLayers`) 이므로, 빈 새 조사에서는 화면에 이 둘만 보인다.
+    pub fn apply_default_basemaps(&mut self) {
+        self.add_satellite_basemap_layer();
+        self.add_cadastral_wms_layer();
+    }
+
+    /// 조사 데이터 레이어만 지운다(C++ `removeSurveyDomainLayers`).
+    /// 배경지도·지적은 남긴다 — 그것들은 조사 데이터가 아니다.
+    pub fn remove_survey_domain_layers(&mut self) {
+        self.entries
+            .retain(|e| e.group != LegendGroup::SurveyData);
+    }
+
     pub fn remove_by_key(&mut self, layer_key: &str) -> bool {
         let before = self.entries.len();
         self.entries.retain(|e| e.layer_key != layer_key);

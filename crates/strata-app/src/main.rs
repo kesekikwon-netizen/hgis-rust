@@ -180,3 +180,7 @@ mod ri_types;
 #[cfg(test)]
 #[path = "ri_tests.rs"]
 mod ri_tests;
+
+#[cfg(test)]
+#[path = "ui_interaction_tests.rs"]
+mod ui_interaction_tests;

@@ -150,3 +150,104 @@ fn test_new_survey_reads_only_its_own_layers() {
     assert_eq!(app.survey_path.as_deref(), Some(path.as_path()));
     let _ = std::fs::remove_file(&path);
 }
+
+/// **사용자 지적 2026-11-09**: 새 조사 화면에 레이어가 가득 차 있었다.
+/// 원인은 레이어 패널이 실제 목록이 아니라 **고정 14행**을 그린 것이었다.
+/// 이제 그리는 행 수가 실제 레이어 수와 정확히 같아야 한다.
+#[test]
+fn test_new_survey_panel_draws_only_real_layers() {
+    use crate::gui_layer_panel::gui_layer_panel_row_spec::layer_rows;
+    use eframe::egui::Color32;
+
+    let mut app = StrataAppState::new_startup();
+    // 이전 조사 흉내: 조사 데이터 레이어 7종을 모두 넣어 둔다.
+    for key in DomainLayerKey::ALL {
+        app.left_layers.ensure_domain_layer(key);
+    }
+    assert_eq!(app.left_layers.entries.len(), 7);
+
+    app.start_new_survey_project("패널확인");
+
+    // 새 조사에는 조사 데이터 레이어가 없고, 배경지도(위성·지적)만 남는다.
+    let survey_layers: Vec<_> = app
+        .left_layers
+        .entries
+        .iter()
+        .filter(|e| e.group == strata_types::schema::LegendGroup::SurveyData)
+        .collect();
+    assert!(
+        survey_layers.is_empty(),
+        "새 조사에 이전 조사의 조사 데이터 레이어가 남아 있으면 안 된다: {:?}",
+        survey_layers
+            .iter()
+            .map(|e| e.layer_key.as_str())
+            .collect::<Vec<_>>()
+    );
+
+    // 그리는 행 수 = 실제 레이어 수 + 묶음 머리글 수.
+    let c = Color32::BLACK;
+    let rows = layer_rows(&app.left_layers, c, c, c, c);
+    let section_rows = rows.iter().filter(|r| !r.section.is_empty()).count();
+    let data_rows = rows.len() - section_rows;
+    assert_eq!(
+        data_rows,
+        app.left_layers.entries.len(),
+        "그리는 행 수가 실제 레이어 수와 같아야 한다 (고정 14행 금지)"
+    );
+    assert!(
+        rows.len() < 14,
+        "빈 새 조사에 14행을 그리면 예전 버그가 재발한다: {}행",
+        rows.len()
+    );
+}
+
+/// **사용자 지적 2026-11-09**: 최초 화면에는 위성·지적 **두 개만** 떠야 한다.
+/// C++ `ensureDefaultBasemaps`(`MainWindow.cpp:1320-1366`) 와 같은 규칙.
+#[test]
+fn test_new_survey_shows_exactly_satellite_and_cadastral() {
+    let mut app = StrataAppState::new_startup();
+    app.start_new_survey_project("배경지도확인");
+
+    let keys: Vec<&str> = app
+        .left_layers
+        .entries
+        .iter()
+        .map(|e| e.layer_key.as_str())
+        .collect();
+    assert_eq!(
+        keys.len(),
+        2,
+        "새 조사에는 배경지도 두 개만 있어야 한다. 실제: {keys:?}"
+    );
+    assert!(
+        keys.contains(&"vworld_satellite"),
+        "위성지도가 있어야 한다: {keys:?}"
+    );
+    assert!(
+        keys.contains(&"vworld_cadastral_wms"),
+        "연속지적도가 있어야 한다: {keys:?}"
+    );
+    // 그리고 둘 다 배경지도/지적 그룹이어야 한다(조사 데이터가 아니다).
+    for e in &app.left_layers.entries {
+        assert_ne!(
+            e.group,
+            strata_types::schema::LegendGroup::SurveyData,
+            "배경지도가 조사 데이터 그룹에 들어가면 안 된다"
+        );
+    }
+}
+
+/// 새 조사를 두 번 해도 배경지도가 중복되면 안 된다.
+#[test]
+fn test_repeated_new_survey_does_not_duplicate_basemaps() {
+    let mut app = StrataAppState::new_startup();
+    app.start_new_survey_project("첫번째");
+    let after_first = app.left_layers.entries.len();
+    app.start_new_survey_project("두번째");
+    let after_second = app.left_layers.entries.len();
+    assert_eq!(
+        after_first, after_second,
+        "새 조사를 반복해도 배경지도는 두 개로 유지돼야 한다"
+    );
+    assert_eq!(after_second, 2);
+}

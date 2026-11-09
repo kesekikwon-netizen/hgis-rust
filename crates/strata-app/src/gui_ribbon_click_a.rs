@@ -50,6 +50,9 @@ impl StrataAppState {
             "열기" => self.open_survey_file_dialog(),
             // C++ MainWindowSession.cpp:1409 saveProject / :1420 saveProjectAs
             "저장" => {
+                // C++ `MainWindowSession.cpp:1409-1418` saveProject —
+                // 조사 파일이 없으면 `saveProjectAs()` 로 「다른 이름으로 저장」
+                // 대화상자를 연다. 그 동작을 그대로 둔다(사용자가 경로를 고른다).
                 let _ = self.save_survey_project();
             }
             "다른 이름" => {
