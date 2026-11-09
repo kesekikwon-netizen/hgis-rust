@@ -127,6 +127,9 @@ pub struct RightInspectorState {
     pub section_id: String,
     /// KaControlCsvBox.cpp — CSV 경로
     pub control_csv_path: String,
+    /// C++ `KaFeatureCard.cpp:202-278` (`d7afcc8`) — 선택한 시추공의 주상도 층서 카드.
+    /// `hole_code` 가 비면 시추 카드를 그리지 않는다(유구 카드 그대로).
+    pub borehole: crate::borehole_card::BoreholeCardData,
 }
 
 impl RightInspectorState {
@@ -159,6 +162,7 @@ impl RightInspectorState {
             control_z: 48.50,
             section_id: "A-A'".to_owned(),
             control_csv_path: String::new(),
+            borehole: crate::borehole_card::BoreholeCardData::default(),
         }
     }
 
@@ -313,6 +317,15 @@ impl StrataAppState {
                 ui.add_space(4.0);
 
                 if is_attr {
+                    // C++ `KaFeatureCard.cpp:202-278` (`d7afcc8`) — 시추공을 고르면 주상도 층서 카드를
+                    // 유구 카드 위에 먼저 보여 준다. `hole_code` 가 없으면 예전처럼 유구 카드만 그린다.
+                    if self.right_inspector.borehole.has_borehole_fields() {
+                        crate::borehole_card::render_borehole_card(
+                            ui,
+                            &self.right_inspector.borehole,
+                        );
+                        ui.add_space(6.0);
+                    }
                     let active_ring = self
                         .home_map
                         .selected_feature_idx
