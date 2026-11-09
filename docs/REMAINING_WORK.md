@@ -146,3 +146,57 @@ C++ 은 세 버튼을 메뉴 항목으로 나열하고, Rust 는 다이얼로그
   입력이 갈리는 지점이 따로 있다. 경계값 하나만 보고 "덮었다" 고 말하지 말 것.
 - **커밋 해시를 말할 때는 `git log` 출력을 그대로 옮길 것.** 이 세션에서 존재하지 않는
   해시(`1f632db`)를 보고한 적이 있다. 실제 커밋은 `408fec3` 이다.
+
+## 5. 개발 환경 — 이미지 인식(스크린샷) 켜기 (2026-11-09)
+
+지금까지 UI 작업은 화면을 **직접 보지 못한 채** 코드와 시험으로만 했다.
+스크린샷을 읽으려면 이미지 입력을 지원하는 모델이 필요하다.
+
+### 무엇이 문제였나
+기본 모델 `deepseek-ai/deepseek-v4.1-flash-1017` 은 `input: [text]` 만 지원한다.
+`read_image` 도구를 부르면 "model does not declare image input" 으로 거부된다.
+
+### 정답 (`.dsh/profiles/desktop/cordis.patch.yml`)
+`settings.yaml.imported` 를 되돌리는 것이 **아니다** — 그 파일은 초기 버전이 남긴
+설정을 DSH 가 **한 번 import 한 뒤 이름을 바꿔 둔 것**이다(`app.asar` 의 settings
+플러그인 설명 참조). 실제 설정은 `cordis.patch.yml` 이다.
+
+`llm-pi-ai` 항목의 `providers` 에 `google-vertex` 를 더하고,
+`agent-default-model` 을 그쪽으로 바꾼다:
+
+```yaml
+      google-vertex:
+        displayName: Google Vertex AI
+        api: google-vertex
+        models:
+          - id: gemini-4-argon
+            name: Gemini 4 Argon (Vertex AI)
+            contextWindow: 1048576
+            maxTokens: 65536
+            input: [text, image]
+            reasoningEfforts:
+              low: low
+              medium: medium
+              high: high
+```
+
+`api: google-vertex` 는 `.env` 의 `GOOGLE_APPLICATION_CREDENTIALS` ·
+`GOOGLE_CLOUD_PROJECT` · `GOOGLE_CLOUD_LOCATION` 을 그대로 읽는다(추가 키 불필요).
+
+### 실제로 확인한 것 (2026-11-09)
+- ADC 토큰 교환 성공(`authorized_user`, cloud-platform 스코프)
+- `gemini-4-argon` 에 **1×1 빨간 PNG** 를 보내 "검붉은색" 답을 받았다 → 이미지 입력 동작
+- 같은 모델에 이미지 없이 보내면 "이미지가 첨부되지 않았습니다" → 구분 정상
+- `gemini-3.1-pro` · `gemini-2.5-flash` 는 이 프로젝트에서 **404**(권한 없음).
+  즉 argon 만 쓸 수 있다.
+- `--dump-config` 로 조합 확인: `input: [text, image]` 가 그대로 전달됨
+
+### 되돌리기
+`C:\Users\kyi25\.dsh\profiles\desktop\cordis.patch.yml.bak-20261109` (1,118 bytes)
+를 원래 이름으로 복사하고 DSH 를 재시작하면 deepseek 모델로 돌아간다.
+
+### 주의
+- `desktop` 프로파일은 Electron 앱 전용이라 CLI `--dump-config` 로는 못 본다.
+  검증은 `--profile web --patch <그 파일>` 로 한다.
+- 텍스트 호출이 가끔 **429(Resource exhausted)** 를 낸다. 잠시 뒤 재시도하면 된다.
+  이미지 호출은 같은 시점에도 성공했다.
