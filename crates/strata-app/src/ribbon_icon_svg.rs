@@ -230,6 +230,13 @@ pub fn svg_parts(id: &str) -> Option<&'static [SvgPart]> {
             SvgPart::Path("M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"),
             SvgPart::Path("M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"),
         ],
+        // C++ `KaIconsMockupMap.cpp:41` — `{"borehole", "lucide/layers"}` (`d7afcc8` 신규).
+        // 「시추」 단추는 「레이어」와 같은 layers 글리프를 쓴다.
+        "borehole" => &[
+            SvgPart::Path("M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"),
+            SvgPart::Path("M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"),
+            SvgPart::Path("M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"),
+        ],
         "warn" => &[
             SvgPart::Path("m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"),
             SvgPart::Path("M12 9v4"),

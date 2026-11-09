@@ -119,8 +119,10 @@ impl Default for ButtonMetrics {
             ribbon_icon_size: 32,
             ribbon_font_size: 13,
             ribbon_min_font_size: 12,
-            ribbon_chip_width: 40,
-            ribbon_min_width: 40,
+            // C++ `KaTheme.h` d7afcc8: `ribbonChipWidth = 36`, `ribbonMinWidth = 36`
+            // (10% 축소, 40 → 36). 「시추」 단추를 더해도 1줄 리본이 줄바꿈되지 않게 한다.
+            ribbon_chip_width: 36,
+            ribbon_min_width: 36,
             ribbon_label_padding: 8,
             ribbon_max_label_width: 64,
             scale_button_height: 30,
@@ -131,6 +133,21 @@ impl Default for ButtonMetrics {
             chip_height: 22,
             chip_radius: 11,
         }
+    }
+}
+
+impl ButtonMetrics {
+    /// C++ `KaBeginnerRibbon.cpp:31-36` `chipWidth(look, labelPx)` 1:1.
+    ///
+    /// 라벨이 보이는 칩(look 12, `tile = 32`)은 `ribbon_chip_width`, `tile + 8`,
+    /// `min(라벨폭, ribbon_max_label_width) + ribbon_label_padding` 중 가장 큰 값이다.
+    #[must_use]
+    pub fn ribbon_chip_width_for_label(&self, label_px: f32) -> u32 {
+        let icon_floor = self.ribbon_icon_size + 8;
+        let label_ceiling = label_px.min(self.ribbon_max_label_width as f32);
+        let label_width = label_ceiling + self.ribbon_label_padding as f32;
+        let widest = label_width.max(icon_floor as f32);
+        self.ribbon_chip_width.max(widest as u32)
     }
 }
 
@@ -705,8 +722,7 @@ mod tests {
     }
 
     #[test]
-    fn test_three_kingdoms_color_mapping_and_era_presets() {
-        // TestKaArchaeologicalThemePreset::testThreeKingdomsColorMapping:
+    fn test_three_kingdoms_color_mapping_and_era_presets() {        // TestKaArchaeologicalThemePreset::testThreeKingdomsColorMapping:
         // EraPreset::ThreeKingdoms -> #2C3E50 (RGB: 44, 62, 80)
         assert_eq!(EraPreset::ThreeKingdoms.standard_rgb(), [44, 62, 80]);
         assert_eq!(EraPreset::ThreeKingdoms.hex_color(), "#2C3E50");
@@ -737,5 +753,34 @@ mod tests {
         let pos =
             calculate_clamped_popover_position([1850, 500, 60, 30], [200, 120], [0, 0, 1920, 1080]);
         assert_eq!(pos[0], 1712);
+    }
+
+    /// C++ `TestKaTheme::testRibbonChipWidthTenPercentReduction` (`d7afcc8`):
+    /// 「시추」 단추를 더한 1줄 리본이 되도록 칩 최소 너비를 40 → 36 (10% 축소) 으로 고정한다.
+    #[test]
+    fn test_ribbon_chip_width_is_36_after_ten_percent_reduction() {
+        let m = ButtonMetrics::default();
+        assert_eq!(m.ribbon_chip_width, 36);
+        assert_eq!(m.ribbon_min_width, 36);
+        assert_eq!(m.ribbon_icon_size, 32);
+        assert_eq!(m.ribbon_label_padding, 8);
+        assert_eq!(m.ribbon_max_label_width, 64);
+    }
+
+    /// C++ `KaBeginnerRibbon.cpp:31-36` `chipWidth` 규칙 1:1.
+    ///
+    /// 라벨이 보이는 칩(tile 32)은 `max(ribbon_chip_width, tile + 8, min(label_px, 64) + 8)` 이다.
+    /// `tile + 8 = 40` 이므로 좁은 라벨에서는 36 이 아니라 40 이 하한이다 — C++ 도 같다.
+    #[test]
+    fn test_ribbon_chip_width_rule_matches_cpp() {
+        let m = ButtonMetrics::default();
+        // tile + 8 = 40 이 세 항 중 가장 크다.
+        assert_eq!(m.ribbon_chip_width_for_label(6.0), 40);
+        assert_eq!(m.ribbon_chip_width_for_label(14.0), 40);
+        assert_eq!(m.ribbon_chip_width_for_label(30.0), 40);
+        // 64 + 8 = 72 이 가장 크다 (`ribbon_max_label_width` 절단).
+        assert_eq!(m.ribbon_chip_width_for_label(100.0), 72);
+        // 라벨 폭이 커지는 경계: min(label,64)+8 > 40 이려면 label > 32.
+        assert_eq!(m.ribbon_chip_width_for_label(33.0), 41);
     }
 }

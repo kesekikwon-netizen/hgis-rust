@@ -11,8 +11,78 @@ use crate::ribbon_icons::{cpp_ribbon_tooltip, paint_ribbon_icon};
 pub const UX_RIBBON_HEIGHT: f32 = 91.0;
 pub const UX_VIEW_TAB_BAR_HEIGHT: f32 = 51.0;
 pub const UX_RIBBON_BUTTON_SIZE: Vec2 = Vec2::new(69.0, 100.0);
-pub const UX_RIBBON_GROUP_XS: [f32; 7] = [9.0, 223.0, 474.0, 630.0, 1013.0, 1062.0, 1278.0];
-pub const UX_RIBBON_GROUP_WIDTHS: [f32; 7] = [214.0, 250.0, 156.0, 382.0, 49.0, 215.0, 50.0];
+
+/// C++ `MainWindowRibbon.cpp:229-235` 7그룹과 각 그룹의 단추 순서 1:1.
+///
+/// `d7afcc8` 은 「자료 받기」에 다섯 번째 단추 「시추」(`btnBoreholeFetch`)를 더했고,
+/// 그 자리를 만들려고 리본 칩 최소 너비를 40 → 36 으로 10% 줄였다. 마스터플랜 Chapter 04
+/// 목업도 「자료 받기 (5종 완성)」 = DEM·지적·수치지형·유산·시추, 「배경 지도」 =
+/// 지형·등고선·토양·고지형·지질·수계·옛 지도 로 같다.
+pub const UX_RIBBON_GROUPS: [(&str, &[&str]); 7] = [
+    ("조사", &["새 조사", "열기", "저장", "다른 이름"]),
+    ("기록", &["선택", "측거", "그리기", "시굴격자", "버퍼"]),
+    ("자료 받기", &["DEM", "지적", "수치지형", "유산", "시추"]),
+    (
+        "배경 지도",
+        &["지형", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"],
+    ),
+    ("정합", &["정합"]),
+    ("내보내기", &["도면", "인쇄", "GeoTIFF", "검수·제출"]),
+    ("기타", &["더보기"]),
+];
+
+/// `KaTheme.h:97-98` `ribbonChipWidth = 36` / `40` — d7afcc8 의 10% 축소 배율.
+/// 칩 폭 표를 이 배율로 줄여 「시추」가 더해져도 1줄 안에 들어오게 한다.
+pub const RIBBON_CHIP_SCALE: f32 = 36.0 / 40.0;
+
+/// `439-449` — 한 칩의 기준 폭(px, 12.5px 라벨 실측값). 배율을 곱하기 전 값이다.
+#[must_use]
+pub fn ribbon_chip_base_width(group_idx: usize, label: &str) -> f32 {
+    match (group_idx, label) {
+        (0, _) => 53.0,
+        (1, "그리기" | "시굴격자") => 51.0,
+        (1, _) => 47.0,
+        (2, "수치지형") => 60.0,
+        (2, _) => 47.0,
+        (3, "옛 지도") => 51.0,
+        (3, _) => 47.0,
+        (4, _) => 47.0,
+        (5, "GeoTIFF" | "검수·제출") => 60.0,
+        (5, _) => 47.0,
+        _ => 48.0,
+    }
+}
+
+/// 7그룹의 `(시작 x, 폭)` 을 `UX_RIBBON_GROUPS` 에서 계산한다. 그룹 폭은 칩 폭 합 + 좌우 여백 2px.
+/// 표를 손으로 고치지 않으므로 단추를 더해도 배치가 어긋나지 않는다.
+#[must_use]
+pub fn ribbon_group_layout() -> ([f32; 7], [f32; 7]) {
+    let mut xs = [0.0_f32; 7];
+    let mut widths = [0.0_f32; 7];
+    let mut x = 9.0_f32;
+    for (g_idx, (_, items)) in UX_RIBBON_GROUPS.iter().enumerate() {
+        let sum: f32 = items
+            .iter()
+            .map(|label| ribbon_chip_base_width(g_idx, label) * RIBBON_CHIP_SCALE)
+            .sum();
+        xs[g_idx] = x;
+        widths[g_idx] = sum + 2.0;
+        x += widths[g_idx];
+    }
+    (xs, widths)
+}
+
+/// C++ `KaBeginnerRibbon` 은 폭을 재서 배치하므로 고정 표가 없다.
+/// Rust 는 1600×900 목업 기준표(`UX_RIBBON_GROUP_XS`/`_WIDTHS`)를 같은 방식으로 계산해 쓴다.
+#[must_use]
+pub fn ux_ribbon_group_xs() -> [f32; 7] {
+    ribbon_group_layout().0
+}
+
+#[must_use]
+pub fn ux_ribbon_group_widths() -> [f32; 7] {
+    ribbon_group_layout().1
+}
 
 /// `KaRegionLocator.cpp:156, 162-163, 192-194` — 동·읍·면·리 / 지번 칸 안내와 맨 아래 규칙 두 줄
 pub const REGION_LOT_PLACEHOLDER: &str = "산 12-3";
@@ -200,47 +270,17 @@ impl StrataAppState {
             );
         }
 
-        let groups: &[(&str, &[&str])] = &[
-            ("조사", &["새 조사", "열기", "저장", "다른 이름"]),
-            ("기록", &["선택", "측거", "그리기", "시굴격자", "버퍼"]),
-            ("자료 받기", &["지적", "수치지형", "유산"]),
-            (
-                "배경 지도",
-                &[
-                    "지형",
-                    "DEM",
-                    "등고선",
-                    "토양",
-                    "고지형",
-                    "지질",
-                    "수계",
-                    "옛 지도",
-                ],
-            ),
-            ("정합", &["정합"]),
-            ("내보내기", &["도면", "인쇄", "GeoTIFF", "검수·제출"]),
-            ("기타", &["더보기"]),
-        ];
+        let groups: &[(&str, &[&str])] = &UX_RIBBON_GROUPS;
+        let group_xs = ribbon_group_layout().0;
+        let group_widths = ribbon_group_layout().1;
 
         let chip_base_w = |g_idx: usize, label: &str| -> f32 {
-            match (g_idx, label) {
-                (0, _) => 53.0,
-                (1, "그리기" | "시굴격자") => 51.0,
-                (1, _) => 47.0,
-                (2, "수치지형") => 60.0,
-                (2, _) => 47.0,
-                (3, "옛 지도") => 51.0,
-                (3, _) => 47.0,
-                (4, _) => 47.0,
-                (5, "GeoTIFF" | "검수·제출") => 60.0,
-                (5, _) => 47.0,
-                _ => 48.0,
-            }
+            ribbon_chip_base_width(g_idx, label) * RIBBON_CHIP_SCALE
         };
 
         for (g_idx, (g_title, items)) in groups.iter().enumerate() {
-            let gx = ribbon_rect.left() + UX_RIBBON_GROUP_XS[g_idx] * h_scale;
-            let gw = UX_RIBBON_GROUP_WIDTHS[g_idx] * h_scale;
+            let gx = ribbon_rect.left() + group_xs[g_idx] * h_scale;
+            let gw = group_widths[g_idx] * h_scale;
             let g_rect = Rect::from_min_size(
                 Pos2::new(gx, ribbon_rect.top() + 1.0),
                 Vec2::new(gw, ribbon_h - 2.0),
@@ -1834,6 +1874,13 @@ impl StrataAppState {
             "유산" => {
                 self.active_tab = MainTab::Map;
                 self.modals.active = Some(ActiveModalDialog::HeritageRegionSelect);
+            }
+            // C++ `MainWindowRibbon.cpp:532-547` btnBoreholeFetch (`d7afcc8`) —
+            // 조사 폴더가 없으면 「먼저 조사 폴더를 준비하세요」 안내만 남기고 창을 열지 않는다
+            // (`KaBoreholeDialog.cpp:66-70`).
+            "시추" => {
+                self.active_tab = MainTab::Map;
+                let _ = self.open_borehole_dialog();
             }
             // C++ MainWindowOverlay.cpp:243-271 toggleTerrainMap. 이미 있는 「지형맵」 은
             // :247 toggleExistingOverlay(:225-240)가 껐다 켰다 하고 `지형맵를 껐습니다.` /

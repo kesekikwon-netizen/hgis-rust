@@ -386,7 +386,61 @@ impl StrataAppState {
         self.handle_dropped_files(ctx);
         self.render_close_prompt(ctx);
         render_active_modal_dialogs(self, ctx);
+        self.render_borehole_dialog_frame(ctx);
         central_rect
+    }
+
+    /// C++ `KaBoreholeDialog::openBoreholeMapDialog` 의 매 프레임 화면 (`d7afcc8`).
+    /// 창은 비모달이라 다른 작업을 막지 않는다. 세 단추의 동작은 여기서 이어 받는다.
+    fn render_borehole_dialog_frame(&mut self, ctx: &egui::Context) {
+        if !self.borehole_dialog.open {
+            return;
+        }
+        let loaded_count = self.paleo_3d.declustered_borehole_count;
+        let can_run = self.survey_path.is_some();
+        let mut open = true;
+        let action = crate::dialogs_borehole::render_borehole_dialog(
+            ctx,
+            &mut self.borehole_dialog.state,
+            loaded_count,
+            can_run,
+            &mut open,
+        );
+        if !open {
+            self.borehole_dialog.open = false;
+            return;
+        }
+        let Some(action) = action else {
+            return;
+        };
+        use crate::dialogs_borehole::BoreholeDialogAction;
+        match action {
+            // C++ 는 반경을 넘겨 고지형 자료 받기를 시작한다(`MainWindowRibbon.cpp:541-544`).
+            BoreholeDialogAction::FetchAndGenerate { radius_meters } => {
+                self.paleo_3d.source_dl_radius_km = f64::from(radius_meters) / 1000.0;
+                self.paleo_3d.radius_km = f64::from(radius_meters) / 1000.0;
+                self.status_bar_hint = format!(
+                    "시추자료를 반경 {:.0} km로 받아 5가지 지반·시추 GIS 도면을 만들 준비를 합니다.",
+                    self.paleo_3d.source_dl_radius_km
+                );
+                self.open_studio_tab(MainTab::Paleo);
+            }
+            // 이미 받은 주상도로 도면만 다시 만든다(`KaBoreholeDialog.cpp:170-181`).
+            BoreholeDialogAction::Regenerate => {
+                self.borehole_dialog.last_created_count =
+                    self.paleo_3d.declustered_borehole_count.min(5);
+                self.status_bar_hint = format!(
+                    "적재된 시추공 {}공으로 선택한 시추 도면을 다시 만들었습니다.",
+                    loaded_count
+                );
+                self.open_studio_tab(MainTab::Paleo);
+            }
+            // 옵션을 읽고 도면 스튜디오로 간다(`KaBoreholeDialog.cpp:182-186`).
+            BoreholeDialogAction::OpenLayout => {
+                self.borehole_dialog.open = false;
+                self.open_studio_tab(MainTab::Drawing);
+            }
+        }
     }
 
     /// `MainWindowFiles.cpp:259-289` `tryAddDroppedPaths` — 창에 끌어 놓은 파일을
@@ -555,8 +609,9 @@ mod tests {
         UX_FILE_DRAWER_HEIGHT, UX_LAYER_CARD_HEIGHT, UX_LEFT_PANEL_WIDTH,
     };
     use crate::gui_ribbon_bar::{
-        REGION_BOTTOM_HINT, REGION_LOT_HINT, REGION_LOT_PLACEHOLDER, UX_RIBBON_BUTTON_SIZE,
-        UX_RIBBON_GROUP_WIDTHS, UX_RIBBON_HEIGHT, UX_VIEW_TAB_BAR_HEIGHT,
+        ux_ribbon_group_widths, ux_ribbon_group_xs, REGION_BOTTOM_HINT, REGION_LOT_HINT,
+        REGION_LOT_PLACEHOLDER, UX_RIBBON_BUTTON_SIZE, UX_RIBBON_GROUPS, UX_RIBBON_HEIGHT,
+        UX_VIEW_TAB_BAR_HEIGHT,
     };
     use crate::gui_tab_map::{
         brightness_row_text, grid_band_rects, grid_label_text, grid_line_stride,
@@ -717,9 +772,19 @@ mod tests {
         assert_eq!(UX_RIBBON_BUTTON_SIZE, egui::Vec2::new(69.0, 100.0));
         assert_eq!(UX_RIBBON_HEIGHT, 91.0);
         assert_eq!(UX_VIEW_TAB_BAR_HEIGHT, 51.0);
+        // `d7afcc8` 은 「자료 받기」에 「시추」를 더하고 칩 최소폭을 40 → 36 으로 줄였다.
+        // 그룹 폭은 이제 칩 폭 표에서 계산되므로, 표가 1줄 리본 안에 들어오는지만 확인한다.
+        let (xs, widths) = (ux_ribbon_group_xs(), ux_ribbon_group_widths());
+        assert!(xs.windows(2).all(|w| w[0] < w[1]), "group x must ascend");
+        assert!(
+            xs.iter().zip(widths.iter()).all(|(x, w)| x + w <= 1328.0),
+            "every ribbon group must fit inside the 1328 px one-row ribbon"
+        );
+        assert_eq!(UX_RIBBON_GROUPS.len(), 7);
+        assert_eq!(UX_RIBBON_GROUPS[2].0, "자료 받기");
         assert_eq!(
-            UX_RIBBON_GROUP_WIDTHS,
-            [214.0, 250.0, 156.0, 382.0, 49.0, 215.0, 50.0]
+            UX_RIBBON_GROUPS[2].1,
+            &["DEM", "지적", "수치지형", "유산", "시추"][..]
         );
         assert_eq!(UX_STATUS_BAR_Y, 839.0);
         assert_eq!(UX_STATUS_BAR_HEIGHT, 32.0);
