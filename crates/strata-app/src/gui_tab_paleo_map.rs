@@ -32,15 +32,13 @@ impl StrataAppState {
                 let w = out.transform.width;
                 let h = out.transform.height;
                 if w > 0 && h > 0 && out.paleo_rgba_buffer.len() >= w * h * 4 {
-                    let rgba = if self.paleo_3d.show_imhof_slope_overlay {
-                        out.paleo_rgba_buffer.clone()
-                    } else {
-                        let mut flat = Vec::with_capacity(w * h * 4);
-                        for &cls in &out.paleo_class_grid {
-                            flat.extend_from_slice(&cls.color_rgba());
-                        }
-                        flat
-                    };
+                    let rgba = paleo_preview_rgba(
+                        &out.paleo_rgba_buffer,
+                        &out.paleo_class_grid,
+                        w,
+                        h,
+                        self.paleo_3d.show_imhof_slope_overlay,
+                    );
                     let img = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
                     let tex = ctx.load_texture(
                         "paleo_7class_map_preview",
@@ -243,4 +241,37 @@ impl StrataAppState {
 
             ui.add_space(4.0);
     }
+}
+
+
+/// 7대 분류도 미리보기 픽셀을 고른다.
+///
+/// `imhof` 가 참이면 파이프라인이 만든 다방향 음영 합성 버퍼를 그대로 쓰고,
+/// 거짓이면 분류 색만 평면으로 칠한다. C++ `67a3f33` 의 「Imhof/경사 시각화」
+/// 체크박스가 이 자리다 — 체크를 끄면 음영이 빠진 순수 분류색이 보여야 한다.
+pub fn paleo_preview_rgba(
+    shaded: &[u8],
+    class_grid: &[strata_paleo::pipeline::PaleoClass],
+    w: usize,
+    h: usize,
+    imhof: bool,
+) -> Vec<u8> {
+    let want = w * h * 4;
+    if imhof && shaded.len() >= want {
+        return shaded[..want].to_vec();
+    }
+    let mut flat = Vec::with_capacity(want);
+    for &cls in class_grid.iter().take(w * h) {
+        flat.extend_from_slice(&cls.color_rgba());
+    }
+    // 분류 격자가 픽셀 수보다 짧으면(아직 연산 전) 남은 칸을 첫 분류색으로 채운다.
+    // 길이가 모자란 채로 TextureHandle 에 넘기면 egui 가 패닉한다.
+    let fill = class_grid
+        .first()
+        .map_or([0, 0, 0, 0], |c| c.color_rgba());
+    while flat.len() < want {
+        flat.extend_from_slice(&fill);
+    }
+    flat.truncate(want);
+    flat
 }

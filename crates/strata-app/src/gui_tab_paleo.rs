@@ -9,7 +9,7 @@ use eframe::egui;
 use crate::app_state::StrataAppState;
 
 #[path = "gui_tab_paleo_map.rs"]
-mod gui_tab_paleo_map;
+pub(crate) mod gui_tab_paleo_map;
 #[path = "gui_tab_paleo_panels.rs"]
 mod gui_tab_paleo_panels;
 #[path = "gui_tab_paleo_section.rs"]

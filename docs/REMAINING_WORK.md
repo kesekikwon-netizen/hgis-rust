@@ -79,13 +79,57 @@ V16 만 있던 동안 왜 초록불이었는가: V16 은 파일이 만들어졌�
 검증: `cargo clippy --workspace --all-targets -- -D warnings` = 0,
 `cargo test --workspace` = 344 passed, `--verify-all` = V1~V17 PASS.
 
-## 3. Phase 4 잔여 (정밀 DEM·고지형 동기화)
+## 3. Phase 4 잔여 (정밀 DEM·고지형 동기화) — **닫힘 (2026-11-09)**
 
-`strata-paleo::dem_synthesizer` 는 다중 도엽 병합·무잠금 저장·이음새 블렌딩이 있고
-시험도 있다. 남은 것은 앱 쪽 동기화다.
+> 두 항목 다 **이미 구현돼 있었다.** 확인만 하고 끝난 것이 아니라,
+> 「구현돼 있는데 시험이 없다」는 구멍을 하나 메웠다.
 
-- 5km 단독 지질/시추 UI 와 범례를 C++ `67a3f33` 과 맞추기
-- Imhof 다방향 음영·경사도 시각화를 실제 화면에 연결
+### 3-1. 5km 단독 지질/시추 UI 와 범례 (`67a3f33` 대조)
+
+C++ `KaPaleoCrossSectionWidget.cpp:122-129` 의 세 갈래 다운로드:
+
+| C++ | Rust |
+|---|---|
+| `actionGeology5k` — 수치지질도(KIGAM 1:5만) 별도 받기 (5km) | `PaleoSourceDownload` 다이얼로그. 반경 2/5/10km 선택(`modal_downloads.rs:33-54`) |
+| `actionPaleoGeoInfo` — 국토지반정보·시추주상도·농경지질도 (5km) | 같은 다이얼로그 + `DemDownload` |
+| `actionPaleoKigam` — KIGAM 수문·지하수·단구연대 (10km) | 같은 다이얼로그의 10km 선택지 |
+
+범례(`gui_tab_paleo_panels.rs:144-146`):
+- 「시추공 충적층 두께 및 수치지질도(1:5만) 범례」
+- 「지질(KIGAM): Qa 제4기 충적층 · Qr 하안단구층 · Ks 경상누층군 · Kgr 불국사화강암」
+- 「7대 분류도 레이어 범례」(`:233`)
+
+C++ 은 세 버튼을 메뉴 항목으로 나열하고, Rust 는 다이얼로그 안 반경 콤보로
+같은 선택을 제공한다. **동작은 같고 진입점만 다르다** — 이건 의도된 차이다.
+
+### 3-2. Imhof 다방향 음영·경사도 시각화
+
+구현 위치:
+- 계산 `strata-paleo::terrain_hillshade::compute_imhof_multidirectional_hillshade_and_slope_rgba`
+  (`terrain_hillshade.rs:40`) — 시험 2건 있음.
+- 파이프라인 반영 `pipeline_analysis.rs:246-256` — 분류색에 음영(0.72~1.06)을 곱해
+  `paleo_rgba_buffer` 를 만든다. 이게 곧 Imhof 를 켠 결과다.
+- 화면 토글 `gui_tab_paleo_panels.rs:76-79` 체크박스
+  「다방향 음영기복(Hillshade) 중첩 적용」 → `show_imhof_slope_overlay` (기본 켜짐).
+- 그리기 분기 `gui_tab_paleo_map.rs` — 켜면 음영 버퍼, 끄면 평면 분류색.
+
+#### 메운 구멍: 토글에 시험이 없었다
+
+토글이 화면에서 **정말 다른 픽셀**을 내는지 아무도 검사하지 않았다. 둘 다
+음영본을 그려도 시험이 없으면 통과한다. 그래서 분기 로직을 순수 함수
+`paleo_preview_rgba(shaded, class_grid, w, h, imhof)` 로 떼어내고 시험 2건을 붙였다.
+
+- `test_imhof_toggle_changes_preview_pixels` — 켬/끔 결과가 **다르고**,
+  끔은 분류색 원본과 같다.
+- `test_imhof_falls_back_when_shaded_buffer_is_short` — 파이프라인 미실행으로
+  버퍼가 짧을 때 평면색으로 떨어지되 **픽셀 수만큼 길이를 채운다**.
+
+> 이 두 번째 시험이 실제 버그를 잡았다. 원래 코드는 짧은 버퍼를 그대로
+> `egui::ColorImage::from_rgba_unmultiplied` 에 넘겨 **패닉 위험**이 있었다.
+> 폴백을 넣어 길이를 맞추도록 고쳤다. 시험을 안 붙였으면 못 봤다.
+
+검증: `clippy --workspace -D warnings` = 0, `test --workspace` = **346 passed**,
+`--verify-all` = V1~V17 PASS.
 
 ## 4. 이 세션에서 배운 것 (다음 사람에게)
 
