@@ -110,3 +110,21 @@ mod tabs_paleo_3d_tests;
 #[cfg(test)]
 #[path = "svg_path_paint_tests.rs"]
 mod svg_path_paint_tests;
+
+mod dlg_cad_import_notice;
+mod dlg_cadastral_download;
+mod dlg_drawing_print;
+mod dlg_geotiff_limits;
+mod dlg_heritage_browser;
+mod dlg_heritage_region_select;
+mod dlg_new_survey;
+mod dlg_ngii_topo_download;
+mod dlg_pdf_preparing;
+mod dlg_survey_contour;
+mod dlg_topographic_browser;
+mod dlg_topographic_import;
+mod dlg_trench_generator;
+
+#[cfg(test)]
+#[path = "dialogs_download_print_tests.rs"]
+mod dialogs_download_print_tests;
