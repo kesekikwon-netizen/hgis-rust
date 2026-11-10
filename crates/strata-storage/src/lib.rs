@@ -15,6 +15,8 @@ pub mod csv_control_points;
 pub mod edit_buffer;
 pub mod gpkg;
 pub mod gpkg_diary;
+pub mod gpkg_feature_reader;
+pub mod gpkg_feature_writer;
 pub mod gpkg_project;
 pub mod gpkg_repository;
 pub mod gpkg_repository_write;

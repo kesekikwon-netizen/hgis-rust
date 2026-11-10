@@ -176,6 +176,9 @@ impl StrataAppState {
         }
         match GpkgRepository::write_workspace_file(path, &ws) {
             Ok(()) => {
+                // **도형을 실제로 쓴다.** 예전에는 메타데이터만 저장해서 다시 열면
+                // 그린 조사구역이 사라졌다(2026-11-10 사용자 흐름 시험에서 발견).
+                let _written = self.write_survey_features(path);
                 self.project_title = path
                     .file_stem()
                     .and_then(|s| s.to_str())
@@ -197,6 +200,47 @@ impl StrataAppState {
         }
     }
 
+    /// 지도에 그린 도형을 GPKG 레이어 표에 쓴다. 쓴 개수를 돌려준다.
+    ///
+    /// 조사구역·시굴격자를 각각 자기 레이어에 넣는다. C++ 은 QGIS 프로바이더가
+    /// 레이어별로 처리하지만 Rust 는 레이어마다 직접 쓴다
+    /// (SurveyStorage.cpp:88-95 writeAsVectorFormatV3 자리).
+    fn write_survey_features(&self, path: &std::path::Path) -> usize {
+        use strata_storage::gpkg_feature_writer::{write_layer_features, GpkgFeatureWrite};
+
+        let srs = self.work_crs.epsg_code();
+        let rs = &self.home_map.real_survey;
+        let mut total = 0usize;
+
+        let rings: Vec<GpkgFeatureWrite> = rs
+            .survey_rings
+            .iter()
+            .filter(|r| r.len() >= 3)
+            .enumerate()
+            .map(|(i, r)| GpkgFeatureWrite {
+                ring: r.clone(),
+                name: format!("조사구역 {}", i + 1),
+            })
+            .collect();
+        if write_layer_features(path, DomainLayerKey::SurveyArea, srs, &rings).is_ok() {
+            total += rings.len();
+        }
+
+        let trenches: Vec<GpkgFeatureWrite> = rs
+            .trenches
+            .iter()
+            .filter(|t| t.ring.len() >= 3)
+            .map(|t| GpkgFeatureWrite {
+                ring: t.ring.clone(),
+                name: t.name.clone(),
+            })
+            .collect();
+        if write_layer_features(path, DomainLayerKey::TrialTrench, srs, &trenches).is_ok() {
+            total += trenches.len();
+        }
+
+        total
+    }
     /// C++ `CrashHandler::handleCrash` / `emergencyAutoSave` — 비정상 종료 시 현재 열려 있는 조사 버퍼를 `.crash_recovery.gpkg`로 즉시 직렬화 백업 1:1
     pub fn emergency_auto_save(&self, crash_recovery_path: &Path) -> bool {
         use std::collections::BTreeMap;

@@ -193,7 +193,9 @@ impl StrataAppState {
                 if !self.home_map.recent_files.contains(&recent) {
                     self.home_map.recent_files.insert(0, recent);
                     self.home_map.recent_files.truncate(12);
-                }
+                }                // **저장된 도형을 되살린다.** 예전에는 워크스페이스 메타데이터만 읽어서
+                // 다시 열면 조사구역이 0개였다(2026-11-10 사용자 흐름 시험).
+                self.load_survey_features(&target);
                 self.home_map.draw_guide_message = Some(format!(
                     "「{}」 조사를 열었습니다 ({} · 레이어 {}개).",
                     title,
@@ -205,6 +207,43 @@ impl StrataAppState {
                 // C++ KaUserError::warn — 오류를 알리고 아무 것도 바꾸지 않는다.
                 self.home_map.draw_guide_message =
                     Some(format!("조사 파일을 열 수 없습니다: {e}"));
+            }
+        }
+    }
+    /// 저장된 도형을 조사 상태로 되살린다.
+    ///
+    /// C++ loadSurveyLayers 가 QGIS 레이어에서 피처를 읽어 오는 자리다.
+    /// Rust 는 레이어마다 직접 읽는다(gpkg_feature_reader).
+    fn load_survey_features(&mut self, path: &std::path::Path) {
+        use strata_storage::gpkg_feature_reader::read_layer_features;
+
+        let rings = read_layer_features(path, DomainLayerKey::SurveyArea);
+        self.home_map.real_survey.survey_rings =
+            rings.into_iter().map(|f| f.ring).collect();
+
+        let trenches = read_layer_features(path, DomainLayerKey::TrialTrench);
+        self.home_map.real_survey.trenches = trenches
+            .into_iter()
+            .filter(|f| f.ring.len() >= 3)
+            .map(|f| {
+                let area = crate::real_survey::ring_area_m2(&f.ring);
+                let n = f.ring.len() as f64;
+                let cx = f.ring.iter().map(|p| p[0]).sum::<f64>() / n;
+                let cy = f.ring.iter().map(|p| p[1]).sum::<f64>() / n;
+                crate::real_survey::RealTrenchPoly {
+                    name: f.name,
+                    ring: f.ring,
+                    area_m2: area,
+                    center: [cx, cy],
+                }
+            })
+            .collect();
+
+        // 읽은 도형이 있으면 그 자리로 화면을 맞춘다.
+        if let Some(first) = self.home_map.real_survey.survey_rings.first() {
+            if let Some(e) = strata_types::geom::Extent::from_points(first.iter().copied()) {
+                self.home_map.real_survey.survey_center = e.center();
+                self.home_map.viewport.center_xy = e.center();
             }
         }
     }

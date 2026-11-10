@@ -169,6 +169,10 @@ mod ribbon_audit_tests;
 #[cfg(test)]
 #[path = "test_env_guard.rs"]
 mod test_env_guard;
+
+#[cfg(test)]
+#[path = "user_flow_tests.rs"]
+mod user_flow_tests;
 mod dlg_cad_import_notice;
 mod dlg_cadastral_download;
 mod dlg_drawing_print;
