@@ -20,6 +20,11 @@ pub struct SnapRequest {
 }
 
 /// 한 단계: 액션 하나를 하고 그 결과를 저장.
+///
+/// `action` 은 다음 중 하나다.
+/// - `@이름` — 내장 동작(탭 전환·모달 닫기 등)
+/// - `@이름:인자` — 인자가 있는 내장 동작
+/// - 그 밖의 문자열 — 리본 라벨로 눌러 본다
 #[derive(Debug, Clone)]
 pub struct SnapStep {
     /// 누를 리본 라벨(없으면 그냥 캡처).
@@ -38,8 +43,23 @@ impl SnapRequest {
             if raw.is_empty() {
                 continue;
             }
+            // `액션|파일이름` 형식을 먼저 본다.
+            //
+            // 액션에 인자가 붙으면 `@draw:600x300` 처럼 콜론이 들어간다.
+            // 예전처럼 첫 콜론에서 자르면 인자가 통째로 파일 이름이 되어
+            // 명령이 먹지 않는다(2026-11-10 실제로 그랬다).
+            if let Some((act, name)) = raw.rsplit_once('|') {
+                let (act, name) = (act.trim(), name.trim());
+                if !act.is_empty() {
+                    list.push(SnapStep {
+                        action: Some(act.to_owned()),
+                        name: if name.is_empty() { act.to_owned() } else { name.to_owned() },
+                    });
+                    continue;
+                }
+            }
             match raw.split_once(':') {
-                Some((act, name)) if !act.is_empty() => {
+                Some((act, name)) if !act.is_empty() && !name.contains('x') => {
                     list.push(SnapStep {
                         action: Some(act.to_owned()),
                         name: name.to_owned(),

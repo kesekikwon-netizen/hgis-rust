@@ -87,6 +87,11 @@ pub struct StrataAppState {
     pub basemap_worker: crate::basemap_tile_worker::TileWorker,
     /// 마지막 프레임에 칠한 타일 수(진단·시험용).
     pub basemap_tiles_painted: usize,
+    /// 마지막 프레임에 지도 탭 캔버스가 차지한 화면 사각형.
+    ///
+    /// 검증 제어 통로(`--snap` 의 `@draw:x,y` 같은 명령)가 **화면 좌표를
+    /// 지도 좌표로 바꿀 때** 필요하다. 그리기 코드가 프레임마다 갱신한다.
+    pub last_canvas_rect: Option<eframe::egui::Rect>,
     /// 연속지적도 격자 칸별 텍스처(위성 타일과 같은 방식).
     pub cadastral_cells: crate::basemap_paint::CadastralCellCache,
     pub active_tool: MapToolKind,

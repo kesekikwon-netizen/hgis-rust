@@ -155,6 +155,10 @@ mod diag_concave_tests;
 mod map_engine_painter;mod map_stage_bridge;
 mod snap_shot;
 mod snap_shot_run;
+
+#[cfg(test)]
+#[path = "snap_control_tests.rs"]
+mod snap_control_tests;
 mod dlg_cad_import_notice;
 mod dlg_cadastral_download;
 mod dlg_drawing_print;

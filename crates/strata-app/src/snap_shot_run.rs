@@ -1,4 +1,4 @@
-//! `--snap` 실행기 — egui 프레임 안에서 액션→캡처를 순서대로 처리한다.
+//! `--snap` ?ㅽ뻾湲???egui ?꾨젅???덉뿉???≪뀡?믪벙泥섎? ?쒖꽌?濡?泥섎━?쒕떎.
 
 use std::io::Write as _;
 
@@ -7,7 +7,7 @@ use eframe::egui;
 use crate::app_state::StrataAppState;
 
 impl StrataAppState {
-    /// 스냅샷 단계를 한 프레임 진행한다. 모든 단계가 끝나면 뷰포트를 닫는다.
+    /// ?ㅻ깄???④퀎瑜????꾨젅??吏꾪뻾?쒕떎. 紐⑤뱺 ?④퀎媛 ?앸굹硫?酉고룷?몃? ?ル뒗??
     pub(crate) fn snap_tick(&mut self, ctx: &egui::Context) {
         let Some(snap) = self.snap.as_ref() else {
             return;
@@ -16,12 +16,12 @@ impl StrataAppState {
             return;
         }
 
-        // 값을 미리 꺼내 두고(빌림 충돌 회피) 아래에서 갱신한다.
+        // 媛믪쓣 誘몃━ 爰쇰궡 ?먭퀬(鍮뚮┝ 異⑸룎 ?뚰뵾) ?꾨옒?먯꽌 媛깆떊?쒕떎.
         let waiting = snap.waiting;
         let settle = snap.settle;
         let next = snap.steps.first().cloned();
 
-        // 1) 캡처를 기다리는 중 — Screenshot 이벤트가 왔으면 저장한다.
+        // 1) 罹≪쿂瑜?湲곕떎由щ뒗 以???Screenshot ?대깽?멸? ?붿쑝硫???ν븳??
         if waiting {
             let taken = ctx.input(|i| {
                 i.events.iter().find_map(|e| match e {
@@ -41,7 +41,7 @@ impl StrataAppState {
                         Ok(bytes) => {
                             eprintln!("[SNAP] {name} -> {} ({bytes} bytes)", path.display());
                         }
-                        Err(e) => eprintln!("[SNAP] {name} 저장 실패: {e}"),
+                        Err(e) => eprintln!("[SNAP] {name} ????ㅽ뙣: {e}"),
                     }
                     snap.steps.remove(0);
                     snap.waiting = false;
@@ -52,7 +52,7 @@ impl StrataAppState {
             return;
         }
 
-        // 2) 자리 잡을 시간을 준다(폰트·레이아웃 확정).
+        // 2) ?먮━ ?≪쓣 ?쒓컙??以???고듃쨌?덉씠?꾩썐 ?뺤젙).
         if settle > 0 {
             if let Some(snap) = self.snap.as_mut() {
                 snap.settle -= 1;
@@ -61,7 +61,7 @@ impl StrataAppState {
             return;
         }
 
-        // 3) 다음 단계 실행.
+        // 3) ?ㅼ쓬 ?④퀎 ?ㅽ뻾.
         let Some(step) = next else {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
@@ -69,9 +69,9 @@ impl StrataAppState {
         if let Some(action) = step.action.clone() {
             self.snap_apply_action(&action);
             if let Some(snap) = self.snap.as_mut() {
-                // 액션은 한 번만 실행한다. 단계는 남겨 두고 action 만 지워서
-                // 다음 바퀴에 이 단계가 "캡처" 로 처리되게 한다.
-                // (지우지 않으면 같은 액션을 무한히 반복한다 — 실제로 그랬다.)
+                // ?≪뀡? ??踰덈쭔 ?ㅽ뻾?쒕떎. ?④퀎???④꺼 ?먭퀬 action 留?吏?뚯꽌
+                // ?ㅼ쓬 諛뷀댁뿉 ???④퀎媛 "罹≪쿂" 濡?泥섎━?섍쾶 ?쒕떎.
+                // (吏?곗? ?딆쑝硫?媛숈? ?≪뀡??臾댄븳??諛섎났?쒕떎 ???ㅼ젣濡?洹몃옱??)
                 if let Some(first) = snap.steps.first_mut() {
                     first.action = None;
                 }
@@ -86,12 +86,34 @@ impl StrataAppState {
         ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
         ctx.request_repaint();
     }
-
-    /// 리본 라벨 하나를 누른 것과 같은 효과를 낸다.
+    /// 리본 라벨 하나를 누르는 것과 같은 효과를 낸다.
+    ///
+    /// ## 검증용 제어 통로
+    ///
+    /// `@` 로 시작하는 이름은 앱을 스크립트로 조종하는 명령이다.
+    /// 화면을 눈으로만 보지 않고 "무엇을 눌렀을 때 무엇이 되는가"를
+    /// 기계적으로 확인하기 위해 만들었다(사용자 지시 2026-11-10).
+    ///
+    /// | 명령 | 하는 일 |
+    /// |---|---|
+    /// | `@tab_map` `@tab_home` `@tab_drawing` `@tab_paleo` `@tab_terrain3d` | 탭 전환 |
+    /// | `@close_modal` | 열린 대화상자 닫기 |
+    /// | `@new_survey_go` | 새 조사 확정 |
+    /// | `@draw:<화면x>,<화면y>` | 지도에 점을 찍는다(조사구역 그리기) |
+    /// | `@finish_draw` | 그리기 마침(우클릭과 같은 효과) |
+    /// | `@clear_draw` | 그리는 중인 점 지우기 |
+    /// | `@select_tool` `@draw_polygon_tool` `@pan_tool` | 도구 전환 |
+    /// | `@zoom:<배율>` | 화면 중심 기준 확대·축소 |
+    /// | `@snap_on` `@snap_off` | 스냅 켜고 끄기 |
+    /// | `@dump_ring` | 지금 그리는 링을 로그로 남긴다 |
     fn snap_apply_action(&mut self, action: &str) {
-        match action {
+        let (name, arg) = match action.split_once(':') {
+            Some((n, a)) => (n, Some(a)),
+            None => (action, None),
+        };
+        match name {
             "@new_survey_go" => {
-                // 새 조사 모달의 「만들기」까지 눌러 실제 조사 화면으로 간다.
+                // 새 조사 모달에 채워진 값으로 실제 조사 화면으로 간다.
                 let name = self.modals.new_survey_name.trim().to_owned();
                 let crs = self.modals.new_survey_crs;
                 let dir = if self.modals.new_survey_dir.trim().is_empty() {
@@ -110,12 +132,95 @@ impl StrataAppState {
             "@tab_drawing" => self.open_studio_tab(crate::app_state::MainTab::Drawing),
             "@tab_paleo" => self.open_studio_tab(crate::app_state::MainTab::Paleo),
             "@tab_terrain3d" => self.open_studio_tab(crate::app_state::MainTab::Terrain3d),
+
+            // ── 그리기 제어 ─────────────────────────────────────────
+            "@draw" => {
+                if let Some(world) = self.snap_arg_to_world(arg) {
+                    self.home_map.scene.active_rubberband.push(world);
+                    self.home_map.cursor_world_xy = world;
+                }
+            }
+            "@finish_draw" => {
+                // 실제 우클릭 마침(`cad_session::on_right_click`)과 같은 순서로 한다.
+                // **3점 이상일 때만** 링을 꺼내 저장한다. 2점 이하면 링을 지우지 않고
+                // 그대로 둬야 사용자가 계속 그릴 수 있다.
+                if self.home_map.scene.active_rubberband.len() >= 3 {
+                    let ring = std::mem::take(&mut self.home_map.scene.active_rubberband);
+                    let area = crate::real_survey::ring_area_m2(&ring);
+                    self.home_map.real_survey.save_drawn_polygon(ring);
+                    self.is_dirty = true;
+                    self.home_map.draw_guide_message =
+                        Some(format!("조사구역을 저장했습니다 ({area:.2} m²)."));
+                }
+            }
+            "@clear_draw" => self.home_map.scene.active_rubberband.clear(),
+
+            // ── 도구·화면 제어 ──────────────────────────────────────
+            "@select_tool" => self.active_tool = strata_canvas2d::map_tools::MapToolKind::Select,
+            "@draw_polygon_tool" => {
+                self.active_tool = strata_canvas2d::map_tools::MapToolKind::DrawPolygon;
+            }
+            "@pan_tool" => self.active_tool = strata_canvas2d::map_tools::MapToolKind::Pan,
+            "@zoom" => {
+                if let Some(f) = arg.and_then(|a| a.trim().parse::<f64>().ok()) {
+                    let rect = self.last_canvas_rect.unwrap_or_else(|| {
+                        egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::new(800.0, 600.0))
+                    });
+                    let center = [
+                        f64::from(rect.width()) * 0.5,
+                        f64::from(rect.height()) * 0.5,
+                    ];
+                    self.home_map.viewport.zoom_at(f, center);
+                }
+            }
+            "@snap_on" => self.home_map.cad.snap_enabled = true,
+            "@snap_off" => self.home_map.cad.snap_enabled = false,
+
+            // ── 진단 ────────────────────────────────────────────────
+            "@dump_ring" => {
+                let ring = &self.home_map.scene.active_rubberband;
+                let pts: Vec<String> = ring
+                    .iter()
+                    .map(|p| format!("({:.2},{:.2})", p[0], p[1]))
+                    .collect();
+                eprintln!(
+                    "[SNAP] ring points={} mpp={:.4} {}",
+                    ring.len(),
+                    self.home_map.viewport.meters_per_pixel,
+                    pts.join(" ")
+                );
+            }
+
             _ => self.handle_ribbon_click(action),
         }
     }
-}
 
-/// `egui::ColorImage` 를 PNG 로 저장한다(외부 크레이트 없이 zlib 수동 기록).
+    /// `@draw:120,340` 의 인자를 화면 픽셀로 보고 지도 좌표로 바꾼다.
+    ///
+    /// 인자는 지도 탭 캔버스 안의 화면 좌표(좌상단 기준)다.
+    /// `@draw:120,340` 의 인자를 화면 픽셀로 보고 지도 좌표로 바꾼다.
+    ///
+    /// 인자는 지도 탭 캔버스 안의 화면 좌표(좌상단 기준)다.
+    /// 단계 구분자가 쉼표라서 인자 안에서는 `x` 또는 `;` 를 쓴다.
+    #[cfg(test)]
+    pub(crate) fn snap_apply_action_for_test(&mut self, action: &str) {
+        self.snap_apply_action(action);
+    }
+
+    fn snap_arg_to_world(&self, arg: Option<&str>) -> Option<[f64; 2]> {
+        let a = arg?;
+        // 단계 구분자가 쉼표라서 인자 안의 쉼표는 쓸 수 없다. `x` 또는 `x;y` 도 받는다.
+        let mut it = a.split([',', 'x', ';']);
+        let sx: f64 = it.next()?.trim().parse().ok()?;
+        let sy: f64 = it.next()?.trim().parse().ok()?;
+        let rect = self.last_canvas_rect?;
+        Some(self.home_map.viewport.screen_to_world([
+            sx - f64::from(rect.left()),
+            sy - f64::from(rect.top()),
+        ]))
+    }
+}
+/// `egui::ColorImage` 瑜?PNG 濡???ν븳???몃? ?щ젅?댄듃 ?놁씠 zlib ?섎룞 湲곕줉).
 fn write_png(path: &std::path::Path, img: &egui::ColorImage) -> std::io::Result<usize> {
     let w = img.width();
     let h = img.height();
@@ -163,10 +268,10 @@ fn push_chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
     out.extend_from_slice(&(crc ^ 0xFFFF_FFFF).to_be_bytes());
 }
 
-/// 무압축 zlib(deflate stored) — PNG 로 읽히기만 하면 되므로 압축은 생략한다.
+/// 臾댁븬異?zlib(deflate stored) ??PNG 濡??쏀엳湲곕쭔 ?섎㈃ ?섎?濡??뺤텞? ?앸왂?쒕떎.
 ///
-/// 다만 4K 화면 한 장이 30MB 라서, 같은 색이 가로로 이어지는 구간을 짧게
-/// 압축하는 아주 단순한 RLE 를 먼저 적용한다(deflate stored 블록 안에 넣는다).
+/// ?ㅻ쭔 4K ?붾㈃ ???μ씠 30MB ?쇱꽌, 媛숈? ?됱씠 媛濡쒕줈 ?댁뼱吏??援ш컙??吏㏐쾶
+/// ?뺤텞?섎뒗 ?꾩＜ ?⑥닚??RLE 瑜?癒쇱? ?곸슜?쒕떎(deflate stored 釉붾줉 ?덉뿉 ?ｋ뒗??.
 fn zlib_stored(data: &[u8]) -> Vec<u8> {
     let mut out = vec![0x78, 0x01];
     let mut i = 0;

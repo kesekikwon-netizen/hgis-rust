@@ -204,7 +204,13 @@ impl StrataAppState {
             }
             "검수·제출" => self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage),
             "더보기" => self.modals.active = Some(ActiveModalDialog::AccountSettings),
-            _ => self.active_tab = MainTab::Map,
+            // 알 수 없는 라벨은 **아무 것도 하지 않는다.**
+            //
+            // 예전에는 `_ => self.active_tab = MainTab::Map` 이라 오타·오작동이
+            // 조용히 지도 탭으로 튕겼다. 2026-11-10 검증 제어 통로(`--snap` 의 `@명령`)를
+            // 만드는 중에 "모르는 명령을 넣었더니 지도 탭으로 갔다"로 드러났다.
+            // 탭을 함부로 바꾸는 것보다 가만히 있는 편이 안전하다.
+            _ => {}
         }
     }
 }

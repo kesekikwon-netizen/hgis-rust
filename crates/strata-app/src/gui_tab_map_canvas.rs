@@ -268,6 +268,8 @@ impl StrataAppState {
         }
 
         let rect = rect.intersect(tab_clip);
+        // 검증 제어 통로가 화면 좌표 → 지도 좌표 변환에 쓴다(--snap 의 @draw 등).
+        self.last_canvas_rect = Some(rect);
         let p = ui.painter_at(rect);
         let bg_col = modulate_color_with_opacity_brightness(
             Color32::from_rgb(251, 250, 246),

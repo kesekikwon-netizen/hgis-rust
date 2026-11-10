@@ -59,6 +59,7 @@ impl StrataAppState {
             snap: None,
             basemap_textures: crate::basemap_paint::TileTextureCache::default(),
         basemap_worker: crate::basemap_tile_worker::TileWorker::spawn(),
+        last_canvas_rect: None,
             basemap_tiles_painted: 0,
             cadastral_cells: crate::basemap_paint::CadastralCellCache::default(),
             active_tool: MapToolKind::Pan,
