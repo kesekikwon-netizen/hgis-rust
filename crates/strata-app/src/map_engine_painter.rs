@@ -108,12 +108,39 @@ fn paint_shape(painter: &egui::Painter, s: &DrawShape) {
             text,
             size_px,
             color,
+            halo,
+            halo_px,
         } => {
+            let font = egui::FontId::proportional(*size_px);
+            let pos = Pos2::new(at[0], at[1]);
+            // 헤일로: 글자 둘레에 테두리를 먼저 깔아 위성·지적 위에서도 읽히게 한다.
+            // C++ `QgsTextBufferSettings` 와 같은 역할. 알파가 0 이면 안 깐다.
+            if halo[3] > 0 && *halo_px > 0.0 {
+                let hc = to_color(*halo);
+                for (dx, dy) in [
+                    (-1.0_f32, 0.0_f32),
+                    (1.0, 0.0),
+                    (0.0, -1.0),
+                    (0.0, 1.0),
+                    (-0.7, -0.7),
+                    (0.7, -0.7),
+                    (-0.7, 0.7),
+                    (0.7, 0.7),
+                ] {
+                    painter.text(
+                        Pos2::new(pos.x + dx * halo_px, pos.y + dy * halo_px),
+                        egui::Align2::CENTER_CENTER,
+                        text,
+                        font.clone(),
+                        hc,
+                    );
+                }
+            }
             painter.text(
-                Pos2::new(at[0], at[1]),
+                pos,
                 egui::Align2::CENTER_CENTER,
                 text,
-                egui::FontId::proportional(*size_px),
+                font,
                 to_color(*color),
             );
         }

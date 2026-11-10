@@ -28,6 +28,7 @@
 //! 그래서 같은 엔진을 화면(egui)·PDF·SHP 어디에도 쓸 수 있다.
 //! C++ 이 QGIS 없이는 못 하는 것과 반대다.
 
+pub mod classify;
 pub mod draw;
 pub mod raster_paint;
 pub mod rasterize;
@@ -41,6 +42,10 @@ pub mod tessellate;
 #[path = "raster_tests.rs"]
 mod raster_tests;
 
+pub use classify::{
+    color_for_kind, stable_hash, CategorizedRenderer, Category, CategoryStyle, CATEGORY_FIELDS,
+    UNCLASSIFIED_LABEL,
+};
 pub use draw::{DrawShape, LayerDraw, ScreenTransform};
 pub use rasterize::{rasterize, Raster};
 pub use renderer::{count_shapes, hit_test, render_stage, RenderOptions};

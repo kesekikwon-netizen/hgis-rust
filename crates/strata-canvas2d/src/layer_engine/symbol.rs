@@ -71,6 +71,9 @@ pub fn layer_labels(layer: &MapLayer, xf: &ScreenTransform, size_px: f32) -> Vec
             text: f.label.clone(),
             size_px,
             color: layer.style.stroke,
+            // C++ `LabelOps.cpp:40-44` 의 기본 헤일로 — 위성·지적 위에서도 글자가 읽히게.
+            halo: super::draw::DEFAULT_LABEL_HALO,
+            halo_px: super::draw::mm_to_px(super::draw::DEFAULT_LABEL_HALO_MM),
         });
     }
     out

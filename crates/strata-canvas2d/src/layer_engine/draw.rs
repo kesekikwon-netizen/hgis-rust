@@ -32,13 +32,24 @@ pub enum DrawShape {
         stroke: [u8; 4],
     },
     /// 글자.
+    ///
+    /// `halo` 는 글자 둘레에 까는 테두리(가독성)다. C++ `LabelOps.cpp:40-44` 의
+    /// `QgsTextBufferSettings`(0.8pt, `QColor(255,255,255,230)`)에 대응한다.
+    /// 알파가 0 이면 테두리를 안 깐다.
     Label {
         at: [f32; 2],
         text: String,
         size_px: f32,
         color: [u8; 4],
+        halo: [u8; 4],
+        halo_px: f32,
     },
 }
+
+/// C++ `LabelOps` 기본 헤일로 — 흰색 230, 0.8pt.
+pub const DEFAULT_LABEL_HALO: [u8; 4] = [255, 255, 255, 230];
+/// C++ `QgsTextBufferSettings::setSize(0.8)` 를 화면 px 로.
+pub const DEFAULT_LABEL_HALO_MM: f32 = 0.8;
 
 /// 한 레이어를 그린 결과.
 #[derive(Debug, Clone, PartialEq)]
