@@ -13,3 +13,4 @@ strata-types.workspace = true
 strata-geo.workspace = true
 strata-storage.workspace = true
 serde.workspace = true
+geo.workspace = true

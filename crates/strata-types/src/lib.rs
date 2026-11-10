@@ -8,6 +8,7 @@
 
 pub mod crs;
 pub mod error;
+pub mod geom;
 pub mod schema;
 pub mod schema_layer;
 pub mod theme_contrast;

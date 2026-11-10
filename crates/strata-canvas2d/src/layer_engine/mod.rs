@@ -35,6 +35,7 @@ pub mod renderer;
 pub mod stage;
 pub mod style;
 pub mod symbol;
+pub mod tessellate;
 
 #[cfg(test)]
 #[path = "raster_tests.rs"]
@@ -46,3 +47,4 @@ pub use renderer::{count_shapes, hit_test, render_stage, RenderOptions};
 pub use stage::{Feature, GeometryKind, LayerStage, MapLayer};
 pub use style::{label_ko, DomainStyle, DOMAIN_LAYER_KEYS};
 pub use symbol::{layer_labels, layer_to_shapes, DEFAULT_LABEL_SIZE_PX};
+pub use tessellate::{is_concave, triangulate_polygon, ScreenTriangle};

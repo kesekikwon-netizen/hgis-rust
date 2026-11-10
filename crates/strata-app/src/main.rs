@@ -147,6 +147,11 @@ mod basemap_fetch;
 mod basemap_paint;
 mod basemap_tiles;
 mod diag_layout;
+
+#[cfg(test)]
+#[path = "diag_concave_tests.rs"]
+mod diag_concave_tests;
+mod map_engine_painter;mod map_stage_bridge;
 mod snap_shot;
 mod snap_shot_run;
 mod dlg_cad_import_notice;
