@@ -1,9 +1,13 @@
-//! 지도 위 보조 겹침 — 좌표격자·도곽 좌표 띠, 수치지형도, GPS 기준점, 러버밴드.
+//! 지도 위 겹침 — 좌표격자·수치지형도·GPS 기준점·CAD 스냅 미리보기·러버밴드.
 //!
-//! `gui_tab_map_heritage` 에서 300줄을 지키려고 나눴다. 원래 `paint_gyeongju_heritage_canvas`
-//! 끝부분의 연속 블록이고, 본문은 그대로다.
+//! 캔버스 본문에서 **레이어 엔진이 조사 데이터를 다 그린 뒤**에 부른다.
+//! 순서가 중요하다: 겹침은 데이터 위에 얹혀야 좌표격자가 조사구역을 덮지 않는다.
+//!
+//! `gui_tab_map_canvas` 가 레이어 엔진으로 바뀌면서 이 겹침들이 사라졌다
+//! (러버밴드가 안 보여 그리는 중인 선이 화면에 없었다). 그래서 따로 되살린다.
 
 use eframe::egui::{self, Color32, FontId, Pos2, Rect, Stroke};
+
 use strata_canvas2d::viewport::ViewportTransform;
 
 use crate::app_state::StrataAppState;
@@ -12,46 +16,49 @@ use super::gui_tab_map_consts::ShellGridConfig;
 use super::gui_tab_map_geom::w2s;
 use super::gui_tab_map_grid::paint_projected_grid;
 
-/// paint_heritage_overlays 가 쓰는 값 묶음 — 인자가 8개가 되어 clippy
-///     oo_many_arguments 에 걸리므로 넘긴다.
-pub(crate) struct HeritageOverlayCtx<'a> {
+/// `paint_scene_overlays` 가 쓰는 값 묶음.
+///
+/// 인자가 7개가 되면 clippy `too_many_arguments` 에 걸리므로 넘긴다.
+pub(crate) struct SceneOverlayCtx<'a> {
     pub(crate) ctx: &'a egui::Context,
     pub(crate) p: &'a egui::Painter,
     pub(crate) rect: Rect,
     pub(crate) vp: &'a ViewportTransform,
-    pub(crate) rs: &'a crate::real_survey::RealSurveyData,
     pub(crate) center: [f64; 2],
-    pub(crate) layer_color: &'a dyn Fn(&str, Color32) -> Color32,
 }
 
 impl StrataAppState {
-    /// 격자·지형도·기준점·러버밴드 겹침 (원문 캔버스 본문 뒤쪽).
-    pub(crate) fn paint_heritage_overlays(&self, g: HeritageOverlayCtx<'_>) {
-        let HeritageOverlayCtx {
+    /// 격자·지형도·기준점·스냅·러버밴드 겹침. 레이어 엔진 **뒤**에 부른다.
+    pub(crate) fn paint_scene_overlays(&self, g: SceneOverlayCtx<'_>) {
+        let SceneOverlayCtx {
             ctx,
             p,
             rect,
             vp,
-            rs,
             center: [cx, cy],
-            layer_color,
         } = g;
-        // KaCanvasGridOverlay.cpp:101-194 — 좌표격자가 켜져 있으면 지도 위에 격자와 도곽 좌표 띠를 그린다
+
+        // KaCanvasGridOverlay.cpp:101-194 — 좌표격자가 켜져 있으면 격자와 도곽 좌표 띠를 그린다.
         if self.home_map.grid_enabled {
             let cfg = ctx.data_mut(|d| {
                 d.get_temp::<ShellGridConfig>(egui::Id::new("ka_shell_grid_cfg"))
                     .unwrap_or_default()
             });
             let labels = cfg.show_labels;
-            paint_projected_grid(p, rect, vp, &cfg, rs.survey_center, cfg.is_geo, labels);
+            paint_projected_grid(
+                p,
+                rect,
+                vp,
+                &cfg,
+                self.home_map.real_survey.survey_center,
+                cfg.is_geo,
+                labels,
+            );
         }
 
-        // T9 KaTopographicImportDialog에서 지도에 추가한 수치지형도 레이어 렌더링 (styleTopographic: 회색 0.2mm 선)
+        // T9 KaTopographicImportDialog 에서 추가한 수치지형도 (styleTopographic: 회색 0.2mm 선).
         if self.modals.topo_maps_enabled && self.modals.topo_imported_count > 0 {
-            let topo_col = layer_color(
-                "수치지형도 1:5,000 (합침)",
-                Color32::from_rgba_unmultiplied(115, 115, 115, 190),
-            );
+            let topo_col = Color32::from_rgba_unmultiplied(115, 115, 115, 190);
             for idx in 0..self.modals.topo_imported_count.min(6) {
                 let offset = (idx as f64 - 2.5) * 140.0;
                 let p1 = w2s(rect, vp, [cx - 880.0, cy + offset - 90.0]);
@@ -60,7 +67,7 @@ impl StrataAppState {
             }
         }
 
-        // T6 (1) KaControlPointDialog에서 추가한 GPS 기준점 심볼·라벨 렌더링
+        // T6 (1) KaControlPointDialog 에서 추가한 GPS 기준점 심볼·라벨.
         for (cp_id, cp_xy, cp_z) in &self.modals.control_points_world {
             let sp = w2s(rect, vp, *cp_xy);
             if rect.contains(sp) {
@@ -88,6 +95,7 @@ impl StrataAppState {
             }
         }
 
+        // CAD 스냅 미리보기 마커.
         if self.home_map.cad.snap_enabled && self.home_map.cad.snap_preview_enabled {
             for &pt in &self.home_map.cad.preview_markers_world {
                 let sp = w2s(rect, vp, pt);
@@ -100,6 +108,7 @@ impl StrataAppState {
             }
         }
 
+        // 러버밴드 — 그리는 중인 선. 이게 없으면 클릭해도 화면에 아무 것도 안 보인다.
         if !self.home_map.scene.active_rubberband.is_empty() {
             let mut active_pts: Vec<Pos2> = self
                 .home_map

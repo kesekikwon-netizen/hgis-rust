@@ -17,12 +17,15 @@ mod verify_harness_gates_v10_v14;
 mod verify_harness_types;
 #[path = "verify_harness_v15_gate.rs"]
 mod verify_harness_v15_gate;
+#[path = "verify_harness_v18_gate.rs"]
+mod verify_harness_v18_gate;
 
 pub use verify_harness_borehole_gates::{
     v16_borehole_maps_generation_gate, v17_borehole_maps_are_painted_gate,
 };
 pub use verify_harness_types::*;
 pub use verify_harness_v15_gate::*;
+pub use verify_harness_v18_gate::v18_map_canvas_draws_data_and_overlays_gate;
 
 use strata_storage::gpkg::GpkgRepository;
 use strata_storage::wkb_codec::{decode_gpkg_wkb, encode_gpkg_wkb, WkbGeometry};
@@ -31,10 +34,10 @@ use strata_types::crs::WorkCrs;
 use verify_harness_gates_v1_v9::push_v1_to_v9_gates;
 use verify_harness_gates_v10_v14::push_v10_to_v14_gates;
 
-/// V1~V17 검증 하네스. 게이트 순서·개수는 C++/기존 구현 그대로다.
+/// V1~V18 검증 하네스. 게이트 순서·개수는 C++/기존 구현 그대로다(V18 은 2026-11-10 추가).
 #[must_use]
 pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
-    let mut gates = Vec::with_capacity(17);
+    let mut gates = Vec::with_capacity(18);
 
     push_v1_to_v9_gates(&mut gates);
     push_v10_to_v14_gates(&mut gates);
@@ -42,6 +45,7 @@ pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
     gates.push(v15_borehole_ribbon_and_dialog_gate());
     gates.push(v16_borehole_maps_generation_gate());
     gates.push(v17_borehole_maps_are_painted_gate());
+    gates.push(v18_map_canvas_draws_data_and_overlays_gate());
 
     gates
 }

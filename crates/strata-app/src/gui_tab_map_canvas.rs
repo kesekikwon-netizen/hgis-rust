@@ -280,7 +280,33 @@ impl StrataAppState {
         self.paint_basemap_layer(ctx, &p, rect);
         self.paint_cadastral_layer(ctx, &p, rect);
 
-        self.paint_gyeongju_heritage_canvas(ctx, &p, rect, is_trench || is_measure || is_style);
+        // 지형 음영 — 실제 DEM 이 있을 때만. 조사 데이터 **아래**에 깐다.
+        self.paint_terrain_backdrop(ctx, &p, rect, &self.home_map.viewport);
+
+        // 조사 데이터는 **레이어 엔진**이 그린다.
+        // C++ 은 QGIS 레이어가 그리지만 Rust 는 layer_engine 이 도형 목록을 낸다.
+        // 이렇게 해야 레이어를 끄면 진짜로 꺼지고, z순서가 데이터로 정해진다.
+        let stage = crate::map_stage_bridge::stage_from_survey(&self.home_map.real_survey);
+        let xf = crate::map_engine_painter::screen_transform_for(&self.home_map.viewport, rect);
+        let draws = strata_canvas2d::layer_engine::render_stage(
+            &stage,
+            &xf,
+            strata_canvas2d::layer_engine::RenderOptions {
+                labels: true,
+                ..Default::default()
+            },
+        );
+        let _painted = crate::map_engine_painter::paint_layer_draws(&p, &draws);
+
+        // 겹침은 데이터 **위**에 얹는다 — 좌표격자·수치지형도·기준점·스냅·러버밴드.
+        self.paint_scene_overlays(super::gui_tab_map_scene_overlay::SceneOverlayCtx {
+            ctx,
+            p: &p,
+            rect,
+            vp: &self.home_map.viewport,
+            center: self.home_map.real_survey.survey_center,
+        });
+
         self.paint_map_hud(
             ctx,
             ui,

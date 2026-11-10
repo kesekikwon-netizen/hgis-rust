@@ -14,7 +14,7 @@ use crate::verify_harness::{run_cpp_smoke_suite_report, run_v1_to_v10_verificati
     #[test]
     fn v1_to_v17_verification_harness_passes_all_seventeen_gates() {
         let gates = run_v1_to_v10_verification_harness();
-        assert_eq!(gates.len(), 17);
+        assert_eq!(gates.len(), 18, "V18(지도 캔버스 겹침)까지 18개");
         for g in &gates {
             assert!(g.passed, "Gate {} failed: {}", g.gate_id, g.detail);
         }

@@ -6,8 +6,6 @@
 //! `gui_shell` 이 쓰는 `UX_MAP_*`·`ShellGridConfig`·`GRID_BAND_*`·`scale_bar_*`·`grid_*`,
 //! `right_inspector` 가 쓰는 `UX_MAP_RIGHT_WIDTH` 를 모두 여기서 재수출한다.
 
-#[path = "gui_tab_map_canvas_overlay.rs"]
-mod gui_tab_map_canvas_overlay;
 #[path = "gui_tab_map_canvas.rs"]
 mod gui_tab_map_canvas;
 #[path = "gui_tab_map_consts.rs"]
@@ -22,8 +20,6 @@ mod gui_tab_map_geom;
 mod gui_tab_map_grid;
 #[path = "gui_tab_map_gridctl.rs"]
 mod gui_tab_map_gridctl;
-#[path = "gui_tab_map_heritage.rs"]
-mod gui_tab_map_heritage;
 #[path = "gui_tab_map_hud.rs"]
 mod gui_tab_map_hud;
 #[path = "gui_tab_map_measure.rs"]
@@ -32,6 +28,10 @@ mod gui_tab_map_measure;
 mod gui_tab_map_opacity;
 #[path = "gui_tab_map_overlay.rs"]
 mod gui_tab_map_overlay;
+#[path = "gui_tab_map_scene_overlay.rs"]
+mod gui_tab_map_scene_overlay;
+#[path = "gui_tab_map_terrain_backdrop.rs"]
+mod gui_tab_map_terrain_backdrop;
 #[path = "gui_tab_map_tab.rs"]
 mod gui_tab_map_tab;
 #[path = "gui_tab_map_undo.rs"]
@@ -41,6 +41,7 @@ pub use gui_tab_map_consts::*;
 pub use gui_tab_map_format::*;
 pub use gui_tab_map_geom::*;
 pub use gui_tab_map_grid::paint_projected_grid;
+pub(crate) use gui_tab_map_scene_overlay::SceneOverlayCtx;
 
 #[cfg(test)]
 #[path = "gui_tab_map_tests.rs"]
