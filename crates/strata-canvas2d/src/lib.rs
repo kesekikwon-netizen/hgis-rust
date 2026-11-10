@@ -15,6 +15,7 @@ pub mod cad_ring_snap;
 pub mod cad_session;
 pub mod cad_snap_trace;
 pub mod canvas_painter;
+pub mod layer_engine;
 pub mod map_tools;
 pub mod painter_hatch;
 pub mod painter_marker;
