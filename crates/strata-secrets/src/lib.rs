@@ -9,5 +9,6 @@
 pub mod accounts;
 pub mod dpapi;
 pub mod mask;
+pub mod registry;
 pub mod secret_store;
 pub mod vworld;

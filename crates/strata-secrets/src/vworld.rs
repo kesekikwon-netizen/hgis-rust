@@ -47,7 +47,19 @@ impl VworldSettings {
         Ok(String::new())
     }
 
+    /// VWorld API 키를 찾는다. **C++ 과 같은 순서**로 본다.
+    ///
+    /// 1. 레지스트리 `HKCU\Software\ka-hgis\ka-hgis\vworld\ApiKey`
+    ///    — C++ `VworldSettings::loadApiKey` 가 QSettings 로 먼저 읽는 곳이다.
+    ///    실제 키가 여기 있어서, 이걸 건너뛰면 C++ 앱은 되는데 Rust 앱만 안 됐다.
+    /// 2. `%LOCALAPPDATA%\ka-hgis\ka-hgis-vworld.ini`
+    /// 3. 환경변수 `VWORLD_API_KEY`
+    /// 4. 저장소 `config/secrets.ini`
     pub fn load_api_key() -> String {
+        let from_registry = crate::registry::read_vworld_key();
+        if !from_registry.is_empty() {
+            return from_registry;
+        }
         if let Some(ini) = Self::default_ini_path() {
             if let Ok(k) = Self::load_from_ini(&ini) {
                 if !k.is_empty() {
@@ -70,7 +82,12 @@ impl VworldSettings {
         String::new()
     }
 
+    /// 이력지리정보(역사지리DB) 키를 찾는다. 순서는 VWorld 와 같다.
     pub fn load_history_gis_api_key() -> String {
+        let from_registry = crate::registry::read_history_gis_key();
+        if !from_registry.is_empty() {
+            return from_registry;
+        }
         if let Some(ini) = Self::default_ini_path() {
             if let Ok(k) = Self::load_history_gis_from_ini(&ini) {
                 if !k.is_empty() {

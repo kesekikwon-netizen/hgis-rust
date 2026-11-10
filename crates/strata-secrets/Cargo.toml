@@ -15,3 +15,6 @@ serde.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[target."cfg(windows)".dependencies]
+winreg = "0.56.0"
