@@ -78,6 +78,10 @@ pub struct StrataAppState {
     pub startup_window_fitted: bool,
     /// --snap 검증 모드 상태(없으면 None). 실행 중에는 항상 None.
     pub snap: Option<crate::snap_shot::SnapRequest>,
+    /// 배경지도 타일 텍스처 캐시(종류·줌·x·y).
+    pub basemap_textures: crate::basemap_paint::TileTextureCache,
+    /// 마지막 프레임에 칠한 타일 수(진단·시험용).
+    pub basemap_tiles_painted: usize,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,

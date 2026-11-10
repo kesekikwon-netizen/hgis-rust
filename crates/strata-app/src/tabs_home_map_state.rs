@@ -40,6 +40,13 @@ pub struct HomeMapTabState {
     pub basemap_opacity: f32,
     pub basemap_brightness: f32,
     pub real_survey: RealSurveyData,
+    /// 실제로 받은 DEM 표고 격자(없으면 「지형 음영」을 그리지 않는다).
+    /// C++ 은 QgsRasterLayer 가 있을 때만 지형 음영 레이어를 만든다
+    /// (LayerOps::addElevationHillshadeMap). 값은 (변환, 표고 배열) 쌍이다.
+    pub dem_grid: Option<(
+        strata_paleo::terrain_edt_tpi::GridTransform,
+        Vec<f64>,
+    )>,
 }
 
 impl Default for HomeMapTabState {
@@ -74,6 +81,7 @@ impl Default for HomeMapTabState {
             basemap_opacity: HGIS_BASEMAP_DEFAULT_OPACITY,
             basemap_brightness: HGIS_BASEMAP_DEFAULT_BRIGHTNESS,
             real_survey,
+            dem_grid: None,
         }
     }
 }

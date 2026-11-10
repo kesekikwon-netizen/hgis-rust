@@ -57,6 +57,8 @@ impl StrataAppState {
             is_dirty: false,
             startup_window_fitted: false,
             snap: None,
+            basemap_textures: crate::basemap_paint::TileTextureCache::default(),
+            basemap_tiles_painted: 0,
             active_tool: MapToolKind::Pan,
             ribbon: KaBeginnerRibbon::default(),
             left_layers: LeftLayerPanel::new_empty(),

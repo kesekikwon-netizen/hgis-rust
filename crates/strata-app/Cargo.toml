@@ -13,6 +13,7 @@ strata-types = { workspace = true }
 strata-secrets = { workspace = true }
 strata-storage = { workspace = true }
 strata-geo = { workspace = true }
+image = { workspace = true }
 strata-net = { workspace = true }
 strata-paleo = { workspace = true }
 strata-canvas2d = { workspace = true }

@@ -22,6 +22,7 @@ pub mod gui_shell;
 pub mod gui_tab_drawing;
 pub mod gui_tab_home;
 pub mod gui_tab_map;
+mod gui_tab_map_basemap;
 pub mod gui_tab_paleo;
 pub mod gui_tab_terrain3d;
 pub mod gui_theme_fonts;
@@ -140,6 +141,9 @@ mod tabs_paleo_3d_tests;
 #[path = "svg_path_paint_tests.rs"]
 mod svg_path_paint_tests;
 
+mod basemap_fetch;
+mod basemap_paint;
+mod basemap_tiles;
 mod diag_layout;
 mod snap_shot;
 mod snap_shot_run;
@@ -216,3 +220,6 @@ mod ri_tests;
 #[cfg(test)]
 #[path = "ui_interaction_tests.rs"]
 mod ui_interaction_tests;
+#[cfg(test)]
+#[path = "basemap_tests.rs"]
+mod basemap_tests;

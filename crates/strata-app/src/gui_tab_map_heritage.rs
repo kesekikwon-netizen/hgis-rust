@@ -32,7 +32,17 @@ impl StrataAppState {
             modulate_color_with_opacity_brightness(base, op, br)
         };
 
-        if rs.is_layer_visible("지형 음영") || rs.is_layer_visible("지표모델(DSM) 30m · Coperni...")
+        // 「지형 음영」·「지표모델(DSM)」은 **실제 DEM 래스터**가 있을 때만 그린다.
+        //
+        // 예전에는 데이터가 없어도 `survey_center` 기준 2100×1440m 사각형에
+        // 합성 등고선·색 띠를 칠했다. 그래서 새 조사 화면 한가운데에 초록
+        // 사각형이 떴다(사용자 지적 2026-11-09). C++ `LayerOps::addElevationHillshadeMap`
+        // 은 실제 QgsRasterLayer(GeoTIFF)만 쓰고, 없으면 아무 것도 그리지 않는다.
+        // 여기서도 같게 한다 — 자료를 받기 전에는 지형 음영이 없다.
+        let has_real_dem = self.home_map.dem_grid.is_some();
+        if has_real_dem
+            && (rs.is_layer_visible("지형 음영")
+                || rs.is_layer_visible("지표모델(DSM) 30m · Coperni..."))
         {
             let tl = w2s(rect, vp, [cx - 1050.0, cy + 720.0]);
             let br = w2s(rect, vp, [cx + 1050.0, cy - 720.0]);
