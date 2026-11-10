@@ -1,6 +1,6 @@
 //! 지도 캔버스 한 프레임 — 입력 처리, 배경, 캔버스 그리기, HUD 구간 호출.
 
-use eframe::egui::{self, Color32, Rect, Stroke, Vec2};
+use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 
 use strata_canvas2d::map_tools::MapToolKind;
 
@@ -112,9 +112,25 @@ impl StrataAppState {
         }
         if response.dragged() {
             let d = response.drag_delta();
-            self.home_map
-                .viewport
-                .pan_by_pixels(f64::from(d.x), f64::from(d.y));
+            // 꼭짓점 편집 중에 핸들을 잡고 있으면 **핸들을 끈다**(지도를 옮기지 않는다).
+            // C++ `KaVertexEditTool.cpp:334 moveVertexTo`.
+            if self.snap_drag_vertex(ctx, rect, response.interact_pointer_pos()) {
+                // 핸들을 끄는 중 — 화면 이동 없음
+            } else {
+                self.home_map
+                    .viewport
+                    .pan_by_pixels(f64::from(d.x), f64::from(d.y));
+            }
+        }
+        // 손을 떼면 잡고 있던 핸들을 놓는다.
+        if response.drag_stopped() {
+            self.snap_release_vertex();
+        }
+        // Del 키 — 편집 중인 정점을 지운다. C++ `KaVertexEditTool.cpp:357 deleteVertexAt`.
+        if self.home_map.vertex_edit.is_some()
+            && ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
+        {
+            self.snap_delete_selected_vertex();
         }
         if response.clicked() {
             if let Some(cp) = response.interact_pointer_pos() {
@@ -324,5 +340,126 @@ impl StrataAppState {
             },
         );
         self.paint_map_overlays(ctx, ui, &p, rect);
+    }
+
+    /// 꼭짓점 편집 중 핸들 끌기를 처리한다. 핸들을 잡았으면 `true`.
+    ///
+    /// C++ `KaVertexEditTool` 대응:
+    /// - `:243 vertexNear` / `:262 segmentNear` — 핸들 찾기
+    /// - `:334 moveVertexTo` — 정점 이동
+    /// - `:381 insertVertexAt` — 선분 중점을 끌면 새 정점
+    /// - `:225-241 snapMapPointExcludingTarget` — **자기 자신에게 붙지 않게** 제외
+    fn snap_drag_vertex(
+        &mut self,
+        _ctx: &egui::Context,
+        rect: Rect,
+        pointer: Option<Pos2>,
+    ) -> bool {
+        use strata_canvas2d::vertex_handle::{hit_handle, HandleKind, VertexEdit};
+
+        let Some(pos) = pointer else {
+            return false;
+        };
+        let Some(ve) = self.home_map.vertex_edit.as_ref().cloned() else {
+            return false;
+        };
+        let idx = ve.feature_index;
+        if idx >= self.home_map.real_survey.survey_rings.len() {
+            return false;
+        }
+        let xf = crate::map_engine_painter::screen_transform_for(&self.home_map.viewport, rect);
+
+        // 아직 잡은 핸들이 없으면 이번 프레임에 잡는다.
+        if ve.dragging.is_none() {
+            let ring = &self.home_map.real_survey.survey_rings[idx];
+            let Some(kind) = hit_handle(ring, [pos.x, pos.y], &xf, 8.0) else {
+                return false;
+            };
+            if let Some(v) = self.home_map.vertex_edit.as_mut() {
+                v.dragging = Some(kind);
+            }
+            return true;
+        }
+
+        let kind = ve.dragging;
+        let mut target = xf.screen_to_world([pos.x, pos.y]);
+
+        // 스냅: 다른 정점·선분에 붙인다. **자기 자신은 제외**한다
+        // (제외하지 않으면 끄는 점이 제자리에 붙어 안 움직인다).
+        if self.home_map.cad.snap_enabled {
+            let stage = crate::map_stage_bridge::stage_from_survey(&self.home_map.real_survey);
+            let settings = strata_canvas2d::snap_locator::SnapSettings {
+                enabled: true,
+                tolerance_px: 10.0,
+                vertex: true,
+                endpoint: true,
+                edge: true,
+            };
+            let layer_index = stage
+                .all()
+                .iter()
+                .position(|l| l.key == crate::map_stage_bridge::KEY_SURVEY_AREA);
+            if let Some(hit) = strata_canvas2d::snap_locator::locate(
+                target,
+                self.home_map.viewport.meters_per_pixel,
+                &stage,
+                &settings,
+                layer_index.map(|li| (li, idx)),
+            ) {
+                target = hit.world;
+            }
+        }
+
+        let edit = match kind {
+            Some(HandleKind::Vertex(i)) => Some(VertexEdit::Move { index: i, to: target }),
+            Some(HandleKind::Midpoint(s)) => Some(VertexEdit::Insert {
+                segment: s,
+                at: target,
+            }),
+            None => None,
+        };
+        if let Some(edit) = edit {
+            let ring = &mut self.home_map.real_survey.survey_rings[idx];
+            if ve.apply_to(ring, &edit).is_ok() {
+                self.is_dirty = true;
+            }
+        }
+        true
+    }
+
+    /// 꼭짓점 편집을 끝낸다(놓았을 때).
+    fn snap_release_vertex(&mut self) {
+        if let Some(v) = self.home_map.vertex_edit.as_mut() {
+            v.dragging = None;
+        }
+    }
+
+    /// Del 키 — 지금 잡고 있던(또는 마지막에 옮긴) 정점을 지운다.
+    ///
+    /// C++ 은 클릭으로 고른 정점을 Del 로 지운다(`KaVertexEditTool.cpp:357`).
+    /// 여기서는 "잡고 있던 정점"을 지운다. 최소 점 수에 걸리면 안내만 남긴다.
+    fn snap_delete_selected_vertex(&mut self) {
+        use strata_canvas2d::vertex_handle::{HandleKind, VertexEdit};
+        let Some(ve) = self.home_map.vertex_edit.as_ref().cloned() else {
+            return;
+        };
+        let Some(HandleKind::Vertex(i)) = ve.dragging else {
+            self.home_map.draw_guide_message =
+                Some("지울 점을 먼저 클릭한 뒤 Del 을 누르세요.".to_owned());
+            return;
+        };
+        let idx = ve.feature_index;
+        let Some(ring) = self.home_map.real_survey.survey_rings.get_mut(idx) else {
+            return;
+        };
+        if ve.apply_to(ring, &VertexEdit::Delete { index: i }).is_ok() {
+            self.is_dirty = true;
+            if let Some(v) = self.home_map.vertex_edit.as_mut() {
+                v.dragging = None;
+            }
+        } else {
+            self.home_map.draw_guide_message =
+                Some("점을 더 지울 수 없습니다 — 면은 최소 3점이 필요합니다.".to_owned());
+        }
     }
 }
