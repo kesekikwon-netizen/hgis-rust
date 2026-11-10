@@ -22,6 +22,7 @@
 | [adr/0001-standalone-cpp-qgis-libs.md](adr/0001-standalone-cpp-qgis-libs.md) | Architecture B |
 | [architecture/data-flow.md](architecture/data-flow.md) | 임계 경로 (현행은 AGENTS·소스 우선) |
 | [domain/data-model.md](domain/data-model.md) | GPKG 레이어·필드 |
+| [design/2026-11-10-rust-gis-architecture-blueprint/index.html](design/2026-11-10-rust-gis-architecture-blueprint/index.html) | C++ QGIS → Rust 재설계 도면·6단계 로드맵 (2026-11-10, 계층 이름은 제안) |
 | [vendor/qgis-manual-3.44/README.md](vendor/qgis-manual-3.44/README.md) | 로컬 QGIS 매뉴얼 |
 
 ## 빌드·배포
@@ -53,4 +54,4 @@
 - [COMMIT_STATUS.md](COMMIT_STATUS.md) 훅이 갱신. 손으로 고치지 않는다.
 - [ERROR_REGRESSION.md](ERROR_REGRESSION.md) 회귀 메모
 - [archive/](archive/README.md) 폐기된 목표·세션 상세, 옛 초심자 IA·와이어프레임·작업 카드(설계 기록, 현재 UI 아님)
-- [design/](design/) 2026-08-15 하늘색 3D 설계서는 **Superseded by Strata**(옛 기록). [ui/](ui/)·`ui-mockup-viewer.html` 은 목업
+- [design/](design/) 2026-08-15 하늘색 3D 설계서는 **Superseded by Strata**(옛 기록). 2026-11-10 Rust 재설계 도면은 위 「설계」 표에 있다. [ui/](ui/)·`ui-mockup-viewer.html` 은 목업
