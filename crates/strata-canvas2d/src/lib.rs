@@ -21,6 +21,8 @@ pub mod painter_hatch;
 pub mod painter_marker;
 pub mod painter_pick;
 pub mod painter_scene;
+pub mod snap_locator;
 pub mod tile_layer;
 pub mod vector_tessellator;
+pub mod vertex_handle;
 pub mod viewport;
