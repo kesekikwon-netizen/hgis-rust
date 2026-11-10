@@ -82,6 +82,8 @@ pub struct StrataAppState {
     pub basemap_textures: crate::basemap_paint::TileTextureCache,
     /// 마지막 프레임에 칠한 타일 수(진단·시험용).
     pub basemap_tiles_painted: usize,
+    /// 연속지적도 격자 칸별 텍스처(위성 타일과 같은 방식).
+    pub cadastral_cells: crate::basemap_paint::CadastralCellCache,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,

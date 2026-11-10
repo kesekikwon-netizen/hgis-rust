@@ -278,6 +278,7 @@ impl StrataAppState {
 
         // 배경지도 타일(위성·일반도). C++ 은 QGIS 가 그리지만 Rust 는 직접 받아 칠한다.
         self.paint_basemap_layer(ctx, &p, rect);
+        self.paint_cadastral_layer(ctx, &p, rect);
 
         self.paint_gyeongju_heritage_canvas(ctx, &p, rect, is_trench || is_measure || is_style);
         self.paint_map_hud(

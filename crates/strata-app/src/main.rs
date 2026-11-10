@@ -141,6 +141,8 @@ mod tabs_paleo_3d_tests;
 #[path = "svg_path_paint_tests.rs"]
 mod svg_path_paint_tests;
 
+mod basemap_cadastral;
+mod basemap_coords;
 mod basemap_fetch;
 mod basemap_paint;
 mod basemap_tiles;

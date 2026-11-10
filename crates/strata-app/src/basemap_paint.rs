@@ -43,6 +43,31 @@ impl TileTextureCache {
     }
 }
 
+/// 지적 격자 칸별 텍스처 캐시.
+#[derive(Clone, Default)]
+pub struct CadastralCellCache(pub std::collections::HashMap<[i64; 2], egui::TextureHandle>);
+
+impl std::fmt::Debug for CadastralCellCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CadastralCellCache")
+            .field("len", &self.0.len())
+            .finish()
+    }
+}
+
+impl CadastralCellCache {
+    /// 칸 텍스처를 얻는다.
+    #[must_use]
+    pub fn get(&self, k: &[i64; 2]) -> Option<&egui::TextureHandle> {
+        self.0.get(k)
+    }
+
+    /// 칸 텍스처를 넣는다.
+    pub fn insert(&mut self, k: [i64; 2], v: egui::TextureHandle) {
+        self.0.insert(k, v);
+    }
+}
+
 /// 화면에 보이는 타일을 칠한다. 칠한 장수를 돌려준다.
 pub fn paint_basemap_tiles(
     ctx: &egui::Context,
@@ -201,14 +226,14 @@ impl TileView {
         }
     }
 
-    fn screen_to_meters(&self, rect: Rect, px: Pos2) -> [f64; 2] {
+    pub(crate) fn screen_to_meters(&self, rect: Rect, px: Pos2) -> [f64; 2] {
         [
             self.world_origin[0] + f64::from(px.x - rect.left()) * self.meters_per_px,
             self.world_origin[1] - f64::from(px.y - rect.top()) * self.meters_per_px,
         ]
     }
 
-    fn meters_to_screen(&self, rect: Rect, m: [f64; 2]) -> Pos2 {
+    pub(crate) fn meters_to_screen(&self, rect: Rect, m: [f64; 2]) -> Pos2 {
         let sx = (m[0] - self.world_origin[0]) / self.meters_per_px;
         let sy = (self.world_origin[1] - m[1]) / self.meters_per_px;
         Pos2::new(rect.left() + sx as f32, rect.top() + sy as f32)
@@ -216,7 +241,7 @@ impl TileView {
 }
 
 /// WorkCrs 에 맞는 TM 투영 파라미터.
-fn tm_params_for(crs: strata_types::crs::WorkCrs) -> Option<TmParams> {
+pub(crate) fn tm_params_for(crs: strata_types::crs::WorkCrs) -> Option<TmParams> {
     use strata_types::crs::WorkCrs;
     let code = match crs {
         WorkCrs::Epsg5186 => strata_types::crs::CrsCode::Epsg5186,

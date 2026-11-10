@@ -99,3 +99,49 @@ fn test_basemap_zoom_increases_when_zoomed_in() {
     assert!((5..=19).contains(&far));
     assert!((5..=19).contains(&near));
 }
+
+/// C++ `BasemapOps.cpp:1383` — 지적선은 1:200 ~ 1:80,000 에서만 그린다.
+/// 넓게 보면 필지선이 뭉개지고 타일 요청만 폭증한다.
+#[test]
+fn test_cadastral_scale_range_matches_cpp() {
+    use crate::basemap_cadastral::{
+        cadastral_target_scale, cadastral_visible_at_scale, CADASTRAL_DEFAULT_SCALE_DENOM,
+    };
+    assert!(cadastral_visible_at_scale(5_000.0), "1:5000 은 보여야 한다");
+    assert!(cadastral_visible_at_scale(25_000.0));
+    assert!(cadastral_visible_at_scale(80_000.0), "경계값은 포함");
+    assert!(!cadastral_visible_at_scale(80_001.0), "1:80000 초과는 숨김");
+    assert!(!cadastral_visible_at_scale(200_000.0), "넓게 보면 숨김");
+    assert!(!cadastral_visible_at_scale(150.0), "1:200 미만은 숨김");
+    assert!(!cadastral_visible_at_scale(f64::NAN));
+    // 범위를 벗어나면 C++ 처럼 1:25,000 으로 당긴다.
+    assert_eq!(
+        cadastral_target_scale(200_000.0),
+        Some(CADASTRAL_DEFAULT_SCALE_DENOM)
+    );
+    assert_eq!(CADASTRAL_DEFAULT_SCALE_DENOM, 25_000.0);
+    assert_eq!(cadastral_target_scale(5_000.0), None);
+}
+
+/// 지적 격자 칸이 1km 이고, 화면 이동에도 같은 칸을 재사용해야 한다.
+/// 화면 전체를 한 장으로 받으면 1px 흔들림에도 매번 새로 받아 화면이 빈다.
+#[test]
+fn test_cadastral_grid_cells_are_reused() {
+    use crate::basemap_cadastral::{cadastral_cell_bbox, cadastral_grid_range, CADASTRAL_CELL_M};
+
+    // 거의 같은 두 영역은 같은 칸 범위를 내야 한다.
+    let a = [1_000_100.0, 2_000_100.0, 1_001_900.0, 2_001_900.0];
+    let b = [1_000_140.0, 2_000_130.0, 1_001_860.0, 2_001_870.0];
+    assert_eq!(cadastral_grid_range(a), cadastral_grid_range(b));
+
+    // 칸 경계는 정확히 격자 배수여야 한다.
+    let bb = cadastral_cell_bbox(12, -3);
+    assert!((bb[0] - 12.0 * CADASTRAL_CELL_M).abs() < 1e-6);
+    assert!((bb[1] + 3.0 * CADASTRAL_CELL_M).abs() < 1e-6);
+    assert!((bb[2] - 13.0 * CADASTRAL_CELL_M).abs() < 1e-6);
+    assert!((bb[3] + 2.0 * CADASTRAL_CELL_M).abs() < 1e-6);
+
+    // 넓게 벌어진 영역은 다른 범위여야 한다.
+    let far = [1_010_000.0, 2_010_000.0, 1_011_000.0, 2_011_000.0];
+    assert_ne!(cadastral_grid_range(a), cadastral_grid_range(far));
+}
