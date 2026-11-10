@@ -9,7 +9,7 @@ use std::path::Path;
 use rusqlite::{Connection, OpenFlags};
 use strata_geo::crs_transform::CrsTransformer;
 use strata_storage::wkb_codec::{decode_gpkg_wkb, WkbGeometry};
-use strata_types::crs::CrsCode;
+use strata_types::crs::{find_crs_by_epsg, CrsCode};
 
 use super::real_survey_types::{ring_centroid, RealCadastralParcel, RealHeritagePoly, RealSurveyData};
 
@@ -62,7 +62,6 @@ impl RealSurveyData {
         let Ok(entries) = std::fs::read_dir(dir.join("가져온자료")) else {
             return;
         };
-        let xf = CrsTransformer::new(CrsCode::Epsg5179, CrsCode::Epsg5187);
         let [cx, cy] = self.survey_center;
         for entry in entries.flatten() {
             let layer_name = entry.file_name().to_string_lossy().to_string();
@@ -80,30 +79,43 @@ impl RealSurveyData {
             if let Ok(mut stmt) = conn.prepare("SELECT __hgis_geom FROM heritage LIMIT 250") {
                 if let Ok(mut rows) = stmt.query([]) {
                     while let Ok(Some(r)) = rows.next() {
-                        if let Ok(blob) = r.get::<_, Vec<u8>>(0) {
-                            if let Ok((srs, WkbGeometry::Polygon(rings))) = decode_gpkg_wkb(&blob) {
-                                for ring in rings {
-                                    let ring_5187: Vec<[f64; 2]> = if srs == 5179 {
-                                        ring.into_iter()
-                                            .map(|p| xf.transform_xy(p[0], p[1]))
-                                            .collect()
-                                    } else {
-                                        ring
-                                    };
-                                    let center = ring_centroid(&ring_5187);
-                                    if (center[0] - cx).abs() <= 2600.0
-                                        && (center[1] - cy).abs() <= 2200.0
-                                    {
-                                        self.heritage_polys.push(RealHeritagePoly {
-                                            layer_name: layer_name.clone(),
-                                            site_name: layer_name.clone(),
-                                            is_green,
-                                            ring: ring_5187,
-                                            center,
-                                        });
-                                    }
-                                }
-                            }
+                        let Ok(blob) = r.get::<_, Vec<u8>>(0) else {
+                            continue;
+                        };
+                        let Ok((srs, WkbGeometry::Polygon(rings))) = decode_gpkg_wkb(&blob) else {
+                            continue;
+                        };
+                        // SRS 를 **작업 좌표계(5187)로 실제 변환**한다.
+                        // 예전에는 5179 만 변환하고 나머지는 5187 로 간주했다.
+                        // 그래서 5186·5174·미상 좌표가 그대로 찍혀 수백 m 어긋났다.
+                        // 지원하지 않는 CRS 는 조용히 넘기지 않고 건너뛴다(무음 오차 방지).
+                        // GPKG 의 srs_id 는 i32 다. 음수·0 은 "미지정"이므로 건너뛴다.
+                        let Ok(srs_code) = u32::try_from(srs) else {
+                            continue;
+                        };
+                        let Some(src_crs) = find_crs_by_epsg(srs_code) else {
+                            continue;
+                        };
+                        let xf = CrsTransformer::new(src_crs, CrsCode::Epsg5187);
+                        let Some(first_ring) = rings.first() else {
+                            continue;
+                        };
+                        let Some(ring_5187) = first_ring
+                            .iter()
+                            .map(|p| xf.try_transform_xy(p[0], p[1]))
+                            .collect::<Option<Vec<[f64; 2]>>>()
+                        else {
+                            continue;
+                        };
+                        let center = ring_centroid(&ring_5187);
+                        if (center[0] - cx).abs() <= 2600.0 && (center[1] - cy).abs() <= 2200.0 {
+                            self.heritage_polys.push(RealHeritagePoly {
+                                layer_name: layer_name.clone(),
+                                site_name: layer_name.clone(),
+                                is_green,
+                                ring: ring_5187,
+                                center,
+                            });
                         }
                     }
                 }
