@@ -40,6 +40,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
 base64 = "0.22"
 encoding_rs = "0.8"
+shapefile = { version = "0.9", features = ["encoding_rs"] }
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 quick-xml = "0.37"
 tempfile = "3.13"
