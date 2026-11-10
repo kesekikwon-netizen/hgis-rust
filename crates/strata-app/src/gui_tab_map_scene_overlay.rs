@@ -16,6 +16,48 @@ use super::gui_tab_map_consts::ShellGridConfig;
 use super::gui_tab_map_geom::w2s;
 use super::gui_tab_map_grid::paint_projected_grid;
 
+/// 꼭짓점 편집 핸들을 그린다.
+///
+/// C++ `KaVertexEditTool.cpp:190-204` — 정점(꼭짓점)은 채운 사각형,
+/// 선분 중점은 테두리만 있는 원. 활성 핸들은 색을 바꾼다.
+fn paint_vertex_handles(
+    p: &egui::Painter,
+    rect: Rect,
+    vp: &ViewportTransform,
+    ring: &[[f64; 2]],
+) {
+    use strata_canvas2d::vertex_handle::{handles_of, HandleKind};
+    for (kind, at) in handles_of(ring, &screen_xf(rect, vp), true) {
+        let pos = Pos2::new(at[0], at[1]);
+        match kind {
+            HandleKind::Vertex(_) => {
+                // 정점 — 채운 사각형 7px.
+                let r = Rect::from_center_size(pos, egui::Vec2::splat(7.0));
+                p.rect_filled(r, 0.0, Color32::WHITE);
+                p.rect_stroke(
+                    r,
+                    0.0,
+                    Stroke::new(1.5, Color32::from_rgb(178, 34, 34)),
+                    egui::StrokeKind::Middle,
+                );
+            }
+            HandleKind::Midpoint(_) => {
+                // 선분 중점 — 원형 3px(테두리만).
+                p.circle_stroke(
+                    pos,
+                    3.0,
+                    Stroke::new(1.2, Color32::from_rgb(217, 119, 6)),
+                );
+            }
+        }
+    }
+}
+
+/// 화면 변환기를 만든다(엔진 `ScreenTransform`).
+fn screen_xf(rect: Rect, vp: &ViewportTransform) -> strata_canvas2d::layer_engine::ScreenTransform {
+    crate::map_engine_painter::screen_transform_for(vp, rect)
+}
+
 /// `paint_scene_overlays` 가 쓰는 값 묶음.
 ///
 /// 인자가 7개가 되면 clippy `too_many_arguments` 에 걸리므로 넘긴다.
@@ -105,6 +147,19 @@ impl StrataAppState {
                     4.5,
                     Stroke::new(2.0, Color32::from_rgba_unmultiplied(217, 119, 6, 230)),
                 );
+            }
+        }
+
+        // 꼭짓점 편집 핸들 — 「꼭짓점 수정」 메뉴가 켜면 그린다.
+        // C++ `KaVertexEditTool.cpp:190-204`: 정점은 사각, 선분 중점은 원형.
+        if let Some(ve) = &self.home_map.vertex_edit {
+            if let Some(ring) = self
+                .home_map
+                .real_survey
+                .survey_rings
+                .get(ve.feature_index)
+            {
+                paint_vertex_handles(p, rect, vp, ring);
             }
         }
 

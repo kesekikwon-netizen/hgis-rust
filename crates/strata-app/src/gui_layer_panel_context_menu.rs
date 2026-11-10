@@ -218,6 +218,17 @@ impl StrataAppState {
                 "vertex_edit" => {
                     self.active_tab = crate::app_state::MainTab::Map;
                     self.active_tool = strata_canvas2d::map_tools::MapToolKind::Select;
+                    // 꼭짓점 편집 모드로 들어간다 — 고른 조사구역의 핸들을 그린다.
+                    // C++ `KaVertexEditTool.cpp:190-204` 가 선택 피처에 핸들을 띄우는 것과 같다.
+                    self.home_map.vertex_edit = Some(crate::vertex_edit_state::VertexEditState::new(
+                        self.home_map
+                            .selected_feature_idx
+                            .unwrap_or(0),
+                    ));
+                    self.home_map.draw_guide_message = Some(
+                        "꼭짓점 수정 — 사각 핸들을 끌어 옮기고, 선 가운데 원을 끌어 점을 추가합니다. Del 은 점 삭제."
+                            .to_owned(),
+                    );
                 }
                 "poly_merge" => {
                     self.home_map.draw_guide_message =

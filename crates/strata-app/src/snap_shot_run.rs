@@ -176,6 +176,72 @@ impl StrataAppState {
             "@snap_on" => self.home_map.cad.snap_enabled = true,
             "@snap_off" => self.home_map.cad.snap_enabled = false,
 
+            // ── 꼭짓점 편집 ────────────────────────────────────────
+            // 「꼭짓점 수정」 메뉴는 레이어 패널 안에 있어 리본 라벨로는 못 누른다.
+            // 검증에서 그 상태를 직접 만들 수 있게 명령으로 노출한다.
+            "@vertex_edit" => {
+                let idx = arg
+                    .and_then(|a| a.trim().parse::<usize>().ok())
+                    .or(self.home_map.selected_feature_idx)
+                    .unwrap_or(0);
+                self.active_tab = crate::app_state::MainTab::Map;
+                self.active_tool = strata_canvas2d::map_tools::MapToolKind::Select;
+                self.home_map.vertex_edit =
+                    Some(crate::vertex_edit_state::VertexEditState::new(idx));
+                self.home_map.selected_feature_idx = Some(idx);
+            }
+            "@vertex_edit_off" => self.home_map.vertex_edit = None,
+            "@move_vertex" => {
+                // `@move_vertex:<점>;<x>;<y>` — 지도 좌표로 옮긴다.
+                if let Some(spec) = arg {
+                    let parts: Vec<&str> = spec.split(';').collect();
+                    if parts.len() == 3 {
+                        if let (Ok(i), Ok(x), Ok(y)) = (
+                            parts[0].trim().parse::<usize>(),
+                            parts[1].trim().parse::<f64>(),
+                            parts[2].trim().parse::<f64>(),
+                        ) {
+                            self.snap_apply_vertex_edit(i, [x, y], false);
+                        }
+                    }
+                }
+            }
+            "@insert_vertex" => {
+                // `@insert_vertex:<선분>;<x>;<y>`
+                if let Some(spec) = arg {
+                    let parts: Vec<&str> = spec.split(';').collect();
+                    if parts.len() == 3 {
+                        if let (Ok(s), Ok(x), Ok(y)) = (
+                            parts[0].trim().parse::<usize>(),
+                            parts[1].trim().parse::<f64>(),
+                            parts[2].trim().parse::<f64>(),
+                        ) {
+                            self.snap_apply_vertex_edit(s, [x, y], true);
+                        }
+                    }
+                }
+            }
+            "@delete_vertex" => {
+                if let Some(i) = arg.and_then(|a| a.trim().parse::<usize>().ok()) {
+                    self.snap_delete_vertex(i);
+                }
+            }
+            "@dump_vertices" => {
+                let idx = self
+                    .home_map
+                    .vertex_edit
+                    .as_ref()
+                    .map(|v| v.feature_index)
+                    .unwrap_or(0);
+                if let Some(ring) = self.home_map.real_survey.survey_rings.get(idx) {
+                    let pts: Vec<String> = ring
+                        .iter()
+                        .map(|p| format!("({:.2},{:.2})", p[0], p[1]))
+                        .collect();
+                    eprintln!("[SNAP] vertices idx={idx} n={} {}", ring.len(), pts.join(" "));
+                }
+            }
+
             // ── 진단 ────────────────────────────────────────────────
             "@dump_ring" => {
                 let ring = &self.home_map.scene.active_rubberband;
@@ -205,6 +271,49 @@ impl StrataAppState {
     #[cfg(test)]
     pub(crate) fn snap_apply_action_for_test(&mut self, action: &str) {
         self.snap_apply_action(action);
+    }
+
+    /// 편집 중인 링에 정점 이동·삽입을 적용한다.
+    fn snap_apply_vertex_edit(&mut self, index: usize, at: [f64; 2], insert: bool) {
+        let Some(ve) = self.home_map.vertex_edit.as_ref().cloned() else {
+            return;
+        };
+        let Some(ring) = self
+            .home_map
+            .real_survey
+            .survey_rings
+            .get_mut(ve.feature_index)
+        else {
+            return;
+        };
+        let edit = if insert {
+            strata_canvas2d::vertex_handle::VertexEdit::Insert { segment: index, at }
+        } else {
+            strata_canvas2d::vertex_handle::VertexEdit::Move { index, to: at }
+        };
+        self.is_dirty = ve.apply_to(ring, &edit).is_ok();
+    }
+
+    /// 편집 중인 링에서 정점을 지운다(최소 점 수 가드 포함).
+    fn snap_delete_vertex(&mut self, index: usize) {
+        let Some(ve) = self.home_map.vertex_edit.as_ref().cloned() else {
+            return;
+        };
+        let Some(ring) = self
+            .home_map
+            .real_survey
+            .survey_rings
+            .get_mut(ve.feature_index)
+        else {
+            return;
+        };
+        let edit = strata_canvas2d::vertex_handle::VertexEdit::Delete { index };
+        if ve.apply_to(ring, &edit).is_ok() {
+            self.is_dirty = true;
+        } else {
+            self.home_map.draw_guide_message =
+                Some("점을 더 지울 수 없습니다 — 면은 최소 3점이 필요합니다.".to_owned());
+        }
     }
 
     fn snap_arg_to_world(&self, arg: Option<&str>) -> Option<[f64; 2]> {

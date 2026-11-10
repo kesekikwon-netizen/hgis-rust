@@ -29,6 +29,11 @@ pub struct HomeMapTabState {
     pub files_open: bool,
     pub layer_filter: String,
     pub selected_feature_idx: Option<usize>,
+    /// 꼭짓점 편집 세션(없으면 편집 중이 아님).
+    ///
+    /// C++ `KaVertexEditTool` 이 도구로 들고 있는 상태를 값으로 둔 것이다.
+    /// 「꼭짓점 수정」 메뉴가 켜고, 캔버스가 핸들을 그리고 입력을 처리한다.
+    pub vertex_edit: Option<crate::vertex_edit_state::VertexEditState>,
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
     pub viewport: ViewportTransform,
@@ -70,6 +75,7 @@ impl Default for HomeMapTabState {
             files_open: true,
             layer_filter: String::new(),
             selected_feature_idx: None,
+            vertex_edit: None,
             grid_enabled: false,
             cursor_world_xy: center,
             viewport: ViewportTransform::new(center, 2.55, [1060.0, 680.0]),

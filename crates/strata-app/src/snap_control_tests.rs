@@ -156,3 +156,75 @@ fn unknown_command_does_not_panic() {
     // 상태가 망가지지 않았는지 — 시작 탭 그대로.
     assert_eq!(a.active_tab, MainTab::Home);
 }
+
+/// 그리기 → 마침 → 꼭짓점 편집 → 이동 → 삽입 → 삭제가 한 줄로 이어진다.
+///
+/// 이게 앱을 스크립트로 조종해 편집 기능을 검증하는 통로다.
+#[test]
+fn vertex_edit_commands_work_end_to_end() {
+    let mut a = app();
+    a.last_canvas_rect = Some(eframe::egui::Rect::from_min_size(
+        eframe::egui::Pos2::ZERO,
+        eframe::egui::Vec2::new(600.0, 400.0),
+    ));
+    // 사각형 하나 그려 저장한다.
+    a.snap_apply_action_for_test("@draw:100x100");
+    a.snap_apply_action_for_test("@draw:300x100");
+    a.snap_apply_action_for_test("@draw:300x300");
+    a.snap_apply_action_for_test("@draw:100x300");
+    a.snap_apply_action_for_test("@finish_draw");
+    let n = a.home_map.real_survey.survey_rings.len();
+    assert!(n > 0, "조사구역이 저장돼야 한다");
+
+    // 마지막에 저장한 링을 편집 대상으로 잡는다.
+    let idx = n - 1;
+    a.home_map.selected_feature_idx = Some(idx);
+    a.snap_apply_action_for_test("@vertex_edit");
+    assert!(a.home_map.vertex_edit.is_some(), "편집 세션이 열려야");
+    assert_eq!(a.home_map.vertex_edit.as_ref().unwrap().feature_index, idx);
+
+    let before = a.home_map.real_survey.survey_rings[idx].len();
+
+    // 점 하나를 지도 좌표로 옮긴다.
+    let target = a.home_map.real_survey.survey_rings[idx][0];
+    let moved = [target[0] + 5.0, target[1] + 5.0];
+    a.snap_apply_action_for_test(&format!(
+        "@move_vertex:0;{};{}",
+        moved[0], moved[1]
+    ));
+    let got = a.home_map.real_survey.survey_rings[idx][0];
+    assert!((got[0] - moved[0]).abs() < 1e-6, "이동한 x");
+    assert!((got[1] - moved[1]).abs() < 1e-6, "이동한 y");
+
+    // 선분 하나에 점을 넣는다.
+    a.snap_apply_action_for_test(&format!("@insert_vertex:0;{};{}", moved[0], moved[1]));
+    assert_eq!(
+        a.home_map.real_survey.survey_rings[idx].len(),
+        before + 1,
+        "삽입으로 점이 하나 늘어야"
+    );
+
+    // 하나 지운다.
+    a.snap_apply_action_for_test("@delete_vertex:0");
+    assert_eq!(
+        a.home_map.real_survey.survey_rings[idx].len(),
+        before,
+        "삭제로 원래대로"
+    );
+
+    // 편집을 끝낸다.
+    a.snap_apply_action_for_test("@vertex_edit_off");
+    assert!(a.home_map.vertex_edit.is_none());
+}
+
+/// 편집 세션이 없으면 정점 명령은 조용히 무시된다(패닉 없음).
+#[test]
+fn vertex_commands_need_session() {
+    let mut a = app();
+    assert!(a.home_map.vertex_edit.is_none());
+    a.snap_apply_action_for_test("@move_vertex:0;1;2");
+    a.snap_apply_action_for_test("@insert_vertex:0;1;2");
+    a.snap_apply_action_for_test("@delete_vertex:0");
+    a.snap_apply_action_for_test("@dump_vertices");
+    assert!(a.home_map.vertex_edit.is_none());
+}

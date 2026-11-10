@@ -156,6 +156,8 @@ mod map_engine_painter;mod map_stage_bridge;
 mod snap_shot;
 mod snap_shot_run;
 
+mod vertex_edit_state;
+
 #[cfg(test)]
 #[path = "snap_control_tests.rs"]
 mod snap_control_tests;
