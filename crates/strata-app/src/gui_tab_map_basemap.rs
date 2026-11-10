@@ -67,8 +67,7 @@ impl StrataAppState {
         {
             return;
         }
-        // C++ `BasemapOps.cpp:712,969` — 1:80,000 보다 넓게 보면 지적선을 그리지 않는다.
-        // 넓게 보면 필지선이 뭉개져 오히려 방해가 되고, 타일 요청도 폭증한다.
+        // C++ BasemapOps.cpp:712,969 — 1:80,000 보다 넓게 보면 지적선을 그리지 않는다.
         let scale_denom = self.home_map.viewport.meters_per_pixel * 3780.0;
         if !crate::basemap_cadastral::cadastral_visible_at_scale(scale_denom) {
             return;
@@ -77,7 +76,6 @@ impl StrataAppState {
         if key.trim().is_empty() {
             return;
         }
-        // 화면 영역을 EPSG:3857 미터 경계로 바꾼다.
         let Some(bbox) = crate::basemap_coords::screen_bbox_3857(
             &self.home_map.viewport,
             rect,
@@ -85,52 +83,39 @@ impl StrataAppState {
         ) else {
             return;
         };
-        // 위성과 같은 방식으로 **격자 칸 단위**로 받아 칠한다.
-        // 화면 전체를 한 장으로 받으면 1px 만 움직여도 새로 받아 화면이 비어 버린다.
-        let (x0, y0, x1, y1) = crate::basemap_cadastral::cadastral_grid_range(bbox);
-        let count = (x1 - x0 + 1) * (y1 - y0 + 1);
-        if count <= 0 || count > 36 {
-            return; // 너무 넓게 보면 지적선을 생략한다(성능 보호)
-        }
-        let tint = egui::Color32::from_rgba_unmultiplied(255, 255, 255, 190);
-        for cy in y0..=y1 {
-            for cx in x0..=x1 {
-                let cell = [cx, cy];
-                let handle = if let Some(h) = self.cadastral_cells.get(&cell) {
-                    h.clone()
-                } else {
-                    let Some(path) = crate::basemap_cadastral::fetch_cadastral_cell(&key, cx, cy)
-                    else {
-                        continue;
-                    };
-                    let name = format!("cad_{cx}_{cy}");
-                    let Some(tex) =
-                        crate::basemap_coords::load_texture_from_path(ctx, &name, &path)
-                    else {
-                        continue;
-                    };
-                    self.cadastral_cells.insert(cell, tex.clone());
-                    tex
-                };
-                let cell_bbox = crate::basemap_cadastral::cadastral_cell_bbox(cx, cy);
-                let Some(draw_rect) = crate::basemap_coords::bbox_3857_to_screen(
-                    &self.home_map.viewport,
-                    rect,
-                    self.work_crs,
-                    cell_bbox,
-                ) else {
-                    continue;
-                };
-                if !draw_rect.intersect(rect).is_positive() {
-                    continue;
-                }
-                p.image(
-                    handle.id(),
-                    draw_rect,
-                    egui::Rect::from_min_max(egui::Pos2::new(0.0, 0.0), egui::Pos2::new(1.0, 1.0)),
-                    tint,
-                );
-            }
-        }
+
+        // **화면 한 장으로 받는다.** 격자 칸마다 따로 받으면 칸 경계에서 선이 끊기고
+        // 겹쳐서 지적도가 격자처럼 보인다. C++ 은 WMS 레이어 하나로 화면 전체를 그린다.
+        let size = crate::basemap_cadastral_view::cadastral_view_size(rect.width(), rect.height());
+        let Some(path) = crate::basemap_cadastral_view::fetch_cadastral_view(&key, bbox, size)
+        else {
+            return;
+        };
+
+        let name = format!(
+            "cadview_{}_{}",
+            size,
+            path.file_stem().and_then(|s| s.to_str()).unwrap_or("0")
+        );
+        let tex = if let Some(h) = self.cadastral_view_tex.get(&name) {
+            h.clone()
+        } else {
+            let Some(t) = crate::basemap_coords::load_texture_from_path(ctx, &name, &path) else {
+                return;
+            };
+            self.cadastral_view_tex.insert(name, t.clone());
+            t
+        };
+
+        // WMS 이미지는 요청한 bbox 를 정확히 덮으므로 화면 사각형에 그대로 그린다.
+        // **색을 입히지 않는다**(흰색 불투명 tint). 예전엔 알파 190 을 곱해
+        // 지적선이 흐려지고 조사구역에 덮였다. C++ 은 레이어를 원본대로 그린다.
+        let tint = egui::Color32::WHITE;
+        p.image(
+            tex.id(),
+            rect,
+            egui::Rect::from_min_max(egui::Pos2::new(0.0, 0.0), egui::Pos2::new(1.0, 1.0)),
+            tint,
+        );
     }
 }

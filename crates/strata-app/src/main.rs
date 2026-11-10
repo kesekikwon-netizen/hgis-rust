@@ -142,6 +142,7 @@ mod tabs_paleo_3d_tests;
 mod svg_path_paint_tests;
 
 mod basemap_cadastral;
+mod basemap_cadastral_view;
 mod basemap_coords;
 mod basemap_fetch;
 mod basemap_paint;

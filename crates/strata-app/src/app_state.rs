@@ -94,6 +94,9 @@ pub struct StrataAppState {
     pub last_canvas_rect: Option<eframe::egui::Rect>,
     /// 연속지적도 격자 칸별 텍스처(위성 타일과 같은 방식).
     pub cadastral_cells: crate::basemap_paint::CadastralCellCache,
+    /// 연속지적도 **화면 한 장** 텍스처. 칸별로 나누지 않는 이유는
+    /// 칸 경계에서 선이 끊기고 겹쳐 "격자처럼" 보이기 때문이다(C++ 과 같은 방식).
+    pub cadastral_view_tex: crate::basemap_cadastral_view::CadastralViewCache,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,

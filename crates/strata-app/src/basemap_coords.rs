@@ -3,7 +3,7 @@
 //! asemap_paint 가 300줄을 넘어 분리했다.
 
 use eframe::egui;
-use strata_geo::crs_transform::{lonlat_to_tm, tm_to_lonlat};
+use strata_geo::crs_transform::tm_to_lonlat;
 
 use crate::basemap_paint::{tm_params_for, TileView};
 
@@ -63,35 +63,4 @@ pub fn load_texture_from_path(
     }
     let color = egui::ColorImage::from_rgba_unmultiplied([w, h], rgba.as_raw());
     Some(ctx.load_texture(name.to_owned(), color, egui::TextureOptions::LINEAR))
-}
-
-/// EPSG:3857 미터 경계를 화면 사각형으로 되돌린다.
-#[must_use]
-pub fn bbox_3857_to_screen(
-    vp: &strata_canvas2d::viewport::ViewportTransform,
-    rect: egui::Rect,
-    work_crs: strata_types::crs::WorkCrs,
-    bbox: [f64; 4],
-) -> Option<egui::Rect> {
-    let view = TileView::from_viewport(vp, rect, work_crs);
-    let params = tm_params_for(work_crs)?;
-    let (lon0, lat0) = lon_lat_from_3857(bbox[0], bbox[1]);
-    let (lon1, lat1) = lon_lat_from_3857(bbox[2], bbox[3]);
-    let sw = lonlat_to_tm(lon0, lat0, &params);
-    let ne = lonlat_to_tm(lon1, lat1, &params);
-    let a = view.meters_to_screen(rect, sw);
-    let b = view.meters_to_screen(rect, ne);
-    let r = egui::Rect::from_min_max(
-        egui::Pos2::new(a.x.min(b.x), a.y.min(b.y)),
-        egui::Pos2::new(a.x.max(b.x), a.y.max(b.y)),
-    );
-    r.is_positive().then_some(r)
-}
-
-/// EPSG:3857 미터 → 경위도.
-fn lon_lat_from_3857(x: f64, y: f64) -> (f64, f64) {
-    const R: f64 = 6_378_137.0;
-    let lon = (x / R).to_degrees();
-    let lat = (2.0 * (y / R).exp().atan() - std::f64::consts::FRAC_PI_2).to_degrees();
-    (lon, lat)
 }

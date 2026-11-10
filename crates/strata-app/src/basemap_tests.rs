@@ -123,25 +123,27 @@ fn test_cadastral_scale_range_matches_cpp() {
     assert_eq!(cadastral_target_scale(5_000.0), None);
 }
 
-/// 지적 격자 칸이 1km 이고, 화면 이동에도 같은 칸을 재사용해야 한다.
-/// 화면 전체를 한 장으로 받으면 1px 흔들림에도 매번 새로 받아 화면이 빈다.
+/// 지적도는 **화면 한 장**으로 받는다 — 칸마다 나누면 경계에서 선이 끊긴다.
+///
+/// 예전에는 격자 칸(수백 m)마다 WMS 를 따로 받아 칸 경계에서 필지선이 잘리고
+/// 겹쳐서 "지적도가 격자처럼" 보였다(2026-11-10 사용자 지적).
 #[test]
-fn test_cadastral_grid_cells_are_reused() {
-    use crate::basemap_cadastral::{cadastral_cell_bbox, cadastral_grid_range, CADASTRAL_CELL_M};
+fn test_cadastral_uses_one_image_per_view() {
+    use crate::basemap_cadastral_view::{cadastral_view_cache_path, cadastral_view_size};
 
-    // 거의 같은 두 영역은 같은 칸 범위를 내야 한다.
-    let a = [1_000_100.0, 2_000_100.0, 1_001_900.0, 2_001_900.0];
-    let b = [1_000_140.0, 2_000_130.0, 1_001_860.0, 2_001_870.0];
-    assert_eq!(cadastral_grid_range(a), cadastral_grid_range(b));
-
-    // 칸 경계는 정확히 격자 배수여야 한다.
-    let bb = cadastral_cell_bbox(12, -3);
-    assert!((bb[0] - 12.0 * CADASTRAL_CELL_M).abs() < 1e-6);
-    assert!((bb[1] + 3.0 * CADASTRAL_CELL_M).abs() < 1e-6);
-    assert!((bb[2] - 13.0 * CADASTRAL_CELL_M).abs() < 1e-6);
-    assert!((bb[3] + 2.0 * CADASTRAL_CELL_M).abs() < 1e-6);
-
-    // 넓게 벌어진 영역은 다른 범위여야 한다.
-    let far = [1_010_000.0, 2_010_000.0, 1_011_000.0, 2_011_000.0];
-    assert_ne!(cadastral_grid_range(a), cadastral_grid_range(far));
+    // 같은 영역·크기는 같은 파일을 쓴다(다시 받지 않는다).
+    let a = [14_385_000.0, 4_274_000.0, 14_386_000.0, 4_275_000.0];
+    assert_eq!(
+        cadastral_view_cache_path(a, 1024),
+        cadastral_view_cache_path(a, 1024)
+    );
+    // 영역이 다르면 다른 파일.
+    let b = [14_385_500.0, 4_274_000.0, 14_386_500.0, 4_275_000.0];
+    assert_ne!(
+        cadastral_view_cache_path(a, 1024),
+        cadastral_view_cache_path(b, 1024)
+    );
+    // 크기는 2의 거듭제곱, 512~2048.
+    assert_eq!(cadastral_view_size(300.0, 200.0), 512);
+    assert_eq!(cadastral_view_size(2000.0, 1000.0), 2048);
 }
