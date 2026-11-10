@@ -115,6 +115,16 @@ impl StrataAppState {
 
     /// C++ `openProject` 의 파일 선택 + `openSurveyGpkg` 에 해당한다.
     pub fn open_survey_file_dialog(&mut self) {
+        // 검증용 경로 주입 — 네이티브 파일 대화상자는 자동화에서 열리지 않는다.
+        // KA_HGIS_OPEN_PATH 가 있으면 그 경로를 바로 연다(사용자 환경 동작은 그대로).
+        if let Ok(p) = std::env::var("KA_HGIS_OPEN_PATH") {
+            if !p.trim().is_empty() {
+                let path = std::path::PathBuf::from(p.trim());
+                self.open_survey_gpkg(&path);
+                return;
+            }
+        }
+
         // C++ QFileDialog 필터: 조사 (*.gpkg *.qgz *.qgs);; GeoPackage (*.gpkg)
         let picked = ::rfd::FileDialog::new()
             .set_title("열기")

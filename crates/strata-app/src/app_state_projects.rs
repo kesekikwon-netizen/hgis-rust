@@ -99,6 +99,21 @@ impl StrataAppState {
     /// C++ `MainWindowSession.cpp:1420` `saveProjectAs` — 다른 이름으로 저장.
     /// .qgz 를 고르면 같은 이름의 .gpkg 로 쓴다. 취소하면 아무 것도 바꾸지 않는다.
     pub fn save_survey_project_as(&mut self) -> bool {
+        // 검증용 경로 주입 — 네이티브 대화상자는 자동화에서 열리지 않는다.
+        if let Ok(p) = std::env::var("KA_HGIS_SAVE_PATH") {
+            if !p.trim().is_empty() {
+                let mut target = std::path::PathBuf::from(p.trim());
+                if target
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("qgz"))
+                {
+                    target.set_extension("gpkg");
+                }
+                self.survey_path = Some(target.clone());
+                return self.write_survey_to(&target);
+            }
+        }
         let default_name = if let Some(cur) = self.survey_path.as_ref() {
             let stem = cur
                 .file_stem()

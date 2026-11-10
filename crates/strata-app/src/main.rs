@@ -161,6 +161,14 @@ mod vertex_edit_state;
 #[cfg(test)]
 #[path = "snap_control_tests.rs"]
 mod snap_control_tests;
+
+#[cfg(test)]
+#[path = "ribbon_audit_tests.rs"]
+mod ribbon_audit_tests;
+
+#[cfg(test)]
+#[path = "test_env_guard.rs"]
+mod test_env_guard;
 mod dlg_cad_import_notice;
 mod dlg_cadastral_download;
 mod dlg_drawing_print;
