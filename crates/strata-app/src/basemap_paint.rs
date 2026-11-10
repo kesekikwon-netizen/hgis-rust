@@ -11,7 +11,7 @@
 use eframe::egui::{self, Color32, Pos2, Rect};
 use strata_geo::crs_transform::{lonlat_to_tm, tm_to_lonlat, TmParams};
 
-use crate::basemap_fetch::{fetch_tile, tile_filename_key};
+use crate::basemap_fetch::{cached_tile, tile_filename_key};
 use crate::basemap_tiles::{lon_lat_to_tile, tile_lon_lat, TileKind};
 
 /// 타일 텍스처 캐시 키.
@@ -68,16 +68,27 @@ impl CadastralCellCache {
     }
 }
 
+/// 배경 타일 한 장의 요청. 인자가 많아 묶는다(clippy `too_many_arguments`).
+pub struct TileRequest<'a> {
+    pub kind: TileKind,
+    pub z: u8,
+    pub view: &'a TileView,
+}
+
 /// 화면에 보이는 타일을 칠한다. 칠한 장수를 돌려준다.
+///
+/// **그리기 함수는 기다리지 않는다.** 캐시에 이미 있는 타일만 칠하고,
+/// 없는 타일은 `worker` 에 요청만 넣어 둔다(백그라운드 스레드가 받아 온다).
+/// 예전에는 이 함수 안에서 `curl` 을 동기로 돌려 첫 프레임이 수십 초 멈출 수 있었다.
 pub fn paint_basemap_tiles(
     ctx: &egui::Context,
     painter: &egui::Painter,
     rect: Rect,
-    kind: TileKind,
-    z: u8,
-    view: &TileView,
+    req: &TileRequest<'_>,
     textures: &mut TileTextureCache,
+    worker: &mut crate::basemap_tile_worker::TileWorker,
 ) -> usize {
+    let TileRequest { kind, z, view } = *req;
     if !kind.is_xyz() || !rect.is_positive() {
         return 0;
     }
@@ -128,11 +139,15 @@ pub fn paint_basemap_tiles(
             let handle = if let Some(h) = textures.0.get(&k) {
                 h.clone()
             } else {
-                let Some(tex) = load_tile_texture(ctx, kind, &key, z, tx, ty) else {
+                // 캐시에 없으면 **워커에 요청만 하고 이번 프레임은 건너뛴다**.
+                // 다음 프레임에 결과가 도착하면 그때 칠한다.
+                if let Some(tex) = load_tile_texture_from_cache(ctx, kind, z, tx, ty) {
+                    textures.0.insert(k, tex.clone());
+                    tex
+                } else {
+                    worker.request(kind, &key, z, tx, ty);
                     continue;
-                };
-                textures.0.insert(k, tex.clone());
-                tex
+                }
             };
             painter.image(
                 handle.id(),
@@ -146,15 +161,17 @@ pub fn paint_basemap_tiles(
     painted
 }
 
-fn load_tile_texture(
+/// 디스크 캐시에 **이미 있는** 타일만 텍스처로 만든다. 네트워크를 타지 않는다.
+///
+/// 워커가 받아 둔 파일을 읽는 경로다. 없으면 `None`(워커에 요청하게 된다).
+fn load_tile_texture_from_cache(
     ctx: &egui::Context,
     kind: TileKind,
-    key: &str,
     z: u8,
     x: u32,
     y: u32,
 ) -> Option<egui::TextureHandle> {
-    let path = fetch_tile(kind, key, z, x, y)?;
+    let path = cached_tile(kind, z, x, y)?;
     let img = image::open(&path).ok()?;
     let rgba = img.to_rgba8();
     let (w, h) = (rgba.width() as usize, rgba.height() as usize);

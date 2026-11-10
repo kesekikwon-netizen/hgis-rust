@@ -145,6 +145,7 @@ mod basemap_cadastral;
 mod basemap_coords;
 mod basemap_fetch;
 mod basemap_paint;
+mod basemap_tile_worker;
 mod basemap_tiles;
 mod diag_layout;
 

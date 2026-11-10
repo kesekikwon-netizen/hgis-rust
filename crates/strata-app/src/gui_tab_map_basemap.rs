@@ -28,14 +28,24 @@ impl StrataAppState {
             rect,
             self.work_crs,
         );
+        // 워커가 받아 둔 타일을 한 번에 꺼낸다(프레임당 한 번만).
+        // 결과가 있으면 그때만 다시 그리기를 요청한다 — 타일마다 알리면 렌더 루프가 죽는다.
+        let ready = self.basemap_worker.drain();
+        if !ready.is_empty() {
+            ctx.request_repaint();
+        }
+
         let n = crate::basemap_paint::paint_basemap_tiles(
             ctx,
             p,
             rect,
-            kind,
-            z,
-            &view,
+            &crate::basemap_paint::TileRequest {
+                kind,
+                z,
+                view: &view,
+            },
             &mut self.basemap_textures,
+            &mut self.basemap_worker,
         );
         self.basemap_tiles_painted = n;
     }

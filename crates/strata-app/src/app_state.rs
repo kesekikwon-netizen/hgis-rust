@@ -80,6 +80,11 @@ pub struct StrataAppState {
     pub snap: Option<crate::snap_shot::SnapRequest>,
     /// 배경지도 타일 텍스처 캐시(종류·줌·x·y).
     pub basemap_textures: crate::basemap_paint::TileTextureCache,
+    /// 배경지도 타일을 백그라운드에서 받는 워커.
+    ///
+    /// 그리기 함수는 이 워커에 **요청만** 넣고 기다리지 않는다. 예전에는
+    /// 그리기 안에서 curl 을 동기로 돌려 첫 프레임이 수십 초 멈출 수 있었다.
+    pub basemap_worker: crate::basemap_tile_worker::TileWorker,
     /// 마지막 프레임에 칠한 타일 수(진단·시험용).
     pub basemap_tiles_painted: usize,
     /// 연속지적도 격자 칸별 텍스처(위성 타일과 같은 방식).
