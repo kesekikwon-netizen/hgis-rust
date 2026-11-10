@@ -419,6 +419,11 @@ impl StrataAppState {
             None => None,
         };
         if let Some(edit) = edit {
+            // 실행취소를 위해 편집 전 링을 남긴다.
+            if ve.dragging.is_none() || matches!(kind, Some(HandleKind::Midpoint(_))) {
+                // 드래그 시작(또는 삽입)일 때만 한 번 남긴다 — 매 프레임 남기면 스택이 터진다.
+                self.snap_record_ring(idx);
+            }
             let ring = &mut self.home_map.real_survey.survey_rings[idx];
             if ve.apply_to(ring, &edit).is_ok() {
                 self.is_dirty = true;

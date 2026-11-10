@@ -132,11 +132,22 @@ impl StrataAppState {
                 } else if i.key_pressed(egui::Key::E) {
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
                 } else if i.key_pressed(egui::Key::Z) {
-                    self.home_map.draw_guide_message =
-                        Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
+                    // 실제로 되돌린다. 예전에는 안내 문구만 띄우고 아무 것도 안 했다.
+                    if self.snap_undo_ring() {
+                        self.home_map.draw_guide_message =
+                            Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
+                    } else {
+                        self.home_map.draw_guide_message =
+                            Some("되돌릴 편집이 없습니다.".to_owned());
+                    }
                 } else if i.key_pressed(egui::Key::Y) {
-                    self.home_map.draw_guide_message =
-                        Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
+                    if self.snap_redo_ring() {
+                        self.home_map.draw_guide_message =
+                            Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
+                    } else {
+                        self.home_map.draw_guide_message =
+                            Some("다시 적용할 편집이 없습니다.".to_owned());
+                    }
                 }
             }
         });

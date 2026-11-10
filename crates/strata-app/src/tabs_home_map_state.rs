@@ -34,6 +34,11 @@ pub struct HomeMapTabState {
     /// C++ `KaVertexEditTool` 이 도구로 들고 있는 상태를 값으로 둔 것이다.
     /// 「꼭짓점 수정」 메뉴가 켜고, 캔버스가 핸들을 그리고 입력을 처리한다.
     pub vertex_edit: Option<crate::vertex_edit_state::VertexEditState>,
+    /// 링 편집 실행취소 스택. C++ `QUndoStack` 자리.
+    ///
+    /// `UndoCommandEntry` 는 옮긴 좌표만 들고 있어 되돌릴 수 없었다.
+    /// 이 스택은 편집 **전** 링을 통째로 담아 실제로 되돌린다.
+    pub ring_undo: crate::tabs_home_map::RingUndoStack,
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
     pub viewport: ViewportTransform,
@@ -76,6 +81,7 @@ impl Default for HomeMapTabState {
             layer_filter: String::new(),
             selected_feature_idx: None,
             vertex_edit: None,
+            ring_undo: crate::tabs_home_map::RingUndoStack::new(),
             grid_enabled: false,
             cursor_world_xy: center,
             viewport: ViewportTransform::new(center, 2.55, [1060.0, 680.0]),

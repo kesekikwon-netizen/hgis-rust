@@ -12,6 +12,87 @@
 
 use strata_canvas2d::vertex_handle::{self, HandleKind, VertexEdit};
 
+use crate::tabs_home_map::RingSnapshot;
+
+impl crate::app_state::StrataAppState {
+    /// 편집 전에 링을 스냅샷으로 남긴다. 실행취소로 되돌릴 수 있게.
+    ///
+    /// C++ `QUndoCommand` 가 `redo()` 전에 이전 값을 보관하는 것과 같은 역할.
+    pub(crate) fn snap_record_ring(&mut self, feature_index: usize) {
+        let before = self
+            .home_map
+            .real_survey
+            .survey_rings
+            .get(feature_index)
+            .cloned();
+        self.home_map.ring_undo.push(RingSnapshot {
+            feature_index,
+            before,
+        });
+    }
+
+    /// Ctrl+Z — 마지막 링 편집을 되돌린다. 되돌렸으면 `true`.
+    pub(crate) fn snap_undo_ring(&mut self) -> bool {
+        let Some(s) = self.home_map.ring_undo.undo() else {
+            return false;
+        };
+        let idx = s.feature_index;
+        // 지금 상태를 redo 용으로 남긴다.
+        let now = self.home_map.real_survey.survey_rings.get(idx).cloned();
+        self.home_map.ring_undo.push_redo(RingSnapshot {
+            feature_index: idx,
+            before: now,
+        });
+        // 되돌린다. `before` 가 없으면 그 전에 링이 없었다는 뜻이므로 지운다.
+        match s.before {
+            Some(ring) => {
+                if idx < self.home_map.real_survey.survey_rings.len() {
+                    self.home_map.real_survey.survey_rings[idx] = ring;
+                } else {
+                    self.home_map.real_survey.survey_rings.push(ring);
+                }
+            }
+            None => {
+                if idx < self.home_map.real_survey.survey_rings.len() {
+                    self.home_map.real_survey.survey_rings.remove(idx);
+                }
+            }
+        }
+        self.is_dirty = true;
+        true
+    }
+
+    /// Ctrl+Y — 되돌린 편집을 다시 적용한다.
+    pub(crate) fn snap_redo_ring(&mut self) -> bool {
+        let Some(s) = self.home_map.ring_undo.pop_redo() else {
+            return false;
+        };
+        let idx = s.feature_index;
+        // 지금 상태를 다시 undo 스택에 넣는다.
+        let now = self.home_map.real_survey.survey_rings.get(idx).cloned();
+        self.home_map.ring_undo.push(RingSnapshot {
+            feature_index: idx,
+            before: now,
+        });
+        match s.before {
+            Some(ring) => {
+                if idx < self.home_map.real_survey.survey_rings.len() {
+                    self.home_map.real_survey.survey_rings[idx] = ring;
+                } else {
+                    self.home_map.real_survey.survey_rings.push(ring);
+                }
+            }
+            None => {
+                if idx < self.home_map.real_survey.survey_rings.len() {
+                    self.home_map.real_survey.survey_rings.remove(idx);
+                }
+            }
+        }
+        self.is_dirty = true;
+        true
+    }
+}
+
 /// 꼭짓점 편집 세션.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VertexEditState {

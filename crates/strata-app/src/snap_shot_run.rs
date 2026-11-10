@@ -241,6 +241,14 @@ impl StrataAppState {
                     eprintln!("[SNAP] vertices idx={idx} n={} {}", ring.len(), pts.join(" "));
                 }
             }
+            "@undo" => {
+                let ok = self.snap_undo_ring();
+                eprintln!("[SNAP] undo -> {ok}");
+            }
+            "@redo" => {
+                let ok = self.snap_redo_ring();
+                eprintln!("[SNAP] redo -> {ok}");
+            }
 
             // ── 진단 ────────────────────────────────────────────────
             "@dump_ring" => {
@@ -278,6 +286,13 @@ impl StrataAppState {
         let Some(ve) = self.home_map.vertex_edit.as_ref().cloned() else {
             return;
         };
+        let edit = if insert {
+            strata_canvas2d::vertex_handle::VertexEdit::Insert { segment: index, at }
+        } else {
+            strata_canvas2d::vertex_handle::VertexEdit::Move { index, to: at }
+        };
+        // 실행취소를 위해 편집 전 링을 남긴다.
+        self.snap_record_ring(ve.feature_index);
         let Some(ring) = self
             .home_map
             .real_survey
@@ -285,11 +300,6 @@ impl StrataAppState {
             .get_mut(ve.feature_index)
         else {
             return;
-        };
-        let edit = if insert {
-            strata_canvas2d::vertex_handle::VertexEdit::Insert { segment: index, at }
-        } else {
-            strata_canvas2d::vertex_handle::VertexEdit::Move { index, to: at }
         };
         self.is_dirty = ve.apply_to(ring, &edit).is_ok();
     }
@@ -299,6 +309,7 @@ impl StrataAppState {
         let Some(ve) = self.home_map.vertex_edit.as_ref().cloned() else {
             return;
         };
+        self.snap_record_ring(ve.feature_index);
         let Some(ring) = self
             .home_map
             .real_survey

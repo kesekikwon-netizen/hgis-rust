@@ -228,3 +228,51 @@ fn vertex_commands_need_session() {
     a.snap_apply_action_for_test("@dump_vertices");
     assert!(a.home_map.vertex_edit.is_none());
 }
+
+/// **Ctrl+Z 가 실제로 되돌린다** — 예전에는 안내 문구만 띄우고 아무 것도 안 했다.
+#[test]
+fn undo_restores_vertex_position() {
+    let mut a = app();
+    a.last_canvas_rect = Some(eframe::egui::Rect::from_min_size(
+        eframe::egui::Pos2::ZERO,
+        eframe::egui::Vec2::new(600.0, 400.0),
+    ));
+    a.snap_apply_action_for_test("@draw:100x100");
+    a.snap_apply_action_for_test("@draw:300x100");
+    a.snap_apply_action_for_test("@draw:300x300");
+    a.snap_apply_action_for_test("@finish_draw");
+    let idx = a.home_map.real_survey.survey_rings.len() - 1;
+    a.home_map.selected_feature_idx = Some(idx);
+    a.snap_apply_action_for_test("@vertex_edit");
+
+    let original = a.home_map.real_survey.survey_rings[idx][0];
+    let moved = [original[0] + 25.0, original[1] + 25.0];
+    a.snap_apply_action_for_test(&format!("@move_vertex:0;{};{}", moved[0], moved[1]));
+
+    let after_move = a.home_map.real_survey.survey_rings[idx][0];
+    assert!((after_move[0] - moved[0]).abs() < 1e-6, "옮겨졌다");
+
+    // 되돌린다.
+    a.snap_apply_action_for_test("@undo");
+    let restored = a.home_map.real_survey.survey_rings[idx][0];
+    assert!(
+        (restored[0] - original[0]).abs() < 1e-6 && (restored[1] - original[1]).abs() < 1e-6,
+        "Ctrl+Z 로 원래 자리로 돌아와야 한다: {restored:?} vs {original:?}"
+    );
+
+    // 다시 실행하면 옮긴 자리로 간다.
+    a.snap_apply_action_for_test("@redo");
+    let redone = a.home_map.real_survey.survey_rings[idx][0];
+    assert!(
+        (redone[0] - moved[0]).abs() < 1e-6,
+        "Ctrl+Y 로 다시 옮긴 자리로"
+    );
+}
+
+/// 되돌릴 것이 없으면 `false` 를 돌려주고 상태를 안 바꾼다.
+#[test]
+fn undo_without_history_is_noop() {
+    let mut a = app();
+    assert!(!a.snap_undo_ring(), "처음엔 되돌릴 것이 없다");
+    assert!(!a.snap_redo_ring(), "처음엔 다시 실행할 것도 없다");
+}
