@@ -18,6 +18,10 @@ pub struct CadastralOutcome {
     pub downloaded: Vec<String>,
     pub districts: Vec<String>,
     pub error: String,
+    /// 누리집 아이디·비밀번호가 아직 없다 — 계정 창을 열어야 한다.
+    pub account_missing: bool,
+    /// 로그인이 거절됐다 — 아이디·비밀번호를 다시 넣게 한다(C++ `accountRejected`).
+    pub account_rejected: bool,
 }
 
 /// C++ `MainWindowCadastral.cpp:121` — 조사 폴더 안 `지적도/원본`

@@ -59,7 +59,20 @@ pub(crate) fn start_download(app: &StrataAppState, state: &mut CadastralState) {
         state.status = VworldClient::NO_SURVEY_MESSAGE.to_owned();
         return;
     };
-    let center = app.home_map.real_survey.survey_center;
+    // C++ `MainWindowCadastral.cpp:93-115` — 조사구역 도형이 있어야 한다. 그 범위에서 5 km 를 찾는다.
+    let areas = &app
+        .survey_doc
+        .layer(strata_types::schema::DomainLayerKey::SurveyArea)
+        .features;
+    let mut scope = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+    for geom in areas.iter().filter_map(|f| f.geom.as_ref()) {
+        let [min_x, max_x, min_y, max_y] = geom.envelope_xy();
+        scope = [scope[0].min(min_x), scope[1].min(min_y), scope[2].max(max_x), scope[3].max(max_y)];
+    }
+    if !scope.iter().all(|v| v.is_finite()) {
+        state.status = VworldClient::NO_SCOPE_MESSAGE.to_owned();
+        return;
+    }
     let cancel = Arc::new(AtomicBool::new(false));
     let progress = Arc::new(Mutex::new(0.0_f32));
     let (sender, receiver) = mpsc::channel();
@@ -70,7 +83,7 @@ pub(crate) fn start_download(app: &StrataAppState, state: &mut CadastralState) {
     let thread_progress = Arc::clone(&progress);
     let work_crs = app.work_crs;
     std::thread::spawn(move || {
-        let outcome = run_download(dir, center, work_crs, thread_cancel, thread_progress);
+        let outcome = run_download(dir, scope, work_crs, thread_cancel, thread_progress);
         let _ = sender.send(outcome);
     });
     state.cancel = cancel;
@@ -119,7 +132,22 @@ pub(crate) fn poll(app: &mut StrataAppState, ctx: &egui::Context) {
             app.status_bar_hint.push_str(&tail);
         } else {
             state.progress = 0.0;
-            state.status = outcome.error;
+            // C++ `MainWindowCadastral.cpp:139-165` — 계정 문제면 다시 넣으라고 알린다.
+            state.status = if outcome.account_rejected {
+                format!(
+                    "지적도를 받지 못했습니다.\n{}\n「계정 설정」에서 아이디·비밀번호를 다시 입력한 뒤 받기를 누르세요.",
+                    outcome.error
+                )
+            } else if outcome.account_missing {
+                format!("{}\n「계정 설정」에서 VWorld 누리집 아이디·비밀번호를 저장한 뒤 받기를 누르세요.", outcome.error)
+            } else if outcome.error.contains("취소") {
+                outcome.error
+            } else {
+                format!(
+                    "지적도를 준비하지 못했습니다.\n{}\n인터넷 연결과 계정을 확인한 뒤 다시 받아 주세요.",
+                    outcome.error
+                )
+            };
         }
     }
     if state.running {

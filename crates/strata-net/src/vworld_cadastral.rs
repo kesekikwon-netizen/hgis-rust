@@ -180,9 +180,9 @@ pub fn select_cadastral_resources(
                 }
                 continue;
             }
-            let mut sections = stem.split('_');
-            let file_province = sections.next().unwrap_or("");
-            let file_county = sections.next().unwrap_or("");
+            // C++ `:190-193` — 첫 `_` 앞이 도, **첫 `_` 뒤 전부**가 시·군·구다.
+            // 「수원시_장안구」처럼 두 낱말인 구도 이렇게 해야 맞는다.
+            let (file_province, file_county) = stem.split_once('_').unwrap_or((stem, ""));
             let short = short_province(file_province);
             let correct_province = short == province
                 || (short == "전남광주" && (province == "전남" || province == "광주"));
@@ -250,9 +250,8 @@ impl VworldClient {
     pub const NO_SCOPE_MESSAGE: &'static str =
         "조사구역을 먼저 그려 주세요. 경계에서 주변 5km의 지적도를 받습니다.";
 
-    /// C++ `CadastralPortal.cpp:214` — 계정(아이디·비밀번호)이 없을 때
-    pub const NO_ACCOUNT_MESSAGE: &'static str =
-        "5km 범위의 시·군·구를 찾으려면 더보기 → API 키 입력에서 VWorld 키를 설정하세요.";
+    /// C++ `CadastralPortal.cpp:216` — 누리집 계정(아이디·비밀번호)이 없을 때
+    pub const NO_ACCOUNT_MESSAGE: &'static str = "지적도 메뉴에서 VWorld 계정을 설정하세요.";
 
     /// 지적이 무엇을 받아오는지: VWorld WMS 그림(본번·부번) 이 아니라,
     /// 시·군·구 지적도 ZIP(`LSMD_CONT_LDREG_*.zip`)을 받아 SHP 를 지도에 올린다.

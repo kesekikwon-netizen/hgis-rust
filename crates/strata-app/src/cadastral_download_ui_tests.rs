@@ -30,9 +30,11 @@ use crate::cadastral_download_ui::{
             VworldClient::NO_KEY_MESSAGE,
             "VWorld API 키가 없습니다. 리본의 더보기 → API 키 입력에서 키를 넣으세요."
         );
+        // C++ `CadastralPortal.cpp:216` — 누리집 아이디·비밀번호가 없을 때의 문구.
+        // (예전에는 여기에 `:214` 의 「키가 없을 때」 문구가 잘못 들어 있었다.)
         assert_eq!(
             VworldClient::NO_ACCOUNT_MESSAGE,
-            "5km 범위의 시·군·구를 찾으려면 더보기 → API 키 입력에서 VWorld 키를 설정하세요."
+            "지적도 메뉴에서 VWorld 계정을 설정하세요."
         );
         assert_eq!(cadastral_zip_size_error_ko(), "해당 자료는 자동 수신 가능한 시·군·구 ZIP 크기를 벗어났습니다.");
     }
