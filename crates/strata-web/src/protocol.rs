@@ -70,7 +70,31 @@ pub fn safe_file_name(name: &str) -> Option<String> {
         .filter(|c| !c.is_control() && !matches!(c, '<' | '>' | ':' | '"' | '|' | '?' | '*'))
         .collect();
     let cleaned = cleaned.trim().trim_matches('.').to_owned();
-    (!cleaned.is_empty()).then_some(cleaned)
+    // Windows 장치 이름(CON, NUL, COM1 …)은 파일 이름으로 쓰지 않는다.
+    let stem = cleaned.split('.').next().unwrap_or("").trim().to_ascii_uppercase();
+    let device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.ends_with(|c: char| c.is_ascii_digit()));
+    (!cleaned.is_empty() && !device).then_some(cleaned)
+}
+
+/// 받는 파일의 출처가 믿는 사이트인지. 화면 안에서 만든 파일(`blob:https://…`)은 그 화면의 주소로 본다.
+#[must_use]
+pub fn is_trusted_download_url(url: &str, allowed: &[String]) -> bool {
+    is_trusted_url(url.strip_prefix("blob:").unwrap_or(url), allowed)
+}
+
+/// `dir` 안에서 아직 없는 저장 경로. 같은 이름이 있으면 `이름 (2).zip` 처럼 번호를 붙인다(덮어쓰지 않는다).
+#[must_use]
+pub fn free_path(dir: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
+    let (stem, ext) = match name.rfind('.') {
+        Some(i) if i > 0 => (&name[..i], &name[i..]),
+        _ => (name, ""),
+    };
+    (1..1000)
+        .map(|n| if n == 1 { dir.join(name) } else { dir.join(format!("{stem} ({n}){ext}")) })
+        .find(|path| !path.exists())
 }
 
 #[cfg(test)]
@@ -111,5 +135,25 @@ mod tests {
         assert_eq!(safe_file_name("..\\..\\(B010)수치지도_36710.zip").as_deref(), Some("(B010)수치지도_36710.zip"));
         assert_eq!(safe_file_name("a/b/c:d?.dxf").as_deref(), Some("cd.dxf"));
         assert_eq!(safe_file_name("../.."), None);
+        for device in ["NUL", "con.zip", "COM1.dxf", "lpt9"] {
+            assert_eq!(safe_file_name(device), None, "{device}");
+        }
+        assert_eq!(safe_file_name("COMET.zip").as_deref(), Some("COMET.zip"));
+    }
+
+    #[test]
+    fn downloads_come_only_from_trusted_sites_and_never_overwrite() {
+        let allowed = vec!["ngii.go.kr".to_owned()];
+        assert!(is_trusted_download_url("https://nlippd.ngii.go.kr/nlippd/pd/innorix/a.zip", &allowed));
+        assert!(is_trusted_download_url("blob:https://nlippd.ngii.go.kr/1b2c", &allowed));
+        assert!(!is_trusted_download_url("blob:https://evil.example/1b2c", &allowed));
+        assert!(!is_trusted_download_url("data:application/zip;base64,AAAA", &allowed));
+
+        let dir = std::env::temp_dir().join(format!("strata-web-free-path-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("폴더");
+        assert_eq!(free_path(&dir, "a.zip"), Some(dir.join("a.zip")));
+        std::fs::write(dir.join("a.zip"), b"x").expect("쓰기");
+        assert_eq!(free_path(&dir, "a.zip"), Some(dir.join("a (2).zip")));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

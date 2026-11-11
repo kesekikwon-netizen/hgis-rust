@@ -105,4 +105,6 @@ C++ 의 연결 구조를 흐름별로 뽑아 맞대었다(연속지적도·DEM /
 - 뜻: 국토정보플랫폼(map.ngii.go.kr)에서 수치지형도를 받는 것과 **같은 통로**(로그인 → 신청 → 내려받기)로 DEM 자료를 받는다. 해외 공개 자료(Copernicus)를 받는 지금의 길도, 등고선으로 DEM 을 직접 만드는 길도 아니다(Claude 가 처음에 등고선 합성으로 잘못 읽었다가 바로잡음).
 - 그래서 순서는: (1) 수치지형도 통로(앱 안 웹 화면 + C++ 의 자동화 스크립트 `data/providers/ngii-topographic.js`)를 Rust 에 만든다 → (2) 같은 통로에서 DEM 상품을 고르는 요청을 실제 사이트에서 확인해 붙인다 → (3) 받은 DEM 을 지도에 색·음영으로 그린다(읽기 부품은 `strata-paleo::dem_tiff_read`).
 - 미확인: 국토정보플랫폼에서 DEM 을 고를 때 나가는 요청(수치지형도는 `suchiQuery.do` type=0 scale=25000)과 받는 파일 형식. 실제 사이트에서 확인해야 한다.
+- 확인(2026-11-11, 실제 사이트·로그인 없이): 국토정보플랫폼 지도 화면에 「공개DEM」 구획이 따로 있다. 검색은 `POST /ms/map/demQuery.do`(minx·miny·maxx·maxy·wkt, EPSG:5179; 연도 목록은 `demYearsQuery.do`), 결과는 1:50,000 도엽 단위(예: 견본 위치 → 도엽 36705 「전의」, 2014·2021~2025년). 내려받기는 수치지형도와 같은 함수 `downloadMapData('4','online',[{types:'index',years,nums,names}])` → 로그인 확인(`/mn/loginCheck.do`) → 신청 양식(`/pd/shbtManage/dowloadRequestForm.do`) → 내려받기. 즉 사용자 말대로 「수치지형도를 받을 때 쓰는 라인」 그대로다.
+- 미확인: 로그인 뒤의 DEM 신청 양식 항목과 받는 파일 형식(로그인해야 볼 수 있다).
 

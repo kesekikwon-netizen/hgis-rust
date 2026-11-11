@@ -12,7 +12,7 @@ use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use protocol::{is_trusted_url, safe_file_name, url_path, Command, Event};
+use protocol::{free_path, is_trusted_download_url, is_trusted_url, safe_file_name, url_path, Command, Event};
 use tao::dpi::LogicalSize;
 use tao::event::{Event as TaoEvent, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopWindowTarget};
@@ -85,12 +85,16 @@ fn make_page(
             let _ = for_popup.proxy.send_event(UserEvent::Refill);
             NewWindowResponse::Create { webview }
         })
-        .with_download_started_handler(move |_url, path| {
+        .with_download_started_handler(move |url, path| {
+            // 믿는 사이트의 파일만, 안전한 이름으로, 있는 파일을 덮어쓰지 않고 받는다.
+            if !is_trusted_download_url(&url, &for_download.allowed) {
+                return false;
+            }
             let name = path.file_name().and_then(|n| n.to_str()).and_then(safe_file_name);
-            let Some(name) = name else {
+            let Some(free) = name.and_then(|n| free_path(&for_download.downloads, &n)) else {
                 return false;
             };
-            *path = for_download.downloads.join(name);
+            *path = free;
             emit(&Event::DownloadStarted { path: path.display().to_string() });
             true
         })
