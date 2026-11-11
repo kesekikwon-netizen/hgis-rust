@@ -160,7 +160,9 @@
       if(!data){try{data=JSON.parse(xhr.responseText);}catch(e){submission.state='failed';return;}}
       submission.shape=Object.keys(data||{}).concat(Object.keys((data&&data.allDataMap)||{}).map(k=>'allDataMap.'+k)).slice(0,40);
       if(xhr.status<200 || xhr.status>=300 || !data || data.resultCode!=='1' || !data.allDataMap){submission.state='failed';return;}
-      submission.state=data.allDataMap.orderDownList ? 'ready' : 'delayed';
+      // 공개DEM 은 orderDownList 가 비어 있어도 전송 창이 열린다(2026-11-11 실제 확인).
+      // 접수됐으면 파일 단계로 넘기고, 전송 창이 끝내 안 열리면 그 단계가 30초 뒤 알린다.
+      submission.state='ready';
     });
     submit[0].click();
     return result('submitted');
