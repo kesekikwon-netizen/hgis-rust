@@ -24,6 +24,7 @@ pub mod trench_edit;
 pub mod trench_generate;
 pub mod trench_grid;
 pub mod trench_lshape;
+pub mod trench_ratio_fill;
 pub mod trench_stats;
 pub mod trench_types;
 

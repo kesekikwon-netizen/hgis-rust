@@ -60,15 +60,8 @@ pub(crate) fn render_trench_generator(
                     )
                     .clicked()
                 {
-                    app.home_map
-                        .real_survey
-                        .layer_visible
-                        .insert("시굴격자".to_owned(), true);
-                    app.home_map.draw_guide_message = Some(format!(
-                        "시굴격자 {}개를 조사구역 위에 배치했습니다 (방위 {:.0}°).",
-                        app.home_map.real_survey.trenches.len(),
-                        app.modals.trench_azimuth_deg
-                    ));
+                    // 조사구역에서 실제로 계산해 깐다. 결과(또는 못 까는 이유)는 함수가 알린다.
+                    let _ = app.place_trench_grid_in_area();
                 }
                 if ui
                     .button("맵에 찍기")

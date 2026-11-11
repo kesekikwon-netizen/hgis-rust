@@ -157,7 +157,7 @@ impl StrataAppState {
         self.redo_stack.clear();
     }
 
-    fn after_doc_edit(&mut self) {
+    pub(crate) fn after_doc_edit(&mut self) {
         self.selected_doc = None;
         self.extra_selected.clear();
         self.home_map.selected_feature_idx = None;

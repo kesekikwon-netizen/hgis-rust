@@ -40,6 +40,7 @@ mod survey_buffer;
 mod survey_doc_bridge;
 mod survey_edit_ops;
 mod survey_selection;
+mod survey_trench;
 pub mod svg_curve_flatten;
 pub mod svg_path_paint;
 pub mod svg_path_tokenize;
