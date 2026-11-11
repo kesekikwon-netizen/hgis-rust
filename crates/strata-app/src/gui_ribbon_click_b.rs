@@ -53,8 +53,8 @@ impl StrataAppState {
             // 도 같은 상태로 맞춘다(:422-423). 없을 때만 내려받는다(:467 → :536,622).
             "지질" => {
                 self.active_tab = MainTab::Map;
-                self.status_bar_hint =
-                    "지질도(KIGAM) 받기는 아직 Rust 판에 옮기지 못했습니다. 지도에는 아무것도 더해지지 않았습니다.".to_owned();
+                // 있으면 켜고 끄고, 없으면 KIGAM 공개 서비스에서 받아 올린다.
+                self.toggle_or_download_geology();
             }
             // C++ MainWindowOverlay.cpp:476-527 downloadRiverMap — :479 toggleExistingOverlay
             // (`수계도(하천망)`, m_actRiver)로 껐다 켰다 하고, 없을 때만 내려받는다

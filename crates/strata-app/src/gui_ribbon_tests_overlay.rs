@@ -30,15 +30,14 @@ fn test_r8_terrain_toggle_uses_cpp_first_and_repeat_texts() {
     assert_eq!(app.status_bar_hint, "지형맵를 다시 켰습니다.");
 }
 
-/// 「토양」·「수계」·「지질」 받기는 아직 Rust 판에 없다. 예전에는 아무것도 받지 않고
+/// 「토양」·「수계」 받기는 아직 Rust 판에 없다(「지질」은 옮겼다 — `reference_geology`). 예전에는 아무것도 받지 않고
 /// 「추가했습니다」라고 했다. 이제는 레이어를 올린 척하지 않고 없다고 알린다.
 /// (받기를 옮기면 이 시험을 C++ `MainWindowOverlay.cpp:357,409,479` 의 토글 시험으로 되돌린다.)
 #[test]
-fn test_r8_soil_river_geology_say_they_are_not_built_yet_and_add_nothing() {
+fn test_r8_soil_and_river_say_they_are_not_built_yet_and_add_nothing() {
     for (button, title) in [
         ("토양", "토양도(흙토람)"),
         ("수계", "수계도(하천망)"),
-        ("지질", "지질도(KIGAM 1:5만)"),
     ] {
         let mut app = StrataAppState::new_startup();
         app.handle_ribbon_click(button);

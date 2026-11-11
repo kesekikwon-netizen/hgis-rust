@@ -37,6 +37,16 @@ impl StrataAppState {
                 if !crate::reference_layers::boxes_overlap(shape.bbox, view_box) {
                     continue;
                 }
+                // 색이 있는 면(지질도 등)은 먼저 칠한다. `parts` 는 바깥 고리 + 구멍이다.
+                if let Some([fr, fg, fb, fa]) = shape.fill {
+                    super::gui_tab_map_domain::fill_polygon(
+                        p,
+                        rect,
+                        vp,
+                        &shape.parts,
+                        Color32::from_rgba_unmultiplied(fr, fg, fb, fa),
+                    );
+                }
                 let mut any_inside = false;
                 for part in &shape.parts {
                     let pts: Vec<Pos2> = part.iter().map(|&q| w2s(rect, vp, q)).collect();

@@ -145,6 +145,19 @@ impl StrataAppState {
                     self.home_map.viewport.meters_per_pixel = 0.6;
                 }
             }
+            // 검증용: 「지질」을 누르고 받기가 끝날 때까지(최대 3분) 기다린 뒤 넓게 본다.
+            "@geology_wait" => {
+                self.handle_ribbon_click("지질");
+                let ctx = eframe::egui::Context::default();
+                for _ in 0..900 {
+                    self.poll_geology_download(&ctx);
+                    if !self.status_bar_hint.contains("받는 중") {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
+                self.home_map.viewport.meters_per_pixel = 12.0;
+            }
             "@close_modal" => self.modals.active = None,
             "@tab_home" => self.active_tab = crate::app_state::MainTab::Home,
             "@tab_map" => self.active_tab = crate::app_state::MainTab::Map,

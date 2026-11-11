@@ -23,6 +23,8 @@ pub struct ReferenceShape {
     pub label: String,
     /// 도형을 감싸는 범위 `[min_x, min_y, max_x, max_y]` — 화면 밖 도형을 빨리 거르는 데 쓴다.
     pub bbox: [f64; 4],
+    /// 면을 칠할 색(RGBA). 없으면 외곽선만 그린다. 면이면 `parts` 는 바깥 고리 + 구멍이다.
+    pub fill: Option<[u8; 4]>,
 }
 
 fn bbox_of(parts: &[Vec<[f64; 2]>]) -> [f64; 4] {
@@ -161,6 +163,7 @@ pub fn load_reference_shp(
                 .collect();
             ReferenceShape {
                 bbox: bbox_of(&parts),
+                fill: None,
                 parts,
                 label: label_field
                     .as_ref()

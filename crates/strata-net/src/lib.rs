@@ -14,6 +14,7 @@ pub mod kigam_soil_river;
 pub mod ngii_topographic;
 pub mod tile_fetcher;
 pub mod topographic_catalog;
+pub mod kigam_geology;
 pub mod portal_session;
 pub mod vworld_client;
 pub mod vworld_login;
