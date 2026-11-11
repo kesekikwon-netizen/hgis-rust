@@ -31,15 +31,18 @@ fn clicking_picks_the_shape_under_the_cursor_points_before_lines_before_polygons
     assert_eq!(app.pick_doc_feature([200_020.0, 450_014.9]), Some((K::SectionLine, 0)));
     // 점·선에서 떨어진 주거지 안쪽은 면이 잡힌다.
     assert_eq!(app.pick_doc_feature([200_012.0, 450_018.0]).map(|h| h.0), Some(K::FeaturePoly));
-    // 아무것도 없는 곳.
-    assert_eq!(app.pick_doc_feature([200_100.0, 450_085.0]), None);
+    // 유구가 없는 조사구역 안쪽은 조사구역이 잡힌다.
+    assert_eq!(app.pick_doc_feature([200_100.0, 450_085.0]), Some((K::SurveyArea, 0)));
+    // 조사구역 밖은 아무것도 없다.
+    assert_eq!(app.pick_doc_feature([199_980.0, 449_980.0]), None);
 }
 
 #[test]
 fn hidden_layers_are_not_picked() {
     let (mut app, _) = opened_demo("hidden");
     app.home_map.real_survey.layer_visible.insert("기준점".to_owned(), false);
-    assert_eq!(app.pick_doc_feature([200_000.4, 450_000.3]), None);
+    // 기준점은 잡히지 않고, 그 아래의 조사구역이 잡힌다.
+    assert_eq!(app.pick_doc_feature([200_000.4, 450_000.3]), Some((K::SurveyArea, 0)));
 }
 
 #[test]

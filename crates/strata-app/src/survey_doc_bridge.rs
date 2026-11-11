@@ -64,6 +64,14 @@ impl StrataAppState {
         if let Some(dir) = path.parent() {
             rs.survey_dir = dir.to_path_buf();
         }
+        self.survey_doc = doc;
+        self.refresh_view_from_doc();
+    }
+
+    /// 문서가 바뀐 뒤: 화면이 쓰는 조사구역 고리·시굴격자·넓이·중심을 문서에서 다시 만든다.
+    pub(crate) fn refresh_view_from_doc(&mut self) {
+        let doc = &self.survey_doc;
+        let rs = &mut self.home_map.real_survey;
         rs.survey_rings = doc
             .layer(DomainLayerKey::SurveyArea)
             .features
@@ -94,7 +102,6 @@ impl StrataAppState {
         } else if let Some([min_x, max_x, min_y, max_y]) = doc.extent() {
             rs.survey_center = [(min_x + max_x) * 0.5, (min_y + max_y) * 0.5];
         }
-        self.survey_doc = doc;
     }
 
     /// 방금 열거나 저장한 조사를 최근 목록 맨 위에 올리고 홈 표를 다시 만든다.
@@ -172,26 +179,18 @@ impl StrataAppState {
             }
             _ => return None,
         };
-        if key == DomainLayerKey::SurveyArea {
-            // 조사구역은 화면이 `real_survey` 에서 그린다. 저장할 때 문서로 옮겨진다.
-            if let WkbGeometry::Polygon(rings) = &geom {
-                let rs = &mut self.home_map.real_survey;
-                rs.survey_rings.push(rings[0].clone());
-                rs.survey_area_m2 = rs.survey_rings.iter().map(|r| ring_area_m2(r)).sum();
-                if rs.survey_rings.len() == 1 {
-                    rs.survey_center = ring_centroid(&rings[0]);
-                }
-            }
-        } else {
-            let mut feature = SurveyFeature::new_drawn(geom);
-            if key == DomainLayerKey::ArtifactPoint {
-                let n = self.survey_doc.layer(key).features.len() + 1;
-                feature
-                    .attrs
-                    .insert("artifact_no".to_owned(), FieldValue::Text(n.to_string()));
-            }
-            self.survey_doc.add_feature(key, feature);
+        // 그리기도 되돌릴 수 있게 그리기 전 문서를 기록에 쌓는다.
+        self.push_undo();
+        let mut feature = SurveyFeature::new_drawn(geom);
+        if key == DomainLayerKey::ArtifactPoint {
+            let n = self.survey_doc.layer(key).features.len() + 1;
+            feature
+                .attrs
+                .insert("artifact_no".to_owned(), FieldValue::Text(n.to_string()));
         }
+        self.survey_doc.add_feature(key, feature);
+        // 화면이 쓰는 조사구역·시굴격자 고리를 문서에서 다시 만든다.
+        self.refresh_view_from_doc();
         self.left_layers.ensure_domain_layer(key);
         self.is_dirty = true;
         Some(key.name_ko())

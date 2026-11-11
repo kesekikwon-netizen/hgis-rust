@@ -76,6 +76,11 @@ pub struct StrataAppState {
     pub draw_target: strata_types::schema::DomainLayerKey,
     /// 지금 고른 도형(레이어, 그 레이어 안의 순번). 오른쪽 카드가 이 도형의 속성을 보인다.
     pub selected_doc: Option<(strata_types::schema::DomainLayerKey, usize)>,
+    /// Shift 를 누른 채 더 고른 도형들(겹친 곳 지우기·폴리곤 묶기에 쓴다).
+    pub extra_selected: Vec<(strata_types::schema::DomainLayerKey, usize)>,
+    /// 되돌리기·다시하기 기록(편집 직전의 문서).
+    pub undo_stack: Vec<strata_storage::survey_doc::SurveyDoc>,
+    pub redo_stack: Vec<strata_storage::survey_doc::SurveyDoc>,
     pub paper_look: bool,
     pub project_title: String,
     pub is_dirty: bool,

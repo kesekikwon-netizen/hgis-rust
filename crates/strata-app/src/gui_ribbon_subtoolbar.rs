@@ -179,25 +179,21 @@ impl StrataAppState {
                                 ui.separator();
                                 for op in ["폴리곤 묶기", "폴리곤 나누기", "구간 분리", "겹친 곳 지우기"] {
                                     if wbtn(ui, op).clicked() {
-                                        let msg = match op {
+                                        // 실제로 계산해 도형을 고친다. 결과 문구는 각 함수가 남긴다.
+                                        match op {
                                             "폴리곤 묶기" => {
-                                                self.is_dirty = true;
-                                                "폴리곤 묶기(Union) — 선택한 인접 조사구역·유구 폴리곤을 단일 폴리곤으로 병합하고 주 피처 속성을 승계했습니다.".to_owned()
+                                                let _ = self.merge_selected_polygons();
                                             }
-                                            "폴리곤 나누기" => {
-                                                self.is_dirty = true;
-                                                "폴리곤 나누기(Split) — 절단선 관통 검사를 통과하여 대상 폴리곤을 2개 조각으로 분할했습니다.".to_owned()
+                                            "겹친 곳 지우기" => {
+                                                let _ = self.erase_overlap_with_selection();
                                             }
-                                            "구간 분리" => {
-                                                self.is_dirty = true;
-                                                "구간 분리(Isolate Part) — 내부 도넛 홀(수혈·주초)을 독립 유구 폴리곤으로 분리했습니다.".to_owned()
+                                            other => {
+                                                self.home_map.draw_guide_message = Some(format!(
+                                                    "「{other}」는 아직 Rust 판에 옮기지 못했습니다. 도형은 바뀌지 않았습니다."
+                                                ));
                                             }
-                                            _ => {
-                                                self.is_dirty = true;
-                                                "겹친 곳 지우기(Difference) — 중복 침범 영역을 도려내고 슬라이버(0.05 m² 미만)를 제거했습니다.".to_owned()
-                                            }
-                                        };
-                                        self.home_map.draw_guide_message = Some(msg);
+                                        }
+
                                     }
                                 }
                                 if wbtn(ui, "닫기").clicked() { self.ribbon.sub_toolbar_visible = false; }

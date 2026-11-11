@@ -23,6 +23,8 @@ impl StrataAppState {
         // 저장은 파일 창을 띄울 수 있어 입력 잠금(`ctx.input`) 밖에서 한다.
         let mut save_requested = false;
         let mut open_requested = false;
+        // Some(true) = 되돌리기(Ctrl+Z), Some(false) = 다시하기(Ctrl+Y)
+        let mut undo_requested: Option<bool> = None;
         ctx.input(|i| {
             if i.key_pressed(egui::Key::Escape) {
                 self.home_map.cad.on_escape(&mut self.home_map.scene);
@@ -139,16 +141,23 @@ impl StrataAppState {
                 } else if i.key_pressed(egui::Key::E) {
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
                 } else if i.key_pressed(egui::Key::Z) {
-                    self.home_map.draw_guide_message =
-                        Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
+                    undo_requested = Some(true);
                 } else if i.key_pressed(egui::Key::Y) {
-                    self.home_map.draw_guide_message =
-                        Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
+                    undo_requested = Some(false);
                 }
             }
         });
         if save_requested {
             let _ = self.save_survey_project();
+        }
+        match undo_requested {
+            Some(true) => {
+                let _ = self.undo_edit();
+            }
+            Some(false) => {
+                let _ = self.redo_edit();
+            }
+            None => {}
         }
         if open_requested {
             // C++ `openProject` (Ctrl+O) — 파일 고르기 창.

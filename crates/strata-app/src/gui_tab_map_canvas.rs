@@ -163,12 +163,18 @@ impl StrataAppState {
                     MapToolKind::Select | MapToolKind::Pan => {
                         let mpp = self.home_map.viewport.meters_per_pixel;
                         // 조사 파일의 유구·단면선·기준점·유물을 먼저 찾는다(위에 그려지는 것부터).
+                        self.sync_view_into_survey_doc();
                         let doc_hit = self.pick_doc_feature(wxy);
-                        if doc_hit.is_none() {
+                        let shift = response.ctx.input(|i| i.modifiers.shift);
+                        if doc_hit.is_none() && !shift {
                             self.clear_doc_selection();
                         }
                         if let Some((key, idx)) = doc_hit {
-                            self.select_doc_feature(key, idx);
+                            if shift {
+                                self.toggle_extra_selection(key, idx);
+                            } else {
+                                self.select_doc_feature(key, idx);
+                            }
                         } else if let Some((idx, tr)) = self
                             .home_map
                             .real_survey

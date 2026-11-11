@@ -134,20 +134,19 @@ impl StrataAppState {
                 return Some((key, i));
             }
         }
-        if visible(DomainLayerKey::FeaturePoly) {
-            let hit = features(DomainLayerKey::FeaturePoly)
-                .filter_map(|(i, f)| match f.geom.as_ref()? {
-                    WkbGeometry::Polygon(rings) if point_in_polygon(wxy, rings) => {
-                        Some((i, rings.first().map_or(0.0, |r| ring_area_m2(r))))
-                    }
-                    _ => None,
-                })
-                .min_by(|a, b| a.1.total_cmp(&b.1));
-            if let Some((i, _)) = hit {
-                return Some((DomainLayerKey::FeaturePoly, i));
-            }
-        }
-        None
+        // 면: 유구 면·시굴격자·조사구역을 통틀어 가장 작은 것(안쪽 것)을 고른다.
+        [DomainLayerKey::FeaturePoly, DomainLayerKey::TrialTrench, DomainLayerKey::SurveyArea]
+            .into_iter()
+            .filter(|k| visible(*k))
+            .flat_map(|key| features(key).map(move |(i, f)| (key, i, f)))
+            .filter_map(|(key, i, f)| match f.geom.as_ref()? {
+                WkbGeometry::Polygon(rings) if point_in_polygon(wxy, rings) => {
+                    Some((key, i, rings.first().map_or(0.0, |r| ring_area_m2(r))))
+                }
+                _ => None,
+            })
+            .min_by(|a, b| a.2.total_cmp(&b.2))
+            .map(|(key, i, _)| (key, i))
     }
 
     /// 도형을 고르고 그 속성을 오른쪽 카드에 올린다.
@@ -166,7 +165,9 @@ impl StrataAppState {
         ri.feature_memo = memo;
         ri.selected_layer_key = Some(key.name_ko().to_owned());
         self.selected_doc = Some((key, idx));
-        self.home_map.selected_feature_idx = None;
+        self.extra_selected.clear();
+        // 조사구역을 골랐으면 예전 화면 코드(면적 카드·레이어 카드)가 쓰는 순번도 맞춘다.
+        self.home_map.selected_feature_idx = (key == DomainLayerKey::SurveyArea).then_some(idx);
         self.home_map.draw_guide_message = Some(if no.is_empty() {
             format!("도형 선택: {} — 오른쪽 카드에서 기록을 고치고, Delete 로 지웁니다.", key.name_ko())
         } else {
@@ -174,10 +175,32 @@ impl StrataAppState {
         });
     }
 
+    /// Shift+클릭: 이미 고른 도형에 하나를 더 고른다(다시 누르면 뺀다).
+    pub(crate) fn toggle_extra_selection(&mut self, key: DomainLayerKey, idx: usize) {
+        let pick = (key, idx);
+        if self.selected_doc.is_none() {
+            self.select_doc_feature(key, idx);
+            return;
+        }
+        if self.selected_doc == Some(pick) {
+            return;
+        }
+        if let Some(pos) = self.extra_selected.iter().position(|p| *p == pick) {
+            self.extra_selected.remove(pos);
+        } else {
+            self.extra_selected.push(pick);
+        }
+        self.home_map.draw_guide_message = Some(format!(
+            "도형 {}개를 골랐습니다. [겹친 곳 지우기]·[폴리곤 묶기]에 쓸 수 있습니다.",
+            self.extra_selected.len() + 1
+        ));
+    }
+
     /// 고르기를 푼다(카드에서 고친 값은 먼저 도형에 적는다).
     pub(crate) fn clear_doc_selection(&mut self) {
         self.sync_card_into_selected_feature();
         self.selected_doc = None;
+        self.extra_selected.clear();
     }
 
     /// 카드에서 고친 값을 고른 도형의 속성에 적는다. 달라진 것이 있으면 「변경됨」으로 표시한다.
@@ -213,18 +236,25 @@ impl StrataAppState {
 
     /// 고른 도형을 지운다(C++ `MainWindowUndo.cpp:486` 선택 도형 삭제). 지웠으면 `true`.
     pub(crate) fn delete_selected_feature(&mut self) -> bool {
-        let Some((key, idx)) = self.selected_doc.take() else {
-            return false;
-        };
-        let layer = self.survey_doc.layer_mut(key);
-        if idx >= layer.features.len() {
+        let mut picks = self.all_selected();
+        picks.retain(|(key, idx)| *idx < self.survey_doc.layer(*key).features.len());
+        if picks.is_empty() {
             return false;
         }
-        layer.features.remove(idx);
+        self.push_undo();
+        // 순번이 밀리지 않게 뒤에서부터 지운다.
+        picks.sort_by(|a, b| b.1.cmp(&a.1));
+        for (key, idx) in &picks {
+            self.survey_doc.layer_mut(*key).features.remove(*idx);
+        }
+        self.selected_doc = None;
+        self.extra_selected.clear();
+        self.home_map.selected_feature_idx = None;
+        self.refresh_view_from_doc();
         self.is_dirty = true;
         self.home_map.draw_guide_message = Some(format!(
-            "{} 도형 하나를 지웠습니다. 저장(Ctrl+S)해야 파일에서도 지워집니다.",
-            key.name_ko()
+            "도형 {}개를 지웠습니다. Ctrl+Z로 되돌릴 수 있고, 저장(Ctrl+S)해야 파일에서도 지워집니다.",
+            picks.len()
         ));
         true
     }

@@ -97,6 +97,9 @@ impl StrataAppState {
             strata_storage::survey_doc::SurveyDoc::new(self.work_crs.epsg_code() as i32);
         self.draw_target = DomainLayerKey::SurveyArea;
         self.selected_doc = None;
+        self.extra_selected.clear();
+        self.undo_stack.clear();
+        self.redo_stack.clear();
         self.align = crate::gui_ribbon_bar::AlignSessionState::default();
         self.ribbon.sub_toolbar_visible = false;
         self.ribbon.sub_mode = crate::ribbon::SubToolsMode::None;
