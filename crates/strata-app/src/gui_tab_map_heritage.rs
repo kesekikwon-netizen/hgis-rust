@@ -158,30 +158,17 @@ impl StrataAppState {
             } else {
                 Stroke::new(self.right_inspector.stroke_width_mm * 1.6, sc)
             };
-            for ring in &rs.survey_rings {
-                let pts: Vec<Pos2> = ring.iter().map(|&pt| w2s(rect, vp, pt)).collect();
-                p.add(egui::Shape::convex_polygon(
-                    pts.clone(),
-                    fill_col,
-                    Stroke::NONE,
-                ));
-                p.add(egui::Shape::line(pts, stroke));
-            }
-            if rs.is_label_visible("조사구역") {
-                let sp = w2s(rect, vp, rs.survey_center);
-                let lbl_r = Rect::from_center_size(sp, Vec2::new(66.0, 16.0));
-                p.rect_filled(
-                    lbl_r,
-                    3.0,
-                    Color32::from_rgba_unmultiplied(255, 255, 255, 220),
-                );
-                p.text(
-                    lbl_r.center(),
-                    egui::Align2::CENTER_CENTER,
-                    format!("{:.2} m²", rs.survey_area_m2),
-                    FontId::proportional(10.0),
-                    Color32::BLACK,
-                );
+            // 문서의 조사구역을 구멍(제외 구역)까지 그대로 칠한다. 오목한 모양도 맞게 칠해진다.
+            let areas = &self.survey_doc.layer(strata_types::schema::DomainLayerKey::SurveyArea).features;
+            for feature in areas {
+                let Some(strata_storage::wkb_codec::WkbGeometry::Polygon(rings)) = feature.geom.as_ref() else {
+                    continue;
+                };
+                super::gui_tab_map_domain::fill_polygon(p, rect, vp, rings, fill_col);
+                for ring in rings {
+                    let pts: Vec<Pos2> = ring.iter().map(|&pt| w2s(rect, vp, pt)).collect();
+                    p.add(egui::Shape::line(pts, stroke));
+                }
             }
         }
 
@@ -189,23 +176,18 @@ impl StrataAppState {
         self.paint_survey_doc_layers(p, rect);
 
         if rs.is_layer_visible("시굴격자") {
-            let tr_col = layer_color("시굴격자", Color32::from_rgb(156, 62, 32));
-            let tr_s = Stroke::new(1.2, tr_col);
-            for (ti, tr) in rs.trenches.iter().enumerate() {
+            // C++ `LayerStyleDefaults.cpp:69-73` — 붉은 외곽선 0.5 mm, 채움은 거의 없음(alpha 18).
+            let tr_col = layer_color("시굴격자", Color32::from_rgb(220, 38, 38));
+            let tr_fill = Color32::from_rgba_unmultiplied(220, 38, 38, 18);
+            let tr_s = Stroke::new(0.5 * 96.0 / 25.4, tr_col);
+            for tr in &rs.trenches {
+                super::gui_tab_map_domain::fill_polygon(p, rect, vp, std::slice::from_ref(&tr.ring), tr_fill);
                 let pts: Vec<Pos2> = tr.ring.iter().map(|&pt| w2s(rect, vp, pt)).collect();
                 p.add(egui::Shape::line(pts, tr_s));
-                if cadastral_detail && rs.is_label_visible("시굴격자") && ti % 14 == 3 {
-                    let tp = w2s(rect, vp, tr.center);
-                    p.text(
-                        tp,
-                        egui::Align2::CENTER_CENTER,
-                        format!("{}\n({:.1} m²)", tr.name, tr.area_m2),
-                        FontId::proportional(8.5),
-                        Color32::WHITE,
-                    );
-                }
             }
         }
+        // 글자(면적·이름)는 도형을 다 그린 뒤 한꺼번에 놓는다 — C++ 기본 라벨 규칙.
+        self.paint_survey_doc_labels(p, rect);
 
         if rs.is_layer_visible("주변 500m") && !rs.buffer_500m.is_empty() {
             let b_col = layer_color("주변 500m", Color32::from_rgb(184, 58, 24));

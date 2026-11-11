@@ -24,6 +24,8 @@ mod gui_tab_map_grid;
 mod gui_tab_map_gridctl;
 #[path = "gui_tab_map_domain.rs"]
 mod gui_tab_map_domain;
+#[path = "gui_tab_map_labels.rs"]
+mod gui_tab_map_labels;
 #[path = "gui_tab_map_heritage.rs"]
 mod gui_tab_map_heritage;
 #[path = "gui_tab_map_hud.rs"]

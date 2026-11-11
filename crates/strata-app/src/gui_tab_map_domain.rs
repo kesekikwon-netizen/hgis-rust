@@ -79,7 +79,7 @@ fn style_for(key: DomainLayerKey) -> DomainStyle {
 
 /// 다각형(구멍·오목한 모양 포함)을 삼각형으로 나눠 칠한다.
 /// `Shape::convex_polygon` 은 볼록한 모양만 맞게 칠하므로 쓰지 않는다.
-fn fill_polygon(p: &egui::Painter, rect: Rect, vp: &ViewportTransform, rings: &[Vec<[f64; 2]>], color: Color32) {
+pub(super) fn fill_polygon(p: &egui::Painter, rect: Rect, vp: &ViewportTransform, rings: &[Vec<[f64; 2]>], color: Color32) {
     let Some(outer) = rings.first() else {
         return;
     };
