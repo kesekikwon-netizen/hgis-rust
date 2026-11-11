@@ -116,8 +116,15 @@ impl StrataAppState {
                 let handle = if let Some(h) = self.cadastral_cells.get(&cell) {
                     h.clone()
                 } else {
-                    let Some(path) = crate::basemap_cadastral::fetch_cadastral_cell(&key, cx, cy)
-                    else {
+                    // 지적 그림 칸도 뒤에서 받는다(그리는 동안 기다리지 않는다).
+                    let key_owned = key.clone();
+                    let state = crate::tile_fetch_queue::request_tile(
+                        ctx,
+                        format!("cadastral/{cx}/{cy}"),
+                        || crate::basemap_cadastral::cached_cadastral_cell(cx, cy),
+                        move || crate::basemap_cadastral::fetch_cadastral_cell(&key_owned, cx, cy),
+                    );
+                    let crate::tile_fetch_queue::TileState::Ready(path) = state else {
                         continue;
                     };
                     let name = format!("cad_{cx}_{cy}");

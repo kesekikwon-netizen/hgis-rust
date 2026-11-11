@@ -154,7 +154,17 @@ fn load_tile_texture(
     x: u32,
     y: u32,
 ) -> Option<egui::TextureHandle> {
-    let path = fetch_tile(kind, key, z, x, y)?;
+    // 캐시에 있으면 바로, 없으면 뒤에서 받기 시작하고 이번 프레임은 비워 둔다.
+    let key_owned = key.to_owned();
+    let state = crate::tile_fetch_queue::request_tile(
+        ctx,
+        format!("{}/{z}/{x}/{y}", tile_filename_key(kind)),
+        || crate::basemap_fetch::cached_tile(kind, z, x, y),
+        move || fetch_tile(kind, &key_owned, z, x, y),
+    );
+    let crate::tile_fetch_queue::TileState::Ready(path) = state else {
+        return None;
+    };
     let img = image::open(&path).ok()?;
     let rgba = img.to_rgba8();
     let (w, h) = (rgba.width() as usize, rgba.height() as usize);

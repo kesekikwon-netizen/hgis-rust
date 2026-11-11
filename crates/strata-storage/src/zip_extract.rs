@@ -11,6 +11,9 @@ use strata_types::error::{StrataError, StrataResult};
 
 /// 한 파일이 이보다 크면 풀지 않는다(압축 폭탄 방지, 2 GB).
 const MAX_ENTRY_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+/// 꾸러미 전체를 풀었을 때의 상한(8 GB)과 항목 수 상한.
+const MAX_TOTAL_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+const MAX_ENTRIES: usize = 20_000;
 
 fn entry_name(raw: &[u8]) -> String {
     match std::str::from_utf8(raw) {
@@ -19,18 +22,50 @@ fn entry_name(raw: &[u8]) -> String {
     }
 }
 
-/// ZIP 안 이름을 `dest` 아래의 안전한 경로로 바꾼다. 밖으로 나가면 `None`.
+/// Windows 가 장치로 다루는 이름(CON, NUL, COM1 …)인지. 확장자가 붙어도 장치다.
+fn is_reserved_device(part: &str) -> bool {
+    let stem = part.split('.').next().unwrap_or("").trim_end_matches(' ').to_ascii_uppercase();
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.as_bytes()[3].is_ascii_digit())
+}
+
+/// 경로의 한 마디가 폴더 안에 머무는 평범한 이름인지.
+/// `:`(드라이브·대체 데이터 스트림), 장치 이름, 끝의 점·공백(Windows 가 떼어 버린다)을 막는다.
+fn safe_part(part: &str) -> bool {
+    !part.is_empty()
+        && part != "."
+        && part != ".."
+        && !part.contains([':', '\\', '/', '\0'])
+        && !part.ends_with(['.', ' '])
+        && !is_reserved_device(part)
+}
+
+/// ZIP 안 이름을 `dest` 아래의 안전한 경로로 바꾼다. 밖으로 나가거나 수상하면 `None`.
 fn safe_target(dest: &Path, name: &str) -> Option<PathBuf> {
-    let rel = Path::new(&name.replace('\\', "/")).to_path_buf();
-    let mut out = dest.to_path_buf();
-    for part in rel.components() {
-        match part {
-            Component::Normal(p) => out.push(p),
-            Component::CurDir => {}
-            _ => return None,
-        }
+    let normalized = name.replace('\\', "/");
+    if normalized.starts_with('/') {
+        return None; // 절대 경로
     }
-    (out != dest).then_some(out)
+    let mut out = dest.to_path_buf();
+    let mut pushed = false;
+    for part in normalized.split('/') {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if !safe_part(part) {
+            return None;
+        }
+        // 한 마디가 정확히 평범한 이름 하나로 읽히는지 다시 확인한다.
+        let mut comps = Path::new(part).components();
+        if !matches!((comps.next(), comps.next()), (Some(Component::Normal(_)), None)) {
+            return None;
+        }
+        out.push(part);
+        pushed = true;
+    }
+    (pushed && out.starts_with(dest)).then_some(out)
 }
 
 /// `zip_path` 를 `dest` 폴더에 풀고, 푼 파일 경로를 돌려준다.
@@ -38,10 +73,17 @@ pub fn extract_zip(zip_path: &Path, dest: &Path) -> StrataResult<Vec<PathBuf>> {
     let file = std::fs::File::open(zip_path)?;
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| StrataError::Storage(format!("ZIP 을 열지 못했습니다: {e}")))?;
+    if archive.len() > MAX_ENTRIES {
+        return Err(StrataError::Storage(format!(
+            "ZIP 안의 항목이 너무 많습니다({}개)",
+            archive.len()
+        )));
+    }
     std::fs::create_dir_all(dest)?;
     let mut written = Vec::new();
+    let mut total: u64 = 0;
     for i in 0..archive.len() {
-        let mut entry = archive
+        let entry = archive
             .by_index(i)
             .map_err(|e| StrataError::Storage(format!("ZIP 항목을 읽지 못했습니다: {e}")))?;
         let name = entry_name(entry.name_raw());
@@ -51,19 +93,21 @@ pub fn extract_zip(zip_path: &Path, dest: &Path) -> StrataResult<Vec<PathBuf>> {
         let Some(target) = safe_target(dest, &name) else {
             continue;
         };
-        if entry.size() > MAX_ENTRY_BYTES {
-            return Err(StrataError::Storage(format!("ZIP 안의 「{name}」이 너무 큽니다")));
-        }
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let mut bytes = Vec::with_capacity(entry.size() as usize);
-        entry
-            .by_ref()
-            .take(MAX_ENTRY_BYTES)
-            .read_to_end(&mut bytes)
+        // 적힌 크기를 믿지 않는다: 미리 메모리를 잡지 않고 파일로 흘려 쓰며, 한도에서 끊는다.
+        let mut out = std::fs::File::create(&target)?;
+        let copied = std::io::copy(&mut entry.take(MAX_ENTRY_BYTES + 1), &mut out)
             .map_err(|e| StrataError::Storage(format!("「{name}」을 풀지 못했습니다: {e}")))?;
-        std::fs::write(&target, bytes)?;
+        total += copied;
+        if copied > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES {
+            drop(out);
+            let _ = std::fs::remove_file(&target);
+            return Err(StrataError::Storage(format!(
+                "ZIP 을 풀면 너무 커집니다(「{name}」에서 멈춤)"
+            )));
+        }
         written.push(target);
     }
     Ok(written)
@@ -112,6 +156,20 @@ mod tests {
         assert!(!dir.path().join("outside.txt").exists(), "폴더 밖으로 쓰지 않는다");
         assert_eq!(shapefiles_in(&files), vec![dest.join("LSMD_CONT_LDREG_47130.shp")]);
         Ok(())
+    }
+
+    #[test]
+    fn names_that_could_leave_the_folder_or_hit_a_device_are_rejected() {
+        let dest = Path::new("C:/받은자료/풀기");
+        let ok = |name: &str| safe_target(dest, name).is_some();
+        assert!(ok("a.shp") && ok("sub/b.dbf") && ok("./c.prj") && ok("한글/지적.shp"));
+        for bad in [
+            "../x", "a/../../x", "/abs.shp", "C:/x.shp", "c:x.shp", "x.shp:stream", "NUL", "nul.txt",
+            "COM1.shp", "sub/LPT9", "trail.", "trail ", "a/./../b", "",
+        ] {
+            assert!(!ok(bad), "{bad:?} 는 막아야 한다");
+        }
+        assert_eq!(safe_target(dest, "sub\\b.dbf"), Some(dest.join("sub").join("b.dbf")));
     }
 
     #[test]

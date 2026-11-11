@@ -87,6 +87,13 @@ pub fn cadastral_cell_path(cx: i64, cy: i64) -> PathBuf {
     cadastral_cache_dir().join(format!("{cx}_{cy}.png"))
 }
 
+/// 이미 받아 둔 칸이 있으면 그 경로(PNG 인지 확인한다).
+#[must_use]
+pub fn cached_cadastral_cell(cx: i64, cy: i64) -> Option<PathBuf> {
+    let dest = cadastral_cell_path(cx, cy);
+    std::fs::read(&dest).ok().filter(|b| is_png(b)).map(|_| dest)
+}
+
 /// 한 칸을 받아 캐시 경로를 돌려준다.
 pub fn fetch_cadastral_cell(key: &str, cx: i64, cy: i64) -> Option<PathBuf> {
     if key.trim().is_empty() {
