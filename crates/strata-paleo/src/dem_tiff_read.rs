@@ -10,7 +10,7 @@ use std::path::Path;
 use tiff::decoder::{Decoder, DecodingResult};
 use tiff::tags::Tag;
 
-/// 잘라 낸 표고 격자. 북쪽이 위, 좌표는 경위도(도).
+/// 잘라 낸 표고 격자. 북쪽이 위. 좌표는 경위도(도), `projected` 면 EPSG:5179(m).
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemRaster {
     /// 왼쪽 위 모서리의 경도·위도.
@@ -23,6 +23,8 @@ pub struct DemRaster {
     pub height: usize,
     /// 줄 순서(북→남, 서→동)의 표고(m). 자료가 없는 칸은 NaN.
     pub values: Vec<f32>,
+    /// 좌표가 EPSG:5179(m)인가(국토정보플랫폼 공개DEM). 아니면 경위도.
+    pub projected: bool,
 }
 
 impl DemRaster {
@@ -114,6 +116,7 @@ pub fn read_dem_window(path: &Path, clip: Option<[f64; 4]>) -> Result<DemRaster,
         width: cw,
         height: ch,
         values,
+        projected: false,
     })
 }
 

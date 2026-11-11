@@ -53,8 +53,9 @@ pub struct ShadedDem {
     pub width: usize,
     pub height: usize,
     pub rgba: Vec<u8>,
-    /// 덮는 범위 `[west, south, east, north]`(경위도).
+    /// 덮는 범위 `[west, south, east, north]` — 경위도, `projected` 면 EPSG:5179(m).
     pub bbox: [f64; 4],
+    pub projected: bool,
 }
 
 /// 표고 격자(경위도)를 색띠 + 음영 그림으로 만든다.
@@ -64,8 +65,11 @@ pub fn shade_dem(dem: &DemRaster) -> ShadedDem {
     let (w, h) = (dem.width.div_ceil(step), dem.height.div_ceil(step));
     // 한 칸의 실제 크기(m): 위도에 따라 동서 간격이 줄어든다.
     let mid_lat = (dem.north - dem.dy * dem.height as f64 * 0.5).to_radians();
-    let cell_x = (dem.dx * step as f64 * 111_320.0 * mid_lat.cos()) as f32;
-    let cell_y = (dem.dy * step as f64 * 110_540.0) as f32;
+    let (cell_x, cell_y) = if dem.projected {
+        ((dem.dx * step as f64) as f32, (dem.dy * step as f64) as f32)
+    } else {
+        ((dem.dx * step as f64 * 111_320.0 * mid_lat.cos()) as f32, (dem.dy * step as f64 * 110_540.0) as f32)
+    };
     let at = |col: usize, row: usize| -> f32 {
         let (c, r) = ((col * step).min(dem.width - 1), (row * step).min(dem.height - 1));
         dem.values[r * dem.width + c]
@@ -99,7 +103,7 @@ pub fn shade_dem(dem: &DemRaster) -> ShadedDem {
             rgba[i + 3] = 255;
         }
     }
-    ShadedDem { width: w, height: h, rgba, bbox: dem.bbox() }
+    ShadedDem { width: w, height: h, rgba, bbox: dem.bbox(), projected: dem.projected }
 }
 
 #[cfg(test)]
@@ -107,7 +111,7 @@ mod tests {
     use super::*;
 
     fn raster(width: usize, height: usize, values: Vec<f32>) -> DemRaster {
-        DemRaster { west: 127.0, north: 37.0, dx: 1.0 / 3600.0, dy: 1.0 / 3600.0, width, height, values }
+        DemRaster { west: 127.0, north: 37.0, dx: 1.0 / 3600.0, dy: 1.0 / 3600.0, width, height, values, projected: false }
     }
 
     #[test]

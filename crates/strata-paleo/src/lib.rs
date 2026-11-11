@@ -6,6 +6,7 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod dem_hfa_read;
 pub mod dem_shade;
 pub mod dem_tiff_read;
 pub mod borehole_color_ramp;

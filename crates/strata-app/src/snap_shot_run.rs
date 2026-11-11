@@ -166,6 +166,22 @@ impl StrataAppState {
                     };
                 }
             }
+            // 검증용: 「DEM」 받기가 끝날 때까지(최대 8분) 기다린다.
+            "@wait_dem" => {
+                let ctx = eframe::egui::Context::default();
+                for _ in 0..2400 {
+                    crate::dem_download_ui::poll(self, &ctx);
+                    let running = crate::dem_download_ui::dem_state().lock().is_ok_and(|s| s.running);
+                    if !running {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
+                if let Ok(state) = crate::dem_download_ui::dem_state().lock() {
+                    self.status_bar_hint = state.status.clone();
+                }
+                self.modals.active = None;
+            }
             "@zoom_out" => self.home_map.viewport.meters_per_pixel = 12.0,
             "@close_modal" => self.modals.active = None,
             "@tab_home" => self.active_tab = crate::app_state::MainTab::Home,

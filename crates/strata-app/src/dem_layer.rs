@@ -10,7 +10,8 @@ use std::sync::{Mutex, OnceLock};
 use eframe::egui::{self, Color32, Pos2, Rect};
 use strata_geo::crs_transform::CrsTransformer;
 use strata_paleo::dem_shade::{shade_dem, ShadedDem};
-use strata_paleo::dem_tiff_read::read_dem_window;
+use strata_paleo::dem_hfa_read::{mosaic_dems, read_hfa_dem};
+use strata_paleo::dem_tiff_read::{read_dem_window, DemRaster};
 use strata_types::crs::{CrsCode, WorkCrs};
 
 use crate::app_state::StrataAppState;
@@ -55,9 +56,21 @@ impl StrataAppState {
         bbox
     }
 
-    /// 표고 GeoTIFF 에서 화면 주변을 읽어 지도에 올린다. 올린 칸 수를 돌려준다.
-    pub(crate) fn load_dem_image(&mut self, tif: &Path) -> Result<usize, String> {
-        let raster = read_dem_window(tif, Some(self.dem_clip_lonlat()))?;
+    /// 받은 표고를 지도에 올린다. 올린 칸 수를 돌려준다.
+    /// `path`: 경위도 GeoTIFF(화면 주변만 읽는다), 공개DEM `.img` 한 장, 또는 `.img` 들이 든 폴더(붙인다).
+    pub(crate) fn load_dem_image(&mut self, path: &Path) -> Result<usize, String> {
+        let is_img = |p: &Path| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("img"));
+        let raster: DemRaster = if path.is_dir() {
+            let mut sheets = Vec::new();
+            for file in img_files_under(path, 3) {
+                sheets.push(read_hfa_dem(&file)?);
+            }
+            mosaic_dems(&sheets).ok_or("이 폴더에서 붙일 수 있는 공개DEM(.img)을 찾지 못했습니다.")?
+        } else if is_img(path) {
+            read_hfa_dem(path)?
+        } else {
+            read_dem_window(path, Some(self.dem_clip_lonlat()))?
+        };
         if raster.min_max().is_none() {
             return Err("이 범위의 DEM 에는 표고 값이 없습니다.".to_owned());
         }
@@ -79,7 +92,8 @@ impl StrataAppState {
         let Some(texture) = dem_texture(p.ctx(), image) else {
             return;
         };
-        let to_work = CrsTransformer::new(CrsCode::Epsg4326, crs_code(self.work_crs));
+        let from = if image.projected { CrsCode::Epsg5179 } else { CrsCode::Epsg4326 };
+        let to_work = CrsTransformer::new(from, crs_code(self.work_crs));
         let vp = &self.home_map.viewport;
         let mut mesh = egui::Mesh::with_texture(texture.id());
         for (lon, lat, u, v) in mesh_points(image.bbox) {
@@ -96,6 +110,21 @@ impl StrataAppState {
         }
         p.with_clip_rect(rect).add(egui::Shape::mesh(mesh));
     }
+}
+
+/// 폴더 아래(`depth` 단계까지)의 `.img` 파일들, 이름 순.
+fn img_files_under(dir: &Path, depth: usize) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.is_dir() && depth > 0 {
+            found.extend(img_files_under(&path, depth - 1));
+        } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("img")) {
+            found.push(path);
+        }
+    }
+    found.sort();
+    found
 }
 
 /// 그물의 꼭짓점: (경도, 위도, 그림의 가로 위치 0~1, 세로 위치 0~1). 북서쪽부터 줄 순서.
@@ -161,5 +190,20 @@ mod tests {
         // 범위 밖(타일에 없는 곳)에서는 알려 주고 그림을 바꾸지 않는다.
         app.home_map.viewport.center_xy = to_work.transform_xy(129.0, 35.0);
         assert!(app.load_dem_image(&tif).is_err());
+    }
+
+    #[test]
+    fn received_ngii_open_dem_sheets_are_joined_into_one_image() {
+        let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/probe/dem_survey/DEM/원본");
+        if img_files_under(&folder, 3).len() < 2 {
+            eprintln!("받은 공개DEM 이 없어 건너뜁니다: {}", folder.display());
+            return;
+        }
+        let mut app = StrataAppState::new_startup();
+        let cells = app.load_dem_image(&folder).expect("공개DEM 읽기");
+        let image = app.home_map.dem_image.as_ref().expect("그림");
+        // 도엽 36608·36705 두 장: EPSG:5179, 90 m 격자가 한 장으로 붙는다.
+        assert!(image.projected && cells == image.width * image.height && image.width >= 256 && image.height >= 315);
+        assert!(image.bbox[0] < 955_080.0 + 1.0 && image.bbox[3] > 1_861_380.0 - 1.0, "{:?}", image.bbox);
     }
 }

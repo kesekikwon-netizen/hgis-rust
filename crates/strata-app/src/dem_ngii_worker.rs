@@ -63,7 +63,7 @@ fn progress_of(flow: &PortalFlow) -> f32 {
     }
 }
 
-/// 받은 파일 가운데 지도에 올릴 표고 그림(GeoTIFF)을 찾는다. 압축 파일은 푼다.
+/// 받은 파일 가운데 지도에 올릴 표고 자료를 찾는다. 압축 파일은 푼다.
 fn find_raster(received: &[String], folder: &Path) -> Option<PathBuf> {
     let mut files: Vec<PathBuf> = Vec::new();
     for path in received.iter().map(PathBuf::from) {
@@ -74,6 +74,11 @@ fn find_raster(received: &[String], folder: &Path) -> Option<PathBuf> {
         } else {
             files.push(path);
         }
+    }
+    let has = |ext: &str| files.iter().any(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext)));
+    // 공개DEM 은 도엽마다 `.img` 한 장이다(2026-11-11 실제 확인) — 폴더째 넘겨 한 장으로 붙여 올린다.
+    if has("img") {
+        return Some(folder.to_path_buf());
     }
     files.into_iter().find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("tif") || e.eq_ignore_ascii_case("tiff")))
 }
@@ -169,7 +174,7 @@ fn drive(
     let warnings = if raster_uri.is_some() {
         Vec::new()
     } else {
-        vec!["받은 파일에서 지도에 올릴 표고 그림(GeoTIFF)을 찾지 못했습니다. 파일은 조사 폴더의 DEM/원본 에 있습니다.".to_owned()]
+        vec!["받은 파일에서 지도에 올릴 표고 자료(.img, GeoTIFF)를 찾지 못했습니다. 파일은 조사 폴더의 DEM/원본 에 있습니다.".to_owned()]
     };
     PreparedDem {
         status: Some(DemStatus::Ready),
@@ -210,7 +215,11 @@ mod tests {
         let text = dir.join("36705.txt").to_string_lossy().into_owned();
         let found = find_raster(&[text.clone(), tif.to_string_lossy().into_owned()], &dir);
         assert_eq!(found, Some(tif));
-        assert_eq!(find_raster(&[text], &dir), None);
+        assert_eq!(find_raster(std::slice::from_ref(&text), &dir), None);
+        // 공개DEM(.img)이 있으면 폴더째 넘긴다.
+        let img = dir.join("36705.img");
+        std::fs::write(&img, b"x").expect("쓰기");
+        assert_eq!(find_raster(&[text, img.to_string_lossy().into_owned()], &dir), Some(dir.clone()));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
