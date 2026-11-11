@@ -150,6 +150,13 @@ impl StrataAppState {
                             .home_map
                             .real_survey
                             .is_layer_visible("지질도(KIGAM 1:5만)");
+                    // 올려 둔 DEM 그림도 함께 켜고 끈다.
+                    if self.home_map.dem_image.is_some() {
+                        self.home_map
+                            .real_survey
+                            .layer_visible
+                            .insert("지형 음영".to_owned(), make_visible);
+                    }
                     if !make_visible && !geology_on {
                         self.home_map
                             .real_survey
@@ -163,8 +170,10 @@ impl StrataAppState {
                         "DEM 지형을 숨겼습니다.".to_owned()
                     };
                 } else {
-                    // :344 startDemDownload
+                    // :344 startDemDownload — 단추를 누르면 바로 받는다(창에서 다시 누르지 않는다,
+                    // 2026-11-11 사용자 지시). 창은 진행 상황과 취소만 보인다.
                     self.modals.active = Some(ActiveModalDialog::DemDownload);
+                    crate::dem_download_ui::start_from_ribbon(self);
                 }
             }
             "지적" => {

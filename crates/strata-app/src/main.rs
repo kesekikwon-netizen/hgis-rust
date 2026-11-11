@@ -32,6 +32,7 @@ pub mod real_survey;
 mod recent_surveys;
 mod reference_cadastral;
 mod dem_layer;
+mod dem_ngii_worker;
 mod reference_overlays;
 mod reference_layers;
 pub mod ribbon;

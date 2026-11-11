@@ -7,12 +7,14 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 
 use eframe::egui;
-use strata_net::dem_copernicus::{self, DemProgress, PreparedDem};
+use strata_net::dem_copernicus::PreparedDem;
+
+use crate::dem_ngii_worker::{run_ngii_dem, NgiiDemJob};
 
 use crate::app_state::StrataAppState;
 
 use super::dem_download_ui_paths::{
-    dem_success_message_ko, dem_target_base_path, ensure_dem_folder, wgs84_extent_from_work,
+    dem_target_base_path, ensure_dem_folder,
     DEM_FOLDER_CREATE_FAILED_KO, DEM_LEGEND_KEYS, DEM_NO_SURVEY_KO,
 };
 
@@ -24,6 +26,8 @@ pub(crate) struct DemDownloadState {
     pub(crate) status: String,
     pub(crate) cancel: Arc<AtomicBool>,
     pub(crate) progress_slot: Arc<Mutex<f32>>,
+    /// 작업 스레드가 적는 지금 단계 안내.
+    pub(crate) status_slot: Arc<Mutex<String>>,
     pub(crate) receiver: Option<mpsc::Receiver<PreparedDem>>,
     /// 완료된 결과. `storage_dir` 를 들고 있어야 받은 `dem.tif` 가 지워지지 않는다.
     pub(crate) result: Option<PreparedDem>,
@@ -35,9 +39,10 @@ impl DemDownloadState {
         Self {
             running: false,
             progress: 0.0,
-            status: "조사구역 주변의 공개 DEM 30m 타일을 받아 한 장으로 붙입니다.".to_owned(),
+            status: "국토정보플랫폼에서 화면 범위의 공개DEM 을 받습니다. 받을 때마다 저장된 수치지형도 계정으로 공식 신청 1건이 접수됩니다.".to_owned(),
             cancel: Arc::new(AtomicBool::new(false)),
             progress_slot: Arc::new(Mutex::new(0.0)),
+            status_slot: Arc::new(Mutex::new(String::new())),
             receiver: None,
             result: None,
             tile_total: 0,
@@ -65,44 +70,64 @@ pub(crate) fn start_download(app: &StrataAppState, state: &mut DemDownloadState)
         state.status = DEM_FOLDER_CREATE_FAILED_KO.to_owned();
         return;
     }
-    let Some(extent) = wgs84_extent_from_work(app.home_map.viewport.world_bbox(), app.work_crs)
-    else {
-        state.status = dem_copernicus::DEM_EXTENT_INVALID_KO.to_owned();
-        return;
+    // 받을 범위: 화면 가운데와 화면의 절반 크기(500 m ~ 5 km)를 국토정보플랫폼의 좌표(EPSG:5179)로.
+    let vp = &app.home_map.viewport;
+    let half_m = (vp.screen_size_px[0].max(vp.screen_size_px[1]) * 0.5 * vp.meters_per_pixel).clamp(500.0, 5_000.0);
+    let work = match app.work_crs {
+        strata_types::crs::WorkCrs::Epsg5186 => strata_types::crs::CrsCode::Epsg5186,
+        strata_types::crs::WorkCrs::Epsg5187 => strata_types::crs::CrsCode::Epsg5187,
     };
-    let tiles = match dem_copernicus::tiles_for_extent(extent) {
-        Ok(tiles) => tiles,
-        Err(error) => {
-            state.status = error.message_ko();
-            return;
-        }
-    };
-    state.tile_total = tiles.len();
+    let to_portal = strata_geo::crs_transform::CrsTransformer::new(work, strata_types::crs::CrsCode::Epsg5179);
+    let center_5179 = to_portal.transform_xy(vp.center_xy[0], vp.center_xy[1]);
+    let folder = PathBuf::from(&target).parent().map_or_else(|| PathBuf::from("."), std::path::Path::to_path_buf);
+    state.tile_total = 0;
     state.running = true;
     state.progress = 0.0;
-    state.status = format!("DEM {}칸을 받는 중입니다.", tiles.len());
+    state.status = "국토정보플랫폼에 연결하는 중입니다.".to_owned();
     let cancel = Arc::new(AtomicBool::new(false));
     let progress_slot = Arc::new(Mutex::new(0.0_f32));
+    let status_slot = Arc::new(Mutex::new(state.status.clone()));
     let (sender, receiver) = mpsc::channel();
-    let thread_cancel = Arc::clone(&cancel);
-    let thread_progress = Arc::clone(&progress_slot);
+    let job = NgiiDemJob {
+        center_5179,
+        radius_m: half_m,
+        folder,
+        cancel: Arc::clone(&cancel),
+        progress: Arc::clone(&progress_slot),
+        status: Arc::clone(&status_slot),
+    };
     std::thread::spawn(move || {
-        let report = |fraction: f32| {
-            if let Ok(mut slot) = thread_progress.lock() {
-                *slot = fraction;
-            }
-        };
-        let callback: &dyn Fn(f32) = &report;
-        let progress = DemProgress {
-            on_progress: Some(callback),
-            is_cancelled: Some(&thread_cancel),
-        };
-        let result = dem_copernicus::prepare(extent, &target, &progress);
-        let _ = sender.send(result);
+        let _ = sender.send(run_ngii_dem(&job));
     });
+    state.status_slot = status_slot;
     state.cancel = cancel;
     state.progress_slot = progress_slot;
     state.receiver = Some(receiver);
+}
+
+/// 리본의 「DEM」 단추에서 바로 받기를 시작한다.
+///
+/// 받기는 사용자 이름으로 공식 신청을 내는 일이므로, 사람이 단추를 누른 때에만 한다:
+/// 시험과 화면 캡처 실행(`--snap`)에서는 시작하지 않는다(캡처에서 꼭 필요하면
+/// `KA_HGIS_SNAP_REAL_ORDER=1`).
+pub(crate) fn start_from_ribbon(app: &StrataAppState) {
+    let automated = cfg!(test) || (app.snap.is_some() && std::env::var_os("KA_HGIS_SNAP_REAL_ORDER").is_none());
+    if automated {
+        return;
+    }
+    if let Ok(mut state) = dem_state().lock() {
+        start_download(app, &mut state);
+    }
+}
+
+/// 받기가 끝났을 때의 안내.
+fn ngii_dem_done_message(result: &PreparedDem) -> String {
+    let mut text = format!("국토정보플랫폼에서 공개DEM 파일 {}개를 받았습니다.", result.downloaded_tiles);
+    for warning in &result.warnings {
+        text.push(' ');
+        text.push_str(warning);
+    }
+    text
 }
 
 pub(crate) fn apply_result(app: &mut StrataAppState, state: &mut DemDownloadState) {
@@ -119,7 +144,7 @@ pub(crate) fn apply_result(app: &mut StrataAppState, state: &mut DemDownloadStat
             .layer_visible
             .insert(key.to_owned(), true);
     }
-    let mut message = dem_success_message_ko(result.downloaded_tiles, result.missing_tiles);
+    let mut message = ngii_dem_done_message(result);
     // 받은 표고를 화면 주변만 읽어 색띠 + 음영 그림으로 올린다.
     if let Some(tif) = result.raster_uri.clone() {
         if let Err(why) = app.load_dem_image(&tif) {
@@ -139,6 +164,12 @@ pub(crate) fn poll(app: &mut StrataAppState, ctx: &egui::Context) {
     if let Some(progress) = shared_progress {
         state.progress = progress;
     }
+    if state.running {
+        let said = state.status_slot.lock().map(|slot| slot.clone()).unwrap_or_default();
+        if !said.is_empty() {
+            state.status = said;
+        }
+    }
     let finished = state
         .receiver
         .as_ref()
@@ -148,7 +179,7 @@ pub(crate) fn poll(app: &mut StrataAppState, ctx: &egui::Context) {
         state.receiver = None;
         state.progress = if result.is_ready() { 1.0 } else { 0.0 };
         state.status = if result.is_ready() {
-            dem_success_message_ko(result.downloaded_tiles, result.missing_tiles)
+            ngii_dem_done_message(&result)
         } else {
             result.error.clone()
         };

@@ -40,6 +40,10 @@ impl std::fmt::Debug for PortalLogin {
     }
 }
 
+/// 포털 자동화 스크립트(C++ 과 같은 파일)와 공개DEM 용 스크립트. 실행 파일에 넣어 둔다.
+pub const TOPOGRAPHIC_JS: &str = include_str!("../../../data/providers/ngii-topographic.js");
+pub const DEM_JS: &str = include_str!("../../../data/providers/ngii-dem.js");
+
 /// 자동 진행에 넣는 값들.
 #[derive(Debug, Clone)]
 pub struct PortalInputs {

@@ -88,7 +88,7 @@ pub fn render_dem_download(app: &mut StrataAppState, ctx: &egui::Context, open: 
                     egui::RichText::new(if state.result.is_some() {
                         "다시 받기"
                     } else {
-                        "DEM 받기"
+                        "다시 시도"
                     })
                     .color(Color32::WHITE)
                     .strong()
@@ -99,7 +99,7 @@ pub fn render_dem_download(app: &mut StrataAppState, ctx: &egui::Context, open: 
                 .min_size(Vec2::new(132.0, 36.0));
                 if ui
                     .add_enabled(!state.running, start_btn)
-                    .on_hover_text("지금 화면 범위를 덮는 1° 공개 DEM 타일을 받습니다.")
+                    .on_hover_text("지금 화면 범위의 공개DEM 을 국토정보플랫폼에서 다시 받습니다(공식 신청 1건).")
                     .clicked()
                 {
                     start = true;
