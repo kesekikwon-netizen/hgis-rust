@@ -20,8 +20,12 @@ fn main() -> Result<(), String> {
     println!("저장된 계정: 아이디 {} · 비밀번호 {}", !creds.username.is_empty(), !creds.password.is_empty());
     let login = PortalLogin { id: creds.username, password: creds.password, attempt: 1 };
 
-    let js_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/providers/ngii-topographic.js");
-    let automation = std::fs::read_to_string(js_path).map_err(|e| format!("자동화 스크립트: {e}"))?;
+    // `KA_HGIS_PROBE_DEM=1` 이면 공개DEM 을 고르는 스크립트로 돌린다.
+    let dem = std::env::var_os("KA_HGIS_PROBE_DEM").is_some();
+    let providers = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/providers");
+    let read = |name: &str| std::fs::read_to_string(providers.join(name)).map_err(|e| format!("자동화 스크립트 {name}: {e}"));
+    let topographic = read("ngii-topographic.js")?;
+    let automation = if dem { strata_net::ngii_portal_runner::dem_automation(&topographic, &read("ngii-dem.js")?) } else { topographic };
 
     let mut scope = Map::new();
     scope.insert("x".to_owned(), json!(number(x)?));
@@ -59,7 +63,7 @@ fn main() -> Result<(), String> {
     }
     println!("끝: 단계={:?} 중단={:?} 신청할 자료={}", flow.stage, flow.failed, flow.records.len());
     for r in &flow.records {
-        println!("  도엽 {} {} (이력 {})", r["num"], r["name"], r["historyNo"]);
+        println!("  도엽 {} {} (이력 {} · 연도 {})", r["num"], r["name"], r["historyNo"], r["year"]);
     }
     if flow.stage == Stage::Form {
         // 신청서의 항목 이름만 읽는다(값은 읽지 않는다).

@@ -21,6 +21,10 @@ pub const PORTAL_URL: &str = "https://map.ngii.go.kr/ms/map/NlipMap.do";
 /// 믿는 사이트(국토지리정보원과 그 하위 도메인).
 pub const PORTAL_HOST: &str = "ngii.go.kr";
 
+/// 공식 로그인이 지나가는 정부 통합인증 주소(2026-11-11 실제 확인). 지나가기만 허용한다 —
+/// 그 화면에서는 스크립트도 계정 입력도 하지 않는다.
+pub const AUTH_PASS_THROUGH_HOSTS: [&str; 1] = ["sso.anyid.go.kr"];
+
 /// 로그인 화면에만 넘기는 값.
 #[derive(Clone)]
 pub struct PortalLogin {
@@ -57,9 +61,24 @@ pub fn wrap_script(automation_js: &str, input: &Value, login: &PortalLogin) -> S
         "loginAttempt": login.attempt.to_string(),
     });
     format!(
-        "(function(){{var input={input};if({paths}.indexOf(location.pathname)>=0){{var l={login_input};for(var k in l)input[k]=l[k];}}\nvar fresh=false;if(location.pathname==={portal}&&!window.__kaPageMark){{window.__kaPageMark=1;fresh=true;}}\ntry{{var r=\n{automation_js}\n(input);return {{command:input.command,fresh:fresh,result:r||{{}}}};}}catch(e){{return {{command:input.command,result:{{}},error:String(e&&e.message)}};}}}})()",
+        "(function(){{var input={input};var official=location.protocol==='https:'&&(location.hostname==={host}||location.hostname.slice(-{dot_len})==={dot_host});if(!official)return {{command:'',result:{{}},error:'origin'}};if({paths}.indexOf(location.pathname)>=0){{var l={login_input};for(var k in l)input[k]=l[k];}}\nvar fresh=false;if(location.pathname==={portal}&&!window.__kaPageMark){{window.__kaPageMark=1;return {{command:input.command,fresh:true,result:{{}}}};}}\ntry{{var r=\n{automation_js}\n(input);return {{command:input.command,fresh:fresh,result:r||{{}}}};}}catch(e){{return {{command:input.command,result:{{}},error:String(e&&e.message)}};}}}})()",
         paths = json!(LOGIN_PATHS),
         portal = json!(PORTAL_PATH),
+        host = json!(PORTAL_HOST),
+        dot_host = json!(format!(".{PORTAL_HOST}")),
+        dot_len = PORTAL_HOST.len() + 1,
+    )
+}
+
+/// 공개DEM 용 자동화: 도엽 고르기·신청서 열기는 `ngii-dem.js`, 로그인은 수치지형도 스크립트가 맡는다.
+#[must_use]
+pub fn dem_automation(topographic_js: &str, dem_js: &str) -> String {
+    format!(
+        "(function(input){{if(input.command==='login')return(
+{topographic_js}
+)(input);return(
+{dem_js}
+)(input);}})"
     )
 }
 
@@ -78,7 +97,11 @@ impl PortalHelper {
     /// 도우미를 띄우고 준비될 때까지 기다린다.
     pub fn start(helper_exe: &Path, downloads: &Path, hidden: bool) -> Result<Self, String> {
         let mut command = Command::new(helper_exe);
-        command.args(["--allow", PORTAL_HOST, "--downloads"]).arg(downloads);
+        command.args(["--allow", PORTAL_HOST]);
+        for host in AUTH_PASS_THROUGH_HOSTS {
+            command.args(["--allow-nav", host]);
+        }
+        command.arg("--downloads").arg(downloads);
         if hidden {
             command.arg("--hidden");
         }
@@ -100,6 +123,10 @@ impl PortalHelper {
         std::thread::spawn(move || {
             for line in BufReader::new(stdout).lines().map_while(Result::ok) {
                 if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                    // 원인 찾기: 도우미가 알린 오류(막은 이동 등)를 보인다.
+                    if value["event"] == "error" && std::env::var_os("KA_HGIS_WEB_STDERR").is_some() {
+                        eprintln!("도우미: {}", value["message"]);
+                    }
                     if sender.send(value).is_err() {
                         break;
                     }
@@ -156,7 +183,7 @@ impl PortalHelper {
                     "{} 명령={command} 상태={} 오류={}",
                     answer["url"].as_str().unwrap_or("").split('?').next().unwrap_or(""),
                     answer["result"]["result"]["state"].as_str().unwrap_or("-"),
-                    answer["result"]["error"].as_str().unwrap_or("-"),
+                    answer["result"]["error"].as_str().or(answer["result"]["result"]["detail"].as_str()).unwrap_or("-"),
                 );
                 // 포털 화면이 새로 열렸으면 그 답은 버리고 도엽 확인부터 다시 한다.
                 if !(answer["result"]["fresh"] == true && flow.on_portal_reloaded()) {
@@ -215,6 +242,9 @@ mod tests {
     fn the_wrapped_script_gives_the_account_only_to_login_pages() {
         let login = PortalLogin { id: "someone".to_owned(), password: "p\"w'd</script>".to_owned(), attempt: 2 };
         let script = wrap_script("// c\n(function (input) { return {state:input.command}; })", &json!({"command": "select", "x": 1}), &login);
+        // 화면 안에서도 공식 사이트(https, ngii.go.kr 와 그 하위)인지 먼저 확인한다 — 아니면 계정을 넣기 전에 끝낸다.
+        let origin = script.find(r#"location.protocol==='https:'&&(location.hostname==="ngii.go.kr"||location.hostname.slice(-11)===".ngii.go.kr");if(!official)return"#).expect("주소 확인");
+        assert!(origin < script.find("loginPassword").expect("계정"));
         // 계정은 로그인 경로일 때만 입력에 합쳐진다.
         let guard = script.find("indexOf(location.pathname)>=0){").expect("경로 확인");
         let account = script.find("loginPassword").expect("계정");
@@ -223,7 +253,9 @@ mod tests {
         // 따옴표가 든 비밀번호도 문자열 밖으로 새지 않는다(JSON 으로 적는다).
         assert!(script.contains(r#"p\"w'd</script>"#));
         assert!(script.contains("(input);return {command:input.command,fresh:fresh,result:r||{}};}catch(e){"));
-        // 포털 화면이 새로 열렸는지 표시를 남겨 알아낸다.
+        // 포털 화면이 새로 열렸는지 표시를 남겨 알아내고, 그 차례에는 아무것도 시키지 않는다
+        // (옛 단계의 명령이 새 화면에서 신청서를 열어 버리지 않게).
+        assert!(script.contains("{window.__kaPageMark=1;return {command:input.command,fresh:true,result:{}};}"));
         assert!(script.contains(r#"location.pathname==="/ms/map/NlipMap.do"&&!window.__kaPageMark"#));
         // 디버그 출력에 계정이 없다.
         let shown = format!("{login:?}");

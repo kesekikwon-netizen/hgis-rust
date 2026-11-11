@@ -3,7 +3,9 @@
 //! C++ `KaTopographicBrowser` 가 QWebEngineView 로 하던 일(사이트를 열고, 자동화 스크립트를
 //! 돌리고, 팝업과 파일 받기를 다룬다)을 WebView2 로 한다. 본 앱이 따로 띄워 표준 입출력으로 부린다.
 //!
-//! 실행: `ka-hgis-web --allow <호스트> [--allow …] --downloads <폴더> [--hidden]`
+//! 실행: `ka-hgis-web --allow <호스트> [--allow …] [--allow-nav <호스트> …] --downloads <폴더> [--hidden]`
+//! `--allow`: 스크립트를 돌리고 파일을 받는 믿는 사이트. `--allow-nav`: 지나가는 것만 허용하는
+//! 주소(공식 로그인이 거치는 인증 사이트) — 그 화면에서는 스크립트도 계정 입력도 하지 않는다.
 
 mod protocol;
 
@@ -49,6 +51,8 @@ struct Page {
 /// 창들이 함께 쓰는 것.
 struct Shared {
     allowed: Vec<String>,
+    /// 지나가는 것만 허용하는 호스트.
+    pass_through: Vec<String>,
     downloads: PathBuf,
     visible: RefCell<bool>,
     spares: RefCell<Vec<Page>>,
@@ -80,12 +84,21 @@ fn make_page(
         .map_err(|e| format!("창을 만들지 못했습니다: {e}"))?;
 
     let for_popup = Rc::clone(shared);
+    let for_nav = Rc::clone(shared);
     let for_download = Rc::clone(shared);
     let mut builder = WebViewBuilder::new()
-        // C++ `acceptNavigationRequest`(:72) 와 같다: 웹 주소로의 이동은 허용한다(공식 로그인이
-        // 다른 인증 주소를 거친다). 스크립트와 계정 입력은 믿는 사이트 화면에서만 한다(`run_eval`).
-        .with_navigation_handler(|url| {
-            ["https://", "http://", "about:", "blob:", "data:"].iter().any(|scheme| url.starts_with(scheme))
+        // 믿는 사이트(https) 밖으로는 가지 않는다. 공식 로그인이 거치는 주소는 모두 그 안에 있다
+        // (map.ngii.go.kr/anyid/…, www.ngii.go.kr/member/…, 2026-11-11 실제 확인). 빈 화면은 팝업이 채워지기 전 상태.
+        .with_navigation_handler(move |url| {
+            let ok = url == "about:blank"
+                || is_trusted_url(&url, &for_nav.allowed)
+                || is_trusted_url(&url, &for_nav.pass_through);
+            if !ok {
+                // 막은 주소는 호스트만 알린다(뒤의 값에는 인증 정보가 있을 수 있다).
+                let host = url.split_once("://").map_or("", |(_, rest)| rest).split(['/', '?', '#']).next().unwrap_or("");
+                emit(&Event::Error { message: format!("막은 이동: {}://{host}", url.split(':').next().unwrap_or("")) });
+            }
+            ok
         })
         .with_new_window_req_handler(move |_url, _features| {
             // 미리 만들어 둔 빈 화면을 팝업으로 내준다.
@@ -158,25 +171,27 @@ fn run_eval(pages: &[Page], shared: &Shared, id: u64, paths: &[String], script: 
     }
 }
 
-fn parse_args() -> (Vec<String>, PathBuf, bool) {
-    let (mut allowed, mut downloads, mut hidden) = (Vec::new(), std::env::temp_dir(), false);
+fn parse_args() -> (Vec<String>, Vec<String>, PathBuf, bool) {
+    let (mut allowed, mut pass_through, mut downloads, mut hidden) = (Vec::new(), Vec::new(), std::env::temp_dir(), false);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--allow" => allowed.extend(args.next().map(|h| h.to_ascii_lowercase())),
+            "--allow-nav" => pass_through.extend(args.next().map(|h| h.to_ascii_lowercase())),
             "--downloads" => downloads = args.next().map_or(downloads, PathBuf::from),
             "--hidden" => hidden = true,
             _ => {}
         }
     }
-    (allowed, downloads, hidden)
+    (allowed, pass_through, downloads, hidden)
 }
 
 fn main() {
-    let (allowed, downloads, hidden) = parse_args();
+    let (allowed, pass_through, downloads, hidden) = parse_args();
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let shared = Rc::new(Shared {
         allowed,
+        pass_through,
         downloads,
         visible: RefCell::new(!hidden),
         spares: RefCell::new(Vec::new()),
