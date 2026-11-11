@@ -14,12 +14,17 @@ pub enum TileKind {
     Base,
     /// 연속지적도 (WMS — 별도 처리).
     Cadastral,
+    /// 지형맵(OpenTopoMap). C++ `LayerOps::addElevationHillshadeMap` 의 XYZ 주소와 같다.
+    Terrain,
 }
+
+/// 지형맵 타일이 있는 가장 큰 확대 단계(C++ URI 의 `zmax=17`).
+pub const TERRAIN_MAX_ZOOM: u8 = 17;
 
 impl TileKind {
     #[must_use]
     pub const fn is_xyz(self) -> bool {
-        matches!(self, Self::Satellite | Self::Base)
+        matches!(self, Self::Satellite | Self::Base | Self::Terrain)
     }
 }
 
@@ -44,6 +49,8 @@ pub fn tile_url(kind: TileKind, key: &str, z: u8, x: u32, y: u32) -> String {
             }
         }
         TileKind::Cadastral => String::new(),
+        // 키가 필요 없는 공개 타일. 표준 XYZ({z}/{x}/{y}) 순서다.
+        TileKind::Terrain => format!("https://tile.opentopomap.org/{z}/{x}/{y}.png"),
     }
 }
 

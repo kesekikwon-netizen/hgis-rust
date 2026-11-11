@@ -44,14 +44,8 @@ impl StrataAppState {
             // 내려받는다(:396 startReferenceDownload → :536,622 `토양도를 추가했습니다. …`).
             "토양" => {
                 self.active_tab = MainTab::Map;
-                if !self.toggle_existing_overlay("토양도(흙토람)") {
-                    self.home_map
-                        .real_survey
-                        .layer_visible
-                        .insert("토양도(흙토람)".to_owned(), true);
-                    self.status_bar_hint =
-                        "토양도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
-                }
+                self.status_bar_hint =
+                    "토양도(흙토람) 받기는 아직 Rust 판에 옮기지 못했습니다. 지도에는 아무것도 더해지지 않았습니다.".to_owned();
             }
             // C++ MainWindowOverlay.cpp:405-472 downloadGeologyMap — :409 toggleExistingOverlay
             // (`지질도(KIGAM 1:5만)`, m_actGeology)로 껐다 켰다 하고, 켤 때는 지형 음영
@@ -59,49 +53,23 @@ impl StrataAppState {
             // 도 같은 상태로 맞춘다(:422-423). 없을 때만 내려받는다(:467 → :536,622).
             "지질" => {
                 self.active_tab = MainTab::Map;
-                if !self.toggle_existing_overlay("지질도(KIGAM 1:5만)") {
-                    self.home_map
-                        .real_survey
-                        .layer_visible
-                        .insert("지질도(KIGAM 1:5만)".to_owned(), true);
-                    self.status_bar_hint =
-                        "지질도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
-                }
-                let now_on = self
-                    .home_map
-                    .real_survey
-                    .is_layer_visible("지질도(KIGAM 1:5만)");
-                self.home_map
-                    .real_survey
-                    .layer_visible
-                    .insert("지질 음영".to_owned(), now_on);
+                self.status_bar_hint =
+                    "지질도(KIGAM) 받기는 아직 Rust 판에 옮기지 못했습니다. 지도에는 아무것도 더해지지 않았습니다.".to_owned();
             }
             // C++ MainWindowOverlay.cpp:476-527 downloadRiverMap — :479 toggleExistingOverlay
             // (`수계도(하천망)`, m_actRiver)로 껐다 켰다 하고, 없을 때만 내려받는다
             // (:522 → :536,622 `수계도를 추가했습니다. …`).
             "수계" => {
                 self.active_tab = MainTab::Map;
-                if !self.toggle_existing_overlay("수계도(하천망)") {
-                    self.home_map
-                        .real_survey
-                        .layer_visible
-                        .insert("수계도(하천망)".to_owned(), true);
-                    self.status_bar_hint =
-                        "수계도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
-                }
+                self.status_bar_hint =
+                    "수계도(하천망) 받기는 아직 Rust 판에 옮기지 못했습니다. 지도에는 아무것도 더해지지 않았습니다.".to_owned();
             }
             "옛 지도" => {
                 self.active_tab = MainTab::Map;
-                let spec = strata_net::tile_fetcher::build_historical_tms_layer_spec(
-                    strata_net::tile_fetcher::HistoricalMapType::Chosun1919_1to50000,
-                    0.8,
+                self.home_map.draw_guide_message = Some(
+                    "옛 지도(대동여지도·1919 조선지형도) 배경은 아직 Rust 판에 옮기지 못했습니다. 지도는 바뀌지 않았습니다."
+                        .to_owned(),
                 );
-                self.home_map.draw_guide_message = Some(format!(
-                    "{} ({}) 배경을 적용했습니다 (투명도 {:.0}%).",
-                    spec.layer_title_ko,
-                    self.work_crs.auth_id(),
-                    spec.opacity * 100.0
-                ));
             }
             "고지형" => self.open_studio_tab(MainTab::Paleo),
             // C++ MainWindowRibbon.cpp:522-523 — 「정합」 단추는 setCheckable 없이

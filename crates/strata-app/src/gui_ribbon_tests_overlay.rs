@@ -30,50 +30,29 @@ fn test_r8_terrain_toggle_uses_cpp_first_and_repeat_texts() {
     assert_eq!(app.status_bar_hint, "지형맵를 다시 켰습니다.");
 }
 
-/// R8 — 「토양」·「수계」는 `MainWindowOverlay.cpp:357,479` 가
-/// `토양도(흙토람)` / `수계도(하천망)` 이름으로 토글한다.
+/// 「토양」·「수계」·「지질」 받기는 아직 Rust 판에 없다. 예전에는 아무것도 받지 않고
+/// 「추가했습니다」라고 했다. 이제는 레이어를 올린 척하지 않고 없다고 알린다.
+/// (받기를 옮기면 이 시험을 C++ `MainWindowOverlay.cpp:357,409,479` 의 토글 시험으로 되돌린다.)
 #[test]
-fn test_r8_soil_and_river_toggle_with_cpp_layer_names() {
-    for (button, title) in [("토양", "토양도(흙토람)"), ("수계", "수계도(하천망)")] {
+fn test_r8_soil_river_geology_say_they_are_not_built_yet_and_add_nothing() {
+    for (button, title) in [
+        ("토양", "토양도(흙토람)"),
+        ("수계", "수계도(하천망)"),
+        ("지질", "지질도(KIGAM 1:5만)"),
+    ] {
         let mut app = StrataAppState::new_startup();
-        // 없는 상태: 받아 오는 길(여기서는 안내 문구)로 간다.
         app.handle_ribbon_click(button);
-        assert!(app.home_map.real_survey.is_layer_visible(title), "{button}");
         assert!(
-            app.status_bar_hint.contains("추가했습니다"),
+            !app.home_map.real_survey.layer_visible.contains_key(title),
+            "{button}: 받지 않은 레이어를 올린 것처럼 기록하면 안 된다"
+        );
+        assert!(
+            app.status_bar_hint.contains("아직 Rust 판에 옮기지 못했습니다")
+                && !app.status_bar_hint.contains("추가했습니다"),
             "{button}: {}",
             app.status_bar_hint
         );
-
-        // 있는 상태: 끄고 켜며 C++ toggleExistingOverlay 문구를 쓴다.
-        app.handle_ribbon_click(button);
-        assert!(!app.home_map.real_survey.is_layer_visible(title), "{button}");
-        assert_eq!(app.status_bar_hint, format!("{title}를 껐습니다."));
-
-        app.handle_ribbon_click(button);
-        assert!(app.home_map.real_survey.is_layer_visible(title), "{button}");
-        assert_eq!(app.status_bar_hint, format!("{title}를 다시 켰습니다."));
     }
-}
-
-/// R8 — 「지질」은 `MainWindowOverlay.cpp:409,422` 처럼 `지질도(KIGAM 1:5만)` 을
-/// 토글하고 `지질 음영` 을 같은 상태로 맞춘다.
-#[test]
-fn test_r8_geology_toggle_also_sets_relief_layer() {
-    let mut app = StrataAppState::new_startup();
-    app.handle_ribbon_click("지질");
-    assert!(app
-        .home_map
-        .real_survey
-        .is_layer_visible("지질도(KIGAM 1:5만)"));
-    app.handle_ribbon_click("지질");
-    assert!(!app
-        .home_map
-        .real_survey
-        .is_layer_visible("지질도(KIGAM 1:5만)"));
-    assert_eq!(app.status_bar_hint, "지질도(KIGAM 1:5만)를 껐습니다.");
-    // :422-423 — 지질도를 끄면 지형 음영 겹침도 내린다.
-    assert!(!app.home_map.real_survey.is_layer_visible("지질 음영"));
 }
 
 /// R8 — 「DEM」은 `MainWindowOverlay.cpp:303-348`. 없으면 받는 창(:344),

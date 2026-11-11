@@ -38,6 +38,33 @@ impl StrataAppState {
             &mut self.basemap_textures,
         );
         self.basemap_tiles_painted = n;
+        self.paint_terrain_overlay(ctx, p, rect);
+    }
+
+    /// 「지형」 단추로 켠 지형맵(OpenTopoMap)을 배경지도 위에 칠한다.
+    /// C++ 은 참조 지도 그룹에 XYZ 레이어 「지형맵」을 올린다(zmax 17).
+    fn paint_terrain_overlay(&mut self, ctx: &egui::Context, p: &egui::Painter, rect: egui::Rect) {
+        let rs = &self.home_map.real_survey;
+        if !rs.layer_visible.contains_key("지형맵") || !rs.is_layer_visible("지형맵") {
+            return;
+        }
+        let mpp = self.home_map.viewport.meters_per_pixel.max(1e-6);
+        let z = crate::basemap_tiles::basemap_zoom_for(mpp, rect)
+            .min(crate::basemap_tiles::TERRAIN_MAX_ZOOM);
+        let view = crate::basemap_paint::TileView::from_viewport(
+            &self.home_map.viewport,
+            rect,
+            self.work_crs,
+        );
+        let _ = crate::basemap_paint::paint_basemap_tiles(
+            ctx,
+            p,
+            rect,
+            crate::basemap_tiles::TileKind::Terrain,
+            z,
+            &view,
+            &mut self.basemap_textures,
+        );
     }
 
     /// 연속지적도(WMS)를 지도 위에 겹쳐 칠한다.

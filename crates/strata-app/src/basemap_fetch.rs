@@ -35,6 +35,7 @@ fn kind_dir(kind: TileKind) -> &'static str {
         TileKind::Satellite => "satellite",
         TileKind::Base => "base",
         TileKind::Cadastral => "cadastral",
+        TileKind::Terrain => "terrain",
     }
 }
 
@@ -42,7 +43,7 @@ fn ext_for(kind: TileKind) -> &'static str {
     match kind {
         TileKind::Satellite => "jpeg",
         TileKind::Base => "png",
-        TileKind::Cadastral => "png",
+        TileKind::Cadastral | TileKind::Terrain => "png",
     }
 }
 
