@@ -16,3 +16,4 @@ pub mod submit_package;
 pub mod submit_audit;
 pub mod submit_export;
 pub mod submit_manifest;
+pub mod submit_survey_package;

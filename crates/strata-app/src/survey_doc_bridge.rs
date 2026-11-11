@@ -129,6 +129,40 @@ impl StrataAppState {
         }
     }
 
+    /// 제출 꾸러미를 `out_dir` 에 만든다: 도형이 있는 조사 레이어마다 EPSG:5179 SHP,
+    /// encoding.txt, README_submit.txt, MANIFEST.sha256. 결과(또는 못 만든 이유) 문장을 돌려준다.
+    ///
+    /// C++ `ExportService.cpp:100-102` 와 같이 비어 있지 않은 폴더에는 쓰지 않는다.
+    /// 조사도면.pdf 는 넣지 않는다 — Rust 판의 도면 PDF 가 아직 지도 내용을 담지 못한다.
+    pub(crate) fn export_submit_package_to(
+        &mut self,
+        out_dir: &std::path::Path,
+        findings: &[strata_check_export::checklist_engine::ChecklistFinding],
+    ) -> Result<String, String> {
+        self.sync_view_into_survey_doc();
+        let not_empty = std::fs::read_dir(out_dir).is_ok_and(|mut d| d.next().is_some());
+        if not_empty {
+            return Err(format!(
+                "제출 폴더가 비어 있지 않습니다. 새 폴더를 선택하세요: {}",
+                out_dir.display()
+            ));
+        }
+        let (manifest, layers) = strata_check_export::submit_survey_package::export_survey_package(
+            out_dir,
+            &self.survey_doc,
+            findings,
+            None,
+        )
+        .map_err(|e| format!("제출 꾸러미를 만들지 못했습니다: {e}"))?;
+        let shapes: usize = layers.iter().map(|l| l.features).sum();
+        Ok(format!(
+            "제출 꾸러미 생성 완료: {} — EPSG:5179 SHP {}개 레이어·도형 {shapes}개, 파일 {}개. 조사도면.pdf 는 아직 넣지 않습니다.",
+            out_dir.display(),
+            layers.len(),
+            manifest.files_sha256.len()
+        ))
+    }
+
     /// 저장 직전: 화면에서 고친 조사구역·시굴격자를 문서에 되적는다.
     pub(crate) fn sync_view_into_survey_doc(&mut self) {
         // 카드에서 고치던 값이 있으면 먼저 그 도형에 적는다.

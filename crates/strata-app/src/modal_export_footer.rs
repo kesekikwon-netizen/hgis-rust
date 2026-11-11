@@ -2,7 +2,6 @@
 //!
 //! `modal_export.rs` 가 300줄을 넘어 한 함수의 구간을 옮겼다.
 //! 실행 순서는 호출부가 보장한다.
-use strata_check_export::submit_package::export_submission_package;
 use crate::app_state::{StrataAppState};
 use eframe::egui::{self, Color32, Vec2};
 
@@ -20,7 +19,8 @@ pub(crate) fn paint_export_submit_footer(
             }
             if ui.button("레이어 5179 변환…").clicked() {
                 app.home_map.draw_guide_message = Some(
-                    "선택한 레이어를 EPSG:5179 SHP 파일로 변환했습니다.".to_owned(),
+                    "레이어 하나만 바꾸는 기능은 아직 Rust 판에 없습니다. 「제출 꾸러미 만들기」가 모든 조사 레이어를 EPSG:5179 SHP 로 내보냅니다."
+                        .to_owned(),
                 );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -37,15 +37,17 @@ pub(crate) fn paint_export_submit_footer(
                 .corner_radius(6.0)
                 .min_size(Vec2::new(160.0, 32.0));
                 if ui.add(export_btn).clicked() {
-                    let out_dir =
-                        app.home_map.real_survey.survey_dir.join("제출꾸러미_5179");
-                    if let Ok(m) = export_submission_package(&out_dir, findings) {
-                        app.modals.last_export_status = format!(
-                            "제출 꾸러미 생성 완료: {} (파일 {}종, {} — README_submit.txt 기록됨)",
-                            out_dir.display(),
-                            m.files_sha256.len(),
-                            status_txt
-                        );
+                    // C++ `KaSubmitFlow` — 제출 폴더를 고른다. 취소하면 아무 것도 하지 않는다.
+                    let picked = rfd::FileDialog::new()
+                        .set_title("제출 꾸러미를 만들 빈 폴더")
+                        .set_directory(&app.home_map.real_survey.survey_dir)
+                        .pick_folder();
+                    if let Some(out_dir) = picked {
+                        app.modals.last_export_status =
+                            match app.export_submit_package_to(&out_dir, findings) {
+                                Ok(done) => format!("{done} ({status_txt})"),
+                                Err(why) => why,
+                            };
                     }
                 }
             });

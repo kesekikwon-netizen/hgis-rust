@@ -8,7 +8,6 @@ use geo::{Coord, LineString, Polygon};
 use strata_canvas2d::canvas_painter::MapSceneModel;
 use strata_canvas2d::viewport::ViewportTransform;
 use strata_check_export::checklist_engine::ChecklistEngine;
-use strata_check_export::submit_package::export_submission_package;
 use strata_geo::buffer_round::round_buffer_polygon;
 use strata_geo::trench_grid::{generate_standard_trenches, TrenchConfig, TrenchStandardLength};
 use strata_layout::pdf_geotiff::{render_geotiff_header_bytes, render_sheet_pdf_bytes};
@@ -150,13 +149,35 @@ pub(crate) fn push_v1_to_v9_gates(gates: &mut Vec<GateResult>) {
     // V9: 국가유산청 제출 꾸러미(EPSG:5179 SHP + PDF + MANIFEST.sha256 + README)
     let findings = ChecklistEngine::evaluate_sheet(&sheet, SubmitCrs::Epsg5179, true);
     let tmp_dir = std::env::temp_dir().join(format!("ka_hgis_v9_{}", std::process::id()));
-    let v9_ok = export_submission_package(&tmp_dir, &findings)
-        .is_ok_and(|m| m.crs == SubmitCrs::Epsg5179 && m.files_sha256.len() == 3);
+    // 실제 도형(조사구역 100×100 m)을 가진 문서를 내보내고, 쓴 SHP 를 다시 읽어 도형 수를 센다.
+    let mut v9_doc = strata_storage::survey_doc::SurveyDoc::new(5187);
+    v9_doc.add_feature(
+        strata_types::schema::DomainLayerKey::SurveyArea,
+        strata_storage::survey_doc::SurveyFeature::new_drawn(
+            strata_storage::wkb_codec::WkbGeometry::Polygon(vec![vec![
+                [219_700.0, 360_900.0],
+                [219_800.0, 360_900.0],
+                [219_800.0, 361_000.0],
+                [219_700.0, 361_000.0],
+                [219_700.0, 360_900.0],
+            ]]),
+        ),
+    );
+    let v9_ok = strata_check_export::submit_survey_package::export_survey_package(
+        &tmp_dir, &v9_doc, &findings, None,
+    )
+    .is_ok_and(|(m, layers)| {
+        m.crs == SubmitCrs::Epsg5179
+            && layers.len() == 1
+            && m.files_sha256.iter().any(|(name, _)| name == "survey_area.shp")
+            && strata_storage::shp_file_writer::count_shp_records(&tmp_dir.join("survey_area.shp"))
+                .is_ok_and(|n| n == 1)
+    });
     let _ = std::fs::remove_dir_all(&tmp_dir);
     gates.push(GateResult {
         gate_id: "V9",
         title_ko: "국가유산청 제출 꾸러미(EPSG:5179 + MANIFEST.sha256) 무결성",
         passed: v9_ok,
-        detail: "EPSG:5179 SHP + PDF + MANIFEST.sha256 verified".to_owned(),
+        detail: "EPSG:5179 SHP(실제 도형 1개) + README + MANIFEST.sha256 verified".to_owned(),
     });
 }

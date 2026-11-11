@@ -8,6 +8,7 @@ license.workspace = true
 strata-types = { path = "../strata-types" }
 strata-storage = { path = "../strata-storage" }
 strata-layout = { path = "../strata-layout" }
+strata-geo = { path = "../strata-geo" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

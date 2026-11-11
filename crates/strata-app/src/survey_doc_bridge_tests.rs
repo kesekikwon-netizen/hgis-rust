@@ -123,3 +123,30 @@ fn opening_something_that_is_not_a_survey_changes_nothing() {
         .unwrap_or("")
         .contains("열 수 없습니다"));
 }
+
+#[test]
+fn the_submit_package_holds_the_surveys_real_shapes_and_refuses_a_non_empty_folder() {
+    let path = demo_copy("submit");
+    let mut app = StrataAppState::new_startup();
+    app.open_survey_gpkg(&path);
+    let out = path.parent().expect("폴더").join("제출");
+    let done = app.export_submit_package_to(&out, &[]).expect("꾸러미");
+    assert!(done.contains("SHP 7개 레이어·도형 9개"), "{done}");
+    for name in ["survey_area.shp", "feature_poly.dbf", "trial_trench.prj", "README_submit.txt", "MANIFEST.sha256"] {
+        assert!(out.join(name).is_file(), "{name} 이 없다");
+    }
+    assert_eq!(
+        strata_storage::shp_file_writer::count_shp_records(&out.join("feature_poly.shp")).expect("shp"),
+        2
+    );
+    // 같은 폴더에 다시 만들면 덮지 않고 알린다.
+    let again = app.export_submit_package_to(&out, &[]).expect_err("비어 있지 않은 폴더");
+    assert!(again.starts_with("제출 폴더가 비어 있지 않습니다."), "{again}");
+
+    // 도형이 없으면 만들지 않는다.
+    let mut empty = StrataAppState::new_startup();
+    let why = empty
+        .export_submit_package_to(&path.parent().expect("폴더").join("빈제출"), &[])
+        .expect_err("도형 없음");
+    assert!(why.contains("내보낼 조사 도형이 없습니다"), "{why}");
+}
