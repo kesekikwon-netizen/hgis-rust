@@ -6,6 +6,7 @@
 )]
 pub mod checklist_engine;
 pub mod check_attributes;
+pub mod check_doc_state;
 pub mod check_engine;
 pub mod check_geometry;
 pub mod check_harris;

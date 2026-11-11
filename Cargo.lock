@@ -3329,10 +3329,12 @@ dependencies = [
 name = "strata-check-export"
 version = "2.0.0"
 dependencies = [
+ "geo",
  "quick-xml 0.37.5",
  "serde",
  "serde_json",
  "sha2",
+ "strata-geo",
  "strata-layout",
  "strata-storage",
  "strata-types",
