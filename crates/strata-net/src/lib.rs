@@ -16,6 +16,7 @@ pub mod tile_fetcher;
 pub mod topographic_catalog;
 pub mod kigam_geology;
 pub mod portal_session;
+pub mod reference_wfs;
 pub mod vworld_client;
 pub mod vworld_login;
 

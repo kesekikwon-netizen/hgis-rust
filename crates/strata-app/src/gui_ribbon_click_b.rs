@@ -44,8 +44,8 @@ impl StrataAppState {
             // 내려받는다(:396 startReferenceDownload → :536,622 `토양도를 추가했습니다. …`).
             "토양" => {
                 self.active_tab = MainTab::Map;
-                self.status_bar_hint =
-                    "토양도(흙토람) 받기는 아직 Rust 판에 옮기지 못했습니다. 지도에는 아무것도 더해지지 않았습니다.".to_owned();
+                // 있으면 켜고 끄고, 없으면 흙토람 공개 서비스에서 받아 올린다.
+                self.toggle_or_download_overlay(crate::reference_overlays::OverlayKind::Soil);
             }
             // C++ MainWindowOverlay.cpp:405-472 downloadGeologyMap — :409 toggleExistingOverlay
             // (`지질도(KIGAM 1:5만)`, m_actGeology)로 껐다 켰다 하고, 켤 때는 지형 음영
@@ -54,15 +54,15 @@ impl StrataAppState {
             "지질" => {
                 self.active_tab = MainTab::Map;
                 // 있으면 켜고 끄고, 없으면 KIGAM 공개 서비스에서 받아 올린다.
-                self.toggle_or_download_geology();
+                self.toggle_or_download_overlay(crate::reference_overlays::OverlayKind::Geology);
             }
             // C++ MainWindowOverlay.cpp:476-527 downloadRiverMap — :479 toggleExistingOverlay
             // (`수계도(하천망)`, m_actRiver)로 껐다 켰다 하고, 없을 때만 내려받는다
             // (:522 → :536,622 `수계도를 추가했습니다. …`).
             "수계" => {
                 self.active_tab = MainTab::Map;
-                self.status_bar_hint =
-                    "수계도(하천망) 받기는 아직 Rust 판에 옮기지 못했습니다. 지도에는 아무것도 더해지지 않았습니다.".to_owned();
+                // 있으면 켜고 끄고, 없으면 VWorld(키 필요)에서 받아 올린다.
+                self.toggle_or_download_overlay(crate::reference_overlays::OverlayKind::River);
             }
             "옛 지도" => {
                 self.active_tab = MainTab::Map;
