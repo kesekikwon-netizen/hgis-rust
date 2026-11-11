@@ -6,6 +6,7 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod dem_tiff_read;
 pub mod borehole_color_ramp;
 pub mod borehole_decluster;
 pub mod borehole_geotiff;
