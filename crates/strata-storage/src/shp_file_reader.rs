@@ -100,45 +100,83 @@ fn decode_text(bytes: &[u8], utf8: bool) -> String {
     text.trim().to_owned()
 }
 
-type DbfTable = (Vec<String>, Vec<BTreeMap<String, String>>);
+/// DBF 표. 머리만 해석해 두고, 필요한 줄만 꺼내 푼다(필지 수십만 개짜리 지적도에서
+/// 5 km 안의 몇 천 줄만 읽으려고).
+struct DbfTable {
+    bytes: Vec<u8>,
+    fields: Vec<(String, usize)>,
+    header_len: usize,
+    record_len: usize,
+    utf8: bool,
+}
 
-fn read_dbf(path: &Path, utf8: bool) -> StrataResult<DbfTable> {
-    let Ok(b) = std::fs::read(path) else {
-        return Ok((Vec::new(), Vec::new())); // 속성 없는 SHP 도 연다.
-    };
-    if b.len() < 33 {
-        return Err(err("DBF 머리가 너무 짧습니다"));
+impl DbfTable {
+    fn empty() -> Self {
+        Self { bytes: Vec::new(), fields: Vec::new(), header_len: 0, record_len: 0, utf8: false }
     }
-    let n_records = u32::from_le_bytes([b[4], b[5], b[6], b[7]]) as usize;
-    let header_len = u16::from_le_bytes([b[8], b[9]]) as usize;
-    let record_len = u16::from_le_bytes([b[10], b[11]]) as usize;
-    let mut fields: Vec<(String, usize)> = Vec::new();
-    let mut at = 32;
-    while at + 32 <= header_len.min(b.len()) && b[at] != 0x0D {
-        let name_end = b[at..at + 11].iter().position(|c| *c == 0).unwrap_or(11);
-        fields.push((decode_text(&b[at..at + name_end], utf8), b[at + 16] as usize));
-        at += 32;
-    }
-    let mut rows = Vec::with_capacity(n_records);
-    for r in 0..n_records {
-        let start = header_len + r * record_len;
-        let Some(rec) = b.get(start..start + record_len) else {
-            break;
+
+    fn row(&self, index: usize) -> BTreeMap<String, String> {
+        let start = self.header_len + index * self.record_len;
+        let Some(rec) = self.bytes.get(start..start + self.record_len) else {
+            return BTreeMap::new();
         };
         let mut row = BTreeMap::new();
         let mut col = 1; // 첫 바이트는 삭제 표시
-        for (name, width) in &fields {
+        for (name, width) in &self.fields {
             let cell = rec.get(col..col + width).unwrap_or(&[]);
-            row.insert(name.clone(), decode_text(cell, utf8));
+            row.insert(name.clone(), decode_text(cell, self.utf8));
             col += width;
         }
-        rows.push(row);
+        row
     }
-    Ok((fields.into_iter().map(|f| f.0).collect(), rows))
+}
+
+fn read_dbf(path: &Path, utf8: bool) -> StrataResult<DbfTable> {
+    let Ok(bytes) = std::fs::read(path) else {
+        return Ok(DbfTable::empty()); // 속성 없는 SHP 도 연다.
+    };
+    if bytes.len() < 33 {
+        return Err(err("DBF 머리가 너무 짧습니다"));
+    }
+    let header_len = u16::from_le_bytes([bytes[8], bytes[9]]) as usize;
+    let record_len = u16::from_le_bytes([bytes[10], bytes[11]]) as usize;
+    let mut fields: Vec<(String, usize)> = Vec::new();
+    let mut at = 32;
+    while at + 32 <= header_len.min(bytes.len()) && bytes[at] != 0x0D {
+        let name_end = bytes[at..at + 11].iter().position(|c| *c == 0).unwrap_or(11);
+        fields.push((decode_text(&bytes[at..at + name_end], utf8), bytes[at + 16] as usize));
+        at += 32;
+    }
+    Ok(DbfTable { bytes, fields, header_len, record_len, utf8 })
+}
+
+/// 레코드 내용의 범위 `[min_x, min_y, max_x, max_y]`. 점은 그 점, 빈 도형은 `None`.
+fn record_bbox(content: &[u8]) -> Option<[f64; 4]> {
+    match le_i32(content, 0).ok()? % 10 {
+        1 => {
+            let (x, y) = (le_f64(content, 4).ok()?, le_f64(content, 12).ok()?);
+            Some([x, y, x, y])
+        }
+        3 | 5 | 8 => Some([
+            le_f64(content, 4).ok()?,
+            le_f64(content, 12).ok()?,
+            le_f64(content, 20).ok()?,
+            le_f64(content, 28).ok()?,
+        ]),
+        _ => None,
+    }
 }
 
 /// Shapefile 을 읽는다. `path` 는 `.shp` 경로.
 pub fn read_shapefile(path: &Path) -> StrataResult<ShpDataset> {
+    read_shapefile_in_box(path, None)
+}
+
+/// 범위(파일 좌표계의 `[min_x, min_y, max_x, max_y]`)에 걸친 도형만 읽는다.
+///
+/// 도형의 좌표와 속성을 풀기 전에 레코드에 적힌 범위로 먼저 거르므로, 필지 수십만 개짜리
+/// 지적도에서도 조사구역 주변만 빠르게 읽는다(C++ `CadastralImport.cpp:170` 의 사각형 거르기).
+pub fn read_shapefile_in_box(path: &Path, clip: Option<[f64; 4]>) -> StrataResult<ShpDataset> {
     let b = std::fs::read(path)?;
     if b.len() < 100 || be_i32(&b, 0)? != 9994 {
         return Err(err("Shapefile(.shp)이 아닙니다"));
@@ -147,93 +185,36 @@ pub fn read_shapefile(path: &Path) -> StrataResult<ShpDataset> {
     let cpg = std::fs::read_to_string(path.with_extension("cpg")).unwrap_or_default();
     let cpg = cpg.trim().to_ascii_uppercase();
     let utf8 = cpg.contains("UTF-8") || cpg.contains("UTF8") || cpg == "65001";
-    let (fields, rows) = read_dbf(&path.with_extension("dbf"), utf8)?;
+    let table = read_dbf(&path.with_extension("dbf"), utf8)?;
 
     let mut shapes = Vec::new();
+    let mut index = 0_usize; // 레코드 순번 = DBF 줄 번호
     let mut pos = 100;
     while pos + 8 <= b.len() {
         let words = be_i32(&b, pos + 4)?.max(0) as usize;
         let content = b
             .get(pos + 8..pos + 8 + 2 * words)
             .ok_or_else(|| err("SHP 레코드가 파일 끝을 넘습니다"))?;
-        shapes.push(ShpShape {
-            parts: parse_shape(content)?,
-            attrs: rows.get(shapes.len()).cloned().unwrap_or_default(),
+        let wanted = clip.is_none_or(|c| {
+            record_bbox(content).is_some_and(|b| b[0] <= c[2] && c[0] <= b[2] && b[1] <= c[3] && c[1] <= b[3])
         });
+        if wanted {
+            shapes.push(ShpShape {
+                parts: parse_shape(content)?,
+                attrs: table.row(index),
+            });
+        }
+        index += 1;
         pos += 8 + 2 * words;
     }
     Ok(ShpDataset {
         shape_type,
         shapes,
-        fields,
+        fields: table.fields.iter().map(|f| f.0.clone()).collect(),
         prj_wkt: std::fs::read_to_string(path.with_extension("prj")).unwrap_or_default(),
     })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::shp_file_writer::{write_shapefile, ShpField, ShpKind, ShpRecord};
-    use crate::survey_doc::FieldValue;
-    use crate::wkb_codec::WkbGeometry;
-
-    #[test]
-    fn what_the_writer_writes_the_reader_reads_back_with_korean_text() -> StrataResult<()> {
-        let dir = tempfile::tempdir()?;
-        let base = dir.path().join("유구");
-        // 구멍이 있는 면 하나.
-        let outer = vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]];
-        let hole = vec![[4.0, 4.0], [6.0, 4.0], [6.0, 6.0], [4.0, 6.0], [4.0, 4.0]];
-        let fields = vec![
-            ShpField { name: "kind".to_owned(), numeric: false },
-            ShpField { name: "depth_m".to_owned(), numeric: true },
-        ];
-        let records = vec![ShpRecord {
-            geom: WkbGeometry::Polygon(vec![outer, hole]),
-            values: vec![FieldValue::Text("주거지".to_owned()), FieldValue::Real(1.25)],
-        }];
-        write_shapefile(&base, ShpKind::Polygon, &fields, &records, "PRJ")?;
-
-        let ds = read_shapefile(&base.with_extension("shp"))?;
-        assert_eq!((ds.shape_type, ds.shapes.len(), ds.prj_wkt.as_str()), (5, 1, "PRJ"));
-        assert_eq!(ds.fields, vec!["kind".to_owned(), "depth_m".to_owned()]);
-        let shape = &ds.shapes[0];
-        assert_eq!(shape.parts.len(), 2, "바깥 고리와 구멍");
-        assert_eq!(shape.parts[0].len(), 5);
-        assert_eq!(shape.attrs["kind"], "주거지");
-        assert!((shape.attrs["depth_m"].parse::<f64>().unwrap_or(0.0) - 1.25).abs() < 1e-12);
-        Ok(())
-    }
-
-    #[test]
-    fn cp949_attributes_without_a_cpg_file_are_read_as_korean() -> StrataResult<()> {
-        let dir = tempfile::tempdir()?;
-        let base = dir.path().join("jijeok");
-        let records = vec![ShpRecord {
-            geom: WkbGeometry::Point([200_000.0, 450_000.0]),
-            values: vec![FieldValue::Text(String::new())],
-        }];
-        write_shapefile(&base, ShpKind::Point, &[ShpField { name: "JIBUN".to_owned(), numeric: false }], &records, "")?;
-        // 국토부 지적도처럼: .cpg 가 없고 값이 CP949 로 적힌 DBF.
-        std::fs::remove_file(base.with_extension("cpg"))?;
-        let dbf_path = base.with_extension("dbf");
-        let mut dbf = std::fs::read(&dbf_path)?;
-        let header_len = u16::from_le_bytes([dbf[8], dbf[9]]) as usize;
-        let (cp949, _, _) = encoding_rs::EUC_KR.encode("산81 임");
-        dbf[header_len + 1..header_len + 1 + cp949.len()].copy_from_slice(&cp949);
-        std::fs::write(&dbf_path, dbf)?;
-
-        let ds = read_shapefile(&base.with_extension("shp"))?;
-        assert_eq!(ds.shapes[0].attrs["JIBUN"], "산81 임");
-        assert_eq!(ds.shapes[0].parts, vec![vec![[200_000.0, 450_000.0]]]);
-        Ok(())
-    }
-
-    #[test]
-    fn a_file_that_is_not_a_shapefile_is_refused() {
-        let dir = tempfile::tempdir().unwrap_or_else(|_| std::process::abort());
-        let path = dir.path().join("x.shp");
-        let _ = std::fs::write(&path, vec![0_u8; 200]);
-        assert!(read_shapefile(&path).is_err());
-    }
-}
+#[path = "shp_file_reader_tests.rs"]
+mod tests;

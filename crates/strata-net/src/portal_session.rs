@@ -92,6 +92,13 @@ impl PortalSession {
         vec![
             "-sS".into(),
             "-g".into(),
+            // C++ 은 같은 출처의 리다이렉트를 따라간다(`SameOriginRedirectPolicy`). curl 에는
+            // 그 옵션이 없어 https 로만, 5번까지 따라가게 한다.
+            "-L".into(),
+            "--max-redirs".into(),
+            "5".into(),
+            "--proto-redir".into(),
+            "=https".into(),
             "-A".into(),
             USER_AGENT.into(),
             "-e".into(),
@@ -129,9 +136,28 @@ impl PortalSession {
         let output = output?;
         let status = String::from_utf8_lossy(&output.stdout).trim().to_owned();
         if !output.status.success() || status != "200" {
-            return Err(format!("HTTP {status}"));
+            return Err(format!("HTTP {status} (curl {})", output.status.code().unwrap_or(-1)));
         }
         Ok(body)
+    }
+
+    /// 진단용: 리다이렉트를 따라가지 않고 응답 머리만 받는다. 쿠키 줄은 뺀다.
+    pub fn response_headers(&self, url: &str) -> Vec<String> {
+        let jar = self.jar.to_string_lossy().into_owned();
+        let out = Command::new("curl")
+            .args(["-sS", "-g", "-A", USER_AGENT, "-e", self.referer_for(url), "-b", &jar, "-c", &jar])
+            .args(["--max-time", REQUEST_TIMEOUT_SECS, "-D", "-", "-o"])
+            .arg(if cfg!(windows) { "NUL" } else { "/dev/null" })
+            .arg(url)
+            .output();
+        out.map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .filter(|l| !l.to_ascii_lowercase().starts_with("set-cookie"))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
     }
 
     /// GET — 본문을 글자로.
@@ -168,7 +194,10 @@ impl PortalSession {
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent).map_err(|_| ZipDownloadError::Disk)?;
         }
-        let part = dest.with_extension("zip.part");
+        // 받는 중인 파일은 대상과 같은 폴더(같은 디스크)에 둔다. 시스템 임시 폴더(C:)는 공간이
+        // 모자랄 수 있다 — 실제로 C: 가 가득 차 curl 이 쓰기 오류(23)로 실패한 적이 있다.
+        let serial = SERIAL.fetch_add(1, Ordering::Relaxed);
+        let part = dest.with_file_name(format!("ka-hgis-part-{}-{serial}.zip.part", std::process::id()));
         let _ = std::fs::remove_file(&part);
         let mut args = self.base_args(url, &part);
         args.extend(
@@ -189,7 +218,7 @@ impl PortalSession {
             .args(&args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|_| ZipDownloadError::Network)?;
         let status = loop {
@@ -219,10 +248,17 @@ impl PortalSession {
             Err(e)
         };
         if !status.success() || code.trim() != "200" {
+            // 진단 줄(비밀 없음): curl 종료 코드와 HTTP 상태.
+            let mut why = String::new();
+            if let Some(mut err) = child.stderr.take() {
+                let _ = std::io::Read::read_to_string(&mut err, &mut why);
+            }
+            eprintln!("[portal_session] zip 받기 실패: curl={:?} http={} {}", status.code(), code.trim(), why.trim());
             // curl 28 = 시간 초과, 63 = 크기 초과.
             return fail(match status.code() {
                 Some(28) => ZipDownloadError::Timeout,
                 Some(63) => ZipDownloadError::TooLarge,
+                Some(23) => ZipDownloadError::Disk, // 디스크에 쓰지 못함(공간 부족 등)
                 _ => ZipDownloadError::Network,
             });
         }

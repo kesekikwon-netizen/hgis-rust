@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use strata_geo::crs_transform::CrsTransformer;
-use strata_storage::shp_file_reader::read_shapefile;
+use strata_storage::shp_file_reader::read_shapefile_in_box;
 use strata_types::crs::{CrsCode, WorkCrs};
 use strata_types::schema::LegendGroup;
 
@@ -39,6 +39,28 @@ pub fn boxes_overlap(a: [f64; 4], b: [f64; 4]) -> bool {
     a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]
 }
 
+/// 참조 레이어의 모양과 목록에서의 자리.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ReferenceStyle {
+    pub line_rgb: [u8; 3],
+    pub line_mm: f32,
+    /// 화면 1 픽셀이 이 미터보다 크면(더 넓게 보면) 이름을 그리지 않는다.
+    pub label_max_mpp: f64,
+    pub group: LegendGroup,
+}
+
+impl Default for ReferenceStyle {
+    /// 끌어 놓은 SHP 의 기본: 어두운 회색 0.26 mm, 「주변·참조」 묶음.
+    fn default() -> Self {
+        Self {
+            line_rgb: [70, 68, 62],
+            line_mm: 0.26,
+            label_max_mpp: 1.0,
+            group: LegendGroup::ReferenceMap,
+        }
+    }
+}
+
 /// 참조 레이어 하나.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReferenceLayer {
@@ -47,6 +69,7 @@ pub struct ReferenceLayer {
     /// 1 점, 3 선, 5 면.
     pub shape_type: i32,
     pub shapes: Vec<ReferenceShape>,
+    pub style: ReferenceStyle,
 }
 
 /// `.prj` 글자에서 좌표계를 알아낸다. 한국에서 쓰는 것만 본다. 모르면 `None`.
@@ -101,12 +124,24 @@ pub fn load_reference_shp(
     work_crs: WorkCrs,
     clip: Option<[f64; 4]>,
 ) -> Result<(ReferenceLayer, String), String> {
-    let ds = read_shapefile(path).map_err(|e| format!("SHP 를 읽지 못했습니다: {e}"))?;
     let work = match work_crs {
         WorkCrs::Epsg5186 => CrsCode::Epsg5186,
         WorkCrs::Epsg5187 => CrsCode::Epsg5187,
     };
-    let source = detect_prj_crs(&ds.prj_wkt);
+    // 좌표계를 먼저 알아내고, 자를 범위를 파일 좌표계로 옮겨 그 안의 도형만 읽는다.
+    let prj = std::fs::read_to_string(path.with_extension("prj")).unwrap_or_default();
+    let source = detect_prj_crs(&prj);
+    let source_clip = clip.map(|c| {
+        let back = CrsTransformer::new(work, source.unwrap_or(work));
+        let corners = [[c[0], c[1]], [c[0], c[3]], [c[2], c[1]], [c[2], c[3]]].map(|p| back.transform_xy(p[0], p[1]));
+        let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+        for p in corners {
+            b = [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])];
+        }
+        // 좌표계가 달라 사각형이 조금 기울 수 있으니 50 m 여유를 둔다.
+        [b[0] - 50.0, b[1] - 50.0, b[2] + 50.0, b[3] + 50.0]
+    });
+    let ds = read_shapefile_in_box(path, source_clip).map_err(|e| format!("SHP 를 읽지 못했습니다: {e}"))?;
     let crs_note = match source {
         Some(crs) if crs == work => format!("{} (작업 좌표계와 같음)", crs.auth_id()),
         Some(crs) => format!("{} → {}", crs.auth_id(), work.auth_id()),
@@ -147,6 +182,7 @@ pub fn load_reference_shp(
             source: path.to_path_buf(),
             shape_type: ds.shape_type,
             shapes,
+            style: ReferenceStyle::default(),
         },
         crs_note,
     ))
@@ -227,20 +263,6 @@ impl StrataAppState {
             layer.name = format!("{base} ({n})");
             n += 1;
         }
-        self.left_layers.entries.push(LayerTreeEntry {
-            layer_key: format!("ref:{}", layer.name),
-            label_ko: layer.name.clone(),
-            group: LegendGroup::ReferenceMap,
-            visible: true,
-            opacity: 1.0,
-            read_only: true,
-            snap_enabled: true,
-            feature_count: layer.shapes.len(),
-        });
-        self.home_map
-            .real_survey
-            .layer_visible
-            .insert(layer.name.clone(), true);
         // 조사가 비어 있으면 올린 자료가 보이도록 그 범위로 간다.
         if self.survey_doc.total_features() == 0 {
             if let Some([min_x, min_y, max_x, max_y]) = layer.extent() {
@@ -254,9 +276,31 @@ impl StrataAppState {
             layer.name,
             layer.shapes.len()
         ));
-        self.home_map.reference_layers.push(layer);
+        self.install_reference_layer(layer);
         self.active_tab = crate::app_state::MainTab::Map;
         true
+    }
+
+    /// 참조 레이어를 지도와 목록에 넣는다. 같은 이름의 레이어가 있으면 바꿔 놓는다.
+    pub(crate) fn install_reference_layer(&mut self, layer: ReferenceLayer) {
+        let key = format!("ref:{}", layer.name);
+        self.left_layers.entries.retain(|e| e.layer_key != key);
+        self.home_map.reference_layers.retain(|l| l.name != layer.name);
+        self.left_layers.entries.push(LayerTreeEntry {
+            layer_key: key,
+            label_ko: layer.name.clone(),
+            group: layer.style.group,
+            visible: true,
+            opacity: 1.0,
+            read_only: true,
+            snap_enabled: true,
+            feature_count: layer.shapes.len(),
+        });
+        self.home_map
+            .real_survey
+            .layer_visible
+            .insert(layer.name.clone(), true);
+        self.home_map.reference_layers.push(layer);
     }
 }
 

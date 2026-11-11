@@ -123,6 +123,28 @@ impl StrataAppState {
                 self.toggle_survey_buffer(500.0);
                 self.home_map.viewport.meters_per_pixel = 2.0;
             }
+            // 검증용: 환경변수 KA_HGIS_SNAP_CADASTRAL 폴더의 받은 지적도 ZIP 을 지도에 올린다
+            // (받기가 끝났을 때와 같은 함수).
+            "@cadastral_env" => {
+                if let (Ok(dir), Some(clip)) =
+                    (std::env::var("KA_HGIS_SNAP_CADASTRAL"), self.survey_clip_box(5_000.0))
+                {
+                    let zips: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+                        .map(|d| {
+                            d.filter_map(Result::ok)
+                                .map(|e| e.path())
+                                .filter(|p| p.extension().is_some_and(|e| e == "zip"))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if let Ok(layer) =
+                        crate::reference_cadastral::load_cadastral_layer(&zips, self.work_crs, clip)
+                    {
+                        self.install_reference_layer(layer);
+                    }
+                    self.home_map.viewport.meters_per_pixel = 0.6;
+                }
+            }
             "@close_modal" => self.modals.active = None,
             "@tab_home" => self.active_tab = crate::app_state::MainTab::Home,
             "@tab_map" => self.active_tab = crate::app_state::MainTab::Map,

@@ -184,9 +184,22 @@ pub(crate) fn run_download(
         outcome.downloaded.push(path.to_string_lossy().into_owned());
         report(0.15 + 0.5 * (index + 1) as f32 / total as f32);
     }
-    outcome.ok = !outcome.downloaded.is_empty();
-    if !outcome.ok {
+    if outcome.downloaded.is_empty() {
         outcome.error = "조사 범위의 전체 시·군·구 목록을 확인하지 못했습니다.".to_owned();
+        return outcome;
+    }
+    // C++ `CadastralImport::prepare` — 5 km 범위의 필지를 정리한다(65 % → 100 %).
+    // 큰 SHP 를 읽는 일이라 화면 스레드가 아니라 여기서 한다.
+    let r = strata_net::ngii_topographic::NgiiTopographicClient::SCOPE_RADIUS_M;
+    let clip = [scope_work[0] - r, scope_work[1] - r, scope_work[2] + r, scope_work[3] + r];
+    let zips: Vec<std::path::PathBuf> = outcome.downloaded.iter().map(std::path::PathBuf::from).collect();
+    match crate::reference_cadastral::load_cadastral_layer(&zips, work_crs, clip) {
+        Ok(layer) => {
+            outcome.layer = Some(layer);
+            outcome.ok = true;
+            report(1.0);
+        }
+        Err(why) => outcome.error = why,
     }
     outcome
 }

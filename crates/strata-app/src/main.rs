@@ -30,6 +30,7 @@ pub mod left_layer_panel;
 pub mod ngii_topographic_ui;
 pub mod real_survey;
 mod recent_surveys;
+mod reference_cadastral;
 mod reference_layers;
 pub mod ribbon;
 pub mod ribbon_icon_svg;

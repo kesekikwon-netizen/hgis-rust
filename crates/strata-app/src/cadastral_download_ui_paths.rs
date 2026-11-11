@@ -22,6 +22,8 @@ pub struct CadastralOutcome {
     pub account_missing: bool,
     /// 로그인이 거절됐다 — 아이디·비밀번호를 다시 넣게 한다(C++ `accountRejected`).
     pub account_rejected: bool,
+    /// 받은 ZIP 에서 만든 「지적도 · 조사 주변 5km」 레이어(작업 스레드에서 읽는다).
+    pub layer: Option<crate::reference_layers::ReferenceLayer>,
 }
 
 /// C++ `MainWindowCadastral.cpp:121` — 조사 폴더 안 `지적도/원본`

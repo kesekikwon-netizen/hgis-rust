@@ -11,18 +11,13 @@ use crate::real_survey::ring_centroid;
 
 use super::gui_tab_map_geom::w2s;
 
-/// 참조 레이어 선: 어두운 회색 0.26 mm (QGIS 새 레이어의 기본 선 굵기).
-const LINE_PX: f32 = 0.26 * 96.0 / 25.4;
-const LINE_COLOR: Color32 = Color32::from_rgb(70, 68, 62);
-/// 이보다 넓게 보면(1 픽셀이 1 m 초과) 이름을 그리지 않는다.
-const LABEL_MAX_MPP: f64 = 1.0;
+/// 화면 1 mm 의 픽셀 수(96 DPI).
+const PX_PER_MM: f32 = 96.0 / 25.4;
 
 impl StrataAppState {
     pub(crate) fn paint_reference_layers(&self, p: &egui::Painter, rect: Rect) {
         let vp = &self.home_map.viewport;
         let rs = &self.home_map.real_survey;
-        let stroke = Stroke::new(LINE_PX.max(1.0), LINE_COLOR);
-        let show_labels = vp.meters_per_pixel <= LABEL_MAX_MPP;
         let font = FontId::proportional(8.0 * 96.0 / 72.0);
         let mut placed: Vec<Rect> = Vec::new();
         let seen = rect.expand(60.0);
@@ -34,6 +29,10 @@ impl StrataAppState {
             if !rs.is_layer_visible(&layer.name) {
                 continue;
             }
+            // 레이어마다 제 선 색·굵기와 이름을 보이는 축척을 쓴다.
+            let [r, g, b] = layer.style.line_rgb;
+            let stroke = Stroke::new((layer.style.line_mm * PX_PER_MM).max(1.0), Color32::from_rgb(r, g, b));
+            let show_labels = vp.meters_per_pixel <= layer.style.label_max_mpp;
             for shape in &layer.shapes {
                 if !crate::reference_layers::boxes_overlap(shape.bbox, view_box) {
                     continue;

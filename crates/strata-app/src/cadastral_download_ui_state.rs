@@ -115,21 +115,15 @@ pub(crate) fn poll(app: &mut StrataAppState, ctx: &egui::Context) {
             state.status = message.clone();
             app.status_bar_hint = message;
             // C++ `MainWindowCadastral.cpp:166-168` — 받은 지적도를 최상위 레이어로 올린다.
-            // 받은 ZIP 을 풀어 조사구역 5 km 안의 필지를 참조 레이어로 올린다.
-            let mut loaded = 0;
-            for zip in &outcome.downloaded {
-                loaded += app.import_reference_zip(std::path::Path::new(zip));
+            // C++ `CadastralImport::addPrepared` — 「지적도 · 조사 주변 5km」 레이어를 올린다
+            // (같은 이름의 이전 레이어는 바꿔 놓는다).
+            if let Some(layer) = outcome.layer.clone() {
+                let parcels = layer.shapes.len();
+                app.install_reference_layer(layer);
+                let tail = format!(" 주변 필지 {parcels}개를 준비했습니다.");
+                state.status.push_str(&tail);
+                app.status_bar_hint.push_str(&tail);
             }
-            let tail = if loaded > 0 {
-                format!(" 지도에 {loaded}개 레이어를 올렸습니다.")
-            } else {
-                format!(
-                    " 지도에는 올리지 못했습니다: {}",
-                    app.home_map.draw_guide_message.clone().unwrap_or_default()
-                )
-            };
-            state.status.push_str(&tail);
-            app.status_bar_hint.push_str(&tail);
         } else {
             state.progress = 0.0;
             // C++ `MainWindowCadastral.cpp:139-165` — 계정 문제면 다시 넣으라고 알린다.
