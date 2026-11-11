@@ -11,6 +11,8 @@ use std::cell::RefCell;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 use protocol::{free_path, is_trusted_download_url, is_trusted_url, safe_file_name, url_path, Command, Event};
 use tao::dpi::LogicalSize;
@@ -18,6 +20,10 @@ use tao::event::{Event as TaoEvent, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopWindowTarget};
 use tao::window::{Window, WindowBuilder};
 use wry::{NewWindowResponse, WebView, WebViewBuilder, WebViewBuilderExtWindows, WebViewExtWindows};
+
+/// 팝업이 스스로 닫히면(`window.close()`) 화면은 사라지고 창만 남는다. 그런 화면은 스크립트에
+/// 빈 답만 준다 — 이만큼 잇달아 빈 답이면 닫힌 것으로 보고 치운다.
+const DEAD_AFTER_EMPTY_ANSWERS: u32 = 3;
 
 /// 미리 만들어 두는 팝업용 빈 화면 수(로그인 창이 팝업으로 뜬다).
 const SPARE_PAGES: usize = 2;
@@ -27,12 +33,17 @@ enum UserEvent {
     Command(Command),
     /// 팝업이 빈 화면을 하나 썼다 — 다시 채운다.
     Refill,
+    /// 닫힌 팝업을 치운다.
+    DropPage(tao::window::WindowId),
     InputClosed,
 }
 
 struct Page {
-    window: Window,
+    // 화면을 창보다 먼저 없앤다(선언 순서대로 없어진다).
     webview: WebView,
+    window: Window,
+    /// 잇달아 받은 빈 답의 수.
+    empty_answers: Arc<AtomicU32>,
 }
 
 /// 창들이 함께 쓰는 것.
@@ -69,11 +80,13 @@ fn make_page(
         .map_err(|e| format!("창을 만들지 못했습니다: {e}"))?;
 
     let for_popup = Rc::clone(shared);
-    let for_nav = Rc::clone(shared);
     let for_download = Rc::clone(shared);
     let mut builder = WebViewBuilder::new()
-        // 믿는 사이트 밖으로는 가지 않는다(빈 화면은 팝업이 채워지기 전 상태).
-        .with_navigation_handler(move |url| url == "about:blank" || is_trusted_url(&url, &for_nav.allowed))
+        // C++ `acceptNavigationRequest`(:72) 와 같다: 웹 주소로의 이동은 허용한다(공식 로그인이
+        // 다른 인증 주소를 거친다). 스크립트와 계정 입력은 믿는 사이트 화면에서만 한다(`run_eval`).
+        .with_navigation_handler(|url| {
+            ["https://", "http://", "about:", "blob:", "data:"].iter().any(|scheme| url.starts_with(scheme))
+        })
         .with_new_window_req_handler(move |_url, _features| {
             // 미리 만들어 둔 빈 화면을 팝업으로 내준다.
             let Some(page) = for_popup.spares.borrow_mut().pop() else {
@@ -106,7 +119,7 @@ fn make_page(
         builder = builder.with_environment(sibling.environment());
     }
     let webview = builder.build(&window).map_err(|e| format!("웹 화면을 만들지 못했습니다: {e}"))?;
-    Ok(Page { window, webview })
+    Ok(Page { window, webview, empty_answers: Arc::new(AtomicU32::new(0)) })
 }
 
 /// 경로가 맞는 믿는 화면에서 스크립트를 돌린다. `paths` 의 앞 경로가 먼저(로그인 화면 우선),
@@ -124,11 +137,23 @@ fn run_eval(pages: &[Page], shared: &Shared, id: u64, paths: &[String], script: 
         return;
     };
     let answer_url = url.clone();
+    // 첫 화면은 치우지 않는다(이동 중에 빈 답이 올 수 있다).
+    let is_popup = pages.first().is_some_and(|first| first.window.id() != page.window.id());
+    let (empty, window_id, proxy) = (Arc::clone(&page.empty_answers), page.window.id(), shared.proxy.clone());
     let sent = page.webview.evaluate_script_with_callback(script, move |json| {
         let result = serde_json::from_str(&json).unwrap_or(serde_json::Value::Null);
+        if !result.is_null() {
+            empty.store(0, Ordering::Relaxed);
+        } else if is_popup && empty.fetch_add(1, Ordering::Relaxed) + 1 >= DEAD_AFTER_EMPTY_ANSWERS {
+            let _ = proxy.send_event(UserEvent::DropPage(window_id));
+        }
         emit(&Event::Eval { id, found: true, url: answer_url.clone(), result });
     });
     if sent.is_err() {
+        // 스크립트를 돌릴 수 없는 팝업은 이미 닫힌 화면이다.
+        if is_popup {
+            let _ = shared.proxy.send_event(UserEvent::DropPage(window_id));
+        }
         emit(&Event::Eval { id, found: true, url, result: serde_json::Value::Null });
     }
 }
@@ -220,6 +245,11 @@ fn main() {
                 }
                 Command::Quit => *control_flow = ControlFlow::Exit,
             },
+            TaoEvent::UserEvent(UserEvent::DropPage(window_id)) => {
+                if pages.first().is_some_and(|p| p.window.id() != window_id) {
+                    pages.retain(|p| p.window.id() != window_id);
+                }
+            }
             TaoEvent::UserEvent(UserEvent::InputClosed) => *control_flow = ControlFlow::Exit,
             TaoEvent::WindowEvent { event: WindowEvent::CloseRequested, window_id, .. } => {
                 // 첫 화면을 닫으면 끝, 팝업을 닫으면 그 화면만 없앤다.

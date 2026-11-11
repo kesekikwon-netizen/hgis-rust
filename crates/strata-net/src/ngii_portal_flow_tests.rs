@@ -32,7 +32,7 @@ fn the_stages_run_in_the_cpp_order_from_sheets_to_download() {
     assert_eq!(request.input["records"], json!([record]));
     assert_eq!(request.input["generation"], json!("3"));
     assert!(request.input.get("birthDate").is_none(), "생년월일은 신청서 단계에서만 보낸다");
-    assert_eq!(request.paths.first().map(String::as_str), Some("/mn/loginPopup.do"));
+    assert_eq!(request.paths.first().map(String::as_str), Some("/member/login.do"));
     assert_eq!(request.paths.last().map(String::as_str), Some(PORTAL_PATH));
     f.on_result("openForm", &json!({"state": "form"}));
     assert_eq!((f.stage, f.phase.as_str()), (Stage::Form, "신청"));
@@ -86,6 +86,27 @@ fn a_submit_that_did_not_happen_goes_back_to_the_form() {
     f.on_result("submit", &json!({"state": "input", "message": "신청에 필요한 생년월일이 비어 있습니다."}));
     assert_eq!(f.stage, Stage::Form);
     assert!(f.message.contains("생년월일"));
+}
+
+#[test]
+fn a_reloaded_portal_page_starts_again_from_the_sheet_check() {
+    let mut f = flow();
+    // 도엽 확인 중의 첫 화면은 그대로 진행한다.
+    assert!(!f.on_portal_reloaded());
+    for stage in [Stage::OpenForm, Stage::Form, Stage::Submit] {
+        let mut f = flow();
+        f.stage = stage;
+        let before = f.poll("", "").expect("요청").input["generation"].clone();
+        assert!(f.on_portal_reloaded(), "{stage:?}");
+        assert_eq!(f.stage, Stage::Select);
+        // 새 세대로 다시 묻는다(화면의 옛 상태와 섞이지 않게).
+        assert_ne!(f.poll("", "").expect("select").input["generation"], before);
+    }
+    // 신청을 낸 뒤에는 다시 시작하지 않는다(중복 신청 방지).
+    let mut f = flow();
+    f.stage = Stage::Order;
+    assert!(!f.on_portal_reloaded());
+    assert_eq!(f.stage, Stage::Order);
 }
 
 #[test]

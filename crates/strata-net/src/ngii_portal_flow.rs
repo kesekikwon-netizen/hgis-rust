@@ -10,7 +10,7 @@ use serde_json::{json, Map, Value};
 /// 응답 없이 기다려 주는 횟수(0.4초 × 75 = 30초). C++ `m_waitTicks == 75`.
 pub const MAX_WAIT_TICKS: u32 = 75;
 
-/// 로그인 화면들의 경로(먼저 찾는다). C++ :748-751.
+/// 로그인 화면들의 경로(포털 화면보다 먼저, 그 안에서는 뒤의 것부터 찾는다). C++ :748-751.
 pub const LOGIN_PATHS: [&str; 4] = [
     "/mn/loginPopup.do",
     "/anyid/common/login.do",
@@ -115,7 +115,8 @@ impl PortalFlow {
         let paths: Vec<String> = if download {
             vec![DOWNLOAD_PATH.to_owned()]
         } else {
-            LOGIN_PATHS.iter().chain([&PORTAL_PATH]).map(|p| (*p).to_owned()).collect()
+            // C++ :748-757 은 목록을 차례로 보며 덮어쓴다 — 뒤 경로(아이디 입력 화면)가 이긴다.
+            LOGIN_PATHS.iter().rev().chain([&PORTAL_PATH]).map(|p| (*p).to_owned()).collect()
         };
         let mut input = self.scope.clone();
         input.insert("command".to_owned(), json!(command));
@@ -160,6 +161,21 @@ impl PortalFlow {
                 "공식 사이트의 응답을 확인하지 못했습니다. 계정 설정과 연결 상태를 확인하세요."
             });
         }
+    }
+
+    /// 포털 화면이 새로 열렸다(로그인 뒤 등). 신청서를 열거나 채우던 중이었다면 화면의 선택이
+    /// 사라졌으므로 도엽 확인부터 다시 한다. C++ `loadFinished`(:586-590).
+    /// 다시 시작했으면 `true` — 그때의 답은 버린다.
+    pub fn on_portal_reloaded(&mut self) -> bool {
+        let stage = self.sent_from.unwrap_or(self.stage);
+        if !matches!(stage, Stage::OpenForm | Stage::Form | Stage::Submit) {
+            return false;
+        }
+        self.sent_from = None;
+        self.generation += 1;
+        self.stage = Stage::Select;
+        self.wait_ticks = 0;
+        true
     }
 
     /// 스크립트의 답. `command` 는 화면에서 실제로 돈 명령(로그인 화면이면 `login`).
