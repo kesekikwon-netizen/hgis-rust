@@ -102,10 +102,21 @@ pub(crate) fn poll(app: &mut StrataAppState, ctx: &egui::Context) {
             state.status = message.clone();
             app.status_bar_hint = message;
             // C++ `MainWindowCadastral.cpp:166-168` — 받은 지적도를 최상위 레이어로 올린다.
-            app.home_map
-                .real_survey
-                .layer_visible
-                .insert("지적도".to_owned(), true);
+            // 받은 ZIP 을 풀어 조사구역 5 km 안의 필지를 참조 레이어로 올린다.
+            let mut loaded = 0;
+            for zip in &outcome.downloaded {
+                loaded += app.import_reference_zip(std::path::Path::new(zip));
+            }
+            let tail = if loaded > 0 {
+                format!(" 지도에 {loaded}개 레이어를 올렸습니다.")
+            } else {
+                format!(
+                    " 지도에는 올리지 못했습니다: {}",
+                    app.home_map.draw_guide_message.clone().unwrap_or_default()
+                )
+            };
+            state.status.push_str(&tail);
+            app.status_bar_hint.push_str(&tail);
         } else {
             state.progress = 0.0;
             state.status = outcome.error;

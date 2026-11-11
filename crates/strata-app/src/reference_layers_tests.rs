@@ -60,7 +60,7 @@ fn an_old_cadastral_shapefile_lands_in_the_work_crs_with_its_parcel_numbers() {
     let dir = std::env::temp_dir().join(format!("strata_ref_5174_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let shp = parcel_shp(&dir, PRJ_5174);
-    let (layer, note) = load_reference_shp(&shp, WorkCrs::Epsg5186).expect("읽기");
+    let (layer, note) = load_reference_shp(&shp, WorkCrs::Epsg5186, None).expect("읽기");
     assert_eq!(note, "EPSG:5174 → EPSG:5186");
     assert_eq!((layer.name.as_str(), layer.shape_type, layer.shapes.len()), ("연속지적도", 5, 1));
     assert_eq!(layer.shapes[0].label, "산81 임");
@@ -102,4 +102,54 @@ fn dropping_a_shapefile_adds_a_reference_layer_to_the_map_and_the_list() {
     std::fs::write(&bad, b"not a shapefile").expect("쓰기");
     assert!(!app.import_reference_shp(&bad));
     assert_eq!(app.home_map.reference_layers.len(), 2);
+}
+
+#[test]
+fn a_downloaded_zip_is_unpacked_and_only_shapes_near_the_survey_are_loaded() {
+    use std::io::Write;
+    use strata_canvas2d::map_tools::MapToolKind;
+    use strata_types::schema::DomainLayerKey;
+
+    let dir = std::env::temp_dir().join(format!("strata_ref_zip_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let shp = parcel_shp(&dir, PRJ_5186); // 필지는 (198000~198030, 350000~350020)
+    let zip_path = dir.join("받은지적도.zip");
+    {
+        let mut w = zip::ZipWriter::new(std::fs::File::create(&zip_path).expect("zip"));
+        let opt = zip::write::SimpleFileOptions::default();
+        for ext in ["shp", "shx", "dbf", "prj", "cpg"] {
+            w.start_file(format!("LSMD_CONT_LDREG.{ext}"), opt).expect("항목");
+            w.write_all(&std::fs::read(shp.with_extension(ext)).expect("읽기")).expect("쓰기");
+        }
+        w.finish().expect("끝");
+    }
+
+    // 조사구역이 필지에서 1 km 떨어져 있으면 5 km 안이라 올라온다.
+    let mut near = StrataAppState::new_startup();
+    near.work_crs = WorkCrs::Epsg5186;
+    near.draw_target = DomainLayerKey::SurveyArea;
+    let _ = near.commit_drawn_shape(
+        MapToolKind::DrawPolygon,
+        vec![[199_000.0, 350_000.0], [199_100.0, 350_000.0], [199_100.0, 350_100.0], [199_000.0, 350_100.0]],
+    );
+    assert_eq!(near.import_reference_zip(&zip_path), 1);
+    assert_eq!(near.home_map.reference_layers[0].shapes.len(), 1);
+    assert_eq!(near.home_map.reference_layers[0].shapes[0].label, "산81 임");
+
+    // 조사구역이 50 km 떨어져 있으면 올리지 않고 이유를 알린다.
+    let mut far = StrataAppState::new_startup();
+    far.work_crs = WorkCrs::Epsg5186;
+    far.draw_target = DomainLayerKey::SurveyArea;
+    let _ = far.commit_drawn_shape(
+        MapToolKind::DrawPolygon,
+        vec![[250_000.0, 350_000.0], [250_100.0, 350_000.0], [250_100.0, 350_100.0], [250_000.0, 350_100.0]],
+    );
+    assert_eq!(far.import_reference_zip(&zip_path), 0);
+    assert!(far.home_map.reference_layers.is_empty());
+    assert!(far
+        .home_map
+        .draw_guide_message
+        .as_deref()
+        .unwrap_or("")
+        .contains("조사구역 5 km 안에 드는 도형이 없어"));
 }

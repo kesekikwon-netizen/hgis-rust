@@ -26,11 +26,18 @@ impl StrataAppState {
         let font = FontId::proportional(8.0 * 96.0 / 72.0);
         let mut placed: Vec<Rect> = Vec::new();
         let seen = rect.expand(60.0);
+        // 화면에 보이는 지도 범위(여유 포함). 범위 밖 도형은 좌표를 바꾸기 전에 거른다.
+        let a = vp.screen_to_world([-60.0, -60.0]);
+        let b = vp.screen_to_world([f64::from(rect.width()) + 60.0, f64::from(rect.height()) + 60.0]);
+        let view_box = [a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])];
         for layer in &self.home_map.reference_layers {
             if !rs.is_layer_visible(&layer.name) {
                 continue;
             }
             for shape in &layer.shapes {
+                if !crate::reference_layers::boxes_overlap(shape.bbox, view_box) {
+                    continue;
+                }
                 let mut any_inside = false;
                 for part in &shape.parts {
                     let pts: Vec<Pos2> = part.iter().map(|&q| w2s(rect, vp, q)).collect();

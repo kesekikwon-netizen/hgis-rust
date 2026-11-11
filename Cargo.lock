@@ -3313,6 +3313,7 @@ dependencies = [
  "strata-storage",
  "strata-terrain3d",
  "strata-types",
+ "zip",
 ]
 
 [[package]]
@@ -3409,6 +3410,7 @@ dependencies = [
  "sha2",
  "strata-types",
  "tempfile",
+ "zip",
 ]
 
 [[package]]

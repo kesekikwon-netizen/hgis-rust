@@ -127,6 +127,15 @@ impl StrataAppState {
             let name = path.to_string_lossy().to_string();
             let low = name.to_lowercase();
             let is_cad = low.ends_with(".dxf") || low.ends_with(".dwg");
+            if low.ends_with(".zip") {
+                // 받은 꾸러미(ZIP)는 풀어서 안의 SHP 를 올린다.
+                if self.import_reference_zip(path) > 0 {
+                    added += 1;
+                } else {
+                    failed += 1;
+                }
+                continue;
+            }
             let ok = low.ends_with(".shp")
                 || is_cad
                 || low.ends_with(".gpkg")

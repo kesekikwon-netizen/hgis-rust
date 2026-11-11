@@ -36,4 +36,5 @@ mod survey_gpkg_tests;
 pub mod survey_gpkg_write;
 pub mod topo_sheet;
 pub mod wkb_codec;
+pub mod zip_extract;
 pub mod workflow_guide;
