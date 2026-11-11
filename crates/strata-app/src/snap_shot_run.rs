@@ -115,6 +115,14 @@ impl StrataAppState {
                     self.home_map.viewport.meters_per_pixel = 0.2;
                 }
             }
+            // 검증용: 시굴격자 「구역에 깔기」, 주변 500 m 경계, 넓게 보기.
+            "@trench_fill" => {
+                let _ = self.place_trench_grid_in_area();
+            }
+            "@buffer500" => {
+                self.toggle_survey_buffer(500.0);
+                self.home_map.viewport.meters_per_pixel = 2.0;
+            }
             "@close_modal" => self.modals.active = None,
             "@tab_home" => self.active_tab = crate::app_state::MainTab::Home,
             "@tab_map" => self.active_tab = crate::app_state::MainTab::Map,
