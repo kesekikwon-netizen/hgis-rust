@@ -74,6 +74,8 @@ pub struct StrataAppState {
     /// 그리기 단추가 정한 대상 레이어(조사구역 / 유구 면 / 유구 선 / 단면선).
     /// C++ `MainWindowEditing.cpp` 는 누른 단추에 따라 대상 레이어를 고른다.
     pub draw_target: strata_types::schema::DomainLayerKey,
+    /// 지금 고른 도형(레이어, 그 레이어 안의 순번). 오른쪽 카드가 이 도형의 속성을 보인다.
+    pub selected_doc: Option<(strata_types::schema::DomainLayerKey, usize)>,
     pub paper_look: bool,
     pub project_title: String,
     pub is_dirty: bool,

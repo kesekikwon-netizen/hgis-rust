@@ -162,33 +162,21 @@ impl StrataAppState {
                     }
                     MapToolKind::Select | MapToolKind::Pan => {
                         let mpp = self.home_map.viewport.meters_per_pixel;
-                        if let Some((idx, tr)) = self
+                        // 조사 파일의 유구·단면선·기준점·유물을 먼저 찾는다(위에 그려지는 것부터).
+                        let doc_hit = self.pick_doc_feature(wxy);
+                        if doc_hit.is_none() {
+                            self.clear_doc_selection();
+                        }
+                        if let Some((key, idx)) = doc_hit {
+                            self.select_doc_feature(key, idx);
+                        } else if let Some((idx, tr)) = self
                             .home_map
                             .real_survey
                             .trenches
                             .iter()
                             .enumerate()
                             .find(|(_, t)| {
-                                let min_x = t
-                                    .ring
-                                    .iter()
-                                    .map(|p| p[0])
-                                    .fold(f64::INFINITY, f64::min);
-                                let max_x = t
-                                    .ring
-                                    .iter()
-                                    .map(|p| p[0])
-                                    .fold(f64::NEG_INFINITY, f64::max);
-                                let min_y = t
-                                    .ring
-                                    .iter()
-                                    .map(|p| p[1])
-                                    .fold(f64::INFINITY, f64::min);
-                                let max_y = t
-                                    .ring
-                                    .iter()
-                                    .map(|p| p[1])
-                                    .fold(f64::NEG_INFINITY, f64::max);
+                                let ([min_x, min_y], [max_x, max_y]) = crate::survey_selection::ring_bbox(&t.ring);
                                 strata_canvas2d::canvas_painter::perform_canvas_hit_test_10px(
                                     Some(([min_x, min_y], [max_x, max_y], 1)),
                                     None,
@@ -214,10 +202,7 @@ impl StrataAppState {
                             .iter()
                             .enumerate()
                             .find(|(_, r)| {
-                                let min_x = r.iter().map(|p| p[0]).fold(f64::INFINITY, f64::min);
-                                let max_x = r.iter().map(|p| p[0]).fold(f64::NEG_INFINITY, f64::max);
-                                let min_y = r.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min);
-                                let max_y = r.iter().map(|p| p[1]).fold(f64::NEG_INFINITY, f64::max);
+                                let ([min_x, min_y], [max_x, max_y]) = crate::survey_selection::ring_bbox(r);
                                 wxy[0] >= min_x && wxy[0] <= max_x && wxy[1] >= min_y && wxy[1] <= max_y
                             })
                         {

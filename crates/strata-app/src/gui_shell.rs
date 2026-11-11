@@ -72,7 +72,12 @@ impl StrataAppState {
             if !wants_kb
                 && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
             {
-                self.home_map.cad.on_backspace(&mut self.home_map.scene);
+                if self.home_map.scene.active_rubberband.is_empty() {
+                    // 그리는 중이 아니면 고른 도형을 지운다(C++ 선택 도형 삭제).
+                    let _ = self.delete_selected_feature();
+                } else {
+                    self.home_map.cad.on_backspace(&mut self.home_map.scene);
+                }
             }
             if !wants_kb && self.active_tab == MainTab::Map {
                 let arrow = if i.key_pressed(egui::Key::ArrowLeft) {

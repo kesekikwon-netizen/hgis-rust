@@ -122,6 +122,8 @@ impl StrataAppState {
 
     /// 저장 직전: 화면에서 고친 조사구역·시굴격자를 문서에 되적는다.
     pub(crate) fn sync_view_into_survey_doc(&mut self) {
+        // 카드에서 고치던 값이 있으면 먼저 그 도형에 적는다.
+        self.sync_card_into_selected_feature();
         self.survey_doc.srs_id = self.work_crs.epsg_code() as i32;
         let rs = &self.home_map.real_survey;
         let area_rings = rs.survey_rings.clone();

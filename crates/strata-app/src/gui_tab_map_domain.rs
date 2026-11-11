@@ -147,5 +147,32 @@ impl StrataAppState {
                 }
             }
         }
+        self.paint_doc_selection(p, rect);
+    }
+
+    /// 고른 도형을 노란 선으로 한 번 더 그린다(QGIS 기본 선택 색).
+    fn paint_doc_selection(&self, p: &egui::Painter, rect: Rect) {
+        let Some((key, idx)) = self.selected_doc else {
+            return;
+        };
+        let Some(geom) = self.survey_doc.layer(key).features.get(idx).and_then(|f| f.geom.as_ref()) else {
+            return;
+        };
+        let vp = &self.home_map.viewport;
+        let mark = Stroke::new(2.0, Color32::from_rgb(255, 255, 0));
+        match geom {
+            WkbGeometry::Polygon(rings) => {
+                for ring in rings {
+                    p.add(egui::Shape::line(screen_points(rect, vp, ring), mark));
+                }
+            }
+            WkbGeometry::LineString(pts) => {
+                p.add(egui::Shape::line(screen_points(rect, vp, pts), mark));
+            }
+            WkbGeometry::Point(pt) => {
+                let r = style_for(key).marker_mm * PX_PER_MM * 0.5 + 3.0;
+                p.circle_stroke(w2s(rect, vp, *pt), r, mark);
+            }
+        }
     }
 }

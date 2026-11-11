@@ -16,14 +16,8 @@ if self.right_inspector.borehole.has_borehole_fields() {
     );
     ui.add_space(6.0);
 }
-let active_ring = self
-    .home_map
-    .selected_feature_idx
-    .and_then(|idx| self.home_map.real_survey.survey_rings.get(idx));
-if let Some(ring) = active_ring {
-    let area_m2 = crate::real_survey::ring_area_m2(ring);
-    let pyeong = area_m2 / 3.305_785;
-    let perim_m = crate::real_survey::ring_perimeter_m(ring);
+// 고른 도형(조사 파일의 유구·선·점, 또는 조사구역)의 크기 두 줄. 없으면 빈 안내를 보인다.
+if let Some((line1, line2)) = self.selection_summary_lines() {
     egui::Frame::NONE
         .fill(Color32::from_rgb(245, 243, 236))
         .stroke(Stroke::new(1.0, Color32::from_rgb(212, 209, 200)))
@@ -31,18 +25,13 @@ if let Some(ring) = active_ring {
         .inner_margin(egui::Margin::symmetric(8, 6))
         .show(ui, |ui| {
             ui.label(
-                egui::RichText::new(format!(
-                    "면적: {area_m2:.2} m² ({pyeong:.1} 평)"
-                ))
+                egui::RichText::new(line1.clone())
                 .size(12.0)
                 .strong()
                 .color(Color32::from_rgb(30, 30, 28)),
             );
             ui.label(
-                egui::RichText::new(format!(
-                    "둘레: {perim_m:.2} m · {}",
-                    self.work_crs.auth_id()
-                ))
+                egui::RichText::new(line2.clone())
                 .size(11.5)
                 .color(Color32::from_rgb(80, 79, 74)),
             );
@@ -202,34 +191,37 @@ if let Some(ring) = active_ring {
             }
         }
     ui.add_space(4.0);
-    let (pit_depth, pit_caption) =
-        strata_terrain3d::trench_profile3d::compute_pit_elevation_depth_and_caption(
-            Some(48.50),
-            Some(47.20),
-            None,
-        );
-    egui::Frame::NONE
-        .fill(Color32::from_rgb(245, 240, 232))
-        .stroke(Stroke::new(1.0, Color32::from_rgb(212, 204, 191)))
-        .corner_radius(5.0)
-        .inner_margin(egui::Margin::symmetric(8, 5))
-        .show(ui, |ui| {
-            ui.label(
-                egui::RichText::new("단면 표고 (KaElevationFigure)")
-                    .size(11.0)
-                    .strong()
-                    .color(Color32::from_rgb(107, 78, 61)),
+    // 단면 표고: 그 유구에 상면·바닥 표고(top_el·bottom_el)가 적혀 있을 때만 보인다.
+    if let Some((top_el, bottom_el)) = self.selected_elevations() {
+        let (pit_depth, pit_caption) =
+            strata_terrain3d::trench_profile3d::compute_pit_elevation_depth_and_caption(
+                Some(top_el),
+                Some(bottom_el),
+                None,
             );
-            ui.label(
-                egui::RichText::new(format!(
-                    "상면 EL. 48.50 · 바닥 EL. 47.20 · 깊이 {:.2} m",
-                    pit_depth.unwrap_or(0.0)
-                ))
-                .size(11.0)
-                .color(Color32::from_rgb(47, 42, 38)),
-            )
-            .on_hover_text(pit_caption);
-        });
+        egui::Frame::NONE
+            .fill(Color32::from_rgb(245, 240, 232))
+            .stroke(Stroke::new(1.0, Color32::from_rgb(212, 204, 191)))
+            .corner_radius(5.0)
+            .inner_margin(egui::Margin::symmetric(8, 5))
+            .show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new("단면 표고 (KaElevationFigure)")
+                        .size(11.0)
+                        .strong()
+                        .color(Color32::from_rgb(107, 78, 61)),
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "상면 EL. {top_el:.2} · 바닥 EL. {bottom_el:.2} · 깊이 {:.2} m",
+                        pit_depth.unwrap_or(0.0)
+                    ))
+                    .size(11.0)
+                    .color(Color32::from_rgb(47, 42, 38)),
+                )
+                .on_hover_text(pit_caption);
+            });
+    }
     ui.add_space(2.0);
     ui.label(egui::RichText::new("메모").size(11.5));
     if ui

@@ -37,6 +37,7 @@ pub mod ribbon_icon_svg_part2;
 pub mod ribbon_icons;
 pub mod right_inspector;
 mod survey_doc_bridge;
+mod survey_selection;
 pub mod svg_curve_flatten;
 pub mod svg_path_paint;
 pub mod svg_path_tokenize;
