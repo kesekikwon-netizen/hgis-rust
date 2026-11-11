@@ -100,9 +100,20 @@ impl StrataAppState {
                     std::path::PathBuf::from(self.modals.new_survey_dir.trim())
                 };
                 let path = dir.join(format!("{name}.gpkg"));
-                let _ = strata_storage::gpkg::GpkgRepository::create_new_survey(&path, crs);
+                let _ = std::fs::remove_file(&path);
+                let _ = strata_storage::survey_gpkg_write::create_standard_survey(
+                    &path,
+                    crs.epsg_code() as i32,
+                );
                 self.start_new_survey_project_with_path(&name, &path, crs);
                 self.modals.active = None;
+            }
+            "@open_env" => {
+                // 검증용: 환경변수 KA_HGIS_SNAP_OPEN 의 조사 파일을 「열기」와 같은 경로로 연다.
+                if let Ok(p) = std::env::var("KA_HGIS_SNAP_OPEN") {
+                    self.open_survey_gpkg(std::path::Path::new(&p));
+                    self.home_map.viewport.meters_per_pixel = 0.2;
+                }
             }
             "@close_modal" => self.modals.active = None,
             "@tab_home" => self.active_tab = crate::app_state::MainTab::Home,

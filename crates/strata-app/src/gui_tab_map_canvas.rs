@@ -130,6 +130,10 @@ impl StrataAppState {
                             effective_tool,
                             cur_layer.as_deref(),
                         );
+                        // 유물위치표시: 찍은 점을 유물 레이어에 넣는다(C++ `MainWindowEditing.cpp:1168`).
+                        if effective_tool == MapToolKind::PlacePoint {
+                            let _ = self.commit_drawn_shape(effective_tool, vec![wxy]);
+                        }
                     }
                     MapToolKind::TrenchPlace => {
                         let len_m = self.modals.trench_length.meters();
@@ -246,17 +250,22 @@ impl StrataAppState {
             );
             if drawing_tool {
                 let ring = self.home_map.scene.active_rubberband.clone();
-                if self
+                let _ = self
                     .home_map
                     .cad
-                    .on_right_click(effective_tool, &mut self.home_map.scene)
-                    && ring.len() >= 3
-                {
-                    let area_m2 = ring_area_m2(&ring);
-                    self.home_map.real_survey.save_drawn_polygon(ring);
-                    self.is_dirty = true;
-                    self.home_map.draw_guide_message =
-                        Some(format!("조사구역·유구 다각형을 저장했습니다 ({area_m2:.2} m²)."));
+                    .on_right_click(effective_tool, &mut self.home_map.scene);
+                // C++ `onGeometryCaptured` — 마친 도형을 대상 레이어에 넣는다(면·선 모두).
+                // 파일에는 「저장」을 눌러야 들어간다(C++ 과 같이 자동 저장 없음).
+                let area_m2 = ring_area_m2(&ring);
+                let is_polygon = effective_tool == MapToolKind::DrawPolygon;
+                if matches!(effective_tool, MapToolKind::DrawPolygon | MapToolKind::DrawLine) {
+                    if let Some(layer) = self.commit_drawn_shape(effective_tool, ring) {
+                        self.home_map.draw_guide_message = Some(if is_polygon {
+                            format!("「{layer}」에 도형을 그렸습니다 ({area_m2:.2} m²). 저장하려면 Ctrl+S.")
+                        } else {
+                            format!("「{layer}」에 선을 그렸습니다. 저장하려면 Ctrl+S.")
+                        });
+                    }
                 }
             } else if let Some(pos) = response.interact_pointer_pos() {
                 // MainWindowContextMenus.cpp:112-161 mapContextMenu

@@ -162,10 +162,15 @@ impl StrataAppState {
                                         });
                                 }
                                 ui.separator();
-                                for (b_lbl, tool) in [("／ 쉽게그리기", MapToolKind::DrawPolygon), ("□ 조사구역 그리기", MapToolKind::DrawPolygon), ("◇ 유구 그리기", MapToolKind::DrawPolygon), ("━ 유구 선", MapToolKind::DrawLine), ("● 유물위치표시", MapToolKind::PlacePoint)] {
+                                use strata_types::schema::DomainLayerKey as K;
+                                for (b_lbl, tool, target) in [("／ 쉽게그리기", MapToolKind::DrawPolygon, None), ("□ 조사구역 그리기", MapToolKind::DrawPolygon, Some(K::SurveyArea)), ("◇ 유구 그리기", MapToolKind::DrawPolygon, Some(K::FeaturePoly)), ("━ 유구 선", MapToolKind::DrawLine, Some(K::FeatureLine)), ("● 유물위치표시", MapToolKind::PlacePoint, Some(K::ArtifactPoint))] {
                                     if wbtn(ui, b_lbl).clicked() {
                                         self.active_tab = MainTab::Map;
                                         self.active_tool = tool;
+                                        // 누른 단추가 도형이 들어갈 레이어를 정한다.
+                                        if let Some(key) = target {
+                                            self.draw_target = key;
+                                        }
                                         self.home_map.update_guide_for_tool(tool);
                                     }
                                 }

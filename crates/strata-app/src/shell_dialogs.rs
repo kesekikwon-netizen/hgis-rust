@@ -210,9 +210,12 @@ impl StrataAppState {
                     .corner_radius(6.0)
                     .min_size(Vec2::new(130.0, 30.0));
                     if ui.add(save_btn).clicked() {
-                        self.is_dirty = false;
+                        // C++ `KaClosePrompt` — 실제로 저장하고, 저장에 성공했을 때만 끝낸다.
+                        // 실패(또는 저장 창 취소)하면 창을 닫지 않아 그린 것이 사라지지 않는다.
                         self.close_prompt_open = false;
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        if self.save_survey_project() {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
                     }
                     if ui
                         .add(

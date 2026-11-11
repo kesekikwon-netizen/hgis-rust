@@ -4,7 +4,6 @@
 //! 원래 같은 `impl` 블록 안에 있던 메서드들을 그대로 옮겼고, 동작·문구는 바꾸지 않았다.
 
 use strata_canvas2d::map_tools::MapToolKind;
-use strata_storage::gpkg::GpkgRepository;
 use strata_types::schema::DomainLayerKey;
 
 use crate::app_state::{MainTab, StrataAppState};
@@ -27,14 +26,16 @@ impl StrataAppState {
 
         // C++ `loadSurveyLayers` → `addNonEmptyDomainLayers`: 빈 GPKG 이므로
         // 도메인 레이어는 0개다. 파일에 실제로 들어 있는 레이어만 되살린다.
-        let mut restored = 0usize;
-        if let Ok(ws) = strata_storage::gpkg::GpkgRepository::open_read_only(path) {
-            for key_name in ws.layers.keys() {
-                if let Some(key) = DomainLayerKey::from_id(key_name.as_str()) {
-                    self.left_layers.ensure_domain_layer(key);
-                    restored += 1;
-                }
-            }
+        // 표준 조사 파일이면 그 내용을, 아니면(예전 형식·아직 없는 파일) 빈 문서를 쓴다.
+        let doc = strata_storage::survey_gpkg_read::read_survey_gpkg(path).unwrap_or_else(|_| {
+            strata_storage::survey_doc::SurveyDoc::new(work_crs.epsg_code() as i32)
+        });
+        let keys = doc.non_empty_keys();
+        let restored = keys.len();
+        self.install_survey_doc(doc, path);
+        self.work_crs = work_crs;
+        for key in keys {
+            self.left_layers.ensure_domain_layer(key);
         }
 
         // C++ `applyStartupMap` → `ensureDefaultBasemaps`: 위성 + 지적 딱 두 개.
@@ -64,7 +65,12 @@ impl StrataAppState {
     pub fn start_new_survey_project(&mut self, name: &str) {
         let path = std::env::temp_dir().join(format!("{name}.gpkg"));
         let crs = self.modals.new_survey_crs;
-        let _ = GpkgRepository::create_new_survey(&path, crs);
+        // 임시 폴더의 시연용 파일이라 같은 이름이 남아 있으면 지우고 새로 만든다.
+        let _ = std::fs::remove_file(&path);
+        let _ = strata_storage::survey_gpkg_write::create_standard_survey(
+            &path,
+            crs.epsg_code() as i32,
+        );
         self.start_new_survey_project_with_path(name, &path, crs);
     }
 
@@ -87,6 +93,9 @@ impl StrataAppState {
         self.home_map.cad = strata_canvas2d::cad_session::CadSessionController::default();
         self.home_map.real_survey =
             crate::real_survey::RealSurveyData::new_empty_survey(&std::env::temp_dir());
+        self.survey_doc =
+            strata_storage::survey_doc::SurveyDoc::new(self.work_crs.epsg_code() as i32);
+        self.draw_target = DomainLayerKey::SurveyArea;
         self.align = crate::gui_ribbon_bar::AlignSessionState::default();
         self.ribbon.sub_toolbar_visible = false;
         self.ribbon.sub_mode = crate::ribbon::SubToolsMode::None;
@@ -130,7 +139,7 @@ impl StrataAppState {
 
     /// C++ `openSurveyGpkg` — 파일을 읽어 조사 제목·좌표계·레이어를 되살린다.
     pub fn open_survey_gpkg(&mut self, path: &std::path::Path) {
-        use strata_storage::gpkg::GpkgRepository;
+        use strata_storage::survey_gpkg_read::read_survey_gpkg;
 
         // C++ 은 .qgz/.qgs 를 고르면 같은 이름의 .gpkg 동반 파일을 먼저 찾는다.
         let mut target = path.to_path_buf();
@@ -152,8 +161,9 @@ impl StrataAppState {
             }
         }
 
-        match GpkgRepository::open_read_only(&target) {
-            Ok(ws) => {
+        // C++ 이 만든 표준 조사 파일(7개 도메인 표)을 그대로 읽는다. 원본은 읽기 전용으로만 연다.
+        match read_survey_gpkg(&target) {
+            Ok(doc) => {
                 // C++ `MainWindowSession.cpp:389` — 열기 전에 프로젝트를 비우고
                 // `loadSurveyLayers` 가 `removeSurveyDomainLayers` 로 이전 조사 레이어를
                 // 지운다. 같은 자리에서 지도·레이어·조사 상태를 먼저 비운다.
@@ -165,13 +175,13 @@ impl StrataAppState {
                     .to_owned();
                 self.reset_survey_workspace(&title);
                 self.home_map.recent_files = recents;
-                self.work_crs = ws.work_crs;
-
-                // 레이어 종류별로 도메인 레이어를 되살린다.
-                for key_name in ws.layers.keys() {
-                    if let Some(key) = DomainLayerKey::from_id(key_name.as_str()) {
-                        self.left_layers.ensure_domain_layer(key);
-                    }
+                // C++ `addNonEmptyDomainLayers` — 도형이 있는 도메인 레이어만 목록에 올린다.
+                let keys = doc.non_empty_keys();
+                let n_layers = keys.len();
+                let n_shapes = doc.total_features();
+                self.install_survey_doc(doc, &target);
+                for key in keys {
+                    self.left_layers.ensure_domain_layer(key);
                 }
                 // C++ `ensureDefaultBasemaps` — 열기 직후에도 위성·지적 두 개.
                 self.left_layers.apply_default_basemaps();
@@ -185,10 +195,11 @@ impl StrataAppState {
                     self.home_map.recent_files.truncate(12);
                 }
                 self.home_map.draw_guide_message = Some(format!(
-                    "「{}」 조사를 열었습니다 ({} · 레이어 {}개).",
+                    "「{}」 조사를 열었습니다 ({} · 레이어 {}개 · 도형 {}개).",
                     title,
                     self.work_crs.auth_id(),
-                    ws.layers.len()
+                    n_layers,
+                    n_shapes
                 ));
             }
             Err(e) => {

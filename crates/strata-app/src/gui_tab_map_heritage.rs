@@ -185,6 +185,9 @@ impl StrataAppState {
             }
         }
 
+        // 조사 파일의 유구 면·선·단면선·유물·기준점 (조사구역 위, 시굴격자 아래).
+        self.paint_survey_doc_layers(p, rect);
+
         if rs.is_layer_visible("시굴격자") {
             let tr_col = layer_color("시굴격자", Color32::from_rgb(156, 62, 32));
             let tr_s = Stroke::new(1.2, tr_col);

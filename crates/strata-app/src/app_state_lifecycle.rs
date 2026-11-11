@@ -52,6 +52,8 @@ impl StrataAppState {
             theme: ThemeTokens::for_options(&default_opts),
             theme_dirty: true,
             survey_path: None,
+            survey_doc: strata_storage::survey_doc::SurveyDoc::new(5187),
+            draw_target: strata_types::schema::DomainLayerKey::SurveyArea,
             paper_look: true,
             project_title: "새 고고학 지표·시굴조사".to_owned(),
             is_dirty: false,

@@ -176,8 +176,11 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                             let name = app.modals.new_survey_name.trim().to_owned();
                             let path = dir.join(format!("{name}.gpkg"));
                             let crs = app.modals.new_survey_crs;
-                            match strata_storage::gpkg::GpkgRepository::create_new_survey(
-                                &path, crs,
+                            // C++ `SurveyProjectFactory::createNewSurvey` — 7개 도메인 표를 가진
+                            // 표준 GeoPackage. 같은 이름 파일이 있으면 덮지 않고 알린다.
+                            match strata_storage::survey_gpkg_write::create_standard_survey(
+                                &path,
+                                crs.epsg_code() as i32,
                             ) {
                                 Ok(_) => {
                                     app.start_new_survey_project_with_path(&name, &path, crs);

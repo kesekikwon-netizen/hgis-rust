@@ -69,6 +69,11 @@ pub struct StrataAppState {
     pub theme_dirty: bool,
     /// C++ `MainWindow::m_surveyPath` — 지금 열려 있는 조사 파일(.gpkg) 경로
     pub survey_path: Option<std::path::PathBuf>,
+    /// 지금 열려 있는 조사의 7개 도메인 레이어(fid·도형·속성). C++ 은 `QgsVectorLayer` 가 든다.
+    pub survey_doc: strata_storage::survey_doc::SurveyDoc,
+    /// 그리기 단추가 정한 대상 레이어(조사구역 / 유구 면 / 유구 선 / 단면선).
+    /// C++ `MainWindowEditing.cpp` 는 누른 단추에 따라 대상 레이어를 고른다.
+    pub draw_target: strata_types::schema::DomainLayerKey,
     pub paper_look: bool,
     pub project_title: String,
     pub is_dirty: bool,
@@ -126,11 +131,11 @@ mod tests {
         assert!(path.exists(), "the .gpkg must exist on disk");
         assert!(!app.is_dirty, "a successful save clears the dirty flag");
 
-        // 다시 읽어 좌표계와 레이어가 살아 있는지
-        let ws = strata_storage::gpkg::GpkgRepository::open_read_only(&path)
+        // 다시 읽어 좌표계와 레이어가 살아 있는지 — 이제 C++ 과 같은 표준 GeoPackage 다.
+        let doc = strata_storage::survey_gpkg_read::read_survey_gpkg(&path)
             .expect("the file must be a readable GeoPackage");
-        assert_eq!(ws.work_crs, WorkCrs::Epsg5186);
-        assert!(ws.layers.contains_key("survey_area"));
+        assert_eq!(doc.srs_id, 5186);
+        assert_eq!(doc.layers.len(), 7);
 
         let _ = std::fs::remove_file(&path);
     }

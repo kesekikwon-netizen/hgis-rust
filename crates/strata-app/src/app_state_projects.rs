@@ -145,22 +145,12 @@ impl StrataAppState {
 
     /// 워크스페이스를 GPKG 로 실제로 쓴다. 성공하면 제목·저장 상태를 갱신한다.
     pub(crate) fn write_survey_to(&mut self, path: &std::path::Path) -> bool {
-        use std::collections::BTreeMap;
-        use strata_storage::gpkg::{GpkgRepository, SurveyWorkspace};
-
-        let mut ws = SurveyWorkspace {
-            schema_version: 3,
-            work_crs: self.work_crs,
-            layers: BTreeMap::new(),
-            embedded_project_json: format!("{{\"title\":{:?}}}", self.project_title),
-        };
-        for entry in &self.left_layers.entries {
-            if let Some(key) = DomainLayerKey::from_id(&entry.layer_key) {
-                ws.ensure_domain_layer(key);
-            }
-        }
-        match GpkgRepository::write_workspace_file(path, &ws) {
+        // 화면에서 고친 조사구역·시굴격자를 문서에 되적고, C++ 과 같은 표준 GeoPackage 로 쓴다
+        // (세대 사본 → 반영 → 검증 → 교체). 실패하면 원본 파일은 그대로다.
+        self.sync_view_into_survey_doc();
+        match strata_storage::survey_gpkg_write::save_survey_gpkg(path, &mut self.survey_doc) {
             Ok(()) => {
+                self.home_map.real_survey.gpkg_path = path.to_path_buf();
                 self.project_title = path
                     .file_stem()
                     .and_then(|s| s.to_str())

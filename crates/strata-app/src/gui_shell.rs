@@ -20,6 +20,8 @@ impl StrataAppState {
     /// C++ `MainWindow.cpp` + `MainWindowRibbon.cpp` + `KaShellFocus.h` 단축키 1:1 처리
     pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
         let wants_kb = ctx.wants_keyboard_input();
+        // 저장은 파일 창을 띄울 수 있어 입력 잠금(`ctx.input`) 밖에서 한다.
+        let mut save_requested = false;
         ctx.input(|i| {
             if i.key_pressed(egui::Key::Escape) {
                 self.home_map.cad.on_escape(&mut self.home_map.scene);
@@ -111,9 +113,8 @@ impl StrataAppState {
                 } else if i.key_pressed(egui::Key::O) {
                     self.open_sample_survey_project(0);
                 } else if i.key_pressed(egui::Key::S) {
-                    self.is_dirty = false;
-                    self.home_map.draw_guide_message =
-                        Some(format!("「{}」 조사를 저장했습니다.", self.project_title));
+                    // C++ `saveProject` — 리본 「저장」과 같은 실제 저장. 결과 문구는 저장 함수가 남긴다.
+                    save_requested = true;
                 } else if i.key_pressed(egui::Key::Num1) {
                     self.active_tab = MainTab::Map;
                     self.active_tool = MapToolKind::Select;
@@ -140,6 +141,9 @@ impl StrataAppState {
                 }
             }
         });
+        if save_requested {
+            let _ = self.save_survey_project();
+        }
     }
 }
 

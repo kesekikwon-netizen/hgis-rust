@@ -1820,6 +1820,8 @@ dependencies = [
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -3296,6 +3298,7 @@ dependencies = [
  "eframe",
  "egui",
  "geo",
+ "image",
  "rfd",
  "rusqlite",
  "serde",
