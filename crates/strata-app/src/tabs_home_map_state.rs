@@ -45,6 +45,8 @@ pub struct HomeMapTabState {
     /// 실제로 받은 DEM 표고 격자(없으면 「지형 음영」을 그리지 않는다).
     /// C++ 은 QgsRasterLayer 가 있을 때만 지형 음영 레이어를 만든다
     /// (LayerOps::addElevationHillshadeMap). 값은 (변환, 표고 배열) 쌍이다.
+    /// 받은 SHP 등 참조 레이어(조사 파일에 저장하지 않는다).
+    pub reference_layers: Vec<crate::reference_layers::ReferenceLayer>,
     pub dem_grid: Option<(
         strata_paleo::terrain_edt_tpi::GridTransform,
         Vec<f64>,
@@ -83,6 +85,7 @@ impl Default for HomeMapTabState {
             basemap_opacity: HGIS_BASEMAP_DEFAULT_OPACITY,
             basemap_brightness: HGIS_BASEMAP_DEFAULT_BRIGHTNESS,
             real_survey,
+            reference_layers: Vec::new(),
             dem_grid: None,
         }
     }
@@ -146,6 +149,23 @@ impl HomeMapTabState {
                 dx * dx + dy * dy <= r_sq
             }) {
                 out.push(h.ring.clone());
+            }
+        }
+        // 올린 참조 레이어(지적도 SHP 등)의 선에도 붙는다. 꺼 둔 레이어는 뺀다.
+        for layer in &self.reference_layers {
+            if !self.real_survey.is_layer_visible(&layer.name) {
+                continue;
+            }
+            for part in layer.shapes.iter().flat_map(|s| s.parts.iter()) {
+                if part.len() >= 2
+                    && part.iter().any(|pt| {
+                        let dx = pt[0] - around_xy[0];
+                        let dy = pt[1] - around_xy[1];
+                        dx * dx + dy * dy <= r_sq
+                    })
+                {
+                    out.push(part.clone());
+                }
             }
         }
         out

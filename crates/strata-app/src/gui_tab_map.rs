@@ -36,6 +36,8 @@ mod gui_tab_map_measure;
 mod gui_tab_map_opacity;
 #[path = "gui_tab_map_overlay.rs"]
 mod gui_tab_map_overlay;
+#[path = "gui_tab_map_reference.rs"]
+mod gui_tab_map_reference;
 #[path = "gui_tab_map_tab.rs"]
 mod gui_tab_map_tab;
 #[path = "gui_tab_map_undo.rs"]

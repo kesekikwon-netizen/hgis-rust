@@ -87,6 +87,9 @@ impl StrataAppState {
         self.active_tool = MapToolKind::Pan;
         // 조사 데이터 레이어만 제거. 배경지도·지적은 호출부가 다시 보장한다.
         self.left_layers.remove_survey_domain_layers();
+        // 참조 레이어(받은 SHP)도 이전 조사의 것이므로 함께 비운다.
+        self.left_layers.entries.retain(|e| !e.layer_key.starts_with("ref:"));
+        self.home_map.reference_layers.clear();
         self.right_inspector = crate::right_inspector::RightInspectorState::new_default();
         self.home_map.scene = strata_canvas2d::painter_scene::MapSceneModel::default();
         self.home_map.selected_feature_idx = None;

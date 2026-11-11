@@ -116,6 +116,9 @@ impl StrataAppState {
         let mut added = 0usize;
         let mut cad_path: Option<String> = None;
         let mut skipped = 0usize;
+        let mut failed = 0usize;
+        // 아직 읽지 못하는 종류(GPKG·GeoJSON·TIF·CSV·XLSX)의 파일 이름.
+        let mut not_yet: Vec<String> = Vec::new();
         for f in &dropped {
             let Some(path) = f.path.as_ref() else {
                 skipped += 1;
@@ -143,7 +146,16 @@ impl StrataAppState {
                 cad_path = Some(name);
                 continue;
             }
-            added += 1;
+            if low.ends_with(".shp") {
+                // SHP 는 실제로 읽어 참조 레이어로 올린다. 결과 문구는 그 함수가 남긴다.
+                if self.import_reference_shp(path) {
+                    added += 1;
+                } else {
+                    failed += 1;
+                }
+                continue;
+            }
+            not_yet.push(name);
         }
         if let Some(path) = cad_path {
             // KaCadImportNotice.cpp — 도면은 좌표계 확인 안내를 먼저 보여준다
@@ -153,13 +165,16 @@ impl StrataAppState {
                 Some("CAD 도면을 끌어 놓았습니다. 좌표계를 확인하고 지도에 올리세요.".to_owned());
             return;
         }
-        if added > 0 {
-            let msg = format!("레이어 {added}개 추가됨 (파일→지도)");
-            self.last_drop_message = Some(msg.clone());
-            self.home_map.draw_guide_message = Some(msg);
+        if !not_yet.is_empty() {
+            // 아직 읽지 못하는 종류는 올린 척하지 않는다.
+            self.home_map.draw_guide_message = Some(format!(
+                "이 종류의 파일은 아직 Rust 판에서 지도에 올리지 못합니다(SHP 만 됩니다): {}",
+                not_yet.join(", ")
+            ));
+        } else if added > 0 {
+            self.last_drop_message = self.home_map.draw_guide_message.clone();
             self.active_tab = MainTab::Map;
-            self.is_dirty = true;
-        } else if skipped > 0 {
+        } else if failed == 0 && skipped > 0 {
             self.home_map.draw_guide_message =
                 Some("지도에 올릴 수 있는 파일이 아닙니다.".to_owned());
         }

@@ -140,6 +140,9 @@ impl StrataAppState {
             }
         }
 
+        // 받은 SHP 등 참조 레이어는 조사 도형 아래에 그린다.
+        self.paint_reference_layers(p, rect);
+
         if rs.is_layer_visible("조사구역") {
             let base_stroke = if let Some([r, g, b]) = self.modals.applied_line_color_rgb {
                 Color32::from_rgb(r, g, b)
