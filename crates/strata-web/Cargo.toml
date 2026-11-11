@@ -1,0 +1,20 @@
+[package]
+name = "strata-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "앱 안의 웹 화면 도우미 — 국토정보플랫폼·국가유산청 인트라넷처럼 로그인이 필요한 사이트를 C++ 의 QWebEngineView 처럼 열어 자동화한다."
+
+[[bin]]
+name = "ka-hgis-web"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tao = "0.37.2"
+wry = "0.57.2"
