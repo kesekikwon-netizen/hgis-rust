@@ -36,6 +36,7 @@ pub mod ribbon_icon_svg_part1;
 pub mod ribbon_icon_svg_part2;
 pub mod ribbon_icons;
 pub mod right_inspector;
+mod survey_buffer;
 mod survey_doc_bridge;
 mod survey_edit_ops;
 mod survey_selection;

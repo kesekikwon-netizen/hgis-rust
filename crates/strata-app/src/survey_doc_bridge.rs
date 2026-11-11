@@ -102,6 +102,8 @@ impl StrataAppState {
         } else if let Some([min_x, max_x, min_y, max_y]) = doc.extent() {
             rs.survey_center = [(min_x + max_x) * 0.5, (min_y + max_y) * 0.5];
         }
+        // 켜 둔 주변 경계(500 m·1000 m)는 조사구역을 따라 다시 계산한다.
+        self.refresh_survey_buffers();
     }
 
     /// 방금 열거나 저장한 조사를 최근 목록 맨 위에 올리고 홈 표를 다시 만든다.
