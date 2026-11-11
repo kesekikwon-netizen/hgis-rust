@@ -1,5 +1,7 @@
 use strata_types::crs::CrsCode;
 
+use crate::crs_datum_shift::{bessel_to_grs80, grs80_to_bessel, BESSEL_A, BESSEL_F};
+
 #[derive(Debug, Clone, Copy)]
 pub struct TmParams {
     pub lon0_deg: f64,
@@ -64,10 +66,15 @@ struct Kruger {
 
 impl Kruger {
     fn grs80() -> Self {
-        let n = GRS80_F / (2.0 - GRS80_F);
+        Self::new(GRS80_A, GRS80_F)
+    }
+
+    /// 반지름 `a`, 편평률 `f` 인 타원체의 계수.
+    fn new(a: f64, f: f64) -> Self {
+        let n = f / (2.0 - f);
         let (n2, n3) = (n * n, n * n * n);
         Self {
-            radius: GRS80_A / (1.0 + n) * (1.0 + n2 / 4.0 + n2 * n2 / 64.0),
+            radius: a / (1.0 + n) * (1.0 + n2 / 4.0 + n2 * n2 / 64.0),
             e_conf: 2.0 * n.sqrt() / (1.0 + n),
             alpha: [n / 2.0 - 2.0 * n2 / 3.0 + 5.0 * n3 / 16.0, 13.0 * n2 / 48.0 - 3.0 * n3 / 5.0, 61.0 * n3 / 240.0],
             beta: [n / 2.0 - 2.0 * n2 / 3.0 + 37.0 * n3 / 96.0, n2 / 48.0 + n3 / 15.0, 17.0 * n3 / 480.0],
@@ -112,9 +119,12 @@ impl Kruger {
     }
 }
 
-/// 경위도(도) → TM 평면 좌표(m).
+/// 경위도(도) → TM 평면 좌표(m). GRS80 타원체.
 pub fn lonlat_to_tm(lon_deg: f64, lat_deg: f64, p: &TmParams) -> [f64; 2] {
-    let k = Kruger::grs80();
+    lonlat_to_tm_on(&Kruger::grs80(), lon_deg, lat_deg, p)
+}
+
+fn lonlat_to_tm_on(k: &Kruger, lon_deg: f64, lat_deg: f64, p: &TmParams) -> [f64; 2] {
     let (xi, eta) = k.forward(lat_deg.to_radians(), (lon_deg - p.lon0_deg).to_radians());
     let (xi0, _) = k.forward(p.lat0_deg.to_radians(), 0.0);
     [
@@ -123,9 +133,12 @@ pub fn lonlat_to_tm(lon_deg: f64, lat_deg: f64, p: &TmParams) -> [f64; 2] {
     ]
 }
 
-/// TM 평면 좌표(m) → 경위도(도).
+/// TM 평면 좌표(m) → 경위도(도). GRS80 타원체.
 pub fn tm_to_lonlat(x: f64, y: f64, p: &TmParams) -> [f64; 2] {
-    let k = Kruger::grs80();
+    tm_to_lonlat_on(&Kruger::grs80(), x, y, p)
+}
+
+fn tm_to_lonlat_on(k: &Kruger, x: f64, y: f64, p: &TmParams) -> [f64; 2] {
     let (xi0, _) = k.forward(p.lat0_deg.to_radians(), 0.0);
     let xi = (y - p.false_n) / (p.k0 * k.radius) + xi0;
     let eta = (x - p.false_e) / (p.k0 * k.radius);
@@ -156,6 +169,13 @@ impl CrsTransformer {
                     (2.0 * (y / GRS80_A).exp().atan() - std::f64::consts::FRAC_PI_2).to_degrees();
                 [lon, lat]
             }
+            // 옛 지적 좌표계: Bessel 타원체에서 풀고 KGD2002(GRS80)로 측지계를 옮긴다.
+            CrsCode::Epsg5174 => {
+                let bessel = Kruger::new(BESSEL_A, BESSEL_F);
+                let [lon, lat] = TmParams::for_crs(CrsCode::Epsg5174)
+                    .map_or([x, y], |p| tm_to_lonlat_on(&bessel, x, y, &p));
+                bessel_to_grs80(lon, lat, GRS80_A, GRS80_F)
+            }
             other => {
                 if let Some(p) = TmParams::for_crs(other) {
                     tm_to_lonlat(x, y, &p)
@@ -171,6 +191,12 @@ impl CrsTransformer {
                 let my =
                     GRS80_A * ((std::f64::consts::FRAC_PI_4 + lat.to_radians() * 0.5).tan()).ln();
                 [mx, my]
+            }
+            CrsCode::Epsg5174 => {
+                let [blon, blat] = grs80_to_bessel(lon, lat, GRS80_A, GRS80_F);
+                let bessel = Kruger::new(BESSEL_A, BESSEL_F);
+                TmParams::for_crs(CrsCode::Epsg5174)
+                    .map_or([lon, lat], |p| lonlat_to_tm_on(&bessel, blon, blat, &p))
             }
             other => {
                 if let Some(p) = TmParams::for_crs(other) {
@@ -207,6 +233,26 @@ mod accuracy_tests {
         for (src, x, y, ex, ey, _, _) in CASES {
             let [gx, gy] = CrsTransformer::new(src, CrsCode::Epsg5179).transform_xy(x, y);
             assert!((gx - ex).abs() < 0.001 && (gy - ey).abs() < 0.001, "{src:?} ({x}, {y}) → ({gx:.4}, {gy:.4}), PROJ ({ex}, {ey})");
+        }
+    }
+
+    /// 옛 지적 좌표계(EPSG:5174) → EPSG:5186. PROJ 가 고르는 변환(Korean 1985 to KGD2002 (1),
+    /// 정확도 약 1 m)과 2 cm 안에서 같아야 한다. 예전에는 타원체와 측지계 이동을 무시해
+    /// 수백 미터 어긋났다.
+    #[test]
+    fn old_cadastral_crs_5174_matches_proj_and_comes_back() {
+        #[allow(clippy::unreadable_literal)]
+        let cases = [
+            (200000.0, 500000.0, 200068.8176, 600304.7995),
+            (198000.0, 350000.0, 198071.2299, 450305.9710),
+            (230000.0, 420000.0, 230069.8800, 520305.9458),
+            (170000.0, 280000.0, 170072.4892, 380306.0525),
+        ];
+        for (x, y, ex, ey) in cases {
+            let [gx, gy] = CrsTransformer::new(CrsCode::Epsg5174, CrsCode::Epsg5186).transform_xy(x, y);
+            assert!((gx - ex).abs() < 0.02 && (gy - ey).abs() < 0.02, "({x}, {y}) → ({gx:.4}, {gy:.4}), PROJ ({ex}, {ey})");
+            let [bx, by] = CrsTransformer::new(CrsCode::Epsg5186, CrsCode::Epsg5174).transform_xy(gx, gy);
+            assert!((bx - x).abs() < 0.02 && (by - y).abs() < 0.02, "왕복 ({bx:.4}, {by:.4})");
         }
     }
 
