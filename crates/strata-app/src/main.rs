@@ -31,6 +31,7 @@ pub mod ngii_topographic_ui;
 pub mod real_survey;
 mod recent_surveys;
 mod reference_cadastral;
+mod dem_layer;
 mod reference_overlays;
 mod reference_layers;
 pub mod ribbon;

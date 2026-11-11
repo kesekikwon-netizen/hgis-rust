@@ -119,7 +119,13 @@ pub(crate) fn apply_result(app: &mut StrataAppState, state: &mut DemDownloadStat
             .layer_visible
             .insert(key.to_owned(), true);
     }
-    let message = dem_success_message_ko(result.downloaded_tiles, result.missing_tiles);
+    let mut message = dem_success_message_ko(result.downloaded_tiles, result.missing_tiles);
+    // 받은 표고를 화면 주변만 읽어 색띠 + 음영 그림으로 올린다.
+    if let Some(tif) = result.raster_uri.clone() {
+        if let Err(why) = app.load_dem_image(&tif) {
+            message = format!("{message} 다만 지도에 그리지는 못했습니다: {why}");
+        }
+    }
     app.status_bar_hint = message.clone();
     app.home_map.draw_guide_message = Some(message);
 }

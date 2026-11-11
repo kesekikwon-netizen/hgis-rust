@@ -47,6 +47,8 @@ pub struct HomeMapTabState {
     /// (LayerOps::addElevationHillshadeMap). 값은 (변환, 표고 배열) 쌍이다.
     /// 받은 SHP 등 참조 레이어(조사 파일에 저장하지 않는다).
     pub reference_layers: Vec<crate::reference_layers::ReferenceLayer>,
+    /// 받은 DEM 을 색띠 + 음영으로 만든 그림(화면 주변만).
+    pub dem_image: Option<strata_paleo::dem_shade::ShadedDem>,
     pub dem_grid: Option<(
         strata_paleo::terrain_edt_tpi::GridTransform,
         Vec<f64>,
@@ -86,6 +88,7 @@ impl Default for HomeMapTabState {
             basemap_brightness: HGIS_BASEMAP_DEFAULT_BRIGHTNESS,
             real_survey,
             reference_layers: Vec::new(),
+            dem_image: None,
             dem_grid: None,
         }
     }

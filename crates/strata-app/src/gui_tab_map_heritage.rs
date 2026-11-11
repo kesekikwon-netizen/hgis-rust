@@ -140,6 +140,8 @@ impl StrataAppState {
             }
         }
 
+        // 받은 DEM 그림은 참조 레이어보다도 아래에 그린다.
+        self.paint_dem_image(p, rect);
         // 받은 SHP 등 참조 레이어는 조사 도형 아래에 그린다.
         self.paint_reference_layers(p, rect);
 

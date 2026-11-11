@@ -157,6 +157,15 @@ impl StrataAppState {
                     std::thread::sleep(std::time::Duration::from_millis(200));
                 }
             }
+            // 검증용: 받은 표고 파일(`KA_HGIS_SNAP_DEM`)을 지도에 올린다.
+            "@dem_env" => {
+                if let Some(tif) = std::env::var_os("KA_HGIS_SNAP_DEM") {
+                    self.status_bar_hint = match self.load_dem_image(std::path::Path::new(&tif)) {
+                        Ok(cells) => format!("DEM 을 지도에 올렸습니다({cells}칸)."),
+                        Err(why) => format!("DEM 을 올리지 못했습니다: {why}"),
+                    };
+                }
+            }
             "@zoom_out" => self.home_map.viewport.meters_per_pixel = 12.0,
             "@close_modal" => self.modals.active = None,
             "@tab_home" => self.active_tab = crate::app_state::MainTab::Home,
