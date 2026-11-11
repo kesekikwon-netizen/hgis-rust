@@ -109,7 +109,8 @@ impl StrataAppState {
                                 );
                             }
                             if b2_resp.clicked() {
-                                self.open_sample_survey_project(0);
+                                // C++ `openProject` — 파일 고르기 창.
+                                self.open_survey_file_dialog();
                             }
                         });
                     });
@@ -186,7 +187,12 @@ impl StrataAppState {
             )
             .clicked()
         {
-            self.open_sample_survey_project(0);
+            // 가장 최근에 연 조사를 다시 연다. 없으면 파일 고르기 창.
+            if self.home_map.recent_rows.first().is_some_and(|r| r.exists) {
+                self.open_recent_survey_row(0);
+            } else {
+                self.open_survey_file_dialog();
+            }
         }
 
         // KaHomeTitleBlock.cpp:133-137 crsText — 작업 좌표계는 실제 작업 CRS 에서 만든다.

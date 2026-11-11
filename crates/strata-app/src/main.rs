@@ -29,6 +29,7 @@ pub mod gui_theme_fonts;
 pub mod left_layer_panel;
 pub mod ngii_topographic_ui;
 pub mod real_survey;
+mod recent_surveys;
 pub mod ribbon;
 pub mod ribbon_icon_svg;
 pub mod ribbon_icon_svg_part1;

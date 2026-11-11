@@ -47,54 +47,35 @@ impl StrataAppState {
             Stroke::new(1.0, Color32::from_rgb(222, 220, 210)),
         );
 
-        let rows = [
-            (
-                "경주시",
-                "문서 › 경주시",
-                "저장됨",
-                "1",
-                "0",
-                "검수 전",
-                "어제 22:26",
-                true,
-            ),
-            (
-                "verify1-저장",
-                "... › ka-hgis-survey-verify",
-                "⊗ 원본 없음",
-                "—",
-                "—",
-                "—",
-                "찾을 수 없음",
-                false,
-            ),
-            (
-                "verify1",
-                "... › ka-hgis-survey-verify",
-                "⊗ 원본 없음",
-                "—",
-                "—",
-                "—",
-                "찾을 수 없음",
-                false,
-            ),
-            (
-                "andong",
-                "바탕 화면 › andong",
-                "⊗ 원본 없음",
-                "—",
-                "—",
-                "—",
-                "찾을 수 없음",
-                false,
-            ),
-        ];
-        for (idx, (name, folder, st, area, feat, chk, opened, ok)) in rows.into_iter().enumerate() {
-            if !self.home_map.recent_filter.trim().is_empty()
-                && !name.contains(self.home_map.recent_filter.trim())
-            {
-                continue;
-            }
+        // C++ `KaHomeRecentCard` — 실제로 연 조사만 보인다. 없으면 그렇다고 말한다.
+        let rows = self.home_map.recent_rows.clone();
+        if rows.is_empty() {
+            p.text(
+                Pos2::new(col_x[0], box_r.top() + 52.0),
+                egui::Align2::LEFT_CENTER,
+                "아직 연 조사가 없습니다. 「새 조사」나 「조사 열기」로 시작하세요.",
+                egui::FontId::proportional(12.0),
+                Color32::from_rgb(115, 113, 106),
+            );
+        }
+        let filter = self.home_map.recent_filter.trim().to_owned();
+        let mut clicked_row: Option<usize> = None;
+        for (idx, row) in rows
+            .iter()
+            .filter(|r| filter.is_empty() || r.name.contains(&filter))
+            .take(4)
+            .enumerate()
+        {
+            let (name, folder, st, area, feat, chk, opened, ok) = (
+                row.name.as_str(),
+                row.folder.as_str(),
+                row.status.as_str(),
+                row.areas.as_str(),
+                row.features.as_str(),
+                if row.exists { "검수 전" } else { "—" },
+                row.opened.as_str(),
+                row.exists,
+            );
             let ry = box_r.top() + 30.0 + (idx as f32) * 43.0;
             let row_r = Rect::from_min_size(
                 Pos2::new(box_r.left() + 1.0, ry),
@@ -144,8 +125,11 @@ impl StrataAppState {
                 )
                 .clicked()
             {
-                self.open_sample_survey_project(idx);
+                clicked_row = rows.iter().position(|r| r.path == row.path);
             }
+        }
+        if let Some(i) = clicked_row {
+            self.open_recent_survey_row(i);
         }
     }
 }

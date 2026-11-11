@@ -16,7 +16,9 @@ use super::tabs_home_map_undo::{HGIS_BASEMAP_DEFAULT_BRIGHTNESS, HGIS_BASEMAP_DE
 
 #[derive(Debug, Clone)]
 pub struct HomeMapTabState {
-    pub recent_files: Vec<String>,
+    /// 실제로 연 조사 기록(설정 폴더에 남는다)과 그것을 홈 표에 보일 줄.
+    pub recent_list: Vec<crate::recent_surveys::RecentSurvey>,
+    pub recent_rows: Vec<crate::recent_surveys::RecentRow>,
     pub recent_filter: String,
     // D8 KaLayerInformationPanel.cpp:25-190 '표시 설정' 상태
     pub layer_display_settings_open: bool,
@@ -51,14 +53,14 @@ pub struct HomeMapTabState {
 
 impl Default for HomeMapTabState {
     fn default() -> Self {
-        let real_survey = RealSurveyData::load_gyeongju_or_fallback();
+        // 시작할 때는 열린 조사가 없다(C++: 홈 화면만, 자동 복원 없음).
+        let real_survey = RealSurveyData::new_empty_survey(&std::env::temp_dir());
+        let recent_list = crate::recent_surveys::load_recent_surveys();
+        let recent_rows = crate::recent_surveys::build_recent_rows(&recent_list);
         let center = real_survey.survey_center;
         Self {
-            recent_files: vec![
-                "경주_월성북편_시굴조사.gpkg".to_owned(),
-                "부여_관북리_지표조사.gpkg".to_owned(),
-                "익산_왕궁리_정밀발굴조사.gpkg".to_owned(),
-            ],
+            recent_list,
+            recent_rows,
             recent_filter: String::new(),
             layer_display_settings_open: false,
             layer_label_field_idx: 0,

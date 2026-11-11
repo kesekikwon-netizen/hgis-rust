@@ -22,6 +22,7 @@ impl StrataAppState {
         let wants_kb = ctx.wants_keyboard_input();
         // 저장은 파일 창을 띄울 수 있어 입력 잠금(`ctx.input`) 밖에서 한다.
         let mut save_requested = false;
+        let mut open_requested = false;
         ctx.input(|i| {
             if i.key_pressed(egui::Key::Escape) {
                 self.home_map.cad.on_escape(&mut self.home_map.scene);
@@ -111,7 +112,7 @@ impl StrataAppState {
                 if i.key_pressed(egui::Key::N) {
                     self.start_new_survey_project("경주시");
                 } else if i.key_pressed(egui::Key::O) {
-                    self.open_sample_survey_project(0);
+                    open_requested = true;
                 } else if i.key_pressed(egui::Key::S) {
                     // C++ `saveProject` — 리본 「저장」과 같은 실제 저장. 결과 문구는 저장 함수가 남긴다.
                     save_requested = true;
@@ -143,6 +144,10 @@ impl StrataAppState {
         });
         if save_requested {
             let _ = self.save_survey_project();
+        }
+        if open_requested {
+            // C++ `openProject` (Ctrl+O) — 파일 고르기 창.
+            self.open_survey_file_dialog();
         }
     }
 }

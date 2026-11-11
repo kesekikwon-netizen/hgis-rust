@@ -151,6 +151,7 @@ impl StrataAppState {
         match strata_storage::survey_gpkg_write::save_survey_gpkg(path, &mut self.survey_doc) {
             Ok(()) => {
                 self.home_map.real_survey.gpkg_path = path.to_path_buf();
+                self.remember_recent_survey(path);
                 self.project_title = path
                     .file_stem()
                     .and_then(|s| s.to_str())

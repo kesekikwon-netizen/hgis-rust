@@ -120,6 +120,17 @@ pub(crate) fn push_v10_to_v14_gates(gates: &mut Vec<GateResult>) {
     });
 
     // V14: 11대 실무 모달 대화상자(용지·DEM·유산·수치지형·지적·시굴격자·고지형자료·PDF준비·도면인쇄·계정·제출) Headless egui 렌더링
+    // 시작 화면에는 견본 조사가 없다. 실제 그리기 경로로 조사구역 하나를 넣고 창을 띄운다.
+    gui_state.draw_target = DomainLayerKey::SurveyArea;
+    let _ = gui_state.commit_drawn_shape(
+        MapToolKind::DrawPolygon,
+        vec![
+            [219_700.0, 360_900.0],
+            [219_800.0, 360_900.0],
+            [219_800.0, 361_000.0],
+            [219_700.0, 361_000.0],
+        ],
+    );
     let mut modal_ok = true;
     for modal in [
         ActiveModalDialog::AccountSettings,

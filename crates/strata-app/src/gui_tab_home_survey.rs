@@ -167,14 +167,12 @@ impl StrataAppState {
                 // C++ `MainWindowSession.cpp:389` — 열기 전에 프로젝트를 비우고
                 // `loadSurveyLayers` 가 `removeSurveyDomainLayers` 로 이전 조사 레이어를
                 // 지운다. 같은 자리에서 지도·레이어·조사 상태를 먼저 비운다.
-                let recents = self.home_map.recent_files.clone();
                 let title = target
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("조사")
                     .to_owned();
                 self.reset_survey_workspace(&title);
-                self.home_map.recent_files = recents;
                 // C++ `addNonEmptyDomainLayers` — 도형이 있는 도메인 레이어만 목록에 올린다.
                 let keys = doc.non_empty_keys();
                 let n_layers = keys.len();
@@ -189,11 +187,7 @@ impl StrataAppState {
                 self.home_map.fit_to_survey();
                 self.active_tab = MainTab::Map;
                 self.is_dirty = false;
-                let recent = target.to_string_lossy().to_string();
-                if !self.home_map.recent_files.contains(&recent) {
-                    self.home_map.recent_files.insert(0, recent);
-                    self.home_map.recent_files.truncate(12);
-                }
+                self.remember_recent_survey(&target);
                 self.home_map.draw_guide_message = Some(format!(
                     "「{}」 조사를 열었습니다 ({} · 레이어 {}개 · 도형 {}개).",
                     title,

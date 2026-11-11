@@ -97,6 +97,29 @@ impl StrataAppState {
         self.survey_doc = doc;
     }
 
+    /// 방금 열거나 저장한 조사를 최근 목록 맨 위에 올리고 홈 표를 다시 만든다.
+    pub(crate) fn remember_recent_survey(&mut self, path: &std::path::Path) {
+        crate::recent_surveys::remember_survey(&mut self.home_map.recent_list, path);
+        self.home_map.recent_rows =
+            crate::recent_surveys::build_recent_rows(&self.home_map.recent_list);
+    }
+
+    /// 홈 표의 한 줄을 눌렀을 때: 파일이 있으면 열고, 없으면 그렇다고 알린다.
+    pub(crate) fn open_recent_survey_row(&mut self, idx: usize) {
+        let Some(row) = self.home_map.recent_rows.get(idx).cloned() else {
+            return;
+        };
+        if row.exists {
+            self.open_survey_gpkg(&row.path);
+        } else {
+            self.home_map.draw_guide_message = Some(format!(
+                "「{}」 조사 파일을 찾을 수 없습니다: {}",
+                row.name,
+                row.path.display()
+            ));
+        }
+    }
+
     /// 저장 직전: 화면에서 고친 조사구역·시굴격자를 문서에 되적는다.
     pub(crate) fn sync_view_into_survey_doc(&mut self) {
         self.survey_doc.srs_id = self.work_crs.epsg_code() as i32;
