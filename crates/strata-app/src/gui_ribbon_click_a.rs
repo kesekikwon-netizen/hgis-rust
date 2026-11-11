@@ -183,7 +183,9 @@ impl StrataAppState {
             }
             "수치지형" => {
                 self.active_tab = MainTab::Map;
+                // 단추를 누르면 바로 받는다(2026-11-11 사용자 지시). 창은 진행 단계를 보인다.
                 self.modals.active = Some(ActiveModalDialog::NgiiTopoDownload);
+                self.start_topographic_download();
             }
             "유산" => {
                 self.active_tab = MainTab::Map;

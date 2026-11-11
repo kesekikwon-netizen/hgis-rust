@@ -292,6 +292,15 @@
     if(!purpose.value && input.purpose && Array.from(purpose.options).some(o=>o.value==='BAAAC00008')){
       purpose.value='BAAAC00008';changed(purpose);
     }
+    // 2026-11-11: 공식 신청서의 사용목적 목록이 바뀌어 「기타(BAAAC00008)」가 없다(제작 및 활용 → CAAAC00001~7).
+    // 앱이 고른 분류(purposeCode)가 목록에 있으면 그것을 고른다. 없는 값은 넣지 않는다. (Rust 판에서 추가)
+    const purposeCode=String(input.purposeCode || ''), purposeGroup=form.querySelector('select[name="code"]');
+    if(!purpose.value && purposeCode) {
+      if(purposeGroup && !purposeGroup.value && Array.from(purposeGroup.options).some(o=>o.value===purposeCode.slice(0,5))){
+        purposeGroup.value=purposeCode.slice(0,5);changed(purposeGroup);
+      }
+      if(Array.from(purpose.options).some(o=>o.value===purposeCode)){purpose.value=purposeCode;changed(purpose);}
+    }
     if(purpose.value==='BAAAC00008' && detail && !detail.value.trim() && input.purpose){detail.value=input.purpose;changed(detail);}
     if(!birth.value.trim())return result('input','신청에 필요한 생년월일이 비어 있습니다. 아래 입력란 또는 공식 신청서에 입력해 주세요.');
     if(!purpose.value || (purpose.value==='BAAAC00008' && (!detail || !detail.value.trim())))

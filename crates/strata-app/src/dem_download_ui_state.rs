@@ -92,6 +92,7 @@ pub(crate) fn start_download(app: &StrataAppState, state: &mut DemDownloadState)
         center_5179,
         radius_m: half_m,
         folder,
+        topographic: false,
         cancel: Arc::clone(&cancel),
         progress: Arc::clone(&progress_slot),
         status: Arc::clone(&status_slot),

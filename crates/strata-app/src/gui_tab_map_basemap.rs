@@ -18,6 +18,7 @@ impl StrataAppState {
         use strata_net::tile_fetcher::BasemapSource;
         // 뒤에서 받던 지질도·토양도·수계도가 끝났으면 지도에 올린다.
         self.poll_overlay_download(ctx);
+        self.poll_topographic_download(ctx);
         let kind = match self.home_map.active_basemap {
             BasemapSource::VworldSatellite => crate::basemap_tiles::TileKind::Satellite,
             BasemapSource::VworldBase => crate::basemap_tiles::TileKind::Base,

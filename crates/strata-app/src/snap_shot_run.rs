@@ -182,6 +182,18 @@ impl StrataAppState {
                 }
                 self.modals.active = None;
             }
+            // 검증용: 「수치지형」 받기가 끝날 때까지(최대 10분) 기다린다.
+            "@wait_topo" => {
+                let ctx = eframe::egui::Context::default();
+                for _ in 0..3000 {
+                    self.poll_topographic_download(&ctx);
+                    if !self.status_bar_hint.contains("받는 중") {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
+                self.modals.active = None;
+            }
             "@zoom_out" => self.home_map.viewport.meters_per_pixel = 12.0,
             "@close_modal" => self.modals.active = None,
             "@tab_home" => self.active_tab = crate::app_state::MainTab::Home,

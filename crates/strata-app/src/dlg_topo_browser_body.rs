@@ -100,6 +100,10 @@ if detail {
             {
                 app.modals.topo_browser_auto_stopped =
                     !app.modals.topo_browser_auto_stopped;
+                // 중지하면 받던 일을 그만둔다(이미 낸 신청은 공식 신청 내역에 남는다).
+                if app.modals.topo_browser_auto_stopped {
+                    app.cancel_topographic_download();
+                }
             }
             ui.end_row();
         });

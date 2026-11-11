@@ -31,6 +31,8 @@ pub(crate) struct NgiiDemJob {
     pub(crate) radius_m: f64,
     /// 받은 파일을 둘 폴더(`<조사폴더>/DEM/원본`).
     pub(crate) folder: PathBuf,
+    /// 공개DEM 이 아니라 1:25,000 수치지형도(DXF)를 받는다.
+    pub(crate) topographic: bool,
     pub(crate) cancel: Arc<AtomicBool>,
     pub(crate) progress: Arc<Mutex<f32>>,
     pub(crate) status: Arc<Mutex<String>>,
@@ -38,6 +40,10 @@ pub(crate) struct NgiiDemJob {
 
 fn failed(message: impl Into<String>) -> PreparedDem {
     PreparedDem { status: Some(DemStatus::Failed), error: message.into(), ..PreparedDem::default() }
+}
+
+fn boxed(message: impl Into<String>) -> Box<PreparedDem> {
+    Box::new(failed(message))
 }
 
 /// 도우미 실행 파일: 앱 실행 파일 옆의 `ka-hgis-web.exe`.
@@ -85,6 +91,22 @@ fn find_raster(received: &[String], folder: &Path) -> Option<PathBuf> {
 
 /// 뒤의 스레드에서 돈다. 끝나면 결과(성공이면 받은 파일 수, 올릴 그림 경로)를 돌려준다.
 pub(crate) fn run_ngii_dem(job: &NgiiDemJob) -> PreparedDem {
+    let received = match receive_from_portal(job) {
+        Ok(received) => received,
+        Err(failure) => return *failure,
+    };
+    let raster_uri = find_raster(&received, &job.folder);
+    let warnings = if raster_uri.is_some() {
+        Vec::new()
+    } else {
+        vec!["받은 파일에서 지도에 올릴 표고 자료(.img, GeoTIFF)를 찾지 못했습니다. 파일은 조사 폴더의 DEM/원본 에 있습니다.".to_owned()]
+    };
+    PreparedDem { status: Some(DemStatus::Ready), raster_uri, downloaded_tiles: received.len(), warnings, ..PreparedDem::default() }
+}
+
+/// 국토정보플랫폼에서 받는다(로그인 → 도엽 확인 → 공식 신청 → 파일 받기). 받은 파일의 경로들.
+/// 실패·취소면 그 사유가 든 결과를 돌려준다.
+pub(crate) fn receive_from_portal(job: &NgiiDemJob) -> Result<Vec<String>, Box<PreparedDem>> {
     let say = |text: &str| {
         if let Ok(mut slot) = job.status.lock() {
             text.clone_into(&mut slot);
@@ -92,18 +114,18 @@ pub(crate) fn run_ngii_dem(job: &NgiiDemJob) -> PreparedDem {
     };
     let creds = AccountSettings::read_from_dir(&AccountSettings::user_config_dir(), AccountKind::NgiiTopographic);
     if !creds.is_ready() {
-        return failed("더보기의 수치지형도 계정 설정에서 아이디와 비밀번호를 입력해 주세요.");
+        return Err(boxed("더보기의 수치지형도 계정 설정에서 아이디와 비밀번호를 입력해 주세요."));
     }
     let Some(helper_path) = helper_exe() else {
-        return failed("웹 화면 도우미(ka-hgis-web)를 찾지 못했습니다. 앱 설치 파일을 확인하세요.");
+        return Err(boxed("웹 화면 도우미(ka-hgis-web)를 찾지 못했습니다. 앱 설치 파일을 확인하세요."));
     };
     if std::fs::create_dir_all(&job.folder).is_err() {
-        return failed("다운로드 폴더를 만들지 못했습니다. 저장 공간과 쓰기 권한을 확인하세요.");
+        return Err(boxed("다운로드 폴더를 만들지 못했습니다. 저장 공간과 쓰기 권한을 확인하세요."));
     }
     // 전송 화면 설정용 스크립트는 파일로 넘긴다(끝나면 지운다).
     let init_script = job.folder.join(".ngii-transfer-setup.js");
     if std::fs::write(&init_script, TOPOGRAPHIC_JS).is_err() {
-        return failed("다운로드 폴더에 쓰지 못했습니다. 쓰기 권한을 확인하세요.");
+        return Err(boxed("다운로드 폴더에 쓰지 못했습니다. 쓰기 권한을 확인하세요."));
     }
     let result = drive(job, &helper_path, &init_script, creds.username, creds.password, &say);
     let _ = std::fs::remove_file(&init_script);
@@ -117,7 +139,7 @@ fn drive(
     id: String,
     password: String,
     say: &dyn Fn(&str),
-) -> PreparedDem {
+) -> Result<Vec<String>, Box<PreparedDem>> {
     let mut scope = Map::new();
     scope.insert("x".to_owned(), json!(job.center_5179[0].round()));
     scope.insert("y".to_owned(), json!(job.center_5179[1].round()));
@@ -127,32 +149,32 @@ fn drive(
     scope.insert("purposeCode".to_owned(), json!(DEFAULT_PURPOSE_CODE));
     let mut flow = PortalFlow::new(scope, 1);
     let inputs = PortalInputs {
-        automation_js: dem_automation(TOPOGRAPHIC_JS, DEM_JS),
+        automation_js: if job.topographic { TOPOGRAPHIC_JS.to_owned() } else { dem_automation(TOPOGRAPHIC_JS, DEM_JS) },
         login: PortalLogin { id, password, attempt: 1 },
         birth_date: String::new(),
         purpose: DEFAULT_PURPOSE_KO.to_owned(),
     };
     let mut helper = match PortalHelper::start(helper_path, &job.folder, true, Some(init_script)) {
         Ok(helper) => helper,
-        Err(why) => return failed(why),
+        Err(why) => return Err(boxed(why)),
     };
     if let Err(why) = helper.open(PORTAL_URL) {
-        return failed(why);
+        return Err(boxed(why));
     }
     let started = std::time::Instant::now();
     while !matches!(flow.stage, Stage::Complete | Stage::Stopped) {
         if job.cancel.load(Ordering::Relaxed) {
-            return PreparedDem {
+            return Err(Box::new(PreparedDem {
                 status: Some(DemStatus::Cancelled),
                 error: "자동 진행을 중지했습니다. 이미 신청한 자료는 공식 신청 내역에서 확인할 수 있습니다.".to_owned(),
                 ..PreparedDem::default()
-            };
+            }));
         }
         if started.elapsed().as_secs() > TOTAL_LIMIT_SECS {
-            return failed("국토정보플랫폼의 응답이 너무 오래 걸립니다. 공식 신청 내역을 확인한 뒤 다시 시도하세요.");
+            return Err(boxed("국토정보플랫폼의 응답이 너무 오래 걸립니다. 공식 신청 내역을 확인한 뒤 다시 시도하세요."));
         }
         if let Err(why) = helper.step(&mut flow, &inputs) {
-            return failed(why);
+            return Err(boxed(why));
         }
         if let Ok(mut slot) = job.progress.lock() {
             *slot = progress_of(&flow);
@@ -165,24 +187,12 @@ fn drive(
         std::thread::sleep(POLL_INTERVAL);
     }
     if let Some(why) = flow.failed {
-        return failed(why);
+        return Err(boxed(why));
     }
     if helper.received.is_empty() {
-        return failed(if flow.message.is_empty() { "받은 파일이 없습니다.".to_owned() } else { flow.message });
+        return Err(boxed(if flow.message.is_empty() { "받은 파일이 없습니다.".to_owned() } else { flow.message }));
     }
-    let raster_uri = find_raster(&helper.received, &job.folder);
-    let warnings = if raster_uri.is_some() {
-        Vec::new()
-    } else {
-        vec!["받은 파일에서 지도에 올릴 표고 자료(.img, GeoTIFF)를 찾지 못했습니다. 파일은 조사 폴더의 DEM/원본 에 있습니다.".to_owned()]
-    };
-    PreparedDem {
-        status: Some(DemStatus::Ready),
-        raster_uri,
-        downloaded_tiles: helper.received.len(),
-        warnings,
-        ..PreparedDem::default()
-    }
+    Ok(helper.received.clone())
 }
 
 #[cfg(test)]

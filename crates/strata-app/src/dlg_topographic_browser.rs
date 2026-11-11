@@ -35,6 +35,7 @@ pub(crate) fn render_topographic_browser(app: &mut StrataAppState, ctx: &egui::C
     if !is_open {
         return;
     }
+    app.poll_topographic_download(ctx);
     let stage = app.modals.topo_browser_stage.min(5);
     let detail = app.modals.topo_browser_detail;
 

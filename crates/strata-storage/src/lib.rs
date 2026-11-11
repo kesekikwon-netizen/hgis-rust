@@ -26,6 +26,7 @@ pub mod project_actions;
 pub mod project_recent;
 pub mod session_save;
 pub mod shp_io;
+pub mod dxf_lines_reader;
 pub mod shp_file_reader;
 pub mod shp_file_writer;
 pub mod shp_writer;

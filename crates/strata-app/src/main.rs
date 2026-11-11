@@ -34,6 +34,7 @@ mod reference_cadastral;
 mod dem_layer;
 mod dem_ngii_worker;
 mod reference_overlays;
+mod topo_download;
 mod reference_layers;
 pub mod ribbon;
 pub mod ribbon_icon_svg;
