@@ -14,6 +14,8 @@ pub enum Command {
     /// 주소의 경로가 `paths` 가운데 하나인 화면에서 스크립트를 돌리고 결과를 돌려준다.
     /// 그런 화면이 없으면 `found: false` 로 답한다.
     Eval { id: u64, paths: Vec<String>, script: String },
+    /// 열려 있는 화면들의 주소(경로까지만)를 알려 달라.
+    Pages { id: u64 },
     /// 창을 보이거나 감춘다.
     Show { visible: bool },
     /// 끝낸다.
@@ -28,6 +30,8 @@ pub enum Event {
     Ready,
     /// `Eval` 의 답. `result` 는 스크립트가 돌려준 값이다.
     Eval { id: u64, found: bool, url: String, result: serde_json::Value },
+    /// `Pages` 의 답.
+    Pages { id: u64, urls: Vec<String> },
     /// 파일 받기가 시작됐다(저장할 곳).
     DownloadStarted { path: String },
     /// 파일 받기가 끝났다.

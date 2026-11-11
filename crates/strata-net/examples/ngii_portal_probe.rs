@@ -1,5 +1,6 @@
-//! 국토정보플랫폼 자동 진행을 실제 사이트로 확인한다 — **신청서가 열리는 데까지만**.
-//! 신청 제출(되돌릴 수 없음)은 하지 않는다. 계정 값은 출력하지 않는다.
+//! 국토정보플랫폼 자동 진행을 실제 사이트로 확인한다 — 기본은 **신청서가 열리는 데까지만**.
+//! 신청 제출(되돌릴 수 없음)은 `KA_HGIS_PROBE_SUBMIT=1` 을 줄 때만 한다(사용자가 허락한 경우).
+//! 계정 값은 출력하지 않는다.
 //!
 //! `cargo run -p strata-net --example ngii_portal_probe -- <ka-hgis-web.exe> <받을 폴더> <x5179> <y5179> <반경m>`
 
@@ -33,15 +34,19 @@ fn main() -> Result<(), String> {
     scope.insert("radius".to_owned(), json!(number(radius)?));
     scope.insert("numbers".to_owned(), json!([]));
     scope.insert("cachedNumbers".to_owned(), json!([]));
+    // 사용목적: 공식 목록의 「교육, 학술, 연구」.
+    scope.insert("purposeCode".to_owned(), json!("CAAAC00006"));
+    let submit = std::env::var_os("KA_HGIS_PROBE_SUBMIT").is_some();
+    let (stop_at, limit_secs) = if submit { (Stage::Complete, 400) } else { (Stage::Form, 60) };
     let mut flow = PortalFlow::new(scope, 1);
 
-    let mut helper = PortalHelper::start(&PathBuf::from(helper), &PathBuf::from(downloads), std::env::var_os("KA_HGIS_WEB_SHOW").is_none())?;
+    let mut helper = PortalHelper::start(&PathBuf::from(helper), &PathBuf::from(downloads), std::env::var_os("KA_HGIS_WEB_SHOW").is_none(), Some(&providers.join("ngii-topographic.js")))?;
     helper.open(PORTAL_URL)?;
     let started = std::time::Instant::now();
-    let inputs = PortalInputs { automation_js: automation, login, birth_date: String::new(), purpose: String::new() };
+    let inputs = PortalInputs { automation_js: automation, login, birth_date: String::new(), purpose: "고고학 발굴조사 현장 도면 작성 및 지형 확인".to_owned() };
     // 최대 60초만 돌린다(멈춘 화면을 오래 붙잡지 않는다).
     let mut last = String::new();
-    while started.elapsed().as_secs() < 60 && !matches!(flow.stage, Stage::Form | Stage::Stopped | Stage::Complete) {
+    while started.elapsed().as_secs() < limit_secs && flow.stage != stop_at && !matches!(flow.stage, Stage::Stopped | Stage::Complete) {
         helper.step(&mut flow, &inputs)?;
         let now = format!("단계={:?} 표시={} 안내={} | {}", flow.stage, flow.phase, flow.message, helper.last_note);
         if now != last {
@@ -61,6 +66,19 @@ fn main() -> Result<(), String> {
             }
         }
     }
+    if submit {
+        // 신청 뒤: 결과 표시와 응답의 항목 이름, 열린 화면, 받은 파일 알림을 본다.
+        std::thread::sleep(std::time::Duration::from_secs(8));
+        let script = "(function(){var s=window.__kaTopographicSubmission;return s?{state:s.state,shape:s.shape||[]}:null;})()";
+        let answer = helper.eval(&[PORTAL_PATH.to_owned()], script)?;
+        println!("신청 결과: {}", answer.map(|a| a["result"].to_string()).unwrap_or_default());
+        println!("열린 화면: {:?}", helper.pages()?);
+        println!("알림: {:?}", helper.kept_notices);
+        println!("받은 파일: {:?}", helper.received);
+        for file in &flow.manifest {
+            println!("  파일 {} ({} bytes, 도엽 {}, {})", file["name"], file["bytes"], file["number"], file["path"]);
+        }
+    }
     println!("끝: 단계={:?} 중단={:?} 신청할 자료={}", flow.stage, flow.failed, flow.records.len());
     for r in &flow.records {
         println!("  도엽 {} {} (이력 {} · 연도 {})", r["num"], r["name"], r["historyNo"], r["year"]);
@@ -71,6 +89,12 @@ fn main() -> Result<(), String> {
             return Array.from(f.querySelectorAll('input,select,button')).map(function(e){return e.tagName+':'+(e.name||e.id||'')+':'+(e.type||'')+':'+((e.tagName==='BUTTON'?e.textContent:'')||'').trim();});})()";
         let answer = helper.eval(&[PORTAL_PATH.to_owned()], script)?;
         println!("신청서 항목: {}", answer.map(|a| a["result"].to_string()).unwrap_or_default());
+        // `KA_HGIS_PROBE_SCRIPT=<파일>`: 신청서가 열린 화면에서 읽기 전용 스크립트를 하나 더 돌린다.
+        if let Some(extra) = std::env::var_os("KA_HGIS_PROBE_SCRIPT") {
+            let script = std::fs::read_to_string(extra).map_err(|e| format!("추가 스크립트: {e}"))?;
+            let answer = helper.eval(&[PORTAL_PATH.to_owned()], &script)?;
+            println!("추가: {}", answer.map(|a| a["result"].to_string()).unwrap_or_default());
+        }
     }
     Ok(())
 }

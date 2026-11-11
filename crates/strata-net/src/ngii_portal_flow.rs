@@ -18,7 +18,8 @@ pub const LOGIN_PATHS: [&str; 4] = [
     "/member/login.do",
 ];
 pub const PORTAL_PATH: &str = "/ms/map/NlipMap.do";
-pub const DOWNLOAD_PATH: &str = "/pd/purchs/download.do";
+/// 파일 전송 화면(nlippd.ngii.go.kr). C++ `transferPage`(:634).
+pub const DOWNLOAD_PATH: &str = "/nlippd/pd/innorix/innorixdownLoad.do";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stage {
@@ -72,6 +73,8 @@ pub struct PortalFlow {
     /// 공식 검색이 돌려준, 신청할 자료 목록.
     pub records: Vec<Value>,
     pub expected_files: u64,
+    /// 다 받은 파일 수.
+    pub received_files: u64,
     pub manifest: Vec<Value>,
     scope: Map<String, Value>,
     generation: u64,
@@ -91,6 +94,7 @@ impl PortalFlow {
             failed: None,
             records: Vec::new(),
             expected_files: 0,
+            received_files: 0,
             manifest: Vec::new(),
             scope,
             generation,
@@ -125,7 +129,7 @@ impl PortalFlow {
         input.insert("number".to_owned(), self.current().get("num").cloned().unwrap_or(Value::Null));
         input.insert("record".to_owned(), self.current());
         input.insert("records".to_owned(), Value::Array(self.records.clone()));
-        input.insert("fileIndex".to_owned(), json!(0));
+        input.insert("fileIndex".to_owned(), json!(self.received_files));
         if matches!(self.stage, Stage::Form | Stage::Submit) {
             input.insert("birthDate".to_owned(), json!(birth_date.trim()));
             input.insert("purpose".to_owned(), json!(purpose.trim()));
@@ -160,6 +164,24 @@ impl PortalFlow {
             } else {
                 "공식 사이트의 응답을 확인하지 못했습니다. 계정 설정과 연결 상태를 확인하세요."
             });
+        }
+    }
+
+    /// 파일 하나의 받기가 끝났다. 남은 파일이 있으면 다음 파일을, 없으면 끝낸다(C++ 은 한 번에 하나씩 받는다).
+    pub fn on_file_received(&mut self, ok: bool) {
+        if self.stage != Stage::Transfer {
+            return;
+        }
+        if !ok {
+            self.fail("파일을 받는 중에 연결이 끊겼습니다. 다시 받기를 눌러 주세요.");
+            return;
+        }
+        self.received_files += 1;
+        if self.received_files < self.expected_files {
+            self.stage = Stage::Download;
+        } else {
+            self.stage = Stage::Complete;
+            self.message = "파일을 모두 받았습니다.".to_owned();
         }
     }
 

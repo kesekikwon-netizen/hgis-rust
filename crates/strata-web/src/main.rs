@@ -4,6 +4,8 @@
 //! 돌리고, 팝업과 파일 받기를 다룬다)을 WebView2 로 한다. 본 앱이 따로 띄워 표준 입출력으로 부린다.
 //!
 //! 실행: `ka-hgis-web --allow <호스트> [--allow …] [--allow-nav <호스트> …] --downloads <폴더> [--hidden]`
+//! `--init-script <파일>`: 화면의 문서가 준비될 때마다(그 화면의 스크립트가 시작하기 전) 돌릴 함수.
+//! C++ 의 `transferSetup`(DocumentReady, `KaTopographicBrowser.cpp:527`) 자리다.
 //! `--allow`: 스크립트를 돌리고 파일을 받는 믿는 사이트. `--allow-nav`: 지나가는 것만 허용하는
 //! 주소(공식 로그인이 거치는 인증 사이트) — 그 화면에서는 스크립트도 계정 입력도 하지 않는다.
 
@@ -51,6 +53,8 @@ struct Page {
 /// 창들이 함께 쓰는 것.
 struct Shared {
     allowed: Vec<String>,
+    /// 문서가 준비될 때마다 돌릴 스크립트(없으면 빈 글).
+    init_script: String,
     /// 지나가는 것만 허용하는 호스트.
     pass_through: Vec<String>,
     downloads: PathBuf,
@@ -128,6 +132,9 @@ fn make_page(
             let path = path.map(|p| p.display().to_string()).unwrap_or_default();
             emit(&Event::DownloadDone { path, ok });
         });
+    if !shared.init_script.is_empty() {
+        builder = builder.with_initialization_script(shared.init_script.as_str());
+    }
     if let Some(sibling) = sibling {
         builder = builder.with_environment(sibling.environment());
     }
@@ -171,8 +178,9 @@ fn run_eval(pages: &[Page], shared: &Shared, id: u64, paths: &[String], script: 
     }
 }
 
-fn parse_args() -> (Vec<String>, Vec<String>, PathBuf, bool) {
+fn parse_args() -> (Vec<String>, Vec<String>, PathBuf, bool, String) {
     let (mut allowed, mut pass_through, mut downloads, mut hidden) = (Vec::new(), Vec::new(), std::env::temp_dir(), false);
+    let mut init_script = String::new();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -180,18 +188,27 @@ fn parse_args() -> (Vec<String>, Vec<String>, PathBuf, bool) {
             "--allow-nav" => pass_through.extend(args.next().map(|h| h.to_ascii_lowercase())),
             "--downloads" => downloads = args.next().map_or(downloads, PathBuf::from),
             "--hidden" => hidden = true,
+            "--init-script" => {
+                // 믿는 사이트의 https 화면에서, 문서가 준비된 때에만 돌린다.
+                if let Some(function) = args.next().and_then(|path| std::fs::read_to_string(path).ok()) {
+                    init_script = format!(
+                        "document.addEventListener('DOMContentLoaded',function(){{if(location.protocol!=='https:')return;try{{(\n{function}\n)({{command:'configureTransfer',testMode:false}});}}catch(e){{}}}});"
+                    );
+                }
+            }
             _ => {}
         }
     }
-    (allowed, pass_through, downloads, hidden)
+    (allowed, pass_through, downloads, hidden, init_script)
 }
 
 fn main() {
-    let (allowed, pass_through, downloads, hidden) = parse_args();
+    let (allowed, pass_through, downloads, hidden, init_script) = parse_args();
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let shared = Rc::new(Shared {
         allowed,
         pass_through,
+        init_script,
         downloads,
         visible: RefCell::new(!hidden),
         spares: RefCell::new(Vec::new()),
@@ -252,6 +269,14 @@ fn main() {
                     }
                 }
                 Command::Eval { id, paths, script } => run_eval(&pages, &shared, id, &paths, &script),
+                Command::Pages { id } => {
+                    // 주소의 뒤(값)는 빼고 알린다.
+                    let urls = pages
+                        .iter()
+                        .map(|p| p.webview.url().unwrap_or_default().split(['?', '#']).next().unwrap_or("").to_owned())
+                        .collect();
+                    emit(&Event::Pages { id, urls });
+                }
                 Command::Show { visible } => {
                     *shared.visible.borrow_mut() = visible;
                     for page in &pages {

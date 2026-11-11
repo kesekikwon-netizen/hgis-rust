@@ -56,6 +56,17 @@ fn the_stages_run_in_the_cpp_order_from_sheets_to_download() {
     assert_eq!(step(&mut f, json!({"state": "downloading"})), "download");
     assert_eq!(f.stage, Stage::Transfer);
     assert!(f.poll("", "").is_none(), "전송 중에는 화면에 시키지 않는다");
+    // 파일을 다 받으면 끝난다. 두 개면 하나 받고 다음 파일을 시킨다.
+    f.on_file_received(true);
+    assert_eq!((f.stage, f.received_files), (Stage::Complete, 1));
+    let mut two = flow();
+    two.stage = Stage::Transfer;
+    two.expected_files = 2;
+    two.on_file_received(true);
+    assert_eq!(two.stage, Stage::Download);
+    assert_eq!(two.poll("", "").expect("download").input["fileIndex"], json!(1));
+    two.on_file_received(false);
+    assert!(two.failed.as_deref().is_some_and(|m| m.contains("연결이 끊겼습니다")));
 }
 
 #[test]

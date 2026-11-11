@@ -70,11 +70,12 @@ pub fn wrap_script(automation_js: &str, input: &Value, login: &PortalLogin) -> S
     )
 }
 
-/// 공개DEM 용 자동화: 도엽 고르기·신청서 열기는 `ngii-dem.js`, 로그인은 수치지형도 스크립트가 맡는다.
+/// 공개DEM 용 자동화: 도엽 고르기·신청서 열기·채우기·제출은 `ngii-dem.js`,
+/// 로그인·신청 확인·전송 화면 설정은 수치지형도 스크립트가 맡는다.
 #[must_use]
 pub fn dem_automation(topographic_js: &str, dem_js: &str) -> String {
     format!(
-        "(function(input){{if(input.command==='login')return(
+        "(function(input){{if(['login','order','configureTransfer'].indexOf(input.command)>=0)return(
 {topographic_js}
 )(input);return(
 {dem_js}
@@ -89,19 +90,29 @@ pub struct PortalHelper {
     stdin: ChildStdin,
     events: Receiver<Value>,
     next_id: u64,
+    /// 답 말고 도우미가 알린 일 가운데 아직 처리하지 않은 것.
+    pub notices: Vec<Value>,
+    /// 처리하고 남겨 둔 알림(받기 시작, 창 닫힘, 오류).
+    pub kept_notices: Vec<Value>,
+    /// 다 받은 파일의 경로.
+    pub received: Vec<String>,
     /// 마지막 답의 요약(어느 화면·명령·상태·오류) — 원인 찾기용. 계정 값은 없다.
     pub last_note: String,
 }
 
 impl PortalHelper {
     /// 도우미를 띄우고 준비될 때까지 기다린다.
-    pub fn start(helper_exe: &Path, downloads: &Path, hidden: bool) -> Result<Self, String> {
+    /// `init_script`: 문서가 준비될 때마다 돌릴 자동화 함수 파일(전송 화면 설정용, `ngii-topographic.js`).
+    pub fn start(helper_exe: &Path, downloads: &Path, hidden: bool, init_script: Option<&Path>) -> Result<Self, String> {
         let mut command = Command::new(helper_exe);
         command.args(["--allow", PORTAL_HOST]);
         for host in AUTH_PASS_THROUGH_HOSTS {
             command.args(["--allow-nav", host]);
         }
         command.arg("--downloads").arg(downloads);
+        if let Some(script) = init_script {
+            command.arg("--init-script").arg(script);
+        }
         if hidden {
             command.arg("--hidden");
         }
@@ -133,7 +144,7 @@ impl PortalHelper {
                 }
             }
         });
-        let mut helper = Self { child, stdin, events, next_id: 0, last_note: String::new() };
+        let mut helper = Self { child, stdin, events, next_id: 0, notices: Vec::new(), kept_notices: Vec::new(), received: Vec::new(), last_note: String::new() };
         match helper.wait_event(Duration::from_secs(30), |e| e["event"] == "ready" || e["event"] == "error") {
             Some(e) if e["event"] == "ready" => Ok(helper),
             _ => Err("웹 화면 도우미가 준비되지 않았습니다(WebView2 를 확인하세요).".to_owned()),
@@ -154,11 +165,28 @@ impl PortalHelper {
             if want(&event) {
                 return Some(event);
             }
+            if event["event"] != "eval" {
+                self.notices.push(event);
+            }
         }
     }
 
     pub fn open(&mut self, url: &str) -> Result<(), String> {
         self.send(&json!({"cmd": "open", "url": url}))
+    }
+
+    /// 열려 있는 화면들의 주소(경로까지만).
+    pub fn pages(&mut self) -> Result<Vec<String>, String> {
+        self.next_id += 1;
+        let id = self.next_id;
+        self.send(&json!({"cmd": "pages", "id": id}))?;
+        let answer = self.wait_event(Duration::from_secs(10), |e| e["event"] == "pages" && e["id"] == id);
+        Ok(answer
+            .and_then(|a| a["urls"].as_array().cloned())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|u| u.as_str().map(str::to_owned))
+            .collect())
     }
 
     /// 스크립트를 돌리고 답(`found`, `result`)을 받는다. 답이 없으면 `None`.
@@ -171,7 +199,20 @@ impl PortalHelper {
 
     /// 한 차례: 지금 단계를 화면에 시키고 답으로 단계를 옮긴다.
     pub fn step(&mut self, flow: &mut PortalFlow, inputs: &PortalInputs) -> Result<(), String> {
+        // 그사이 끝난 파일 받기를 단계에 알린다.
+        for notice in std::mem::take(&mut self.notices) {
+            if notice["event"] == "download_done" {
+                flow.on_file_received(notice["ok"] == true);
+                self.received.push(notice["path"].as_str().unwrap_or("").to_owned());
+            } else {
+                self.kept_notices.push(notice);
+            }
+        }
         let Some(request) = flow.poll(&inputs.birth_date, &inputs.purpose) else {
+            // 전송 중: 알림이 올 때까지 잠깐 기다린다.
+            if let Some(event) = self.wait_event(POLL_INTERVAL, |e| e["event"] == "download_done") {
+                self.notices.push(event);
+            }
             return Ok(());
         };
         // 스크립트 실행은 도우미가 믿는 사이트(국토지리정보원)의 화면에서만 한다.
