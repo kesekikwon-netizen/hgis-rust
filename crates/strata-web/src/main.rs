@@ -109,11 +109,15 @@ fn make_page(
     Ok(Page { window, webview })
 }
 
-/// 경로가 맞는 믿는 화면에서 스크립트를 돌린다(나중에 열린 화면 먼저).
+/// 경로가 맞는 믿는 화면에서 스크립트를 돌린다. `paths` 의 앞 경로가 먼저(로그인 화면 우선),
+/// 같은 경로면 나중에 열린 화면이 먼저다.
 fn run_eval(pages: &[Page], shared: &Shared, id: u64, paths: &[String], script: &str) {
-    let hit = pages.iter().rev().find_map(|page| {
-        let url = page.webview.url().ok()?;
-        (is_trusted_url(&url, &shared.allowed) && paths.iter().any(|p| p == url_path(&url))).then_some((page, url))
+    let urls: Vec<String> = pages.iter().map(|page| page.webview.url().unwrap_or_default()).collect();
+    let hit = paths.iter().find_map(|path| {
+        (0..pages.len())
+            .rev()
+            .find(|&i| is_trusted_url(&urls[i], &shared.allowed) && url_path(&urls[i]) == path)
+            .map(|i| (&pages[i], urls[i].clone()))
     });
     let Some((page, url)) = hit else {
         emit(&Event::Eval { id, found: false, url: String::new(), result: serde_json::Value::Null });
