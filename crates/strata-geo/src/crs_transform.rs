@@ -163,3 +163,7 @@ impl CrsTransformer {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "crs_transform_tests.rs"]
+mod tests;

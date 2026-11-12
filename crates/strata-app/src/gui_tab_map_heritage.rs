@@ -167,22 +167,8 @@ impl StrataAppState {
                 ));
                 p.add(egui::Shape::line(pts, stroke));
             }
-            if rs.is_label_visible("조사구역") {
-                let sp = w2s(rect, vp, rs.survey_center);
-                let lbl_r = Rect::from_center_size(sp, Vec2::new(66.0, 16.0));
-                p.rect_filled(
-                    lbl_r,
-                    3.0,
-                    Color32::from_rgba_unmultiplied(255, 255, 255, 220),
-                );
-                p.text(
-                    lbl_r.center(),
-                    egui::Align2::CENTER_CENTER,
-                    format!("{:.2} m²", rs.survey_area_m2),
-                    FontId::proportional(10.0),
-                    Color32::BLACK,
-                );
-            }
+            // 예전에는 여기서 survey_center 에 survey_area_m2 를 「0.00 m²」처럼 찍었다(도형이 없어도).
+            // 면적 라벨은 C++ 처럼 조사 파일 레이어의 라벨로만 그린다(지시 3-1, gui_tab_map_survey).
         }
 
         if rs.is_layer_visible("시굴격자") {
@@ -243,5 +229,7 @@ impl StrataAppState {
             center: [cx, cy],
             layer_color: &layer_color,
         });
+        // 「조사 데이터」 묶음은 범례에서 참조 지도·지적 위에 있다 — 그 위에 그린다.
+        self.paint_survey_tables(ctx, p, rect);
     }
 }

@@ -30,6 +30,14 @@ pub fn configure_korean_fonts_and_theme(ctx: &egui::Context, tokens: &ThemeToken
             break;
         }
     }
+    // 지도 라벨: C++ LabelOps 는 맑은 고딕 굵게(`LabelOps.cpp:33-35`). 파일이 없으면 등록하지 않고
+    // 그리는 쪽이 기본 글꼴을 쓴다.
+    if let Ok(bytes) = std::fs::read(r"C:\Windows\Fonts\malgunbd.ttf") {
+        fonts.font_data.insert("korean_bold".to_owned(), egui::FontData::from_owned(bytes).into());
+        let mut family = vec!["korean_bold".to_owned()];
+        family.extend(fonts.families.get(&egui::FontFamily::Proportional).cloned().unwrap_or_default());
+        fonts.families.insert(egui::FontFamily::Name(crate::gui_tab_map::LABEL_FONT_FAMILY.into()), family);
+    }
     ctx.set_fonts(fonts);
     apply_theme_tokens(ctx, tokens);
 }

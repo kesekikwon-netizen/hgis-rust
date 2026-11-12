@@ -32,6 +32,12 @@ mod gui_tab_map_measure;
 mod gui_tab_map_opacity;
 #[path = "gui_tab_map_overlay.rs"]
 mod gui_tab_map_overlay;
+#[path = "gui_tab_map_survey.rs"]
+mod gui_tab_map_survey;
+#[path = "gui_tab_map_survey_labels.rs"]
+mod gui_tab_map_survey_labels;
+
+pub(crate) use gui_tab_map_survey::LABEL_FONT_FAMILY;
 #[path = "gui_tab_map_tab.rs"]
 mod gui_tab_map_tab;
 #[path = "gui_tab_map_undo.rs"]

@@ -23,6 +23,10 @@ pub struct SurveyFileTable {
     pub table: String,
     /// gpkg_geometry_columns 의 좌표계 번호(새 도형을 쓸 때 머리말에 넣는다).
     pub srs_id: i32,
+    /// gpkg_geometry_columns 의 도형 형식 이름(POLYGON·LINESTRING·POINT…).
+    pub geometry_type: String,
+    /// fid·도형 칸을 뺀 항목(이름, 선언 형식) — 표 순서 그대로. C++ detectNameField 가 순서·형식으로 고른다.
+    pub columns: Vec<(String, String)>,
     pub layer: LayerEditBuffer,
     pub baseline: Vec<FeatureRecord>,
 }
@@ -67,19 +71,20 @@ pub fn read_survey_tables(path: &Path) -> StrataResult<Vec<SurveyFileTable>> {
     let conn = open_read_only(path).map_err(db)?;
     let mut stmt = conn
         .prepare(
-            "SELECT c.table_name, g.column_name, g.srs_id FROM gpkg_contents c
+            "SELECT c.table_name, g.column_name, g.srs_id, g.geometry_type_name FROM gpkg_contents c
              LEFT JOIN gpkg_geometry_columns g ON g.table_name = c.table_name
              WHERE c.data_type = 'features' ORDER BY c.rowid",
         )
         .map_err(db)?;
-    let listed: Vec<(String, Option<String>, Option<i32>)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+    type Listed = (String, Option<String>, Option<i32>, Option<String>);
+    let listed: Vec<Listed> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
         .map_err(db)?
         .collect::<Result<_, _>>()
         .map_err(db)?;
 
     let mut out = Vec::new();
-    for (table, geom_col, srs_id) in listed {
+    for (table, geom_col, srs_id, geometry_type) in listed {
         if table.is_empty() || is_metadata_table(&table) {
             continue;
         }
@@ -95,9 +100,34 @@ pub fn read_survey_tables(path: &Path) -> StrataResult<Vec<SurveyFileTable>> {
         }
         let layer = read_table(&conn, &table, geom_col.as_deref())?;
         let baseline = layer.features.clone();
-        out.push(SurveyFileTable { table, srs_id: srs_id.unwrap_or(0), layer, baseline });
+        let columns = read_columns(&conn, &table, geom_col.as_deref())?;
+        out.push(SurveyFileTable {
+            table,
+            srs_id: srs_id.unwrap_or(0),
+            geometry_type: geometry_type.unwrap_or_default().to_ascii_uppercase(),
+            columns,
+            layer,
+            baseline,
+        });
     }
     Ok(out)
+}
+
+/// 표의 항목(이름, 선언 형식)을 표 순서대로 — 기본 키(fid)와 도형 칸은 뺀다.
+fn read_columns(conn: &Connection, table: &str, geom_col: Option<&str>) -> StrataResult<Vec<(String, String)>> {
+    let mut stmt = conn
+        .prepare("SELECT name, type, pk FROM pragma_table_info(?1) ORDER BY cid")
+        .map_err(db)?;
+    let rows: Vec<(String, String, i64)> = stmt
+        .query_map([table], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map_err(db)?
+        .collect::<Result<_, _>>()
+        .map_err(db)?;
+    Ok(rows
+        .into_iter()
+        .filter(|(name, _, pk)| *pk == 0 && Some(name.as_str()) != geom_col)
+        .map(|(name, ty, _)| (name, ty))
+        .collect())
 }
 
 fn read_table(conn: &Connection, table: &str, geom_col: Option<&str>) -> StrataResult<LayerEditBuffer> {

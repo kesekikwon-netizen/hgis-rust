@@ -198,6 +198,8 @@ mod dialogs_modal_tests_c;
 
 mod shell_workspace;
 mod shell_dialogs;
+mod survey_style;
+mod survey_paint_layers;
 
 #[cfg(test)]
 #[path = "gui_shell_tests_a.rs"]

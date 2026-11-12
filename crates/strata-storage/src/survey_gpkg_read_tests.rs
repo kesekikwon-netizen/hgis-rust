@@ -129,3 +129,24 @@ fn validate_rejects_non_gpkg_and_damaged_files_with_cpp_messages() -> StrataResu
     assert_eq!(validate_survey_for_open(&damaged), Err(NOT_INTACT.to_owned()));
     Ok(())
 }
+
+/// 지도 라벨이 고를 항목(C++ `LayerOps::detectNameField` 는 항목 순서·글자 형식으로 고른다)을 위해
+/// 표의 항목을 표 순서 그대로(fid·도형 칸 빼고) 선언 형식과 함께, 도형 형식 이름과 함께 읽는다.
+#[test]
+fn reads_column_order_types_and_geometry_type() -> StrataResult<()> {
+    let dir = tempfile::tempdir()?;
+    let path = demo_copy(dir.path(), "demo.gpkg")?;
+    let tables = read_survey_tables(&path)?;
+    let cp = tables.iter().find(|t| t.table == "control_points").ok_or_else(|| StrataError::Storage("cp".into()))?;
+    let cols: Vec<(&str, &str)> = cp.columns.iter().map(|(n, t)| (n.as_str(), t.as_str())).collect();
+    assert_eq!(&cols[..4], &[("point_id", "TEXT"), ("x", "REAL"), ("y", "REAL"), ("z", "REAL")]);
+    assert_eq!(cols.len(), 14);
+    assert_eq!(cp.geometry_type, "POINT");
+    let kinds: Vec<(&str, &str)> = tables.iter().map(|t| (t.table.as_str(), t.geometry_type.as_str())).collect();
+    assert_eq!(kinds, vec![
+        ("survey_area", "POLYGON"), ("feature_poly", "POLYGON"), ("feature_line", "LINESTRING"),
+        ("section_line", "LINESTRING"), ("control_points", "POINT"), ("artifact_point", "POINT"),
+        ("trial_trench", "POLYGON"),
+    ]);
+    Ok(())
+}
