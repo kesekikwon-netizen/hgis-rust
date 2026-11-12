@@ -31,8 +31,7 @@ fn survey_rows(app: &StrataAppState) -> Vec<(String, usize, Option<&'static str>
             continue;
         }
         if in_survey {
-            let n = app.left_layers.entries.iter().find(|e| e.label_ko == r.name).map_or(0, |e| e.feature_count);
-            out.push((r.name.clone(), n, r.right_label));
+            out.push((r.name.clone(), r.count, r.right_label));
         }
     }
     out
@@ -150,4 +149,30 @@ fn snap_open_action_opens_the_given_file() {
     app.snap_apply_action(&format!("@open={}", path.display()));
     assert_eq!(app.survey_path.as_deref(), Some(path.as_path()));
     assert_eq!(app.window_title(), "demo - Strata");
+}
+
+/// 도메인이 아닌 면 표(user_poly_*)는 모두 「면」 이름으로 올라온다(`LayerOps.cpp:1757`).
+/// 이름이 같아도 행마다 제 도형 수를 보여야 한다.
+#[test]
+fn same_titled_user_polygon_tables_keep_their_own_counts() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = demo_copy(dir.path(), "demo.gpkg");
+    {
+        let c = rusqlite::Connection::open(&path).expect("open copy");
+        c.execute_batch(
+            "CREATE TABLE user_poly_1 (fid INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, geom POLYGON, name TEXT);
+             CREATE TABLE user_poly_2 (fid INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, geom POLYGON, name TEXT);
+             INSERT INTO gpkg_contents (table_name, data_type, identifier, srs_id) VALUES ('user_poly_1', 'features', 'user_poly_1', 5186);
+             INSERT INTO gpkg_contents (table_name, data_type, identifier, srs_id) VALUES ('user_poly_2', 'features', 'user_poly_2', 5186);
+             INSERT INTO user_poly_1 (name) VALUES ('a');
+             INSERT INTO user_poly_2 (name) VALUES ('b');
+             INSERT INTO user_poly_2 (name) VALUES ('c');",
+        )
+        .expect("add user polygon tables");
+    }
+    let mut app = StrataAppState::new_startup();
+    app.open_survey_gpkg(&path);
+    let rows = survey_rows(&app);
+    assert_eq!(rows[0], ("면".to_owned(), 2, Some("면적")), "user_poly_2 is on top");
+    assert_eq!(rows[1], ("면".to_owned(), 1, Some("면적")));
 }

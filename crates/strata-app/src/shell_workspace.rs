@@ -13,14 +13,8 @@ impl StrataAppState {
         self.poll_debug_remote_commands(ctx);
         self.handle_cpp_keyboard_shortcuts(ctx);
 
-        let win_title = if self.active_tab == MainTab::Home {
-            "Strata".to_owned()
-        } else if self.is_dirty {
-            format!("{} * - Strata", self.project_title)
-        } else {
-            format!("{} - Strata", self.project_title)
-        };
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title(win_title));
+        // C++ refreshWindowTitle(`MainWindowSession.cpp:1327-1335`) — 탭과 관계없이 조사 파일 이름.
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
 
         if !self.right_inspector.map_focused {
             egui::TopBottomPanel::top("ka_cpp_top_chrome")

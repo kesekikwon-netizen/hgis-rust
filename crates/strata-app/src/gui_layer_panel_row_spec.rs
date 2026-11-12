@@ -27,6 +27,8 @@ pub(crate) struct LayerRowSpec {
     pub name: String,
     /// 오른쪽에 셀 개수 배지를 그릴지.
     pub show_count: bool,
+    /// 그 레이어의 도형 수(이름이 같은 레이어가 있어도 행마다 제 수).
+    pub count: usize,
     /// 오른쪽 칸 이름.
     pub right_label: Option<&'static str>,
     /// 행 배경을 살짝 다르게(교차 줄무늬).
@@ -113,6 +115,7 @@ pub fn layer_rows(
                 swatch: SwatchKind::GroupFolder,
                 name: String::new(),
                 show_count: false,
+                count: 0,
                 right_label: None,
                 alt_bg: false,
                 ink,
@@ -133,6 +136,7 @@ pub fn layer_rows(
             swatch: swatch_for(entry),
             name: entry.label_ko.clone(),
             show_count: entry.feature_count > 0,
+            count: entry.feature_count,
             right_label: label_caption(entry),
             alt_bg: false,
             ink,

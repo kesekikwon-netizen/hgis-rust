@@ -134,16 +134,10 @@ impl StrataAppState {
             );
 
             if spec.show_count {
-                let cnt = self
-                    .left_layers
-                    .entries
-                    .iter()
-                    .find(|e| e.label_ko == spec.name)
-                    .map_or(0, |e| e.feature_count);
                 p.text(
                     Pos2::new(right_col_x - 8.0, ry),
                     egui::Align2::RIGHT_CENTER,
-                    cnt.to_string(),
+                    spec.count.to_string(),
                     egui::FontId::proportional(10.5),
                     Color32::from_rgb(115, 113, 106),
                 );
