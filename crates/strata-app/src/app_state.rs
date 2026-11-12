@@ -213,4 +213,41 @@ mod tests {
         assert_eq!(app.open_studio_tabs.len(), 1);
         assert_eq!(app.active_tab, MainTab::Map);
     }
+
+    /// C++ `MainWindowSession.cpp:1438-1462` — 다른 이름으로 저장 대상 검사. 있는 .gpkg·같은
+    /// 이름 .qgz 는 덮어쓰지 않고, 열린 조사와 같은 파일(대소문자 무시)은 허용한다.
+    /// .gpkg 로 끝나지 않는 이름은 확장자를 바꾸지 않고 뒤에 붙인다.
+    #[test]
+    fn save_as_target_refuses_existing_survey_files_but_allows_the_open_one() {
+        use super::app_state_projects::resolve_save_as_target;
+        const REFUSED: &str = "같은 이름의 조사 파일 또는 작업공간 사본이 있습니다. 기존 자료를 보존하기 위해 덮어쓰지 않았습니다. 사용하지 않은 이름으로 저장하세요.";
+        let dir = tempfile::tempdir().expect("temp dir");
+        let d = dir.path();
+        for name in ["기존.gpkg", "원본.qgz", "Open.gpkg"] {
+            std::fs::write(d.join(name), b"x").expect("seed file");
+        }
+        let open = d.join("Open.gpkg");
+
+        assert_eq!(resolve_save_as_target(&d.join("기존.gpkg"), Some(&open)), Err(REFUSED));
+        // .qgz 를 고르면 같은 폴더 같은 이름 .gpkg 가 대상 — .qgz 가 있으니 거절
+        assert_eq!(resolve_save_as_target(&d.join("원본.qgz"), None), Err(REFUSED));
+        // .gpkg 를 골라도 같은 이름 .qgz 가 있으면 거절
+        assert_eq!(resolve_save_as_target(&d.join("원본.gpkg"), None), Err(REFUSED));
+        // 열린 조사와 같은 파일은 허용(대소문자 무시)
+        assert_eq!(
+            resolve_save_as_target(&d.join("OPEN.GPKG"), Some(&open)),
+            Ok(d.join("OPEN.GPKG"))
+        );
+        // 열린 조사가 없으면 같은 이름 파일은 거절
+        assert_eq!(resolve_save_as_target(&open, None), Err(REFUSED));
+        // 확장자를 바꾸지 않고 뒤에 붙인다: 「조사.2차」 → 「조사.2차.gpkg」
+        assert_eq!(
+            resolve_save_as_target(&d.join("조사.2차"), Some(&open)),
+            Ok(d.join("조사.2차.gpkg"))
+        );
+        assert_eq!(
+            resolve_save_as_target(&d.join("새이름.qgz"), None),
+            Ok(d.join("새이름.gpkg"))
+        );
+    }
 }

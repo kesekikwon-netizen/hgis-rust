@@ -8,6 +8,7 @@ use crate::app_state::StrataAppState;
 use crate::dialogs_modal::render_strata_modal_header;
 use strata_storage::gpkg::validate_survey_name_ko;
 use strata_types::crs::WorkCrs;
+use strata_types::error::StrataError;
 
 #[path = "dlg_new_survey_ruler.rs"]
 mod dlg_new_survey_ruler;
@@ -26,11 +27,16 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
         .show(ctx, |ui| {
             render_strata_modal_header(ui, "새 조사 - Strata", open);
             ui.label(egui::RichText::new("조사명").strong().size(13.0));
-            ui.add_sized(
-                [440.0, 28.0],
-                egui::TextEdit::singleline(&mut app.modals.new_survey_name)
-                    .hint_text("예: 병산동"),
-            );
+            if ui
+                .add_sized(
+                    [440.0, 28.0],
+                    egui::TextEdit::singleline(&mut app.modals.new_survey_name)
+                        .hint_text("예: 병산동"),
+                )
+                .changed()
+            {
+                app.modals.new_survey_error = None;
+            }
             if let Err(err_msg) = validate_survey_name_ko(&app.modals.new_survey_name) {
                 ui.label(
                     egui::RichText::new(err_msg)
@@ -145,6 +151,15 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                     .size(11.0)
                     .color(Color32::from_rgb(107, 114, 128)),
             );
+            // 새 조사 파일을 만들지 못한 까닭(같은 이름 파일 등) — 창은 닫지 않는다.
+            if let Some(err_msg) = &app.modals.new_survey_error {
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(err_msg)
+                        .size(11.5)
+                        .color(Color32::from_rgb(185, 28, 28)),
+                );
+            }
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -183,11 +198,11 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                                     app.start_new_survey_project_with_path(&name, &path, crs);
                                     app.modals.new_survey_dir =
                                         dir.to_string_lossy().into_owned();
+                                    app.modals.new_survey_error = None;
                                     app.modals.active = None;
                                 }
                                 Err(e) => {
-                                    app.modals.new_survey_error =
-                                        Some(format!("새 조사를 만들지 못했습니다: {e}"));
+                                    app.modals.new_survey_error = Some(new_survey_error_text(&e));
                                 }
                             }
                         }
@@ -195,4 +210,13 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                 });
             });
         });
+}
+
+/// 새 조사 파일을 만들지 못했을 때 창에 보일 문구. 같은 이름 거절(`InvalidInput`)은
+/// C++ 문구를 앞말 없이 그대로 보인다.
+pub(crate) fn new_survey_error_text(e: &StrataError) -> String {
+    match e {
+        StrataError::InvalidInput(msg) => msg.clone(),
+        other => format!("새 조사를 만들지 못했습니다: {other}"),
+    }
 }

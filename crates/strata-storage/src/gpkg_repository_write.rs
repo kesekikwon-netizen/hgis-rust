@@ -10,12 +10,15 @@ use std::time::Duration;
 use rusqlite::{Connection, OpenFlags};
 
 use strata_types::crs::WorkCrs;
-use strata_types::error::StrataResult;
+use strata_types::error::{StrataError, StrataResult};
 use strata_types::schema::DomainLayerKey;
 
 use crate::edit_buffer::LayerEditBuffer;
 use crate::gpkg_repository::{GpkgRepository, SurveyWorkspace};
 use crate::gpkg_schema::{GpkgResultCode, GPKG_REPO_MUTEX};
+
+/// C++ `SurveyProjectFactory.cpp:46-48` 의 거절 문구 그대로.
+const SAME_NAME_SURVEY_EXISTS_KO: &str = "같은 이름의 조사 파일이 이미 있습니다. 기존 파일은 그대로 두었습니다. 다른 조사명이나 폴더를 선택해 주세요.";
 
 impl GpkgRepository {
 
@@ -77,7 +80,12 @@ impl GpkgRepository {
         GpkgResultCode::LockFailed
     }
 
+    /// C++ `SurveyProjectFactory.cpp:44-49` — 같은 이름 .gpkg 나 .qgz 가 있으면 아무 파일도
+    /// 건드리지 않고 거절한다.
     pub fn create_new_survey(path: &Path, work_crs: WorkCrs) -> StrataResult<SurveyWorkspace> {
+        if path.exists() || path.with_extension("qgz").exists() {
+            return Err(StrataError::InvalidInput(SAME_NAME_SURVEY_EXISTS_KO.to_owned()));
+        }
         let ws = SurveyWorkspace {
             schema_version: 3,
             work_crs,

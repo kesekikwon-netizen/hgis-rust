@@ -5,7 +5,6 @@ use eframe::egui::{self, Color32, Rect, Stroke, Vec2};
 use strata_canvas2d::map_tools::MapToolKind;
 
 use crate::app_state::StrataAppState;
-use crate::real_survey::ring_area_m2;
 
 use super::gui_tab_map_hud::MapToolFlags;
 
@@ -252,11 +251,9 @@ impl StrataAppState {
                     .on_right_click(effective_tool, &mut self.home_map.scene)
                     && ring.len() >= 3
                 {
-                    let area_m2 = ring_area_m2(&ring);
+                    // 메모리에만 둔다. 아직 저장하지 않았으므로 「저장했습니다」를 띄우지 않는다.
                     self.home_map.real_survey.save_drawn_polygon(ring);
                     self.is_dirty = true;
-                    self.home_map.draw_guide_message =
-                        Some(format!("조사구역·유구 다각형을 저장했습니다 ({area_m2:.2} m²)."));
                 }
             } else if let Some(pos) = response.interact_pointer_pos() {
                 // MainWindowContextMenus.cpp:112-161 mapContextMenu

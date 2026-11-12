@@ -4,25 +4,18 @@
 
 use std::path::PathBuf;
 
-use rusqlite::Connection;
 use strata_geo::trench_grid::{build_lshape_ring, TrenchShapeKind, TrenchStandardLength};
-use strata_storage::wkb_codec::{encode_gpkg_wkb, WkbGeometry};
 
 use super::real_survey_types::{ring_centroid, RealSurveyData, RealTrenchPoly};
 
 impl RealSurveyData {
+    /// 닫은 다각형을 메모리(편집 버퍼 자리)에만 둔다. 조사 GPKG 에는 쓰지 않는다 —
+    /// C++ 처럼 사용자가 저장(Ctrl+S·저장 단추·닫을 때 저장)할 때만 조사 파일에 쓴다.
     pub fn save_drawn_polygon(&mut self, ring: Vec<[f64; 2]>) {
         if ring.len() < 3 {
             return;
         }
-        self.survey_rings.push(ring.clone());
-        if let Ok(conn) = Connection::open(&self.gpkg_path) {
-            let blob = encode_gpkg_wkb(5187, &WkbGeometry::Polygon(vec![ring]));
-            let _ = conn.execute(
-                "INSERT INTO feature_poly (geom, name, note) VALUES (?1, '신규 유구', 'Rust 저장')",
-                [blob],
-            );
-        }
+        self.survey_rings.push(ring);
     }
 
     pub fn export_nearby_heritage_csv(&self) -> Option<PathBuf> {

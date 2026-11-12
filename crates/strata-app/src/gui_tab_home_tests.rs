@@ -251,3 +251,23 @@ fn test_repeated_new_survey_does_not_duplicate_basemaps() {
     );
     assert_eq!(after_second, 2);
 }
+
+/// 새 조사 창: 같은 이름 조사 파일이 있으면 C++ 문구를 앞말 없이 그대로 보이고,
+/// 기존 파일은 그대로 둔다(C++ `SurveyProjectFactory.cpp:44-49`).
+#[test]
+fn test_new_survey_dialog_shows_cpp_refusal_text_as_is() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("병산동.gpkg");
+    std::fs::write(&path, b"existing survey").expect("seed file");
+
+    let err = strata_storage::gpkg::GpkgRepository::create_new_survey(
+        &path,
+        strata_types::crs::WorkCrs::Epsg5187,
+    )
+    .expect_err("an existing survey file must be refused");
+    assert_eq!(
+        crate::dlg_new_survey::new_survey_error_text(&err),
+        "같은 이름의 조사 파일이 이미 있습니다. 기존 파일은 그대로 두었습니다. 다른 조사명이나 폴더를 선택해 주세요."
+    );
+    assert_eq!(std::fs::read(&path).expect("read back"), b"existing survey");
+}

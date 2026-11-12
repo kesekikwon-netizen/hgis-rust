@@ -4,7 +4,8 @@
 //! 쓰기 쪽은 `gpkg_repository_write` 에 있다.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
@@ -54,13 +55,60 @@ impl GpkgRepository {
             .map_err(|e| StrataError::Storage(format!("조사 파일 역직렬화 실패: {e}")))
     }
 
+    /// 조사 파일을 쓸 때 먼저 다 써 두는 같은 폴더의 임시 파일(`<파일 이름>.strata-tmp`).
+    pub fn workspace_temp_path(path: &Path) -> PathBuf {
+        let mut name = path.file_name().map(OsString::from).unwrap_or_default();
+        name.push(".strata-tmp");
+        path.with_file_name(name)
+    }
+
+    /// 조사 파일을 같은 폴더 임시 파일에 다 쓴 뒤에만 바꿔 넣는다. 쓰다 실패하면 임시
+    /// 파일만 지우고 원래 파일은 그대로 둔다(C++ 도 사본에 쓰고 검증한 뒤 교체한다).
     pub fn write_workspace_file(path: &Path, ws: &SurveyWorkspace) -> StrataResult<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        if path.exists() {
-            std::fs::remove_file(path)?;
+        // 임시 방패: Rust 작업공간 표가 없는 기존 파일(C++ 조사 파일 등)은 덮어쓰지 않는다.
+        // 지시 #2 에서 파일 형식을 C++ 과 맞출 때까지 C++ 원본을 지키려는 것이다.
+        if path.exists() && !Self::has_workspace_table(path) {
+            return Err(StrataError::Storage(
+                "Strata 작업공간 정보가 없는 기존 파일(예전 판 조사 파일 등)이라 덮어쓰지 않았습니다. \
+                 원래 파일은 그대로 두었습니다. 다른 이름으로 저장해 주세요."
+                    .into(),
+            ));
         }
+        let tmp = Self::workspace_temp_path(path);
+        if tmp.exists() {
+            std::fs::remove_file(&tmp)?;
+        }
+        let written = Self::write_workspace_tables(&tmp, ws)
+            .and_then(|()| std::fs::rename(&tmp, path).map_err(StrataError::from));
+        if written.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        written
+    }
+
+    /// `path` 가 Rust 작업공간 표(`ka_hgis_workspace_state`)를 가진 SQLite 파일인지.
+    fn has_workspace_table(path: &Path) -> bool {
+        Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .and_then(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM sqlite_master \
+                 WHERE type = 'table' AND name = 'ka_hgis_workspace_state'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+        })
+        .is_ok_and(|n| n > 0)
+    }
+
+    /// 새 파일 `path` 에 GPKG 표와 작업공간 상태를 쓴다. 연결은 끝날 때 닫힌다
+    /// (Windows 에서는 열린 연결이 있으면 바꿔 넣기가 실패한다).
+    fn write_workspace_tables(path: &Path, ws: &SurveyWorkspace) -> StrataResult<()> {
         let conn = Connection::open(path)
             .map_err(|e| StrataError::Storage(format!("GPKG 생성 실패: {e}")))?;
         conn.execute_batch(

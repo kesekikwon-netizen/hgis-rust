@@ -3313,6 +3313,7 @@ dependencies = [
  "strata-storage",
  "strata-terrain3d",
  "strata-types",
+ "tempfile",
 ]
 
 [[package]]

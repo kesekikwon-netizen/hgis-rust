@@ -4,14 +4,58 @@
 //! `write_survey_to` 는 `app_state` 시험이 직접 부르므로 `pub(crate)` 다 — 크레이트 밖으로는
 //! 나가지 않으므로 공개 API 는 그대로다.
 
+use std::ffi::OsString;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use strata_types::crs::WorkCrs;
 use strata_types::schema::DomainLayerKey;
 
 use crate::app_state::StrataAppState;
 use super::app_state_types::{MainTab, ProjectTemplateConfig};
+
+/// C++ `MainWindowSession.cpp:1457-1459` 의 다른 이름 저장 거절 문구 그대로.
+const SAVE_AS_SAME_NAME_KO: &str = "같은 이름의 조사 파일 또는 작업공간 사본이 있습니다. 기존 자료를 보존하기 위해 덮어쓰지 않았습니다. 사용하지 않은 이름으로 저장하세요.";
+
+/// C++ `MainWindowSession.cpp:1438-1462` — 고른 경로에서 실제로 쓸 .gpkg 를 정한다.
+/// .qgz 면 같은 폴더 같은 이름 .gpkg, .gpkg 로 끝나지 않으면 뒤에 .gpkg 를 붙인다.
+/// 열린 조사와 같은 파일이 아닌데 그 .gpkg 나 같은 이름 .qgz 가 있으면 거절한다.
+pub(crate) fn resolve_save_as_target(
+    picked: &Path,
+    current: Option<&Path>,
+) -> Result<PathBuf, &'static str> {
+    let has_ext = |p: &Path, ext: &str| {
+        p.extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
+    };
+    let mut target = if has_ext(picked, "qgz") {
+        picked.with_extension("gpkg")
+    } else {
+        picked.to_path_buf()
+    };
+    if !has_ext(&target, "gpkg") {
+        let mut name = target.file_name().map(OsString::from).unwrap_or_default();
+        name.push(".gpkg");
+        target.set_file_name(name);
+    }
+    let same_file = current.is_some_and(|cur| same_path_ignoring_case(cur, &target));
+    if !same_file && (target.exists() || target.with_extension("qgz").exists()) {
+        return Err(SAVE_AS_SAME_NAME_KO);
+    }
+    Ok(target)
+}
+
+/// C++ 처럼 절대 경로를 대소문자 무시로 비교한다(대상 파일이 아직 없어도 된다).
+fn same_path_ignoring_case(a: &Path, b: &Path) -> bool {
+    let key = |p: &Path| {
+        std::path::absolute(p)
+            .unwrap_or_else(|_| p.to_path_buf())
+            .to_string_lossy()
+            .to_lowercase()
+    };
+    key(a) == key(b)
+}
 
 impl StrataAppState {
     /// C++ `KaHomeScreen::createNewProject(const ProjectTemplateConfig &config) -> std::optional<QString>` 1:1
@@ -97,7 +141,8 @@ impl StrataAppState {
     }
 
     /// C++ `MainWindowSession.cpp:1420` `saveProjectAs` — 다른 이름으로 저장.
-    /// .qgz 를 고르면 같은 이름의 .gpkg 로 쓴다. 취소하면 아무 것도 바꾸지 않는다.
+    /// .qgz 를 고르면 같은 이름의 .gpkg 로 쓴다. 취소하거나 기존 파일이라 거절하면
+    /// 아무 것도 바꾸지 않는다.
     pub fn save_survey_project_as(&mut self) -> bool {
         let default_name = if let Some(cur) = self.survey_path.as_ref() {
             let stem = cur
@@ -119,22 +164,14 @@ impl StrataAppState {
         let Some(picked) = dialog.save_file() else {
             return false;
         };
-        let mut target = picked;
-        if target
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| e.eq_ignore_ascii_case("qgz"))
-            .unwrap_or(false)
-        {
-            target = target.with_extension("gpkg");
-        } else if !target
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| e.eq_ignore_ascii_case("gpkg"))
-            .unwrap_or(false)
-        {
-            target.set_extension("gpkg");
-        }
+        let target = match resolve_save_as_target(&picked, self.survey_path.as_deref()) {
+            Ok(target) => target,
+            Err(msg) => {
+                self.home_map.draw_guide_message =
+                    Some(format!("다른 이름을 선택해 주세요. {msg}"));
+                return false;
+            }
+        };
         if self.write_survey_to(&target) {
             self.survey_path = Some(target);
             true
