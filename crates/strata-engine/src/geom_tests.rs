@@ -2,7 +2,7 @@
 //! docs/senior/ref-files/geos-makevalid-reference.txt(hgis-2e 가 geosop 으로 만든 값). GEOS 판이 달라
 //! 고리 시작점·방향이 다를 수 있으므로 GEOS normalize 뒤 equalsExact 로 견준다.
 
-use geos::{Geom, Geometry, MakeValidMethod, MakeValidParams};
+use geos::{Geom, Geometry};
 
 use super::*;
 
@@ -46,8 +46,8 @@ const CASES: [(&str, bool, &str, f64); 6] = [
     ),
 ];
 
-/// geosop 은 GEOSMakeValid(기본값). C++ 은 같은 linework 방법이다. 무너진 조각(선)까지 견주려고 keepCollapsed 는
-/// geosop 처럼 기본값으로 둔다 — 면 조각은 keepCollapsed 와 상관없다.
+/// geosop 은 GEOSMakeValid(기본값 = linework). C++ 도 linework 다. keepCollapsed 는 structure 방법에만 쓰여
+/// linework 는 무너진 조각(선)을 늘 남긴다 — 면 조각만 고르는 것은 collectPolygons(C++ 과 같음)가 한다.
 fn make_valid_full(wkt: &str) -> Geometry {
     Geometry::new_from_wkt(wkt).expect("wkt").make_valid().expect("makeValid")
 }
@@ -80,22 +80,28 @@ fn make_valid_matches_geosop_references() {
     }
 }
 
-/// C++ 이 쓰는 꼴(linework, keepCollapsed = false)의 면 조각 — geosop 결과의 면 조각과 같다.
+/// 면 조각들을 정규화 WKT 로(차례는 GEOS 판마다 다를 수 있어 정렬).
+fn normalized_parts(parts: &[PolygonRings]) -> Vec<String> {
+    let mut out: Vec<String> = parts
+        .iter()
+        .map(|p| {
+            let mut g = super::to_geos(p).expect("polygon");
+            g.normalize().expect("normalize");
+            g.to_wkt().expect("wkt")
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// C++ 이 쓰는 꼴(linework, keepCollapsed = false)의 면 조각 하나하나가 geosop 결과의 면 조각과 같다.
 #[test]
 fn polygon_parts_are_the_polygons_of_make_valid() {
-    let mut params = MakeValidParams::new().expect("params");
-    params.set_method(MakeValidMethod::Linework).expect("method");
-    params.set_keep_collapsed(false).expect("keep");
     for (input, _, want, _) in CASES {
         let parts = make_valid_polygon_parts(&rings_of(input)).expect("parts");
         let mut want_parts = Vec::new();
         super::collect_polygons(&Geometry::new_from_wkt(want).expect("wkt"), &mut want_parts).expect("collect");
-        assert_eq!(parts.len(), want_parts.len(), "{input}");
-        let total: f64 = parts.iter().map(|p| polygon_area(p).expect("area")).sum();
-        let want_total: f64 = want_parts.iter().map(|p| polygon_area(p).expect("area")).sum();
-        assert!((total - want_total).abs() < 1e-9, "{input}");
-        let direct = Geometry::new_from_wkt(input).expect("wkt").make_valid_with_params(&params).expect("mv");
-        assert!(direct.get_num_geometries().expect("n") >= 1);
+        assert_eq!(normalized_parts(&parts), normalized_parts(&want_parts), "{input}");
     }
 }
 

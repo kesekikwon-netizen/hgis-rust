@@ -14,6 +14,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      # strata-engine builds PROJ from source; PROJ's CMake needs the sqlite3 command-line tool to make proj.db
+      # (the runner has CMake but no sqlite3). Official SQLite 3.46.0 tools, same version as the bundled library.
+      - name: Put SQLite 3.46.0 command-line tool on PATH
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP\sqlite-tools.zip"
+          Invoke-WebRequest -Uri "https://www.sqlite.org/2024/sqlite-tools-win-x64-3460000.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "adbefda5f92d471cbde9cb3232775485bd1bad61ba97376c9661c37dfd6ad027") { throw "sqlite-tools sha256 mismatch: $hash" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\sqlite-tools"
+          "$env:RUNNER_TEMP\sqlite-tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Run Workspace Unit Tests
