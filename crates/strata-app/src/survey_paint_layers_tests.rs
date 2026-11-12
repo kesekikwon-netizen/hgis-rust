@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use strata_geo::crs_transform::CrsTransformer;
+use strata_engine::Transformer;
 use strata_storage::wkb_codec::WkbGeometry;
 use strata_types::crs::CrsCode;
 use strata_types::schema::LegendGroup;
@@ -60,13 +60,15 @@ fn paint_order_is_legend_order_bottom_first() {
 #[test]
 fn demo_tables_become_labelled_layers_in_the_work_crs() {
     let layers = build_paint_layers(&demo_tables(), CrsCode::Epsg5187);
-    let to5187 = CrsTransformer::new(CrsCode::Epsg5186, CrsCode::Epsg5187);
+    // 작업 좌표계 값은 C++ 과 같은 PROJ(strata-engine)로 — gdaltransform 과 1 mm 안.
+    let proj = Transformer::new(5186, 5187).expect("PROJ 5186 -> 5187");
+    let to5187 = |x: f64, y: f64| proj.transform([x, y]).expect("transform");
     let layer = |t: &str| layers.iter().find(|l| l.table == t).expect(t);
     let close = |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).hypot(a[1] - b[1]) < 1e-6;
 
     let area = &layer("survey_area").features[0];
     assert_eq!(area.label.as_deref(), Some("12,000.00 ㎡"));
-    assert!(close(area.anchor.unwrap().xy, to5187.transform_xy(200_050.0, 450_040.0)));
+    assert!(close(area.anchor.unwrap().xy, to5187(200_050.0, 450_040.0)));
     assert_eq!(layer("survey_area").title, "조사구역");
 
     let trench = &layer("trial_trench").features[0];
@@ -74,7 +76,7 @@ fn demo_tables_become_labelled_layers_in_the_work_crs() {
 
     let section = &layer("section_line").features[0];
     assert_eq!(section.label.as_deref(), Some("A-A'"));
-    assert!(close(section.anchor.unwrap().xy, to5187.transform_xy(200_016.0, 450_014.5)));
+    assert!(close(section.anchor.unwrap().xy, to5187(200_016.0, 450_014.5)));
 
     let gcp: Vec<&str> = layer("control_points").features.iter().filter_map(|f| f.label.as_deref()).collect();
     assert_eq!(gcp, vec!["GCP1", "GCP2"]);
@@ -82,7 +84,28 @@ fn demo_tables_become_labelled_layers_in_the_work_crs() {
     assert_eq!(layer("feature_line").features[0].label.as_deref(), Some("구"));
 
     let PaintPart::Polygon(rings) = &area.parts[0] else { panic!("polygon") };
-    assert!(close(rings[0][0], to5187.transform_xy(199_990.0, 449_990.0)));
+    assert!(close(rings[0][0], to5187(199_990.0, 449_990.0)));
+}
+
+/// QGIS 처럼 PROJ 가 아는 좌표계면 옛 측지계(Bessel EPSG:5174)도 그린다 — 5174 → 5186 은 gdaltransform
+/// 200000,450000 → 200069.633100671,550305.22053531. PROJ 가 모르는 번호의 표는 그리지 않는다.
+#[test]
+fn bessel_5174_table_is_painted_at_the_proj_position_and_unknown_srs_is_skipped() {
+    let mut tables = demo_tables();
+    tables.retain(|t| t.table == "control_points");
+    tables[0].srs_id = 5174;
+    for f in &mut tables[0].layer.features {
+        f.wkt_geom = "POINT (200000 450000)".to_owned();
+    }
+    let mut unknown = tables[0].clone();
+    unknown.table = "artifact_point".to_owned();
+    unknown.srs_id = 999_999;
+    tables.push(unknown);
+
+    let layers = build_paint_layers(&tables, CrsCode::Epsg5186);
+    assert_eq!(layers.len(), 1, "unknown srs table is skipped");
+    let PaintPart::Point(p) = layers[0].features[0].parts[0] else { panic!("point") };
+    assert!((p[0] - 200_069.633_100_671).hypot(p[1] - 550_305.220_535_31) <= 0.001, "{p:?}");
 }
 
 /// 선 라벨의 기울기는 글 폭만큼 걸친 구간의 양 끝으로 잰다 — 그 끝 점을 선을 따라 찾는다.

@@ -20,6 +20,7 @@ strata-canvas2d = { workspace = true }
 strata-terrain3d = { workspace = true }
 strata-layout = { workspace = true }
 strata-check-export = { workspace = true }
+strata-engine = { workspace = true }
 eframe = { workspace = true }
 egui = { workspace = true }
 geo = { workspace = true }

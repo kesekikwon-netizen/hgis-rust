@@ -38,7 +38,7 @@ fn assert_close(got: [f64; 4], want: [f64; 4], tol: f64) {
 }
 
 /// 면·선·점 표: 표 좌표계(5186) 범위를 작업 좌표계(5187)로 옮긴 바깥 상자, 짧은 변은 80 m 로 채우고
-/// ×1.15·×1.05 해 지도 칸에 맞춘다. 옮김 차이(strata-geo TM 대 PROJ, 8 mm 이하)만큼 허용한다.
+/// ×1.15·×1.05 해 지도 칸에 맞춘다. 같은 PROJ(strata-engine)라 1 mm 안에서 같다.
 #[test]
 fn zoom_to_layer_matches_qgis_for_the_demo_tables() {
     let tables = demo_tables();
@@ -53,7 +53,7 @@ fn zoom_to_layer_matches_qgis_for_the_demo_tables() {
         let ext = crate::survey_paint_layers::table_extent_in(t, WorkCrs::Epsg5187).expect("extent");
         let mut m = map_798x598();
         assert!(m.zoom_to_layer_max(Some(ext), false, WorkCrs::Epsg5187));
-        assert_close(extent(&m), w, 0.02);
+        assert_close(extent(&m), w, 0.001);
     }
 }
 

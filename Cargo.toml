@@ -12,6 +12,7 @@ members = [
     "crates/strata-layout",
     "crates/strata-check-export",
     "crates/strata-app",
+    "crates/strata-engine",
 ]
 
 [workspace.package]
@@ -61,6 +62,7 @@ strata-canvas2d = { path = "crates/strata-canvas2d" }
 strata-terrain3d = { path = "crates/strata-terrain3d" }
 strata-layout = { path = "crates/strata-layout" }
 strata-check-export = { path = "crates/strata-check-export" }
+strata-engine = { path = "crates/strata-engine" }
 
 [profile.release]
 opt-level = 3

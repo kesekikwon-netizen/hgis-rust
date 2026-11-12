@@ -1,10 +1,11 @@
 //! 조사 표 → 지도에 그릴 레이어(작업 좌표계 도형, 라벨 글·자리).
 //!
-//! C++ 은 QGIS 가 조사 파일의 레이어를 작업 좌표계로 바로 바꿔(on-the-fly) 그린다. 여기서는
-//! strata-geo 의 TM 변환으로 바꾼다(PROJ 와 demo 모서리 차이 7.9 mm, `crs_transform_tests.rs`).
-//! 라벨 면적은 QGIS `area($geometry)` 처럼 표의 좌표계에서 잰 평면 면적이다.
+//! C++ 은 QGIS 가 조사 파일의 레이어를 작업 좌표계로 바로 바꿔(on-the-fly) 그린다. 여기서도 같은
+//! PROJ(strata-engine)로 바꾼다 — gdaltransform 과 1 mm 안(`strata-engine` crs_tests). PROJ 가 아는
+//! 좌표계면 모두(옛 측지계 5174 포함) 그린다. 라벨 면적은 QGIS `area($geometry)` 처럼 표의 좌표계에서
+//! 잰 평면 면적이다.
 
-use strata_geo::crs_transform::CrsTransformer;
+use strata_engine::Transformer;
 use strata_storage::gpkg_wkt::wkt_to_parts;
 use strata_storage::survey_gpkg_read::SurveyFileTable;
 use strata_storage::wkb_codec::WkbGeometry;
@@ -47,16 +48,10 @@ pub(crate) struct PaintLayer {
     pub(crate) features: Vec<PaintFeature>,
 }
 
-/// 바꿀 수 있는 조사 파일 좌표계. 5174(Bessel)는 strata-geo 에 측지계 변환이 없어 그리지 않는다.
-fn srs_code(srs_id: i32) -> Option<CrsCode> {
-    match srs_id {
-        5186 => Some(CrsCode::Epsg5186),
-        5187 => Some(CrsCode::Epsg5187),
-        5179 => Some(CrsCode::Epsg5179),
-        4326 => Some(CrsCode::Epsg4326),
-        3857 => Some(CrsCode::Epsg3857),
-        _ => None,
-    }
+/// 표 좌표계(gpkg srs_id) → 작업 좌표계 변환기. PROJ 가 모르는 좌표계면 None(그 표는 그리지 않는다).
+fn transformer(srs_id: i32, work_epsg: u32) -> Option<Transformer> {
+    let src = u32::try_from(srs_id).ok().filter(|s| *s > 0)?;
+    Transformer::new(src, work_epsg).ok()
 }
 
 fn ring_signed_area(ring: &[[f64; 2]]) -> f64 {
@@ -148,38 +143,48 @@ fn label_anchor_source(parts: &[WkbGeometry]) -> Option<([f64; 2], Option<[f64; 
     }
 }
 
-fn build_feature(parts: &[WkbGeometry], tr: &CrsTransformer, rule: &LabelRule, attrs: &std::collections::BTreeMap<String, String>) -> PaintFeature {
-    let t = |p: &[f64; 2]| tr.transform_xy(p[0], p[1]);
+/// 도형 하나를 작업 좌표계로. PROJ 가 어느 점을 바꾸지 못하면 그 도형은 그리지 않는다(QGIS 도 건너뛴다).
+fn build_feature(
+    parts: &[WkbGeometry],
+    tr: &Transformer,
+    rule: &LabelRule,
+    attrs: &std::collections::BTreeMap<String, String>,
+) -> Option<PaintFeature> {
+    let t = |p: &[f64; 2]| tr.transform(*p).ok();
+    let all = |pts: &[[f64; 2]]| pts.iter().map(t).collect::<Option<Vec<_>>>();
     let area = planar_area(parts);
-    let anchor = label_anchor_source(parts).map(|(xy, dir)| {
-        let a = t(&xy);
-        // 방향은 작은 걸음을 같이 바꿔 작업 좌표계에서 다시 잰다.
-        let dir = dir.and_then(|d| {
-            let b = t(&[xy[0] + d[0], xy[1] + d[1]]);
-            let len = (b[0] - a[0]).hypot(b[1] - a[1]);
-            (len > 0.0).then(|| [(b[0] - a[0]) / len, (b[1] - a[1]) / len])
-        });
-        LabelAnchor { xy: a, dir }
-    });
+    let anchor = match label_anchor_source(parts) {
+        Some((xy, dir)) => {
+            let a = t(&xy)?;
+            // 방향은 작은 걸음을 같이 바꿔 작업 좌표계에서 다시 잰다.
+            let dir = dir.and_then(|d| {
+                let b = t(&[xy[0] + d[0], xy[1] + d[1]])?;
+                let len = (b[0] - a[0]).hypot(b[1] - a[1]);
+                (len > 0.0).then(|| [(b[0] - a[0]) / len, (b[1] - a[1]) / len])
+            });
+            Some(LabelAnchor { xy: a, dir })
+        }
+        None => None,
+    };
     let parts = parts
         .iter()
         .map(|p| match p {
-            WkbGeometry::Point(pt) => PaintPart::Point(t(pt)),
-            WkbGeometry::LineString(l) => PaintPart::Line(l.iter().map(t).collect()),
-            WkbGeometry::Polygon(r) => PaintPart::Polygon(r.iter().map(|ring| ring.iter().map(t).collect()).collect()),
+            WkbGeometry::Point(pt) => t(pt).map(PaintPart::Point),
+            WkbGeometry::LineString(l) => all(l).map(PaintPart::Line),
+            WkbGeometry::Polygon(r) => r.iter().map(|ring| all(ring)).collect::<Option<Vec<_>>>().map(PaintPart::Polygon),
         })
-        .collect();
-    PaintFeature { parts, label: label_text(rule, attrs, area), anchor, area }
+        .collect::<Option<Vec<_>>>()?;
+    Some(PaintFeature { parts, label: label_text(rule, attrs, area), anchor, area })
 }
 
 /// 조사 표들을 작업 좌표계 `work` 의 그릴 레이어로. 형식·좌표계를 모르는 표는 뺀다.
 pub(crate) fn build_paint_layers(tables: &[SurveyFileTable], work: CrsCode) -> Vec<PaintLayer> {
     let mut out = Vec::new();
     for t in tables {
-        let (Some(kind), Some(src)) = (GeomKind::from_type_name(&t.geometry_type), srs_code(t.srs_id)) else {
+        let (Some(kind), Some(tr)) = (GeomKind::from_type_name(&t.geometry_type), transformer(t.srs_id, work.epsg_number()))
+        else {
             continue;
         };
-        let tr = CrsTransformer::new(src, work);
         let rule = label_rule(&t.table, kind, &t.columns);
         let features = t
             .layer
@@ -187,7 +192,7 @@ pub(crate) fn build_paint_layers(tables: &[SurveyFileTable], work: CrsCode) -> V
             .iter()
             .filter_map(|f| {
                 let parts = wkt_to_parts(&f.wkt_geom).ok().filter(|p| !p.is_empty())?;
-                Some(build_feature(&parts, &tr, &rule, &f.attributes))
+                build_feature(&parts, &tr, &rule, &f.attributes)
             })
             .collect();
         out.push(PaintLayer {
@@ -213,7 +218,7 @@ pub(crate) fn paint_order(entries: &[LayerTreeEntry], layers: &[PaintLayer]) -> 
 
 /// 직사각형 [xmin, ymin, xmax, ymax] 둘레를 `f` 로 옮긴 점들의 바깥 상자 — QGIS transformBoundingBox
 /// (PROJ 9.7+ 는 proj_trans_bounds 로 변마다 촘촘히 옮긴다).
-pub(crate) fn outer_box_of(f: impl Fn(f64, f64) -> [f64; 2], r: [f64; 4]) -> [f64; 4] {
+pub(crate) fn outer_box_of(mut f: impl FnMut(f64, f64) -> [f64; 2], r: [f64; 4]) -> [f64; 4] {
     const STEPS: usize = 22;
     let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
     for i in 0..=STEPS {
@@ -229,7 +234,8 @@ pub(crate) fn outer_box_of(f: impl Fn(f64, f64) -> [f64; 2], r: [f64; 4]) -> [f6
 /// C++ `zoomToLayerMax` 의 레이어 범위 — 표 좌표계에서 도형들의 바깥 상자(QGIS `layer->extent()`)를
 /// 작업 좌표계로 옮긴 바깥 상자. 도형이 없거나 좌표계를 모르면 None.
 pub(crate) fn table_extent_in(t: &SurveyFileTable, work: strata_types::crs::WorkCrs) -> Option<[f64; 4]> {
-    let src = srs_code(t.srs_id)?;
+    let work_epsg = CrsCode::from(work).epsg_number();
+    let tr = transformer(t.srs_id, work_epsg)?;
     let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
     let mut add = |p: &[f64; 2]| b = [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])];
     for f in &t.layer.features {
@@ -244,21 +250,27 @@ pub(crate) fn table_extent_in(t: &SurveyFileTable, work: strata_types::crs::Work
     if !(b[0] <= b[2] && b[1] <= b[3]) {
         return None;
     }
-    let dst = match work {
-        strata_types::crs::WorkCrs::Epsg5186 => CrsCode::Epsg5186,
-        strata_types::crs::WorkCrs::Epsg5187 => CrsCode::Epsg5187,
-    };
-    if src == dst {
+    if u32::try_from(t.srs_id).ok() == Some(work_epsg) {
         return Some(b);
     }
-    let tr = CrsTransformer::new(src, dst);
     if b[2] - b[0] <= 0.0 || b[3] - b[1] <= 0.0 {
         // 너비나 높이가 0 인 상자(수평·수직 선, 점 하나)는 QGIS(PROJ 9.8 proj_trans_bounds)가 왼쪽 아래 한
         // 점으로 옮긴다 — qgis-dev 4.3.0 으로 확인. 그래서 C++ 은 그런 선의 시작점 둘레를 보인다.
-        let p = tr.transform_xy(b[0], b[1]);
+        let p = tr.transform([b[0], b[1]]).ok()?;
         return Some([p[0], p[1], p[0], p[1]]);
     }
-    Some(outer_box_of(|x, y| tr.transform_xy(x, y), b))
+    let mut ok = true;
+    let ext = outer_box_of(
+        |x, y| match tr.transform([x, y]) {
+            Ok(p) => p,
+            Err(_) => {
+                ok = false;
+                [x, y]
+            }
+        },
+        b,
+    );
+    ok.then_some(ext)
 }
 
 #[cfg(test)]

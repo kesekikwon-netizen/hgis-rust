@@ -22,6 +22,23 @@
 Qt 제3자 구성 목록: https://doc.qt.io/QT-6/licenses-used-in-qt.html  
 OSGeo4W에서 복사한 QGIS `LICENSE`/`AUTHORS`는 포터블 `licenses/QGIS-*`.
 
+## Rust 앱(hgis-rust) 엔진 — `crates/strata-engine`
+
+Rust 판은 QGIS 를 링크하지 않는다. 좌표 변환·도형 고치기 엔진은 아래 라이브러리를 실행 파일 안에 정적으로 넣는다(측정 2026-11-13, 판은 `crates/strata-engine/Cargo.toml` 에 고정). 앱 자체는 GPLv2 이상이므로 아래 라이선스와 함께 쓸 수 있다.
+
+| 구성 | 판 | 라이선스 | 공식 근거 |
+| --- | --- | --- | --- |
+| PROJ (소스 빌드, 정적) | 9.6.2 | MIT | https://proj.org/en/stable/about.html |
+| EPSG Geodetic Parameter Dataset (PROJ `proj.db` 안, 실행 파일에 들어 있음) | v12.013 (2025-05-26) | EPSG 이용 약관: 무료 사용·재배포, 출처 「EPSG Geodetic Parameter Dataset, IOGP」 표기, 자료를 고쳐 EPSG 이름으로 내지 않음 | https://epsg.org/terms-of-use.html |
+| GEOS (소스 빌드, 정적) | 3.15.1 | LGPL-2.1. 정적 링크해도 GPLv2+ 앱에 넣을 수 있다(LGPL 2.1 제3조). 받은 사람은 앱 소스(GPL)와 GEOS 소스(https://libgeos.org/)를 받을 수 있다 | https://libgeos.org/project/license/ |
+| SQLite (PROJ 가 proj.db 를 읽는 데 씀, libsqlite3-sys bundled) | 3.46.0 | Public domain | https://www.sqlite.org/copyright.html |
+| Rust 크레이트 `proj` 0.31.0 · `proj-sys` 0.27.0 | — | MIT 또는 Apache-2.0 | https://github.com/georust/proj |
+| Rust 크레이트 `geos` 11.3.1 · `geos-sys` 2.0.10 · `geos-src` 0.2.5 | — | MIT | https://github.com/georust/geos |
+| Rust 크레이트 `libsqlite3-sys` 0.30.1 | — | MIT | https://github.com/rusqlite/rusqlite |
+| Rust 크레이트 `link-cplusplus` 1.0.12 | — | MIT 또는 Apache-2.0 | https://github.com/dtolnay/link-cplusplus |
+
+C++ 앱(OSGeo4W)은 PROJ 9.8.1(EPSG v12.029)·GEOS 3.15.0 이다. 한반도 기준점 변환은 1 mm 안, makeValid 결과는 정규화 비교로 같다(`crates/strata-engine/src/*_tests.rs`).
+
 ## 함께 두는 별도 프로그램
 
 | 구성 | 라이선스 | 받은 파일·소스 주소·sha256 |
