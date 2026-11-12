@@ -50,7 +50,7 @@ impl StrataAppState {
     /// C++ `KaStatusBar.cpp:82-84,92-98` `scaleEdit` — 축척칸에 `"1000"` 또는 `"1:2500"`을
     /// 적고 Enter를 누르면 그 분모를 그대로 쓴다(`parse_scale_string`).
     ///
-    /// 지도 탭은 화면 축척(`meters_per_pixel × 3780`)을, 도면 탭은 도면 축척을 바꾼다.
+    /// 지도 탭은 화면 축척(QGIS 96 dpi: 점당 m × 96 / 0.0254)을, 도면 탭은 도면 축척을 바꾼다.
     /// 읽을 수 없는 글자는 아무것도 바꾸지 않고 `false`를 돌려준다.
     pub fn apply_scale_input(&mut self) -> bool {
         let Ok(denom) = strata_canvas2d::viewport::parse_scale_string(&self.scale_input_buf) else {
@@ -59,7 +59,7 @@ impl StrataAppState {
         if self.active_tab == MainTab::Drawing {
             self.drawing.sheet.scale_denominator = denom.round() as u32;
         } else {
-            self.home_map.viewport.meters_per_pixel = denom / 3780.0;
+            self.home_map.viewport.meters_per_pixel = denom / crate::status_bar_text::POINTS_PER_METER;
         }
         self.scale_input_buf = strata_canvas2d::viewport::format_scale_denominator(denom);
         true

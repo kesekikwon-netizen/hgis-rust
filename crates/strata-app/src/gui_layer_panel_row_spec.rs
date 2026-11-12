@@ -121,8 +121,8 @@ pub fn layer_rows(panel: &LeftLayerPanel, dark: Color32, purple_leaf: Color32) -
     rows
 }
 
-/// 패널이 비었을 때 보여 줄 안내 문구(C++ `refreshLayerEmptyState`).
+/// 패널이 비었을 때 보여 줄 안내 문구(C++ `MainWindow.cpp:805-811` m_layerEmpty, 가운데 맞춤).
 #[must_use]
 pub fn layer_panel_empty_hint() -> &'static str {
-    "아직 레이어가 없습니다. 리본 「자료 받기」에서 위성·지적을 켜세요."
+    "레이어가 없습니다.\n파일함에서 SHP·DXF·DWG를 끌어 넣거나\n위성·지적 배경을 올리세요."
 }

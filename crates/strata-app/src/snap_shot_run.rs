@@ -51,6 +51,15 @@ impl StrataAppState {
                     snap.steps.remove(0);
                     snap.waiting = false;
                     snap.settle = 8;
+                    if snap.steps.is_empty() {
+                        // S0 — 스냅이 쓴 최근 조사·마지막 폴더는 이 사본에 있다(사용자 ini 는 읽기만).
+                        if let Some(ini) = &self.settings_ini {
+                            eprintln!("[SNAP] 설정 사본: {}", ini.display());
+                        }
+                        // 마지막 캡처 뒤 창을 닫는다 — 전에는 has_work() 가 거짓이 되어 아래 닫기에
+                        // 닿지 못하고 바깥 timeout 으로만 끝났다.
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
                 }
             }
             ctx.request_repaint();
@@ -157,7 +166,7 @@ impl StrataAppState {
         };
         let c = strata_geo::crs_transform::lonlat_to_tm(lon, lat, &params);
         self.home_map.viewport.center_xy = c;
-        self.home_map.viewport.meters_per_pixel = scale / 3780.0;
+        self.home_map.viewport.meters_per_pixel = scale / crate::status_bar_text::POINTS_PER_METER;
     }
 }
 

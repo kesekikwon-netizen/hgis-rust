@@ -8,7 +8,6 @@ use crate::app_state::StrataAppState;
 
 use super::gui_tab_map_hud::MapToolFlags;
 
-use super::gui_tab_map_format::modulate_color_with_opacity_brightness;
 use super::gui_tab_map_geom::s2w;
 
 /// `render_map_tab_ui` 가 넘기는 도구 상태 묶음.
@@ -88,6 +87,7 @@ impl StrataAppState {
 
         if let Some(hp) = response.hover_pos() {
             self.home_map.cursor_world_xy = s2w(rect, &self.home_map.viewport, hp);
+            self.home_map.cursor_seen = true;
             if matches!(
                 effective_tool,
                 MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint
@@ -266,12 +266,9 @@ impl StrataAppState {
 
         let rect = rect.intersect(tab_clip);
         let p = ui.painter_at(rect);
-        let bg_col = modulate_color_with_opacity_brightness(
-            Color32::from_rgb(251, 250, 246),
-            1.0,
-            self.home_map.real_survey.layer_brightness,
-        );
-        p.rect_filled(rect, 0.0, bg_col);
+        // MainWindow.cpp:512 setCanvasColor(canvasNeutral) — KaTheme.cpp:75 흰색. 지도는 그림이라 테마·
+        // 레이어 밝기와 상관없이 언제나 흰 바탕이다(KaThemeColors.cpp:152).
+        p.rect_filled(rect, 0.0, Color32::WHITE);
 
         // 배경지도 타일(위성·일반도). C++ 은 QGIS 가 그리지만 Rust 는 직접 받아 칠한다.
         self.paint_basemap_layer(ctx, &p, rect);

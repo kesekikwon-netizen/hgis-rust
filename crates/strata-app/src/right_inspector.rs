@@ -142,7 +142,7 @@ impl StrataAppState {
             .exact_width(crate::gui_tab_map::UX_MAP_RIGHT_WIDTH)
             .frame(
                 egui::Frame::NONE
-                    .fill(Color32::from_rgb(244, 246, 248))
+                    .fill(Color32::from_rgb(245, 244, 237))
                     .inner_margin(egui::Margin::symmetric(8, 2)),
             )
             .show_inside(ui, |ui| {

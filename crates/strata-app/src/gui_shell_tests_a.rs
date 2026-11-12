@@ -141,10 +141,11 @@ fn test_d12_status_bar_13_scale_presets_and_render_toggle() {
     app.active_tab = MainTab::Map;
     app.scale_input_buf = "1000".to_owned();
     assert!(app.apply_scale_input());
-    assert!((app.home_map.viewport.meters_per_pixel - 1000.0 / 3780.0).abs() < 1e-12);
+    // QGIS 축척 96 dpi(지시 S1) — 1:N 의 한 점은 N × 0.0254 / 96 m.
+    assert!((app.home_map.viewport.meters_per_pixel - 1000.0 * 0.0254 / 96.0).abs() < 1e-12);
     app.scale_input_buf = "1:2500".to_owned();
     assert!(app.apply_scale_input());
-    assert!((app.home_map.viewport.meters_per_pixel - 2500.0 / 3780.0).abs() < 1e-12);
+    assert!((app.home_map.viewport.meters_per_pixel - 2500.0 * 0.0254 / 96.0).abs() < 1e-12);
     assert_eq!(app.scale_input_buf, "1:2500");
 
     // 읽을 수 없는 글자는 아무것도 바꾸지 않는다

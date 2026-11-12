@@ -18,7 +18,8 @@ impl StrataAppState {
             .exact_width(UX_LEFT_PANEL_WIDTH)
             .frame(
                 egui::Frame::NONE
-                    .fill(Color32::from_rgb(244, 246, 248))
+                    // C++ 실물 지도 탭 옆판 바탕(cpp-start-maptab.png 실측 245,244,237).
+                    .fill(Color32::from_rgb(245, 244, 237))
                     .inner_margin(egui::Margin::symmetric(6, 0)),
             )
             .show_inside(ui, |ui| {
@@ -36,14 +37,34 @@ impl StrataAppState {
                 l_ui.vertical(|ui| {
                     ui.add_space(2.0);
                     self.paint_layer_card_header(ui, show_set_btn);
-                    self.paint_layer_tree(ui, layer_card_rect);
-                    self.paint_layer_display_settings(ui);
+                    if self.left_layers.entries.is_empty() {
+                        // MainWindow.cpp:798-811, MainWindowSession.cpp:752-760 refreshLayerEmptyState —
+                        // 레이어가 없으면 목록 대신 가운데 맞춘 안내. 「표시 설정」은 찾기 칸 바로 아래.
+                        self.paint_layer_display_settings(ui);
+                        // Qt AlignCenter — 줄마다 가운데.
+                        let rest = Rect::from_min_max(ui.cursor().min, layer_card_rect.max);
+                        let lines: Vec<&str> = super::gui_layer_panel_row_spec::layer_panel_empty_hint().lines().collect();
+                        let line_h = 17.0;
+                        let top = rest.center().y - line_h * (lines.len() as f32) * 0.5;
+                        for (i, line) in lines.iter().enumerate() {
+                            ui.painter().text(
+                                Pos2::new(rest.center().x, top + line_h * (i as f32 + 0.5)),
+                                egui::Align2::CENTER_CENTER,
+                                *line,
+                                egui::FontId::proportional(12.0),
+                                Color32::from_rgb(75, 74, 70),
+                            );
+                        }
+                    } else {
+                        self.paint_layer_tree(ui, layer_card_rect);
+                        self.paint_layer_display_settings(ui);
+                    }
                 });
 
                 let (div_r, _) =
                     ui.allocate_exact_size(Vec2::new(panel_w, 3.0), egui::Sense::hover());
                 ui.painter()
-                    .rect_filled(div_r, 0.0, Color32::from_rgb(125, 123, 116));
+                    .rect_filled(div_r, 0.0, Color32::from_rgb(135, 134, 127));
 
                 // 2. 왼쪽 하단 파일함 카드 (w=351, h=168)
                 self.paint_file_drawer(ui, panel_w);
@@ -63,22 +84,15 @@ impl StrataAppState {
             if ui.add(f_btn).clicked() {
                 self.home_map.files_open = !self.home_map.files_open;
             }
-            let any_on = self
-                .home_map
-                .real_survey
-                .is_layer_visible("지적도 · 조사 주변 5km")
-                || self.home_map.real_survey.is_layer_visible("조사구역")
-                || self.home_map.real_survey.is_layer_visible("시굴격자");
-            let toggle_all_label = if any_on { "전체 끄기" } else { "전체 켜기" };
+            let (toggle_all_label, has_layers) = self.toggle_all_state();
             if ui
-                .add(
-                    egui::Button::new(egui::RichText::new(toggle_all_label).size(12.0))
-                        .frame(false),
+                .add_enabled(
+                    has_layers,
+                    egui::Button::new(egui::RichText::new(toggle_all_label).size(12.0)).frame(false),
                 )
                 .clicked()
             {
-                self.home_map.real_survey.set_all_layers_visible(!any_on);
-                self.left_layers.set_all_visible(!any_on);
+                self.toggle_all_layers();
             }
             if show_set_btn {
                 ui.with_layout(
@@ -175,6 +189,38 @@ impl StrataAppState {
                     .show(ui, |ui| {
                         self.paint_layer_rows(ui, avail_w);
                 });
+        });
+    }
+}
+
+impl StrataAppState {
+    /// C++ `refreshLayerCheckAllButton`(MainWindow.cpp:1272-1287) — 켜진 레이어가 하나라도 있으면
+    /// 「전체 끄기」, 아니면 「전체 켜기」. 레이어가 없으면 단추를 흐리게(false).
+    pub(crate) fn toggle_all_state(&self) -> (&'static str, bool) {
+        let rs = &self.home_map.real_survey;
+        let any_on = self.left_layers.entries.iter().any(|e| rs.is_layer_visible(&e.label_ko));
+        (if any_on { "전체 끄기" } else { "전체 켜기" }, !self.left_layers.entries.is_empty())
+    }
+
+    /// C++ `toggleAllLayersChecked`(MainWindow.cpp:1242-1269) — 하나라도 켜져 있으면 모두 끄고, 모두
+    /// 꺼져 있을 때만 모두 켠다. 상태줄에 「레이어 N개를 모두 켰습니다/껐습니다」.
+    pub(crate) fn toggle_all_layers(&mut self) {
+        let (label, has_layers) = self.toggle_all_state();
+        if !has_layers {
+            return;
+        }
+        let turn_on = label == "전체 켜기";
+        let names: Vec<String> = self.left_layers.entries.iter().map(|e| e.label_ko.clone()).collect();
+        let count = names.len();
+        for n in names {
+            self.home_map.real_survey.layer_visible.insert(n, turn_on);
+        }
+        self.home_map.real_survey.set_all_layers_visible(turn_on);
+        self.left_layers.set_all_visible(turn_on);
+        self.home_map.draw_guide_message = Some(if turn_on {
+            format!("레이어 {count}개를 모두 켰습니다")
+        } else {
+            format!("레이어 {count}개를 모두 껐습니다")
         });
     }
 }

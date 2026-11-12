@@ -13,7 +13,6 @@ impl StrataAppState {
         &mut self,
         ctx: &egui::Context,
         ui: &mut egui::Ui,
-        is_home: bool,
     ) {
         let tabbar_h = if ctx.pixels_per_point() > 1.2 {
             34.0
@@ -210,24 +209,31 @@ impl StrataAppState {
                                 });
                         });
                 }
-                if is_home {
-                    let theme_btn = egui::Button::new(
-                        egui::RichText::new("테마 ▼")
-                            .size(12.0)
-                            .color(Color32::from_rgb(45, 44, 40)),
-                    )
-                    .fill(Color32::WHITE)
-                    .stroke(Stroke::new(1.0, Color32::from_rgb(195, 192, 182)))
-                    .corner_radius(5.0)
-                    .min_size(Vec2::new(56.0, 24.0));
-                    if ui
-                        .add(theme_btn)
-                        .on_hover_text("화면 테마·모양·글자 크기 설정")
-                        .clicked()
-                    {
-                        self.theme_menu_open = !self.theme_menu_open;
-                    }
-                } else {
+                // MainWindowChrome.cpp:144-155 — 탭 줄 오른쪽 끝: 「테마 ▾」(언제나)와 그 왼쪽의 조사 배지.
+                let theme_btn = egui::Button::new(
+                    egui::RichText::new("테마 ▼")
+                        .size(12.0)
+                        .color(Color32::from_rgb(45, 44, 40)),
+                )
+                .fill(Color32::WHITE)
+                .stroke(Stroke::new(1.0, Color32::from_rgb(195, 192, 182)))
+                .corner_radius(5.0)
+                .min_size(Vec2::new(56.0, 24.0));
+                if ui
+                    .add(theme_btn)
+                    .on_hover_text("화면 테마·모양·글자 크기 설정")
+                    .clicked()
+                {
+                    self.theme_menu_open = !self.theme_menu_open;
+                }
+                // KaSurveyBadge.cpp:32-62 — 조사 파일이 열려 있을 때만 「<파일 이름> 저장됨」(새 모양).
+                let survey_name = self
+                    .survey_path
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .map(|s| s.to_string_lossy().trim().to_owned())
+                    .filter(|s| !s.is_empty());
+                if let Some(name) = survey_name {
                     if self.is_dirty {
                         ui.label(
                             egui::RichText::new("● 저장 안 됨")
@@ -242,10 +248,11 @@ impl StrataAppState {
                         );
                     }
                     ui.label(
-                        egui::RichText::new(&self.project_title)
+                        egui::RichText::new(name)
                             .size(12.0)
                             .color(Color32::from_rgb(94, 93, 89)),
-                    );
+                    )
+                    .on_hover_text("열려 있는 조사입니다. 누르면 지도 탭으로 갑니다.");
                 }
             });
         });

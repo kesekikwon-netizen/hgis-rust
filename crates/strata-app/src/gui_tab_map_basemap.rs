@@ -32,15 +32,20 @@ impl StrataAppState {
     /// 예전에는 `active_basemap` 만 보고 체크 상태를 보지 않았다.
     pub(crate) fn basemap_kind_to_paint(&self) -> Option<TileKind> {
         use strata_net::tile_fetcher::BasemapSource;
-        let (kind, row) = match self.home_map.active_basemap {
-            BasemapSource::VworldSatellite => (TileKind::Satellite, "위성지도 (VWorld)"),
-            BasemapSource::VworldBase => (TileKind::Base, "일반지도 (VWorld)"),
+        let (kind, key, row) = match self.home_map.active_basemap {
+            BasemapSource::VworldSatellite => (TileKind::Satellite, "vworld_satellite", "위성지도 (VWorld)"),
+            BasemapSource::VworldBase => (TileKind::Base, "vworld_base", "일반지도 (VWorld)"),
             _ => return None,
         };
-        self.home_map
-            .real_survey
-            .is_layer_visible(row)
-            .then_some(kind)
+        // 범례에 그 배경지도 레이어가 있을 때만 — C++ 은 조사를 열거나 만들 때만 배경지도를 올린다
+        // (MainWindowSession.cpp:400, :728). 켠 직후 지도는 흰 바탕이다(지시 S1).
+        let listed = self.left_layers.entries.iter().any(|e| e.layer_key == key);
+        (listed && self.home_map.real_survey.is_layer_visible(row)).then_some(kind)
+    }
+
+    /// 범례에 VWorld 지적 그림 레이어가 있는가(없으면 지적을 칠하지 않는다).
+    pub(crate) fn cadastral_layer_listed(&self) -> bool {
+        self.left_layers.entries.iter().any(|e| e.layer_key == "vworld_cadastral_wms")
     }
 
     /// 배경지도 타일을 칠한다(위성·일반도). 지적 WMS 는 별도 경로다.
@@ -80,16 +85,14 @@ impl StrataAppState {
         p: &egui::Painter,
         rect: egui::Rect,
     ) {
-        if !self
-            .home_map
-            .real_survey
-            .is_layer_visible("연속지적도 (VWorld WMS)")
+        if !self.cadastral_layer_listed()
+            || !self.home_map.real_survey.is_layer_visible("연속지적도 (VWorld WMS)")
         {
             return;
         }
         // C++ `BasemapOps.cpp:712,969` — 1:80,000 보다 넓게 보면 지적선을 그리지 않는다.
         // 넓게 보면 필지선이 뭉개져 오히려 방해가 되고, 타일 요청도 폭증한다.
-        let scale_denom = self.home_map.viewport.meters_per_pixel * 3780.0;
+        let scale_denom = self.home_map.viewport.meters_per_pixel * crate::status_bar_text::POINTS_PER_METER;
         if !crate::basemap_cadastral::cadastral_visible_at_scale(scale_denom) {
             return;
         }

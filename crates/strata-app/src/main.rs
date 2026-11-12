@@ -150,6 +150,7 @@ mod basemap_cadastral;
 mod extent_history;
 mod home_text;
 mod map_context_menu_model;
+mod status_bar_text;
 mod user_settings;
 mod basemap_cadastral_jobs;
 mod basemap_fetch;

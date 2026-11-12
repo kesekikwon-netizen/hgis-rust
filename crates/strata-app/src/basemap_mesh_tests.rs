@@ -33,6 +33,9 @@ fn chuncheon_view(mpp: f64) -> (TileView, Rect) {
 #[test]
 fn test_satellite_not_painted_when_row_unchecked() {
     let mut app = StrataAppState::new_startup();
+    // 지시 S1: 배경지도는 범례에 그 레이어가 있을 때만 칠한다(새 조사·열기가 올리는 두 줄 + 일반지도).
+    app.left_layers.apply_default_basemaps();
+    app.left_layers.add_vworld_base_layer();
     app.home_map.active_basemap = BasemapSource::VworldSatellite;
     assert_eq!(app.basemap_kind_to_paint(), Some(TileKind::Satellite));
 
@@ -55,6 +58,7 @@ fn test_satellite_not_painted_when_row_unchecked() {
 #[test]
 fn test_toggle_all_off_hides_satellite_and_cadastral() {
     let mut app = StrataAppState::new_startup();
+    app.left_layers.apply_default_basemaps();
     app.home_map.active_basemap = BasemapSource::VworldSatellite;
 
     app.home_map.real_survey.set_all_layers_visible(false);

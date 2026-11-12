@@ -36,17 +36,8 @@ impl StrataAppState {
                                 .color(Color32::from_rgb(75, 74, 70)),
                         );
                     } else {
-                        let msg = if self.active_tab == MainTab::Drawing {
-                            // MainWindowExport.cpp:252 — 도면 탭 안내는 C++ 원문 그대로.
-                            StrataAppState::DRAWING_STUDIO_WELCOME
-                        } else if !self.status_bar_hint.is_empty() {
-                            self.status_bar_hint.as_str()
-                        } else {
-                            self.home_map
-                                .draw_guide_message
-                                .as_deref()
-                                .unwrap_or("위성과 지적도를 올려 두었습니다.")
-                        };
+                        // 다른 알림이 없으면 C++ updateNextActionStatus 의 「다음에 할 일」.
+                        let msg = self.status_left_message().to_owned();
                         ui.label(
                             egui::RichText::new(msg)
                                 .size(11.5)
@@ -117,8 +108,8 @@ impl StrataAppState {
                             let live_scale = if self.active_tab == MainTab::Drawing {
                                 self.drawing.sheet.scale_denominator.max(100)
                             } else {
-                                ((self.home_map.viewport.meters_per_pixel * 3780.0).round() as u32)
-                                    .max(100)
+                                // QGIS 축척(96 dpi) 그대로 — C++ 은 1:100 아래로 자르지 않는다.
+                                u32::try_from(self.map_scale_denominator()).unwrap_or(u32::MAX)
                             };
                             let scale_btn_widget = egui::Button::new(
                                 egui::RichText::new(format!("1:{live_scale}   ▼"))
@@ -190,7 +181,8 @@ impl StrataAppState {
                                                                 self.home_map
                                                                     .viewport
                                                                     .meters_per_pixel =
-                                                                    f64::from(denom) / 3780.0;
+                                                                    f64::from(denom)
+                                                                        / crate::status_bar_text::POINTS_PER_METER;
                                                             }
                                                             self.scale_menu_open = false;
                                                         }
@@ -206,12 +198,24 @@ impl StrataAppState {
                             );
                             if self.active_tab == MainTab::Map {
                                 ui.separator();
-                                let [cx, cy] = self.home_map.cursor_world_xy;
-                                ui.label(
-                                    egui::RichText::new(format!("X {cx:10.3}   Y {cy:10.3}"))
-                                        .size(11.5)
-                                        .color(Color32::from_rgb(75, 74, 70)),
+                                // KaStatusBar.cpp:58-64 xyReadout — 폭 240, 오른쪽 맞춤.
+                                let xy = self.xy_readout();
+                                ui.allocate_ui_with_layout(
+                                    Vec2::new(240.0, 22.0),
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        ui.label(egui::RichText::new(xy).size(11.5).color(Color32::from_rgb(75, 74, 70)))
+                                            .on_hover_text("지도 위 커서의 작업 좌표입니다.");
+                                    },
                                 );
+                                // KaDrawSketchTools.cpp:239-262 toolChip — 지금 도구, 굵게, 좌우 여백 8.
+                                let tool = self.tool_chip_label();
+                                if !tool.is_empty() {
+                                    ui.add_space(8.0);
+                                    ui.label(egui::RichText::new(tool).size(11.5).strong().color(Color32::from_rgb(35, 35, 32)))
+                                        .on_hover_text("지금 켜져 있는 지도 도구입니다.");
+                                    ui.add_space(8.0);
+                                }
                             }
                             if self.is_dirty {
                                 ui.separator();

@@ -30,6 +30,8 @@ pub struct HomeMapTabState {
     pub selected_feature_idx: Option<usize>,
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
+    /// 마우스가 지도 칸 위에 한 번이라도 왔는가 — 그 전에는 상태줄 좌표가 「X —    Y —」(KaStatusBar.cpp:173-175).
+    pub cursor_seen: bool,
     pub viewport: ViewportTransform,
     /// 다음 지도 화면에서 한반도 전체 보기를 한 번 다시 맞출지(지도 칸 크기가 그때 정해진다).
     pub korea_view_pending: bool,
@@ -71,6 +73,7 @@ impl Default for HomeMapTabState {
             selected_feature_idx: None,
             grid_enabled: false,
             cursor_world_xy: center,
+            cursor_seen: false,
             viewport: ViewportTransform::new(center, 2.55, [1060.0, 680.0]),
             korea_view_pending: false,
             extent_history: crate::extent_history::ExtentHistory::default(),

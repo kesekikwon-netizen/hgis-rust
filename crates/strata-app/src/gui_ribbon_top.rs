@@ -78,7 +78,7 @@ impl StrataAppState {
         self.paint_ribbon_groups(ui, &frame, ribbon_h);
         self.paint_ribbon_app_bar(ui, &frame);
         self.paint_ribbon_sub_toolbar(ctx, ui);
-        self.paint_ribbon_tab_bar(ctx, ui, is_home);
+        self.paint_ribbon_tab_bar(ctx, ui);
         self.render_region_locator_popup(ctx);
     }
 
