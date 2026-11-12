@@ -54,6 +54,19 @@ impl StrataAppState {
         self.reload_recent_surveys();
     }
 
+    /// `--snap`(검증 캡처): 사용자 ini 는 읽기만 한다(지시 S0). `temp_dir` 에 사본을 만들어 붙이므로
+    /// 홈 화면은 실제 목록을 보이고, 스냅의 열기·새 조사·저장이 쓰는 최근 조사·마지막 폴더는 사본에만 간다.
+    /// 사용자 ini 가 없으면 빈 사본, 사본을 만들지 못하면 아무 ini 도 붙이지 않는다.
+    pub(crate) fn attach_user_settings_for_snap(&mut self, ini: Option<PathBuf>, temp_dir: &Path) {
+        let copy = temp_dir.join("ka-hgis.ini");
+        let ready = std::fs::create_dir_all(temp_dir).is_ok()
+            && match ini.filter(|src| src.is_file()) {
+                Some(src) => std::fs::copy(&src, &copy).is_ok(),
+                None => !copy.exists() || std::fs::remove_file(&copy).is_ok(),
+            };
+        self.attach_user_settings(ready.then_some(copy));
+    }
+
     /// `KaStartPage::reload` — 없는 조사(USB 를 뺀 경우)도 회색으로 남긴다.
     pub(crate) fn reload_recent_surveys(&mut self) {
         self.recent_surveys = self.settings_ini.as_deref().map(recent_surveys::load_all).unwrap_or_default();

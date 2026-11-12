@@ -121,11 +121,14 @@ fn main() {
         options,
         Box::new(|cc| {
             let mut state = app_state::StrataAppState::new_startup();
-            // C++ 앱과 같은 사용자 ini(최근 조사·마지막 폴더). 시험 실행은 KA_HGIS_SETTINGS_DIR 로 따로 둔다.
-            state.attach_user_settings(user_settings::user_settings_ini());
             gui_theme_fonts::configure_korean_fonts_and_theme(&cc.egui_ctx, &state.theme);
+            // C++ 앱과 같은 사용자 ini(최근 조사·마지막 폴더). --snap 은 읽기만 하고 임시 사본에 쓴다(S0).
+            let ini = user_settings::user_settings_ini();
             if let Some(dir) = snap_dir.clone() {
                 state.snap = Some(snap_shot::SnapRequest::parse(&dir, &snap_steps));
+                state.attach_user_settings_for_snap(ini, &snap_shot_run::snap_temp_dir());
+            } else {
+                state.attach_user_settings(ini);
             }
             Ok(Box::new(state))
         }),

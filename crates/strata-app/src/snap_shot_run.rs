@@ -6,6 +6,11 @@ use eframe::egui;
 
 use crate::app_state::StrataAppState;
 
+/// 스냅 실행의 임시 폴더 — 새 조사 파일과 사용자 ini 사본을 여기에 둔다(사용자 문서·설정에 쓰지 않는다).
+pub(crate) fn snap_temp_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("strata-snap-{}", std::process::id()))
+}
+
 impl StrataAppState {
     /// 스냅샷 단계를 한 프레임 진행한다. 모든 단계가 끝나면 뷰포트를 닫는다.
     pub(crate) fn snap_tick(&mut self, ctx: &egui::Context) {
@@ -95,7 +100,7 @@ impl StrataAppState {
                 // 화면 캡처는 언제나 임시 폴더에 만든다 — 사용자 문서 폴더에 쓰지 않는다.
                 let name = self.modals.new_survey_name.trim().to_owned();
                 let crs = self.modals.new_survey_crs;
-                let dir = std::env::temp_dir().join(format!("strata-snap-{}", std::process::id()));
+                let dir = snap_temp_dir();
                 let path = dir.join(format!("{name}.gpkg"));
                 if let Err(e) = strata_storage::gpkg::GpkgRepository::create_new_survey(&path, crs) {
                     // 거절되면 이 단계에서 멈추고 창에 오류를 남긴다(기존 파일로 계속하지 않는다).

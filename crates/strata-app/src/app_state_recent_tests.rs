@@ -158,3 +158,40 @@ fn preferred_survey_dir_follows_cpp_order() {
     assert_eq!(preferred_survey_dir_from("", None, &recent, desk), PathBuf::from(s(&c)));
     assert_eq!(preferred_survey_dir_from("", None, "", desk), PathBuf::from("DESK"));
 }
+
+/// S0 — `--snap` 은 사용자 ini 를 읽기만 한다: 홈은 실제 목록을 보이고, 스냅의 열기는 임시 폴더 사본에만
+/// 기록한다. 시험의 「사용자 ini」도 임시 폴더의 가짜 파일이다.
+#[test]
+fn snap_reads_the_user_ini_but_writes_only_a_copy() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let real = dir.path().join("real").join("ka-hgis.ini");
+    std::fs::create_dir_all(real.parent().expect("parent")).expect("dir");
+    std::fs::write(&real, shaped_ini(MISSING)).expect("ini");
+    let before = std::fs::read(&real).expect("read");
+    let snap_dir = dir.path().join("snap");
+    let mut app = StrataAppState::new_startup();
+
+    app.attach_user_settings_for_snap(Some(real.clone()), &snap_dir);
+
+    let names: Vec<&str> = app.recent_surveys.iter().map(|it| it.name.as_str()).collect();
+    assert_eq!(names, ["verify1-저장", "verify1", "andong"], "home snaps show the real list");
+    let demo = demo_copy(dir.path(), "demo.gpkg");
+    app.snap_apply_action(&format!("@open={}", demo.display()));
+    assert_eq!(app.survey_path.as_deref(), Some(demo.as_path()));
+    assert_eq!(std::fs::read(&real).expect("read"), before, "the user ini is never written");
+    assert_eq!(app.recent_surveys.first().map(|it| it.name.as_str()), Some("demo"));
+    assert_eq!(last_dir(&snap_dir.join("ka-hgis.ini")), absolute_file_path(dir.path()));
+}
+
+/// 사용자 ini 가 없거나 복사하지 못하면 빈 사본으로 — 그래도 사용자 쪽에는 아무 것도 만들지 않는다.
+#[test]
+fn snap_without_a_user_ini_creates_nothing_there() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let real = dir.path().join("real").join("ka-hgis.ini");
+    let mut app = StrataAppState::new_startup();
+    app.attach_user_settings_for_snap(Some(real.clone()), &dir.path().join("snap"));
+    assert!(app.recent_surveys.is_empty());
+    let demo = demo_copy(dir.path(), "demo.gpkg");
+    app.snap_apply_action(&format!("@open={}", demo.display()));
+    assert!(!real.exists() && !dir.path().join("real").exists());
+}
