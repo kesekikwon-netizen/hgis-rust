@@ -123,3 +123,34 @@ fn a_read_only_or_locked_original_is_saved_beside_it() -> StrataResult<()> {
     std::fs::set_permissions(&ro, perms)?;
     Ok(())
 }
+
+/// 원본 옆에 아무도 쓰지 않는(남겨진) -wal 에 아직 본 파일로 옮기지 않은 행이 있고 원본을 바꿔
+/// 끼울 수 없어 옆 「-저장.gpkg」로 가면, 원본의 -wal 은 그대로 남아 그 행을 잃지 않는다.
+#[test]
+#[cfg(windows)]
+fn a_side_file_save_keeps_the_originals_idle_wal_rows() -> StrataResult<()> {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = tempfile::tempdir()?;
+    let src = demo_copy(dir.path(), "src.gpkg")?;
+    let idle = dir.path().join("idle.gpkg");
+    let writer = Connection::open(&src).map_err(db)?;
+    writer.execute_batch(
+        "PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0;
+         CREATE TABLE site_notes (id INTEGER PRIMARY KEY, memo TEXT);
+         INSERT INTO site_notes VALUES (1, 'WAL 안의 행');",
+    ).map_err(db)?;
+    // 쓰는 연결이 열려 있는 동안 본 파일과 -wal 을 떠 둔다 = 끊긴 앱이 남긴 유휴 -wal.
+    std::fs::write(&idle, std::fs::read(&src)?)?;
+    std::fs::write(dir.path().join("idle.gpkg-wal"), std::fs::read(dir.path().join("src.gpkg-wal"))?)?;
+    drop(writer);
+    let hold = std::fs::OpenOptions::new().read(true).share_mode(0x1 | 0x2).open(&idle)?;
+    let mut tables = read_survey_tables(&idle)?;
+    table(&mut tables, "feature_poly").layer.features.push(new_feature(NEW_POLY, &[("kind", "수혈")]));
+    let written = save_survey(&idle, &tables).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
+    drop(hold);
+    assert_eq!(written, std::path::absolute(dir.path().join("idle-저장.gpkg"))?);
+    assert_eq!(rows(&written, "SELECT memo FROM site_notes")?, vec!["WAL 안의 행"]);
+    assert!(dir.path().join("idle.gpkg-wal").exists(), "the original's -wal must stay");
+    assert_eq!(rows(&idle, "SELECT memo FROM site_notes")?, vec!["WAL 안의 행"]);
+    Ok(())
+}

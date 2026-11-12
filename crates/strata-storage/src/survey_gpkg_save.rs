@@ -106,7 +106,8 @@ fn is_transient_lock(e: &std::io::Error) -> bool {
     matches!(e.raw_os_error(), Some(5 | 32 | 33))
 }
 
-/// C++ dropIdleJournals — 아무도 쓰지 않는 -wal·-shm·-journal 만 지운다(쓰는 중이면 지우기가 실패한다).
+/// C++ dropIdleJournals(`SurveyStorage.cpp:237-244`) — 옆의 -wal·-shm·-journal 을 지운다
+/// (쓰는 사람이 잡고 있으면 지우기가 실패해 남는다).
 fn drop_idle_journals(target: &Path) {
     for ext in ["-wal", "-shm", "-journal"] {
         let mut p = target.as_os_str().to_owned();
@@ -131,9 +132,11 @@ fn sibling_survey_path(target: &Path) -> PathBuf {
 
 /// 검증된 세대로 원본을 바꾼다. 잠금이면 C++ 처럼 40번(100 ms×10, 이후 300 ms) 다시 하고, 끝내
 /// 안 되면 옆 「-저장.gpkg」. 그것도 안 되면 세대 파일을 남기고 알린다(keep = true).
+///
+/// 원본의 저널은 바꿔 끼운 뒤에만 지운다. C++ 는 교체 전에도 지우지만(:426), 그러면 교체가
+/// 끝내 거부돼 옆 파일로 갈 때 원본의 남은 -wal 에만 있던 행을 잃는다 — 원본은 그대로 둔다.
 fn publish(generation: &Path, target: &Path) -> Result<PathBuf, (SaveFailure, bool)> {
     let _ = std::fs::OpenOptions::new().write(true).open(generation).and_then(|f| f.sync_all());
-    drop_idle_journals(target);
     let mut last = None;
     for attempt in 0..40_u64 {
         if attempt > 0 {
@@ -157,7 +160,10 @@ fn publish(generation: &Path, target: &Path) -> Result<PathBuf, (SaveFailure, bo
     let alt = sibling_survey_path(target);
     let moved = std::fs::rename(generation, &alt).or_else(|_| std::fs::copy(generation, &alt).map(|_| ()));
     match moved {
-        Ok(()) => Ok(alt),
+        Ok(()) => {
+            drop_idle_journals(&alt); // C++ :443
+            Ok(alt)
+        }
         Err(e) => Err((
             SaveFailure::Message(format!(
                 "저장 파일을 교체하지 못했습니다: {e} · 원본 조사 파일은 그대로이고, 새로 만든 조사 파일은 {} 에 남겨 두었습니다.",
