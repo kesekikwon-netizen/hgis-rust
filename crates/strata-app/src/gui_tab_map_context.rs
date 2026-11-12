@@ -127,41 +127,47 @@ impl StrataAppState {
         let mut sub_row: Option<Rect> = None;
         let mut sub_items: &[MapMenuAction] = &[];
         let mut sub_open = self.map_menu_sub_open;
-        let win = egui::Window::new("ka_map_context_menu")
-            .title_bar(false)
-            .resizable(false)
+        // 메뉴 본체·하위 메뉴 모두 줄 폭(ROW_W) 그대로의 팝업 틀 — 화살표가 메뉴 오른쪽 끝에,
+        // 하위 메뉴는 메뉴 바로 옆에 붙는다(QMenu 처럼).
+        let main = egui::Area::new(egui::Id::new("ka_map_context_menu"))
+            .order(egui::Order::Foreground)
             .fixed_pos(pos)
             .show(ctx, |ui| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                for e in &entries {
-                    match e {
-                        MapMenuEntry::Separator => {
-                            ui.separator();
-                        }
-                        MapMenuEntry::Action(a) => {
-                            if action_row(ui, a, &mut picked).hovered() {
-                                sub_open = false;
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.set_width(ROW_W);
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    for e in &entries {
+                        match e {
+                            MapMenuEntry::Separator => {
+                                ui.separator();
                             }
-                        }
-                        MapMenuEntry::Submenu { title, items, .. } => {
-                            let r = menu_row(ui, title, true, "", true);
-                            if r.hovered() || r.clicked() {
-                                sub_open = true;
+                            MapMenuEntry::Action(a) => {
+                                if action_row(ui, a, &mut picked).hovered() {
+                                    sub_open = false;
+                                }
                             }
-                            sub_row = Some(r.rect);
-                            sub_items = items;
+                            MapMenuEntry::Submenu { title, items, .. } => {
+                                let r = menu_row(ui, title, true, "", true);
+                                if r.hovered() || r.clicked() {
+                                    sub_open = true;
+                                }
+                                sub_row = Some(r.rect);
+                                sub_items = items;
+                            }
                         }
                     }
-                }
+                });
             });
-        let main_rect = win.map(|w| w.response.rect);
+        let main_rect = Some(main.response.rect);
         let mut sub_rect = None;
         if let (true, Some(row)) = (sub_open, sub_row) {
+            let frame_pad = main.response.rect.right() - row.right();
             let area = egui::Area::new(egui::Id::new("ka_map_context_submenu"))
                 .order(egui::Order::Foreground)
-                .fixed_pos(Pos2::new(row.right() + 6.0, row.top() - 4.0))
+                .fixed_pos(Pos2::new(main.response.rect.right() - 2.0, row.top() - frame_pad))
                 .show(ctx, |ui| {
                     egui::Frame::popup(ui.style()).show(ui, |ui| {
+                        ui.set_width(ROW_W);
                         ui.spacing_mut().item_spacing.y = 0.0;
                         for a in sub_items {
                             action_row(ui, a, &mut picked);
@@ -193,3 +199,7 @@ impl StrataAppState {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "gui_tab_map_context_tests.rs"]
+mod tests;

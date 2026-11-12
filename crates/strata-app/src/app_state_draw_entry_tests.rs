@@ -77,3 +77,16 @@ fn without_a_survey_nothing_is_targeted() {
     assert_eq!(app.edit_layer_key, None);
     assert_eq!(app.active_tool, MapToolKind::Pan);
 }
+
+/// 다른 조사를 열면 이전 조사의 그리기 대상이 남지 않는다(C++ m_editLayer = nullptr).
+#[test]
+fn opening_another_survey_clears_the_target() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut app = opened_demo(dir.path());
+    app.start_edit_section_line();
+    assert_eq!(app.edit_layer_key.as_deref(), Some("section_line"));
+    let other = dir.path().join("다른.gpkg");
+    std::fs::copy(dir.path().join("demo.gpkg"), &other).expect("copy");
+    assert!(app.open_survey_gpkg(&other));
+    assert_eq!(app.edit_layer_key, None);
+}
