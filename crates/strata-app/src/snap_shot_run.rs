@@ -88,19 +88,22 @@ impl StrataAppState {
     }
 
     /// 리본 라벨 하나를 누른 것과 같은 효과를 낸다.
-    fn snap_apply_action(&mut self, action: &str) {
+    pub(crate) fn snap_apply_action(&mut self, action: &str) {
         match action {
             "@new_survey_go" => {
                 // 새 조사 모달의 「만들기」까지 눌러 실제 조사 화면으로 간다.
+                // 화면 캡처는 언제나 임시 폴더에 만든다 — 사용자 문서 폴더에 쓰지 않는다.
                 let name = self.modals.new_survey_name.trim().to_owned();
                 let crs = self.modals.new_survey_crs;
-                let dir = if self.modals.new_survey_dir.trim().is_empty() {
-                    std::env::temp_dir()
-                } else {
-                    std::path::PathBuf::from(self.modals.new_survey_dir.trim())
-                };
+                let dir = std::env::temp_dir().join(format!("strata-snap-{}", std::process::id()));
                 let path = dir.join(format!("{name}.gpkg"));
-                let _ = strata_storage::gpkg::GpkgRepository::create_new_survey(&path, crs);
+                if let Err(e) = strata_storage::gpkg::GpkgRepository::create_new_survey(&path, crs) {
+                    // 거절되면 이 단계에서 멈추고 창에 오류를 남긴다(기존 파일로 계속하지 않는다).
+                    let msg = crate::dlg_new_survey::new_survey_error_text(&e);
+                    eprintln!("[SNAP] 새 조사 실패 {}: {msg}", path.display());
+                    self.modals.new_survey_error = Some(msg);
+                    return;
+                }
                 self.start_new_survey_project_with_path(&name, &path, crs);
                 self.modals.active = None;
             }

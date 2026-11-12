@@ -27,6 +27,7 @@ fn created_gpkg_passes_sqlite_pragma_integrity_check_and_has_gpkg_contents() -> 
         .map_err(|e| StrataError::Storage(e.to_string()))?;
     assert_eq!(integrity, "ok");
 
+    // C++(GDAL) 새 조사 파일은 작업 좌표계 하나만 담는다(5179 는 제출 때만 쓴다).
     let srs_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM gpkg_spatial_ref_sys WHERE srs_id IN (5187, 5186, 5179)",
@@ -34,7 +35,7 @@ fn created_gpkg_passes_sqlite_pragma_integrity_check_and_has_gpkg_contents() -> 
             |r| r.get(0),
         )
         .map_err(|e| StrataError::Storage(e.to_string()))?;
-    assert_eq!(srs_count, 3);
+    assert_eq!(srs_count, 1);
 
     let schema_path = dir.path().join("survey_schema_5_layers.gpkg");
     assert!(GpkgRepository::create_survey_schema_5_layers(
@@ -59,7 +60,14 @@ fn test_gpkg_atomic_write_commits_1000_features_and_verifies_pragma_integrity_ok
 ) -> StrataResult<()> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("atomic_1000_features.gpkg");
-    GpkgRepository::create_new_survey(&path, WorkCrs::Epsg5187)?;
+    // 이 시험은 Rust 작업공간 형식 쓰기를 본다 — 새 조사(C++ 형식)가 아니라 그 형식으로 바탕을 만든다.
+    let base = SurveyWorkspace {
+        schema_version: 3,
+        work_crs: WorkCrs::Epsg5187,
+        layers: BTreeMap::new(),
+        embedded_project_json: String::from("{}"),
+    };
+    GpkgRepository::write_workspace_file(&path, &base)?;
 
     let mut buf = LayerEditBuffer::new(DomainLayerKey::FeaturePoly);
     for i in 0..1000 {
@@ -222,7 +230,14 @@ fn write_workspace_file_refuses_existing_file_without_workspace_table() -> Strat
 fn write_workspace_file_replaces_own_workspace_and_leaves_no_temp_file() -> StrataResult<()> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("새조사.gpkg");
-    let mut ws = GpkgRepository::create_new_survey(&path, WorkCrs::Epsg5187)?;
+    // 바탕은 Rust 작업공간 형식(새 조사는 C++ 형식이라 이 시험의 대상이 아니다).
+    let mut ws = SurveyWorkspace {
+        schema_version: 3,
+        work_crs: WorkCrs::Epsg5187,
+        layers: BTreeMap::new(),
+        embedded_project_json: String::from("{}"),
+    };
+    GpkgRepository::write_workspace_file(&path, &ws)?;
     std::fs::write(GpkgRepository::workspace_temp_path(&path), b"stale temp")?;
 
     ws.work_crs = WorkCrs::Epsg5186;

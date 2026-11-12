@@ -60,11 +60,22 @@ impl StrataAppState {
         );
     }
 
-    /// `start_new_survey_project` 의 예전 시험·시연용 입구(임시 폴더에 만든다).
+    /// `start_new_survey_project` 의 예전 시험·시연용 입구(Ctrl+N). 부를 때마다 임시 폴더 안
+    /// 새 폴더에 만들고, 만들지 못하면 멈춘다 — 기존 파일로 계속하지 않는다.
     pub fn start_new_survey_project(&mut self, name: &str) {
-        let path = std::env::temp_dir().join(format!("{name}.gpkg"));
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let dir = std::env::temp_dir()
+            .join(format!("strata-new-survey-{}-{stamp}", std::process::id()));
+        let path = dir.join(format!("{name}.gpkg"));
         let crs = self.modals.new_survey_crs;
-        let _ = GpkgRepository::create_new_survey(&path, crs);
+        if let Err(e) = GpkgRepository::create_new_survey(&path, crs) {
+            let msg = crate::dlg_new_survey::new_survey_error_text(&e);
+            eprintln!("[NEW SURVEY] {}: {msg}", path.display());
+            self.home_map.draw_guide_message = Some(msg);
+            return;
+        }
         self.start_new_survey_project_with_path(name, &path, crs);
     }
 

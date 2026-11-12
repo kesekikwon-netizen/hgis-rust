@@ -213,11 +213,11 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
         });
 }
 
-/// 새 조사 파일을 만들지 못했을 때 창에 보일 문구. 같은 이름 거절(`InvalidInput`)은
-/// C++ 문구를 앞말 없이 그대로 보인다.
+/// 새 조사 파일을 만들지 못했을 때 창에 보일 문구. 같은 이름 거절(`InvalidInput`)과 파일
+/// 만들기 오류(`Storage`)는 C++ `SurveyProjectFactory.cpp` errorOut 문구를 앞말 없이 그대로 보인다.
 pub(crate) fn new_survey_error_text(e: &StrataError) -> String {
     match e {
-        StrataError::InvalidInput(msg) => msg.clone(),
+        StrataError::InvalidInput(msg) | StrataError::Storage(msg) => msg.clone(),
         other => format!("새 조사를 만들지 못했습니다: {other}"),
     }
 }

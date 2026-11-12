@@ -15,3 +15,7 @@ mod gpkg_core_tests;
 #[cfg(test)]
 #[path = "gpkg_project_tests.rs"]
 mod gpkg_project_tests;
+
+#[cfg(test)]
+#[path = "survey_gpkg_create_tests.rs"]
+mod survey_gpkg_create_tests;

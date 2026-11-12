@@ -68,12 +68,11 @@ impl GpkgRepository {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        // 임시 방패: Rust 작업공간 표가 없는 기존 파일(C++ 조사 파일 등)은 덮어쓰지 않는다.
-        // 지시 #2 에서 파일 형식을 C++ 과 맞출 때까지 C++ 원본을 지키려는 것이다.
+        // 임시 방패: Rust 작업공간 표가 없는 기존 파일(C++ 조사 파일, 2A 이후의 새 조사)은
+        // 덮어쓰지 않는다. 지시 2C 에서 저장이 C++ 형식을 쓰게 되면 지운다.
         if path.exists() && !Self::has_workspace_table(path) {
             return Err(StrataError::Storage(
-                "Strata 작업공간 정보가 없는 기존 파일(예전 판 조사 파일 등)이라 덮어쓰지 않았습니다. \
-                 원래 파일은 그대로 두었습니다. 다른 이름으로 저장해 주세요."
+                "아직 이 판에서는 C++ 형식 조사 파일에 저장하지 못합니다. 파일은 그대로 두었습니다."
                     .into(),
             ));
         }

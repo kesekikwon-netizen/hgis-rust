@@ -81,7 +81,8 @@ impl GpkgRepository {
     }
 
     /// C++ `SurveyProjectFactory.cpp:44-49` — 같은 이름 .gpkg 나 .qgz 가 있으면 아무 파일도
-    /// 건드리지 않고 거절한다.
+    /// 건드리지 않고 거절한다. 파일은 C++(GDAL)과 같은 형식으로 만든다(:61-170) — Rust
+    /// 작업공간 표(`ka_hgis_workspace_state`)는 쓰지 않는다. 돌려주는 값은 빈 메모리 작업공간이다.
     pub fn create_new_survey(path: &Path, work_crs: WorkCrs) -> StrataResult<SurveyWorkspace> {
         if path.exists() || path.with_extension("qgz").exists() {
             return Err(StrataError::InvalidInput(SAME_NAME_SURVEY_EXISTS_KO.to_owned()));
@@ -92,7 +93,7 @@ impl GpkgRepository {
             layers: BTreeMap::new(),
             embedded_project_json: String::from("{\"ka_hgis_project\":true}"),
         };
-        Self::write_workspace_file(path, &ws)?;
+        crate::survey_gpkg_create::create_cpp_survey_file(path, work_crs)?;
         Ok(ws)
     }
 
