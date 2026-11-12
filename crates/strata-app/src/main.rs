@@ -151,6 +151,8 @@ mod extent_history;
 mod home_text;
 mod map_context_menu_model;
 mod status_bar_text;
+mod edit_geometry_repair;
+mod draw_sketch;
 mod user_settings;
 mod basemap_cadastral_jobs;
 mod basemap_fetch;

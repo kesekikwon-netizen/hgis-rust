@@ -79,7 +79,12 @@ impl StrataAppState {
                     _ => "",
                 };
                 let mut text = if target.is_empty() { "그리기".to_owned() } else { format!("그리기 · {target}") };
-                let points = self.home_map.scene.active_rubberband.len();
+                // currentToolLabel 의 「점 n」 — 면은 그리던 면(KaCaptureMapTool), 선·점은 아직 예전 도구.
+                let points = if self.active_tool == MapToolKind::DrawPolygon {
+                    self.draw_sketch.points.len()
+                } else {
+                    self.home_map.scene.active_rubberband.len()
+                };
                 if points > 0 {
                     text.push_str(&format!(" · 점 {points}"));
                 }
@@ -101,6 +106,34 @@ impl StrataAppState {
     /// 지도 화면 축척 분모(QGIS: 점당 m × 96 / 0.0254).
     pub(crate) fn map_scale_denominator(&self) -> u64 {
         (self.home_map.viewport.meters_per_pixel * POINTS_PER_METER).round().max(0.0) as u64
+    }
+}
+
+impl StrataAppState {
+    /// 「저장 안 됨」 칩 글(KaStatusBar::setUnsavedCount, KaStatusBar.cpp:152-160). 편집한 도형 수는
+    /// `EditBufferSummary::uniqueEditedIds` 처럼 레이어마다 더한·지운·바꾼 도형 id 를 한 번씩 센 합.
+    /// 조사가 없거나 저장할 것이 없으면 None(칩 숨김).
+    pub(crate) fn unsaved_chip_text(&self) -> Option<String> {
+        self.survey_path.as_ref()?;
+        let mut features = 0usize;
+        for t in &self.survey_tables {
+            let base: std::collections::HashMap<i64, &strata_storage::edit_buffer::FeatureRecord> =
+                t.baseline.iter().map(|f| (f.fid, f)).collect();
+            let mut ids: std::collections::HashSet<i64> = std::collections::HashSet::new();
+            for f in &t.layer.features {
+                if base.get(&f.fid).is_none_or(|b| b.wkt_geom != f.wkt_geom || b.attributes != f.attributes) {
+                    ids.insert(f.fid);
+                }
+            }
+            let now: std::collections::HashSet<i64> = t.layer.features.iter().map(|f| f.fid).collect();
+            ids.extend(base.keys().filter(|fid| !now.contains(fid)));
+            features += ids.len();
+        }
+        if features > 0 {
+            Some(format!("저장 안 됨 {features}건"))
+        } else {
+            self.is_dirty.then(|| "저장 안 됨".to_owned())
+        }
     }
 }
 

@@ -238,16 +238,8 @@ impl StrataAppState {
         self.remember_survey(&written, &strata_storage::recent_surveys::complete_base_name(&written.to_string_lossy()));
         self.remember_survey_dir(&written);
         self.survey_path = Some(written);
-        if self.home_map.real_survey.drawn_rings > 0 {
-            // 그린 도형은 아직 조사 표에 들어가지 않는다(도면별 그리기 지시). 「*」를 남긴다.
-            self.home_map.draw_guide_message = Some(format!(
-                "조사 데이터를 저장했습니다: {name} — 지도에 그린 도형은 아직 조사 파일에 넣지 못해 「저장 안 됨」으로 둡니다."
-            ));
-        } else {
-            self.is_dirty = false;
-            self.home_map.draw_guide_message =
-                Some(format!("조사 데이터와 작업 구성을 저장했습니다: {name}"));
-        }
+        self.is_dirty = false;
+        self.home_map.draw_guide_message = Some(format!("조사 데이터와 작업 구성을 저장했습니다: {name}"));
         true
     }
 

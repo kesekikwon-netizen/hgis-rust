@@ -24,6 +24,8 @@ pub struct KaBeginnerRibbon {
     pub sub_mode: SubToolsMode,
     pub draw_sub_target: DrawSubTarget,
     pub snap_assist_menu_open: bool,
+    /// C++ `m_continuousDraw` — 그리기 줄 「연속 그리기」.
+    pub continuous_draw: bool,
     pub app_bar: KaAppBarSearch,
 }
 
@@ -44,6 +46,7 @@ impl Default for KaBeginnerRibbon {
             sub_mode: SubToolsMode::None,
             draw_sub_target: DrawSubTarget::SurveyArea,
             snap_assist_menu_open: false,
+            continuous_draw: false,
             app_bar: KaAppBarSearch::default(),
         }
     }

@@ -95,6 +95,10 @@ impl StrataAppState {
         self.survey_tables.clear();
         // C++ newSurvey·openSurveyGpkg 의 m_editLayer = nullptr — 이전 조사의 그리기 대상을 남기지 않는다.
         self.edit_layer_key = None;
+        // 그리던 점(stopCaptureTool)과 이전 조사 레이어의 되돌리기 차례도 남기지 않는다.
+        self.draw_sketch = crate::draw_sketch::DrawSketch::default();
+        self.undo_tables.clear();
+        self.redo_tables.clear();
         self.is_dirty = false;
         self.active_tool = MapToolKind::Pan;
         // 조사 데이터 레이어만 제거. 배경지도·지적은 호출부가 다시 보장한다.

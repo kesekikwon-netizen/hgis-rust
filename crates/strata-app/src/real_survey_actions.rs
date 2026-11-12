@@ -1,4 +1,4 @@
-//! 조사 도형 저장·주변유적 CSV·시굴 트렌치 배치/이동.
+//! 주변유적 CSV·시굴 트렌치 배치/이동.
 //!
 //! `real_survey.rs` 가 300줄 규칙에 맞춰 나눈 파일이다. 옮긴 항목의 이름·시그니처·동작은 그대로다.
 
@@ -9,16 +9,6 @@ use strata_geo::trench_grid::{build_lshape_ring, TrenchShapeKind, TrenchStandard
 use super::real_survey_types::{ring_centroid, RealSurveyData, RealTrenchPoly};
 
 impl RealSurveyData {
-    /// 닫은 다각형을 메모리에만 둔다. 조사 GPKG 에는 쓰지 않는다 — 아직 어느 조사 표에도 넣지
-    /// 않으므로(도면별 그리기는 다음 지시) 저장해도 「저장 안 됨」이 남도록 센다.
-    pub fn save_drawn_polygon(&mut self, ring: Vec<[f64; 2]>) {
-        if ring.len() < 3 {
-            return;
-        }
-        self.survey_rings.push(ring);
-        self.drawn_rings += 1;
-    }
-
     pub fn export_nearby_heritage_csv(&self) -> Option<PathBuf> {
         let out_path = self.survey_dir.join("주변유적_목록.csv");
         let [cx, cy] = self.survey_center;

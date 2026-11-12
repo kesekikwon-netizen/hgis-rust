@@ -107,4 +107,16 @@ impl StrataAppState {
             "✓ 저장됨"
         }
     }
+
+    /// QStatusBar::showMessage — 상태줄 왼쪽 글을 바꾼다(가장 최근 글이 보인다: 남아 있던 리본 안내도 지운다).
+    pub(crate) fn show_status_message(&mut self, text: impl Into<String>) {
+        self.status_bar_hint.clear();
+        self.home_map.draw_guide_message = Some(text.into());
+    }
+
+    /// `stopCaptureTool`(MainWindowEditing.cpp:274-285) — 이동 도구로, 그리던 점은 지운다.
+    pub(crate) fn stop_capture_tool(&mut self) {
+        self.active_tool = strata_canvas2d::map_tools::MapToolKind::Pan;
+        self.draw_sketch = crate::draw_sketch::DrawSketch::default();
+    }
 }

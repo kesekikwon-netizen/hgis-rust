@@ -30,6 +30,8 @@ serde_json = { workspace = true }
 rfd = { workspace = true }
 dirs = { workspace = true }
 chrono = { workspace = true }
+# 그린 도형의 uid(C++ QUuid::createUuid) — v4.
+uuid = { version = "=1.29.0", features = ["v4"] }
 
 [dev-dependencies]
 tempfile.workspace = true

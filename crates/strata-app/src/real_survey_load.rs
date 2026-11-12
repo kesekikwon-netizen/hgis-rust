@@ -19,7 +19,6 @@ impl RealSurveyData {
             survey_name: String::new(),
             site_name: String::new(),
             survey_rings: Vec::new(),
-            drawn_rings: 0,
             survey_area_m2: 0.0,
             survey_center: [219_745.6, 360_930.5],
             trenches: Vec::new(),

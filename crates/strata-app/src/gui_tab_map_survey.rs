@@ -71,7 +71,7 @@ fn square_caps(pts: &[Pos2], half: f32) -> Vec<Pos2> {
 }
 
 /// 오목·구멍 있는 면도 채운다(egui 의 볼록 다각형 대신 귀 자르기 삼각형).
-fn fill_mesh(rings: &[Vec<Pos2>], fill: Color32) -> Shape {
+pub(super) fn fill_mesh(rings: &[Vec<Pos2>], fill: Color32) -> Shape {
     let ls = |r: &Vec<Pos2>| geo::LineString::from(r.iter().map(|p| (f64::from(p.x), f64::from(p.y))).collect::<Vec<_>>());
     let Some(outer) = rings.first() else { return Shape::Noop };
     let tri = geo::Polygon::new(ls(outer), rings[1..].iter().map(ls).collect()).earcut_triangles_raw();

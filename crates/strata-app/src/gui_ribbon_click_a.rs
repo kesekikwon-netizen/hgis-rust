@@ -84,19 +84,7 @@ impl StrataAppState {
                 }
             }
             // C++ MainWindowRibbon.cpp:345 — 다시 누르면 도구를 닫고 이동으로 돌아간다
-            "그리기" => {
-                self.active_tab = MainTab::Map;
-                let was_open =
-                    self.ribbon.sub_toolbar_visible && self.ribbon.sub_mode == SubToolsMode::Draw;
-                self.ribbon.toggle_sub_mode(SubToolsMode::Draw);
-                if was_open {
-                    self.active_tool = MapToolKind::Pan;
-                    self.status_bar_hint = "그리기 도구 모음을 닫고 지도 이동으로 돌아갑니다"
-                        .to_owned();
-                } else {
-                    self.active_tool = MapToolKind::DrawPolygon;
-                }
-            }
+            "그리기" => self.toggle_draw_sub_tools(),
             // C++ MainWindow.cpp:1834 startTrenchGrid — 조사가 없으면 먼저 안내하고 열지 않는다
             "시굴격자" => {
                 if self.survey_path.is_none() {

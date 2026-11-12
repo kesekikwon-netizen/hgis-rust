@@ -217,12 +217,11 @@ impl StrataAppState {
                                     ui.add_space(8.0);
                                 }
                             }
-                            if self.is_dirty {
+                            // KaStatusBar::setUnsavedCount — 「저장 안 됨 n건」(편집한 도형 수) 또는 「저장 안 됨」.
+                            if let Some(unsaved) = self.unsaved_chip_text() {
                                 ui.separator();
-                                ui.colored_label(
-                                    Color32::from_rgb(181, 87, 58),
-                                    egui::RichText::new("● 저장 안 됨").size(11.5),
-                                );
+                                ui.colored_label(Color32::from_rgb(181, 87, 58), egui::RichText::new(unsaved).size(11.5))
+                                    .on_hover_text("아직 파일에 쓰지 않은 편집입니다. 「저장」(Ctrl+S)으로 씁니다.");
                             }
                         });
                     }

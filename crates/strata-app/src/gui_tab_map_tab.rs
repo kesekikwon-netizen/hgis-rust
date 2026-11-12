@@ -6,7 +6,6 @@ use strata_canvas2d::map_tools::MapToolKind;
 
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::ActiveModalDialog;
-use crate::ribbon::SubToolsMode;
 use crate::right_inspector::InspectorCardTab;
 
 use super::gui_tab_map_canvas::MapFrameInput;
@@ -42,12 +41,11 @@ impl StrataAppState {
             let is_trench = self.modals.active == Some(ActiveModalDialog::TrenchGenerator)
                 || self.active_tool == MapToolKind::TrenchPlace;
             let is_measure = self.active_tool == MapToolKind::Measure;
-            let is_draw_subtool =
-                self.ribbon.sub_toolbar_visible && self.ribbon.sub_mode == SubToolsMode::Draw;
+            // C++ 안내 띠(KaDrawGuideBand)는 그리기 도구가 실제로 켜졌을 때만 — 줄만 열면 도구는 이동이다.
             let is_draw_tool = matches!(
                 self.active_tool,
                 MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint
-            ) || (is_draw_subtool && !is_measure && !is_trench);
+            );
             let is_select_tool = self.active_tool == MapToolKind::Select;
             let is_style = self.right_inspector.active_card == InspectorCardTab::LayerStyleCard;
 

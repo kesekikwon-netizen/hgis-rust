@@ -26,6 +26,10 @@ mod app_state_lifecycle;
 mod app_state_projects;
 #[path = "app_state_draw_entry.rs"]
 mod app_state_draw_entry;
+#[path = "app_state_draw_commit.rs"]
+mod app_state_draw_commit;
+#[path = "app_state_draw_row.rs"]
+mod app_state_draw_row;
 #[path = "app_state_recent.rs"]
 mod app_state_recent;
 #[path = "app_state_status_bar.rs"]
@@ -80,8 +84,13 @@ pub struct StrataAppState {
     pub settings_ini: Option<std::path::PathBuf>,
     /// 홈 「최근 조사」 목록 — C++ `KaStartPage::reload` 의 `RecentSurveys::loadAll`.
     pub recent_surveys: Vec<strata_storage::recent_surveys::RecentSurvey>,
-    /// C++ `m_editLayer` — 그리기 입구가 정한 대상 표(그린 도형을 넣는 것은 지시 3-3a).
+    /// C++ `m_editLayer` — 그리기 입구가 정한 대상 표.
     pub edit_layer_key: Option<String>,
+    /// C++ `KaCaptureMapTool::m_points` — 그리던 면.
+    pub(crate) draw_sketch: crate::draw_sketch::DrawSketch,
+    /// 되돌리기·다시 실행 차례(표 이름, 최근 것이 끝) — C++ newestUndoLayer·newestRedoLayer.
+    pub(crate) undo_tables: Vec<String>,
+    pub(crate) redo_tables: Vec<String>,
     /// 지도 우클릭 메뉴의 「조사 도형 그리기」 하위 메뉴가 펼쳐져 있는가.
     pub map_menu_sub_open: bool,
     pub paper_look: bool,

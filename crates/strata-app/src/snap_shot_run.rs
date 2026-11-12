@@ -141,6 +141,16 @@ impl StrataAppState {
             }
             // 열린 지도 메뉴의 「조사 도형 그리기」 하위 메뉴를 펼친다.
             "@map_menu_sub" => self.map_menu_sub_open = true,
+            // 그리기 줄의 「유구 그리기」, 지도 가운데에서 dx;dy m 떨어진 자리 누름, Enter.
+            "@draw_poly" => self.start_edit_feature_poly(),
+            "@sketch_finish" => self.sketch_finish(),
+            _ if action.starts_with("@sketch=") => {
+                let v: Vec<f64> = action["@sketch=".len()..].split(';').filter_map(|s| s.trim().parse().ok()).collect();
+                if let [dx, dy] = v[..] {
+                    let c = self.home_map.viewport.center_xy;
+                    self.sketch_press([c[0] + dx, c[1] + dy]);
+                }
+            }
             // 「열기」와 같이 그 파일을 연다 — 임시 폴더 자료만 쓴다.
             _ if action.starts_with("@open=") => {
                 self.open_survey_gpkg(std::path::Path::new(&action["@open=".len()..]));

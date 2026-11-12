@@ -42,7 +42,7 @@ fn tool_chip_names_the_current_tool() {
     assert_eq!(app.tool_chip_label(), "그리기");
     app.edit_layer_key = Some("feature_poly".to_owned());
     assert_eq!(app.tool_chip_label(), "그리기 · 유구 면");
-    app.home_map.scene.active_rubberband = vec![[0.0, 0.0], [1.0, 1.0]];
+    app.draw_sketch.points = vec![[0.0, 0.0], [1.0, 1.0]];
     assert_eq!(app.tool_chip_label(), "그리기 · 유구 면 · 점 2");
     app.active_tab = MainTab::Home;
     assert_eq!(app.tool_chip_label(), "", "only on the map tab");

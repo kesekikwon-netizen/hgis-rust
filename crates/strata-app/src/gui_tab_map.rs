@@ -10,6 +10,8 @@
 mod gui_tab_map_canvas_overlay;
 #[path = "gui_tab_map_canvas.rs"]
 mod gui_tab_map_canvas;
+#[path = "gui_tab_map_capture.rs"]
+mod gui_tab_map_capture;
 #[path = "gui_tab_map_consts.rs"]
 mod gui_tab_map_consts;
 #[path = "gui_tab_map_context.rs"]

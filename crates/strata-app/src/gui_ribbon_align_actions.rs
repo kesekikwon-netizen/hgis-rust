@@ -139,11 +139,14 @@ impl StrataAppState {
     }
 
     /// C++ `MainWindow::hideSubTools()` — `MainWindowRibbon.cpp:769-777`.
-    /// 정합 모드에서 도구 줄을 닫으면 정합 세션도 함께 끝난다.
+    /// 정합 모드에서 도구 줄을 닫으면 정합 세션도 함께 끝난다. 그리기 줄이면 stopCaptureTool(:773-774).
     pub(crate) fn hide_sub_tools(&mut self) {
         if self.ribbon.sub_mode == SubToolsMode::Align {
             self.stop_align_session();
             return;
+        }
+        if self.ribbon.sub_mode == SubToolsMode::Draw {
+            self.stop_capture_tool();
         }
         self.ribbon.sub_toolbar_visible = false;
         self.ribbon.sub_mode = SubToolsMode::None;

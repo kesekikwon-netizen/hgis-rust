@@ -3,7 +3,6 @@ use strata_canvas2d::map_tools::MapToolKind;
 
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::{ActiveModalDialog};
-use crate::ribbon::SubToolsMode;
 
 /// UX_LAYOUT_SPEC.md 1절: 세로 5단 골격 (창 1600×900 기준, 상태줄 y=839, h=32)
 pub const UX_STATUS_BAR_Y: f32 = 839.0;
@@ -22,12 +21,20 @@ impl StrataAppState {
         let wants_kb = ctx.wants_keyboard_input();
         let mut save_requested: Option<bool> = None;
         let mut open_requested = false;
+        // KaCaptureMapTool::keyPressEvent(:379-391) — 면 그리기 중 Esc 는 그리던 도형만, Enter 는 마치기,
+        // Backspace·Delete 는 마지막 점(MainWindowUndo.cpp:485-494). 도구·창은 그대로다.
+        let capture = !wants_kb && self.modals.active.is_none() && self.polygon_capture_active();
         ctx.input(|i| {
-            if i.key_pressed(egui::Key::Escape) {
+            if capture && i.key_pressed(egui::Key::Escape) {
+                self.sketch_cancel();
+            } else if i.key_pressed(egui::Key::Escape) {
                 self.home_map.cad.on_escape(&mut self.home_map.scene);
                 self.modals.active = None;
                 self.ribbon.sub_toolbar_visible = false;
                 self.active_tool = MapToolKind::Pan;
+            }
+            if capture && i.key_pressed(egui::Key::Enter) {
+                self.sketch_finish();
             }
             if i.key_pressed(egui::Key::F9) {
                 self.right_inspector.left_panel_collapsed =
@@ -68,7 +75,9 @@ impl StrataAppState {
                 self.active_tab = MainTab::Map;
                 self.active_tool = MapToolKind::Select;
             }
-            if !wants_kb
+            if capture && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+                self.sketch_undo_vertex();
+            } else if !wants_kb
                 && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
             {
                 self.home_map.cad.on_backspace(&mut self.home_map.scene);
@@ -121,9 +130,8 @@ impl StrataAppState {
                     self.active_tab = MainTab::Map;
                     self.active_tool = MapToolKind::Select;
                 } else if i.key_pressed(egui::Key::D) {
-                    self.active_tab = MainTab::Map;
-                    self.ribbon.toggle_sub_mode(SubToolsMode::Draw);
-                    self.active_tool = MapToolKind::DrawPolygon;
+                    // MainWindowRibbon.cpp:354-360 — 「그리기」 단추와 같다.
+                    self.toggle_draw_sub_tools();
                 } else if i.key_pressed(egui::Key::L) {
                     self.modals.active = Some(ActiveModalDialog::PaperSetup);
                 } else if i.key_pressed(egui::Key::P) {
@@ -134,12 +142,11 @@ impl StrataAppState {
                     self.modals.active = Some(ActiveModalDialog::DrawingPrint);
                 } else if i.key_pressed(egui::Key::E) {
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
-                } else if i.key_pressed(egui::Key::Z) {
-                    self.home_map.draw_guide_message =
-                        Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
-                } else if i.key_pressed(egui::Key::Y) {
-                    self.home_map.draw_guide_message =
-                        Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
+                } else if !wants_kb && i.key_pressed(egui::Key::Z) {
+                    // undoMapAction — 그리던 점, 아니면 가장 최근 레이어 편집.
+                    self.undo_map_action();
+                } else if !wants_kb && i.key_pressed(egui::Key::Y) {
+                    self.redo_map_action();
                 }
             }
         });

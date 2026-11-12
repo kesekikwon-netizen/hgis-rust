@@ -52,20 +52,11 @@ impl StrataAppState {
                     "클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)".to_owned(),
                 ))
             } else {
-                let target = self
-                    .right_inspector
-                    .selected_layer_key
-                    .as_deref()
-                    .unwrap_or("조사구역");
-                let pt_cnt = self.home_map.scene.active_rubberband.len();
-                let title = if pt_cnt > 0 {
-                    format!("그리기 · {target} · 점 {pt_cnt}")
-                } else {
-                    format!("그리기 · {target}")
-                };
+                // KaDrawSketchTools.cpp:257-259 — 띠 제목은 도구 칸 글(currentToolLabel) 그대로.
+                let title = self.tool_chip_label();
                 // KaDrawGuideBand.cpp:48-62 — m_measure 실시간 길이·면적
                 let mut measure_txt = String::new();
-                let ring = &self.home_map.scene.active_rubberband;
+                let ring = &self.draw_sketch.points;
                 if ring.len() >= 2 {
                     let mut len_m = 0.0_f64;
                     for w in ring.windows(2) {

@@ -36,8 +36,6 @@ pub struct RealSurveyData {
     pub survey_name: String,
     pub site_name: String,
     pub survey_rings: Vec<Vec<[f64; 2]>>,
-    /// 지도에서 그렸지만 아직 어느 조사 표에도 들어가지 않은 도형 수(저장해도 「*」를 남긴다).
-    pub drawn_rings: usize,
     pub survey_area_m2: f64,
     pub survey_center: [f64; 2],
     pub trenches: Vec<RealTrenchPoly>,

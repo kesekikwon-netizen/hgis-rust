@@ -80,6 +80,8 @@ impl StrataAppState {
             .find(|t| t.table == key)
             .and_then(|t| GeomKind::from_type_name(&t.geometry_type))
             .unwrap_or(if key.ends_with("_line") { GeomKind::Line } else { GeomKind::Polygon });
+        // KaCaptureMapTool::setMode → resetSession — 그리던 점은 지운다.
+        self.draw_sketch = crate::draw_sketch::DrawSketch::default();
         // beginEdit — 보이게, 현재 레이어로, 도형 형식대로 그리기 도구.
         self.home_map.real_survey.layer_visible.insert(name.clone(), true);
         self.right_inspector.selected_layer_key = Some(name.clone());

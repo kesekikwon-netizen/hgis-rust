@@ -40,6 +40,10 @@ mod gui_ribbon_region_b;
 mod gui_ribbon_search;
 #[path = "gui_ribbon_subtoolbar.rs"]
 mod gui_ribbon_subtoolbar;
+#[path = "gui_ribbon_draw_row.rs"]
+mod gui_ribbon_draw_row;
+#[path = "gui_ribbon_snap_assist.rs"]
+mod gui_ribbon_snap_assist;
 #[path = "gui_ribbon_tabbar.rs"]
 mod gui_ribbon_tabbar;
 #[path = "gui_ribbon_top.rs"]

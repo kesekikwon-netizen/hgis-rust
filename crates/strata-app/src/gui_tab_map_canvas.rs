@@ -79,11 +79,9 @@ impl StrataAppState {
         self.home_map.viewport.screen_size_px =
             [f64::from(rect.width()), f64::from(rect.height())];
 
-        let effective_tool = if is_draw_tool && self.active_tool == MapToolKind::Pan {
-            MapToolKind::DrawPolygon
-        } else {
-            self.active_tool
-        };
+        // C++ 은 그리기 줄을 열어도 도구가 이동 그대로다 — 그릴 대상을 눌러야 그리기 도구가 켜진다.
+        let effective_tool = self.active_tool;
+        let capture = self.handle_polygon_capture_input(ui, &response, rect);
 
         if let Some(hp) = response.hover_pos() {
             self.home_map.cursor_world_xy = s2w(rect, &self.home_map.viewport, hp);
@@ -109,13 +107,13 @@ impl StrataAppState {
                     .zoom_at(if sy > 0.0 { 0.85 } else { 1.18 }, anchor);
             }
         }
-        if response.dragged() {
+        if response.dragged() && !(capture && response.dragged_by(egui::PointerButton::Primary)) {
             let d = response.drag_delta();
             self.home_map
                 .viewport
                 .pan_by_pixels(f64::from(d.x), f64::from(d.y));
         }
-        if response.clicked() {
+        if !capture && response.clicked() {
             if let Some(cp) = response.interact_pointer_pos() {
                 let wxy = s2w(rect, &self.home_map.viewport, cp);
                 match effective_tool {
@@ -233,7 +231,7 @@ impl StrataAppState {
                 }
             }
         }
-        if response.secondary_clicked() {
+        if !capture && response.secondary_clicked() {
             // MainWindowContextMenus.cpp:163-166 — 그리기·측거 도구일 때는 메뉴 없이
             // 도구 쪽 우클릭(마침)을 그대로 쓴다.
             let drawing_tool = matches!(
@@ -244,20 +242,11 @@ impl StrataAppState {
                     | MapToolKind::PlacePoint
             );
             if drawing_tool {
-                let ring = self.home_map.scene.active_rubberband.clone();
-                if self
-                    .home_map
-                    .cad
-                    .on_right_click(effective_tool, &mut self.home_map.scene)
-                    && ring.len() >= 3
-                {
-                    // 메모리에만 둔다. 아직 저장하지 않았으므로 「저장했습니다」를 띄우지 않는다.
-                    self.home_map.real_survey.save_drawn_polygon(ring);
-                    self.is_dirty = true;
-                }
+                // 면 그리기는 위에서 처리한다. 선·점·줄자는 아직 예전 도구다(지시 3-4·3-5).
+                let _ = self.home_map.cad.on_right_click(effective_tool, &mut self.home_map.scene);
             } else if let Some(pos) = response.interact_pointer_pos() {
                 // MainWindowContextMenus.cpp:112-161 mapContextMenu
-                let wxy = self.home_map.viewport.screen_to_world([pos.x as f64, pos.y as f64]);
+                let wxy = s2w(rect, &self.home_map.viewport, pos);
                 self.map_context_menu_open = true;
                 self.map_context_menu_pos = [pos.x, pos.y];
                 self.map_context_menu_world = wxy;
@@ -290,5 +279,6 @@ impl StrataAppState {
             },
         );
         self.paint_map_overlays(ctx, ui, &p, rect);
+        self.paint_polygon_sketch(&p, rect, response.hover_pos());
     }
 }

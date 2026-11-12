@@ -100,25 +100,6 @@ fn a_failed_save_keeps_the_file_the_edits_and_the_star() {
     assert_eq!(poly.layer.features.len(), 3, "the unsaved edit is kept");
 }
 
-/// 지도에 그린 도형은 아직 조사 표에 들어가지 않는다(지시 3). 저장해도 「*」를 남기고 사실대로 알린다.
-#[test]
-fn drawn_shapes_not_in_a_table_keep_the_star() {
-    let mut app = StrataAppState::new_startup();
-    app.start_new_survey_project("그린도형");
-    let path = app.survey_path.clone().expect("new survey path");
-    app.home_map.real_survey.save_drawn_polygon(vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]]);
-    app.is_dirty = true;
-
-    app.handle_ribbon_click("저장");
-
-    assert!(app.is_dirty);
-    assert_eq!(
-        app.home_map.draw_guide_message.as_deref(),
-        Some("조사 데이터를 저장했습니다: 그린도형.gpkg — 지도에 그린 도형은 아직 조사 파일에 넣지 못해 「저장 안 됨」으로 둡니다.")
-    );
-    let _ = std::fs::remove_dir_all(path.parent().expect("temp folder"));
-}
-
 /// 열어 둔 조사 파일이 없어지면(USB 뽑힘·옮김) 「저장」은 그 자리에 아무 파일도 만들지 않고
 /// C++ 문구(`SurveyStorage.cpp:875`)로 실패한다. 편집과 「*」는 그대로다(되살리기는 지시 2E).
 #[test]
