@@ -32,6 +32,8 @@ pub struct HomeMapTabState {
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
     pub viewport: ViewportTransform,
+    /// 다음 지도 화면에서 한반도 전체 보기를 한 번 다시 맞출지(지도 칸 크기가 그때 정해진다).
+    pub korea_view_pending: bool,
     pub draw_guide_message: Option<String>,
     pub scene: MapSceneModel,
     pub selected_sido_idx: usize,
@@ -73,6 +75,7 @@ impl Default for HomeMapTabState {
             grid_enabled: false,
             cursor_world_xy: center,
             viewport: ViewportTransform::new(center, 2.55, [1060.0, 680.0]),
+            korea_view_pending: false,
             draw_guide_message: None,
             scene: MapSceneModel::new_demo_gyeongju_scene(),
             selected_sido_idx: 0,

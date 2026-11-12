@@ -184,13 +184,12 @@ fn test_new_survey_panel_draws_only_real_layers() {
             .collect::<Vec<_>>()
     );
 
-    // 그리는 행 수 = 실제 레이어 수 + 묶음 머리글 수.
+    // 그리는 행 수 = 실제 레이어 수(구역 띠는 따로 한 줄이 아니라 그 구역 첫 행에 붙는다,
+    // C++ KaLayerSectionDelegate).
     let c = Color32::BLACK;
-    let rows = layer_rows(&app.left_layers, c, c, c, c);
-    let section_rows = rows.iter().filter(|r| !r.section.is_empty()).count();
-    let data_rows = rows.len() - section_rows;
+    let rows = layer_rows(&app.left_layers, c, c);
     assert_eq!(
-        data_rows,
+        rows.len(),
         app.left_layers.entries.len(),
         "그리는 행 수가 실제 레이어 수와 같아야 한다 (고정 14행 금지)"
     );

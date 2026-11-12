@@ -13,10 +13,8 @@ use crate::left_layer_panel::{LayerTreeEntry, LeftLayerPanel};
 
 /// 한 행을 그리는 데 필요한 값.
 pub(crate) struct LayerRowSpec {
-    /// 이 행이 속한 묶음 머리글(빈 문자열이면 없음).
+    /// 이 행 위에 붙는 구역 띠 제목(빈 문자열이면 띠 없음). 띠에는 윗줄이 있다.
     pub section: &'static str,
-    /// 묶음 머리글 위에 구분선을 그릴지.
-    pub top_rule: bool,
     /// 왼쪽 들여쓰기(px).
     pub indent: f32,
     /// 접이식 화살표(없으면 None).
@@ -31,8 +29,6 @@ pub(crate) struct LayerRowSpec {
     pub count: usize,
     /// 오른쪽 칸 이름.
     pub right_label: Option<&'static str>,
-    /// 행 배경을 살짝 다르게(교차 줄무늬).
-    pub alt_bg: bool,
     /// 글자색.
     pub ink: Color32,
 }
@@ -48,19 +44,19 @@ fn swatch_for(entry: &LayerTreeEntry) -> SwatchKind {
     let rgba = Color32::from_rgba_unmultiplied;
     let rgb = Color32::from_rgb;
     match entry.layer_key.as_str() {
-        "survey_area" => SwatchKind::DomainFill { fill: rgba(180, 83, 9, 70), stroke: rgb(146, 64, 14) },
-        "feature_poly" => SwatchKind::DomainFill { fill: rgba(22, 163, 74, 90), stroke: rgb(17, 94, 44) },
-        "feature_line" => SwatchKind::DomainLine { stroke: rgb(202, 138, 4), casing: false },
-        "section_line" => SwatchKind::DomainLine { stroke: rgb(190, 24, 93), casing: true },
-        "control_points" => SwatchKind::DomainMarker { fill: rgb(234, 179, 8), stroke: rgb(161, 98, 7) },
-        "artifact_point" => SwatchKind::DomainMarker { fill: rgb(185, 28, 28), stroke: rgb(127, 29, 29) },
-        "trial_trench" => SwatchKind::DomainFill { fill: rgba(220, 38, 38, 18), stroke: rgb(220, 38, 38) },
+        "survey_area" => SwatchKind::DomainFill { fill: rgba(180, 83, 9, 70), stroke: rgb(146, 64, 14), stroke_mm: 1.6 },
+        "feature_poly" => SwatchKind::DomainFill { fill: rgba(22, 163, 74, 90), stroke: rgb(17, 94, 44), stroke_mm: 1.8 },
+        "feature_line" => SwatchKind::DomainLine { stroke: rgb(202, 138, 4), width_mm: 1.8, casing: false },
+        "section_line" => SwatchKind::DomainLine { stroke: rgb(190, 24, 93), width_mm: 1.8, casing: true },
+        "control_points" => SwatchKind::DomainMarker { fill: rgb(234, 179, 8), stroke: rgb(161, 98, 7), size_mm: 4.0 },
+        "artifact_point" => SwatchKind::DomainMarker { fill: rgb(185, 28, 28), stroke: rgb(127, 29, 29), size_mm: 3.6 },
+        "trial_trench" => SwatchKind::DomainFill { fill: rgba(220, 38, 38, 18), stroke: rgb(220, 38, 38), stroke_mm: 0.5 },
         // 버퍼 반경 레이어(C++ 「주변 500m」)는 띠 견본을 쓴다.
         k if k.contains("buffer") => SwatchKind::BufferBand,
         // 지정유산 하위 항목은 흰 견본(C++ 트리의 하위 노드).
         k if k.contains("heritage") => SwatchKind::HeritageSub,
         _ if entry.group == LegendGroup::SurveyData => {
-            SwatchKind::DomainFill { fill: rgba(37, 99, 235, 90), stroke: rgb(37, 99, 235) }
+            SwatchKind::DomainFill { fill: rgba(37, 99, 235, 90), stroke: rgb(37, 99, 235), stroke_mm: 1.2 }
         }
         _ => SwatchKind::RasterChecker,
     }
@@ -85,52 +81,32 @@ fn label_caption(entry: &LayerTreeEntry) -> Option<&'static str> {
 ///
 /// 순서는 `LeftLayerPanel.entries` 순서 그대로다(= C++ 트리 순서).
 /// 레이어가 하나도 없으면 빈 목록을 돌려주고, 화면에는 안내문만 남는다.
-pub fn layer_rows(
-    panel: &LeftLayerPanel,
-    dark: Color32,
-    blue: Color32,
-    purple_grp: Color32,
-    purple_leaf: Color32,
-) -> Vec<LayerRowSpec> {
-    let mut rows: Vec<LayerRowSpec> = Vec::with_capacity(panel.entries.len() + 4);
+pub fn layer_rows(panel: &LeftLayerPanel, dark: Color32, purple_leaf: Color32) -> Vec<LayerRowSpec> {
+    let mut rows: Vec<LayerRowSpec> = Vec::with_capacity(panel.entries.len());
     let mut last_group: Option<LegendGroup> = None;
 
     for entry in &panel.entries {
         let group = entry.group;
-        // 묶음이 바뀌면 머리글 행을 하나 넣는다(C++ 트리의 그룹 노드).
-        if last_group != Some(group) {
-            let (title, ink) = match group {
-                LegendGroup::SurveyData => ("조사 데이터", blue),
-                LegendGroup::Cadastral => ("지적도", dark),
-                LegendGroup::ReferenceMap => ("주변·참조", purple_grp),
-                LegendGroup::Basemap => ("배경 지도", blue),
-            };
-            // 첫 묶음 앞에는 구분선을 그리지 않는다.
-            let top_rule = !rows.is_empty();
-            rows.push(LayerRowSpec {
-                section: title,
-                top_rule,
-                indent: 0.0,
-                arrow: Some("▼"),
-                swatch: SwatchKind::GroupFolder,
-                name: String::new(),
-                show_count: false,
-                count: 0,
-                right_label: None,
-                alt_bg: false,
-                ink,
-            });
+        // C++ `KaLayerSectionDelegate.cpp:46-69` — 구역이 바뀌는 첫 행 위에 띠 제목을 붙인다
+        // (따로 한 줄을 만들지 않는다).
+        let section = if last_group == Some(group) {
+            ""
+        } else {
             last_group = Some(group);
-        }
-
+            match group {
+                LegendGroup::SurveyData => "조사 데이터",
+                LegendGroup::Cadastral => "지적도",
+                LegendGroup::ReferenceMap => "주변·참조",
+                LegendGroup::Basemap => "배경 지도",
+            }
+        };
         let ink = if group == LegendGroup::Cadastral {
             purple_leaf
         } else {
             dark
         };
         rows.push(LayerRowSpec {
-            section: "",
-            top_rule: false,
+            section,
             indent: 0.0,
             arrow: None,
             swatch: swatch_for(entry),
@@ -138,7 +114,6 @@ pub fn layer_rows(
             show_count: entry.feature_count > 0,
             count: entry.feature_count,
             right_label: label_caption(entry),
-            alt_bg: false,
             ink,
         });
     }

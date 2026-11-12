@@ -56,7 +56,8 @@ impl StrataAppState {
         let recents = self.home_map.recent_files.clone();
         self.reset_survey_workspace(&title);
         self.home_map.recent_files = recents;
-        self.home_map.draw_guide_message = None;
+        // C++ 은 이 길에서 상태줄에 아무 말도 띄우지 않는다(빈 글 = 기본 안내도 없음).
+        self.home_map.draw_guide_message = Some(String::new());
         // C++ :775 addNonEmptyDomainLayers — 도형이 있는 표만 올린다.
         for t in &tables {
             if !t.layer.features.is_empty() {
@@ -66,7 +67,10 @@ impl StrataAppState {
         self.survey_tables = tables;
         self.left_layers.apply_default_basemaps();
         self.survey_path = Some(target.clone());
-        self.home_map.fit_to_survey();
+        // C++ :400-401 applyStartupMap -> ensureStartupViewReady — 데이터 범위가 아니라 한반도 전체.
+        // 지도 칸 크기는 다음 지도 화면에서 정해지므로 그때 한 번 더 맞춘다.
+        self.home_map.zoom_to_korea(self.work_crs);
+        self.home_map.korea_view_pending = true;
         // C++ :412-419 rememberSurvey · showMapWorkspace · rememberSurveyDir · markSurveySaved.
         let recent = target.to_string_lossy().into_owned();
         if !self.home_map.recent_files.contains(&recent) {
@@ -129,3 +133,7 @@ fn add_saved_layer_on_top(panel: &mut LeftLayerPanel, table: &str, count: usize)
 #[cfg(test)]
 #[path = "gui_tab_home_open_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "gui_tab_home_open_view_tests.rs"]
+mod view_tests;

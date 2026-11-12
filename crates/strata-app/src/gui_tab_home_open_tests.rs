@@ -22,13 +22,13 @@ fn demo_copy(dir: &Path, name: &str) -> PathBuf {
 /// 범례 「조사 데이터」 묶음의 (이름, 도형 수, 글자 칸) — 위에서 아래로.
 fn survey_rows(app: &StrataAppState) -> Vec<(String, usize, Option<&'static str>)> {
     let c = Color32::BLACK;
-    let rows = layer_rows(&app.left_layers, c, c, c, c);
+    let rows = layer_rows(&app.left_layers, c, c);
     let mut out = Vec::new();
     let mut in_survey = false;
     for r in rows {
+        // 구역 띠는 그 구역 첫 행에 붙어 있다(C++ KaLayerSectionDelegate).
         if !r.section.is_empty() {
             in_survey = r.section == "조사 데이터";
-            continue;
         }
         if in_survey {
             out.push((r.name.clone(), r.count, r.right_label));
@@ -87,20 +87,21 @@ fn opened_survey_swatches_use_cpp_default_style_colors() {
     app.open_survey_gpkg(&path);
     let c = Color32::BLACK;
     let swatch = |name: &str| {
-        layer_rows(&app.left_layers, c, c, c, c)
+        layer_rows(&app.left_layers, c, c)
             .into_iter()
-            .find(|r| r.section.is_empty() && r.name == name)
+            .find(|r| r.name == name)
             .map(|r| r.swatch)
     };
     let rgba = Color32::from_rgba_unmultiplied;
     let rgb = Color32::from_rgb;
-    assert_eq!(swatch("조사구역"), Some(SwatchKind::DomainFill { fill: rgba(180, 83, 9, 70), stroke: rgb(146, 64, 14) }));
-    assert_eq!(swatch("유구 (면)"), Some(SwatchKind::DomainFill { fill: rgba(22, 163, 74, 90), stroke: rgb(17, 94, 44) }));
-    assert_eq!(swatch("시굴격자"), Some(SwatchKind::DomainFill { fill: rgba(220, 38, 38, 18), stroke: rgb(220, 38, 38) }));
-    assert_eq!(swatch("유구 (선)"), Some(SwatchKind::DomainLine { stroke: rgb(202, 138, 4), casing: false }));
-    assert_eq!(swatch("단면선"), Some(SwatchKind::DomainLine { stroke: rgb(190, 24, 93), casing: true }));
-    assert_eq!(swatch("기준점"), Some(SwatchKind::DomainMarker { fill: rgb(234, 179, 8), stroke: rgb(161, 98, 7) }));
-    assert_eq!(swatch("유물"), Some(SwatchKind::DomainMarker { fill: rgb(185, 28, 28), stroke: rgb(127, 29, 29) }));
+    // 굵기·크기(mm)도 forKey 그대로 — 범례 견본은 이것으로 테두리 안에 그린다.
+    assert_eq!(swatch("조사구역"), Some(SwatchKind::DomainFill { fill: rgba(180, 83, 9, 70), stroke: rgb(146, 64, 14), stroke_mm: 1.6 }));
+    assert_eq!(swatch("유구 (면)"), Some(SwatchKind::DomainFill { fill: rgba(22, 163, 74, 90), stroke: rgb(17, 94, 44), stroke_mm: 1.8 }));
+    assert_eq!(swatch("시굴격자"), Some(SwatchKind::DomainFill { fill: rgba(220, 38, 38, 18), stroke: rgb(220, 38, 38), stroke_mm: 0.5 }));
+    assert_eq!(swatch("유구 (선)"), Some(SwatchKind::DomainLine { stroke: rgb(202, 138, 4), width_mm: 1.8, casing: false }));
+    assert_eq!(swatch("단면선"), Some(SwatchKind::DomainLine { stroke: rgb(190, 24, 93), width_mm: 1.8, casing: true }));
+    assert_eq!(swatch("기준점"), Some(SwatchKind::DomainMarker { fill: rgb(234, 179, 8), stroke: rgb(161, 98, 7), size_mm: 4.0 }));
+    assert_eq!(swatch("유물"), Some(SwatchKind::DomainMarker { fill: rgb(185, 28, 28), stroke: rgb(127, 29, 29), size_mm: 3.6 }));
 }
 
 /// 열 수 없는 파일은 C++ 문구로 알리고 지금 조사는 그대로 둔다(`SurveyStorage.cpp:371-389`).
