@@ -26,15 +26,16 @@ impl StrataAppState {
         self.work_crs = work_crs;
 
         // C++ `loadSurveyLayers` → `addNonEmptyDomainLayers`: 빈 GPKG 이므로
-        // 도메인 레이어는 0개다. 파일에 실제로 들어 있는 레이어만 되살린다.
+        // 도메인 레이어는 0개다. 도형이 있는 표만 되살리고, 표는 저장할 수 있게 메모리에 둔다.
         let mut restored = 0usize;
-        if let Ok(ws) = strata_storage::gpkg::GpkgRepository::open_read_only(path) {
-            for key_name in ws.layers.keys() {
-                if let Some(key) = DomainLayerKey::from_id(key_name.as_str()) {
+        if let Ok(tables) = strata_storage::survey_gpkg_read::read_survey_tables(path) {
+            for t in tables.iter().filter(|t| !t.layer.features.is_empty()) {
+                if let Some(key) = DomainLayerKey::from_id(&t.table) {
                     self.left_layers.ensure_domain_layer(key);
                     restored += 1;
                 }
             }
+            self.survey_tables = tables;
         }
 
         // C++ `applyStartupMap` → `ensureDefaultBasemaps`: 위성 + 지적 딱 두 개.

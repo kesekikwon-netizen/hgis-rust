@@ -15,18 +15,20 @@ use crate::project_actions::{
 fn workspace_file_actions_save_reopen_and_import_dxf_csv_roundtrip() -> StrataResult<()> {
     let dir = tempfile::tempdir()?;
     let gpkg_path = dir.path().join("action_test.gpkg");
-    let mut ws = GpkgRepository::create_new_survey(&gpkg_path, WorkCrs::Epsg5187)?;
-    let buf = ws.ensure_domain_layer(DomainLayerKey::SurveyArea);
-    buf.add_unsaved_feature(
-        String::from("POLYGON((218500 359500, 218550 359500, 218550 359550, 218500 359500))"),
-        std::collections::BTreeMap::new(),
-    );
-
-    let reopened = WorkspaceFileActions::save_and_reopen_gpkg(&gpkg_path, &mut ws)?;
-    assert_eq!(reopened.schema_version, 3);
-    assert!(reopened
-        .layers
-        .contains_key(DomainLayerKey::SurveyArea.id()));
+    GpkgRepository::create_new_survey(&gpkg_path, WorkCrs::Epsg5187)?;
+    // 저장·다시 열기는 조사 저장 하나의 길(survey_gpkg_save)로 한다.
+    let mut tables = crate::survey_gpkg_read::read_survey_tables(&gpkg_path)?;
+    if let Some(t) = tables.iter_mut().find(|t| t.layer.key == Some(DomainLayerKey::SurveyArea)) {
+        t.layer.add_unsaved_feature(
+            String::from("POLYGON((218500 359500, 218550 359500, 218550 359550, 218500 359500))"),
+            std::collections::BTreeMap::new(),
+        );
+    }
+    crate::survey_gpkg_save::save_survey(&gpkg_path, &tables)
+        .map_err(|e| strata_types::error::StrataError::Storage(format!("{e:?}")))?;
+    let reopened = crate::survey_gpkg_read::read_survey_tables(&gpkg_path)?;
+    let area = reopened.iter().find(|t| t.table == DomainLayerKey::SurveyArea.id());
+    assert_eq!(area.map(|t| t.layer.features.len()), Some(1));
 
     let dxf_path = dir.path().join("sample_contour.dxf");
     std::fs::write(

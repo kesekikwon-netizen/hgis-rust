@@ -17,10 +17,14 @@ use crate::edit_buffer::{FeatureRecord, LayerEditBuffer};
 use crate::gpkg_geometry::gpkg_blob_to_wkt;
 
 /// 조사 파일의 도형 표 하나(gpkg_contents 순서)와 그 도형들. 도메인이 아닌 표는 `layer.key` 가 None.
+/// `baseline` 은 열었을 때(저장한 뒤)의 도형 — 저장은 `layer.features` 와 이것이 다른 것만 쓴다.
 #[derive(Debug, Clone)]
 pub struct SurveyFileTable {
     pub table: String,
+    /// gpkg_geometry_columns 의 좌표계 번호(새 도형을 쓸 때 머리말에 넣는다).
+    pub srs_id: i32,
     pub layer: LayerEditBuffer,
+    pub baseline: Vec<FeatureRecord>,
 }
 
 fn open_read_only(path: &Path) -> rusqlite::Result<Connection> {
@@ -63,19 +67,19 @@ pub fn read_survey_tables(path: &Path) -> StrataResult<Vec<SurveyFileTable>> {
     let conn = open_read_only(path).map_err(db)?;
     let mut stmt = conn
         .prepare(
-            "SELECT c.table_name, g.column_name FROM gpkg_contents c
+            "SELECT c.table_name, g.column_name, g.srs_id FROM gpkg_contents c
              LEFT JOIN gpkg_geometry_columns g ON g.table_name = c.table_name
              WHERE c.data_type = 'features' ORDER BY c.rowid",
         )
         .map_err(db)?;
-    let listed: Vec<(String, Option<String>)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+    let listed: Vec<(String, Option<String>, Option<i32>)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
         .map_err(db)?
         .collect::<Result<_, _>>()
         .map_err(db)?;
 
     let mut out = Vec::new();
-    for (table, geom_col) in listed {
+    for (table, geom_col, srs_id) in listed {
         if table.is_empty() || is_metadata_table(&table) {
             continue;
         }
@@ -89,7 +93,9 @@ pub fn read_survey_tables(path: &Path) -> StrataResult<Vec<SurveyFileTable>> {
         if exists == 0 {
             continue;
         }
-        out.push(SurveyFileTable { layer: read_table(&conn, &table, geom_col.as_deref())?, table });
+        let layer = read_table(&conn, &table, geom_col.as_deref())?;
+        let baseline = layer.features.clone();
+        out.push(SurveyFileTable { table, srs_id: srs_id.unwrap_or(0), layer, baseline });
     }
     Ok(out)
 }

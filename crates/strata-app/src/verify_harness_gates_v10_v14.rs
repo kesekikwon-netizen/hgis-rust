@@ -103,12 +103,17 @@ pub(crate) fn push_v10_to_v14_gates(gates: &mut Vec<GateResult>) {
     let csv_p = f_dir.join("v13.csv");
     let _ = std::fs::write(&dxf_p, "0\nPOINT\n10\n200.0\n20\n300.0\n30\n55.0\n");
     let _ = std::fs::write(&csv_p, "CP1,200.0,300.0,55.0\n");
-    let v13_ok = GpkgRepository::create_new_survey(&gpkg_p, WorkCrs::Epsg5187)
-        .and_then(|mut ws| {
-            ws.ensure_domain_layer(DomainLayerKey::SurveyArea);
-            WorkspaceFileActions::save_and_reopen_gpkg(&gpkg_p, &mut ws)
+    // 세대 저장은 앱의 저장과 같은 길(survey_gpkg_save): 조사구역 하나를 더해 저장하고 다시 읽는다.
+    let v13_ok = GpkgRepository::create_new_survey(&gpkg_p, WorkCrs::Epsg5187).is_ok()
+        && strata_storage::survey_gpkg_read::read_survey_tables(&gpkg_p).is_ok_and(|mut tables| {
+            if let Some(t) = tables.iter_mut().find(|t| t.layer.key == Some(DomainLayerKey::SurveyArea)) {
+                t.layer.add_unsaved_feature("POLYGON ((0 0,10 0,10 10,0 0))".to_owned(), Default::default());
+            }
+            strata_storage::survey_gpkg_save::save_survey(&gpkg_p, &tables).is_ok()
         })
-        .is_ok()
+        && strata_storage::survey_gpkg_read::read_survey_tables(&gpkg_p).is_ok_and(|t| {
+            t.iter().any(|t| t.layer.key == Some(DomainLayerKey::SurveyArea) && t.layer.features.len() == 1)
+        })
         && WorkspaceFileActions::import_dxf_contour_points(&dxf_p).is_ok_and(|v| v.len() == 1)
         && WorkspaceFileActions::import_control_points_csv(&csv_p).is_ok_and(|v| v.len() == 1);
     let _ = std::fs::remove_dir_all(&f_dir);

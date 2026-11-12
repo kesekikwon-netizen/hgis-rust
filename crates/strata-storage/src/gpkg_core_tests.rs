@@ -10,7 +10,6 @@ use strata_types::crs::WorkCrs;
 use strata_types::error::{StrataError, StrataResult};
 use strata_types::schema::DomainLayerKey;
 
-use crate::edit_buffer::LayerEditBuffer;
 use crate::gpkg::*;
 
 #[test]
@@ -55,21 +54,19 @@ fn created_gpkg_passes_sqlite_pragma_integrity_check_and_has_gpkg_contents() -> 
     Ok(())
 }
 
+/// 조사 저장(하나로 모은 길)이 새 도형 1000개를 쓰고 무결성·양수 fid 를 지킨다.
 #[test]
-fn test_gpkg_atomic_write_commits_1000_features_and_verifies_pragma_integrity_ok(
+fn test_survey_save_commits_1000_features_and_verifies_pragma_integrity_ok(
 ) -> StrataResult<()> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("atomic_1000_features.gpkg");
-    // 이 시험은 Rust 작업공간 형식 쓰기를 본다 — 새 조사(C++ 형식)가 아니라 그 형식으로 바탕을 만든다.
-    let base = SurveyWorkspace {
-        schema_version: 3,
-        work_crs: WorkCrs::Epsg5187,
-        layers: BTreeMap::new(),
-        embedded_project_json: String::from("{}"),
-    };
-    GpkgRepository::write_workspace_file(&path, &base)?;
-
-    let mut buf = LayerEditBuffer::new(DomainLayerKey::FeaturePoly);
+    GpkgRepository::create_new_survey(&path, WorkCrs::Epsg5187)?;
+    let mut tables = crate::survey_gpkg_read::read_survey_tables(&path)?;
+    let poly_idx = tables
+        .iter()
+        .position(|t| t.layer.key == Some(DomainLayerKey::FeaturePoly))
+        .ok_or_else(|| StrataError::Storage("feature_poly".into()))?;
+    let buf = &mut tables[poly_idx].layer;
     for i in 0..1000 {
         let x = 219_800.0 + f64::from(i % 50) * 5.0;
         let y = 361_500.0 + f64::from(i / 50) * 5.0;
@@ -81,25 +78,26 @@ fn test_gpkg_atomic_write_commits_1000_features_and_verifies_pragma_integrity_ok
             y + 3.0
         );
         let mut attrs = BTreeMap::new();
-        attrs.insert("FEAT_NO".to_owned(), format!("유구-{}", i + 1));
+        attrs.insert("feature_no".to_owned(), format!("유구-{}", i + 1));
         buf.add_unsaved_feature(wkt, attrs);
     }
 
-    let code =
-        GpkgRepository::commit_layer_atomic(&path, DomainLayerKey::FeaturePoly.id(), &buf);
-    assert_eq!(code, GpkgResultCode::Success);
-    assert_eq!(
-        GpkgRepository::commit_layer_atomic(&path, "", &buf),
-        GpkgResultCode::SchemaMismatch
-    );
+    crate::survey_gpkg_save::save_survey(&path, &tables)
+        .map_err(|e| StrataError::Storage(format!("{e:?}")))?;
 
-    let reopened = GpkgRepository::open_read_only(&path)?;
-    let committed_layer = reopened
-        .layers
-        .get(DomainLayerKey::FeaturePoly.id())
-        .expect("committed layer must exist");
+    let reopened = crate::survey_gpkg_read::read_survey_tables(&path)?;
+    let committed_layer = &reopened
+        .iter()
+        .find(|t| t.layer.key == Some(DomainLayerKey::FeaturePoly))
+        .ok_or_else(|| StrataError::Storage("feature_poly".into()))?
+        .layer;
     assert_eq!(committed_layer.features.len(), 1000);
     assert!(committed_layer.features.iter().all(|f| f.fid > 0));
+    let conn = Connection::open(&path).map_err(|e| StrataError::Storage(e.to_string()))?;
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .map_err(|e| StrataError::Storage(e.to_string()))?;
+    assert_eq!(integrity, "ok");
     Ok(())
 }
 
@@ -190,37 +188,6 @@ fn create_new_survey_refuses_when_same_name_qgz_exists() -> StrataResult<()> {
     }
     assert!(!gpkg.exists(), "no .gpkg may be created next to the .qgz");
     assert_eq!(std::fs::read(&qgz)?, b"cpp workspace copy");
-    Ok(())
-}
-
-/// Rust 작업공간 표가 없는 기존 파일(C++ 조사 파일·SQLite 가 아닌 파일)은 덮어쓰지 않는다.
-#[test]
-fn write_workspace_file_refuses_existing_file_without_workspace_table() -> StrataResult<()> {
-    let dir = tempfile::tempdir()?;
-    let cpp_survey = dir.path().join("경주시.gpkg");
-    {
-        let conn =
-            Connection::open(&cpp_survey).map_err(|e| StrataError::Storage(e.to_string()))?;
-        conn.execute_batch(
-            "CREATE TABLE feature_poly (fid INTEGER PRIMARY KEY, geom BLOB, name TEXT, note TEXT);
-             INSERT INTO feature_poly (name) VALUES ('1호 주거지');",
-        )
-        .map_err(|e| StrataError::Storage(e.to_string()))?;
-    }
-    let not_sqlite = dir.path().join("메모.gpkg");
-    std::fs::write(&not_sqlite, b"not a sqlite file")?;
-    let cpp_before = std::fs::read(&cpp_survey)?;
-
-    let ws = SurveyWorkspace {
-        schema_version: 3,
-        work_crs: WorkCrs::Epsg5187,
-        layers: BTreeMap::new(),
-        embedded_project_json: String::from("{}"),
-    };
-    assert!(GpkgRepository::write_workspace_file(&cpp_survey, &ws).is_err());
-    assert!(GpkgRepository::write_workspace_file(&not_sqlite, &ws).is_err());
-    assert_eq!(std::fs::read(&cpp_survey)?, cpp_before);
-    assert_eq!(std::fs::read(&not_sqlite)?, b"not a sqlite file");
     Ok(())
 }
 

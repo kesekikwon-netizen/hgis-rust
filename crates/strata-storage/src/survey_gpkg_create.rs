@@ -29,7 +29,7 @@ pub(crate) fn create_cpp_survey_file(path: &Path, work_crs: WorkCrs) -> StrataRe
         return Err(storage("저장 폴더를 만들 수 없습니다. 쓰기 가능한 다른 폴더를 선택해 주세요."));
     }
     // C++ :61-67
-    let staging = make_staging_dir(dir).ok_or_else(|| {
+    let staging = make_temp_dir(dir, ".ka-new-survey-").ok_or_else(|| {
         storage("새 조사 파일을 준비할 수 없습니다. 저장 폴더의 쓰기 권한과 남은 공간을 확인해 주세요.")
     })?;
     let staged = staging.join(path.file_name().unwrap_or_default());
@@ -45,14 +45,15 @@ pub(crate) fn create_cpp_survey_file(path: &Path, work_crs: WorkCrs) -> StrataRe
     result
 }
 
-/// C++ `QTemporaryDir(dir.filePath(".ka-new-survey-XXXXXX"))`.
-fn make_staging_dir(dir: &Path) -> Option<PathBuf> {
+/// C++ `QTemporaryDir(dir.filePath("<prefix>XXXXXX"))` — 새 조사(.ka-new-survey-)와 저장 세대
+/// (.ka-survey-gen-)가 쓴다.
+pub(crate) fn make_temp_dir(dir: &Path, prefix: &str) -> Option<PathBuf> {
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.subsec_nanos())
         ^ std::process::id();
     (0..16_u32).find_map(|i| {
-        let candidate = dir.join(format!(".ka-new-survey-{:06x}", (seed.wrapping_add(i * 7919)) & 0xFF_FFFF));
+        let candidate = dir.join(format!("{prefix}{:06x}", (seed.wrapping_add(i * 7919)) & 0xFF_FFFF));
         std::fs::create_dir(&candidate).ok().map(|()| candidate)
     })
 }

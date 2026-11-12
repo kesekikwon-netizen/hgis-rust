@@ -88,8 +88,8 @@ impl StrataAppState {
     }
 }
 
-/// C++ `LayerOps.cpp:1749-1759` kaSavedGpkgLayerTitle.
-fn saved_gpkg_layer_title(table: &str) -> String {
+/// C++ `LayerOps.cpp:1749-1759` kaSavedGpkgLayerTitle — 범례 이름, 저장 실패 문구에도 쓴다.
+pub(crate) fn saved_gpkg_layer_title(table: &str) -> String {
     match table {
         "survey_area" => "조사구역",
         "feature_poly" => "유구 (면)",

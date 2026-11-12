@@ -83,7 +83,6 @@ fn test_ribbon_new_survey_opens_modal() {
 
 /// 「저장」은 조사 파일이 있으면 실제로 파일을 쓴다(대화상자 없이).
 #[test]
-#[ignore = "2C 에서 저장이 C++ 형식을 쓰면 되살린다"]
 fn test_ribbon_save_writes_existing_survey_file() {
     let mut app = StrataAppState::new_startup();
     app.start_new_survey_project("저장시험");

@@ -172,51 +172,83 @@ impl StrataAppState {
                 return false;
             }
         };
-        if self.write_survey_to(&target) {
-            self.survey_path = Some(target);
-            true
-        } else {
-            false
+        // C++ :1519-1545 — 지금 조사 파일이 있으면 그 사본에, 없으면 새 조사 파일에 편집을 쓴다.
+        let current = self.survey_path.clone().filter(|p| p.exists());
+        match &current {
+            Some(cur) if same_path_ignoring_case(cur, &target) => return self.write_survey_to(cur),
+            Some(cur) => {
+                if let Err(e) = strata_storage::survey_gpkg_save::copy_survey_snapshot(cur, &target) {
+                    self.report_save_failure(&format!("다른 이름으로 저장할 조사 파일을 만들지 못했습니다. {e}"));
+                    return false;
+                }
+            }
+            None => {}
         }
+        let saved = self.write_survey_to(&target);
+        if !saved && current.is_some() {
+            // 방금 만든 사본만 지운다 — 지금 조사는 그대로다.
+            let _ = fs::remove_file(&target);
+        }
+        saved
     }
 
-    /// 워크스페이스를 GPKG 로 실제로 쓴다. 성공하면 제목·저장 상태를 갱신한다.
+    /// 조사 표의 편집을 `path` 에 저장한다 — C++ persistSurveyWork(`MainWindowSession.cpp:874-1000`).
+    /// 파일이 없으면 C++ 처럼 새 조사 파일을 먼저 만든다(:1530-1545). 성공하면 저장된 상태를 다시
+    /// 읽고 「*」를 지운다. 실패하면 편집·「*」·원본을 그대로 두고 알린다.
     pub(crate) fn write_survey_to(&mut self, path: &std::path::Path) -> bool {
-        use std::collections::BTreeMap;
-        use strata_storage::gpkg::{GpkgRepository, SurveyWorkspace};
+        use strata_storage::survey_gpkg_save::{save_survey, SaveFailure};
 
-        let mut ws = SurveyWorkspace {
-            schema_version: 3,
-            work_crs: self.work_crs,
-            layers: BTreeMap::new(),
-            embedded_project_json: format!("{{\"title\":{:?}}}", self.project_title),
+        if !path.exists() {
+            if let Err(e) = strata_storage::gpkg::GpkgRepository::create_new_survey(path, self.work_crs) {
+                let detail = crate::dlg_new_survey::new_survey_error_text(&e);
+                self.report_save_failure(&format!("새 조사 파일을 만들지 못했습니다. {detail}"));
+                return false;
+            }
+        }
+        let written = match save_survey(path, &self.survey_tables) {
+            Ok(written) => written,
+            Err(SaveFailure::Layer { table, .. }) => {
+                let title = crate::gui_tab_home::saved_gpkg_layer_title(&table);
+                self.report_save_failure(&format!("{title}의 편집을 다음 세대 파일에 쓰지 못했습니다."));
+                return false;
+            }
+            Err(SaveFailure::Message(m)) => {
+                self.report_save_failure(&m);
+                return false;
+            }
         };
-        for entry in &self.left_layers.entries {
-            if let Some(key) = DomainLayerKey::from_id(&entry.layer_key) {
-                ws.ensure_domain_layer(key);
-            }
+        // C++ :963-985 — 저장된 파일(잠겨 있었으면 옆 「-저장.gpkg」)로 맞춘다.
+        if let Ok(tables) = strata_storage::survey_gpkg_read::read_survey_tables(&written) {
+            self.survey_tables = tables;
         }
-        match GpkgRepository::write_workspace_file(path, &ws) {
-            Ok(()) => {
-                self.project_title = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or(&self.project_title)
-                    .to_owned();
-                self.is_dirty = false;
-                self.home_map.draw_guide_message = Some(format!(
-                    "「{}」 조사를 저장했습니다: {}",
-                    self.project_title,
-                    path.display()
-                ));
-                true
-            }
-            Err(e) => {
-                self.home_map.draw_guide_message =
-                    Some(format!("조사를 저장하지 못했습니다: {e}"));
-                false
-            }
+        let name = written.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        if let Some(stem) = written.file_stem() {
+            self.project_title = stem.to_string_lossy().into_owned();
         }
+        let recent = written.to_string_lossy().into_owned();
+        if !self.home_map.recent_files.contains(&recent) {
+            self.home_map.recent_files.insert(0, recent);
+            self.home_map.recent_files.truncate(12);
+        }
+        self.survey_path = Some(written);
+        if self.home_map.real_survey.drawn_rings > 0 {
+            // 그린 도형은 아직 조사 표에 들어가지 않는다(도면별 그리기 지시). 「*」를 남긴다.
+            self.home_map.draw_guide_message = Some(format!(
+                "조사 데이터를 저장했습니다: {name} — 지도에 그린 도형은 아직 조사 파일에 넣지 못해 「저장 안 됨」으로 둡니다."
+            ));
+        } else {
+            self.is_dirty = false;
+            self.home_map.draw_guide_message =
+                Some(format!("조사 데이터와 작업 구성을 저장했습니다: {name}"));
+        }
+        true
+    }
+
+    /// C++ `MainWindowSession.cpp:1006-1019` reportSaveFailure — 알림 창은 아직 없어 상태줄에 쓴다.
+    fn report_save_failure(&mut self, reason: &str) {
+        self.home_map.draw_guide_message = Some(format!(
+            "저장 실패 — {reason} 미저장 편집은 그대로 있습니다. 다시 저장하세요."
+        ));
     }
 
     /// C++ `CrashHandler::handleCrash` / `emergencyAutoSave` — 비정상 종료 시 현재 열려 있는 조사 버퍼를 `.crash_recovery.gpkg`로 즉시 직렬화 백업 1:1

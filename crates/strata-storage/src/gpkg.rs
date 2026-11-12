@@ -27,3 +27,11 @@ mod gpkg_geometry_tests;
 #[cfg(test)]
 #[path = "survey_gpkg_read_tests.rs"]
 mod survey_gpkg_read_tests;
+
+#[cfg(test)]
+#[path = "survey_gpkg_save_tests.rs"]
+mod survey_gpkg_save_tests;
+
+#[cfg(test)]
+#[path = "survey_gpkg_save_more_tests.rs"]
+mod survey_gpkg_save_more_tests;

@@ -209,8 +209,8 @@ impl StrataAppState {
                     .fill(Color32::from_rgb(181, 87, 58))
                     .corner_radius(6.0)
                     .min_size(Vec2::new(130.0, 30.0));
-                    if ui.add(save_btn).clicked() {
-                        self.is_dirty = false;
+                    // C++ KaClosePrompt — 실제로 저장하고, 모두 저장됐을 때만 닫는다(실패하면 창은 그대로).
+                    if ui.add(save_btn).clicked() && self.save_survey_project() && !self.is_dirty {
                         self.close_prompt_open = false;
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }

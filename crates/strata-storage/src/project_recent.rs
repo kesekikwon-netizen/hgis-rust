@@ -8,8 +8,6 @@ use std::path::{Path, PathBuf};
 use strata_types::error::StrataResult;
 
 use crate::cad_csv_io::{extract_dxf_elevation_points, parse_control_points_csv, ControlPointRow};
-use crate::gpkg::{GpkgRepository, SurveyWorkspace};
-use crate::session_save::persist_workspace;
 
 pub const HGIS_MAX_RECENT_PROJECTS: usize = 10;
 
@@ -61,14 +59,6 @@ impl RecentProjectManager {
 pub struct WorkspaceFileActions;
 
 impl WorkspaceFileActions {
-    pub fn save_and_reopen_gpkg(
-        path: &Path,
-        ws: &mut SurveyWorkspace,
-    ) -> StrataResult<SurveyWorkspace> {
-        persist_workspace(ws, path)?;
-        GpkgRepository::open_read_only(path)
-    }
-
     pub fn import_dxf_contour_points(dxf_path: &Path) -> StrataResult<Vec<[f64; 3]>> {
         extract_dxf_elevation_points(dxf_path)
     }

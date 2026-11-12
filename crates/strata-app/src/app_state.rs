@@ -102,6 +102,10 @@ pub struct StrataAppState {
 }
 
 #[cfg(test)]
+#[path = "app_state_save_tests.rs"]
+mod save_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use strata_types::schema::DomainLayerKey;
@@ -130,13 +134,22 @@ mod tests {
         assert!(path.exists(), "the .gpkg must exist on disk");
         assert!(!app.is_dirty, "a successful save clears the dirty flag");
 
-        // 다시 읽어 좌표계와 레이어가 살아 있는지
-        let ws = strata_storage::gpkg::GpkgRepository::open_read_only(&path)
-            .expect("the file must be a readable GeoPackage");
-        assert_eq!(ws.work_crs, WorkCrs::Epsg5186);
-        assert!(ws.layers.contains_key("survey_area"));
+        // 다시 읽어 좌표계와 레이어가 살아 있는지 — 파일은 C++(GDAL) 조사 형식이다.
+        let tables = strata_storage::survey_gpkg_read::read_survey_tables(&path)
+            .expect("the file must be a readable survey GeoPackage");
+        assert!(tables.iter().any(|t| t.table == "survey_area"));
+        let srs: i64 = rusqlite::Connection::open(&path)
+            .and_then(|c| {
+                c.query_row(
+                    "SELECT srs_id FROM gpkg_geometry_columns WHERE table_name = 'survey_area'",
+                    [],
+                    |r| r.get(0),
+                )
+            })
+            .expect("geometry column");
+        assert_eq!(srs, 5186);
 
-        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

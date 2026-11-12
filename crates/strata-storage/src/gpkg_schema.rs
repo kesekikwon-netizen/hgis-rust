@@ -3,24 +3,11 @@
 //! `gpkg` 에서 분리했다.
 
 use std::path::Path;
-use std::sync::Mutex;
 
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 pub const GPKG_MAGIC_HEADER: &[u8; 16] = b"SQLite format 3\0";
-
-pub(crate) static GPKG_REPO_MUTEX: Mutex<()> = Mutex::new(());
-
-/// C++ `GpkgAtomicWrite::commitLayer` 결과 코드 (`enum class GpkgResultCode`)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum GpkgResultCode {
-    Success,
-    LockFailed,
-    SchemaMismatch,
-    DiskFull,
-    WriteError,
-}
 
 /// C++ `HGIS_SCHEMA_VERSION` (5) — `KaSchemaMigrator::validateAndMigrate` 목표 스키마 버전 상수
 pub const HGIS_SCHEMA_VERSION: i32 = 5;

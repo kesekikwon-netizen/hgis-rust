@@ -1,37 +1,9 @@
-use crate::gpkg::{GpkgRepository, SurveyWorkspace};
+//! 조사 파일 지문·세대 보관·원자적 바이트 저장. 조사 저장 자체는 `survey_gpkg_save` 하나로 한다
+//! (예전 Rust 형식 persist_workspace·save_as_copy 는 지시 2C 에서 그 길로 모았다).
+
 use sha2::{Digest, Sha256};
 use std::path::Path;
-use strata_types::error::{StrataError, StrataResult};
-
-pub fn persist_workspace(ws: &mut SurveyWorkspace, path: &Path) -> StrataResult<()> {
-    let mut gen_copy = ws.clone();
-    gen_copy.migrate_generation_copy();
-    let gen_tmp = path.with_extension("gpkg.gen-tmp");
-    GpkgRepository::write_workspace_file(&gen_tmp, &gen_copy)?;
-    let verified = GpkgRepository::open_read_only(&gen_tmp)?;
-    if verified.schema_version != 3 {
-        let _ = std::fs::remove_file(&gen_tmp);
-        return Err(StrataError::Storage(
-            "세대 사본 스키마 버전 검증에 실패했습니다".into(),
-        ));
-    }
-    std::fs::rename(&gen_tmp, path)?;
-    *ws = gen_copy;
-    Ok(())
-}
-
-pub fn save_as_copy(ws: &mut SurveyWorkspace, orig: &Path, copy: &Path) -> StrataResult<()> {
-    if orig == copy {
-        return persist_workspace(ws, copy);
-    }
-    let mut copy_ws = ws.clone();
-    copy_ws.migrate_generation_copy();
-    let tmp_copy = copy.with_extension("gpkg.saveas-tmp");
-    GpkgRepository::write_workspace_file(&tmp_copy, &copy_ws)?;
-    let _verified = GpkgRepository::open_read_only(&tmp_copy)?;
-    std::fs::rename(&tmp_copy, copy)?;
-    Ok(())
-}
+use strata_types::error::StrataResult;
 
 pub fn sha256_fingerprint(path: &Path) -> StrataResult<String> {
     let bytes = std::fs::read(path)?;
@@ -186,29 +158,37 @@ mod tests {
     use strata_types::schema::DomainLayerKey;
     use tempfile::TempDir;
 
+    /// 조사 저장(하나로 모은 길)은 잠기지 않은 파일을 제자리에 저장하고 「-저장」 옆 파일로 빠지지 않는다.
     #[test]
-    fn persist_workspace_after_layer_delete_never_locks_file_or_falls_back_to_dash_save(
-    ) -> StrataResult<()> {
+    fn survey_save_never_locks_file_or_falls_back_to_dash_save() -> StrataResult<()> {
         let tmp = TempDir::new()?;
         let path = tmp.path().join("경주시_성동동.gpkg");
-        let mut session = GpkgRepository::create_new_survey(&path, WorkCrs::Epsg5187)?;
-        session.ensure_domain_layer(DomainLayerKey::SurveyArea);
-        session.remove_domain_layer(DomainLayerKey::SurveyArea);
-        persist_workspace(&mut session, &path)?;
-        assert!(path.exists());
+        GpkgRepository::create_new_survey(&path, WorkCrs::Epsg5187)?;
+        let tables = crate::survey_gpkg_read::read_survey_tables(&path)?;
+        let written = crate::survey_gpkg_save::save_survey(&path, &tables)
+            .map_err(|e| strata_types::error::StrataError::Storage(format!("{e:?}")))?;
+        assert_eq!(written, std::path::absolute(&path)?);
         assert!(!tmp.path().join("경주시_성동동-저장.gpkg").exists());
         Ok(())
     }
 
+    /// 다른 이름으로 저장(사본 만들고 그 사본에 저장)은 원본 지문을 바꾸지 않는다.
     #[test]
     fn save_as_copy_leaves_original_survey_fingerprint_untouched() -> StrataResult<()> {
         let tmp = TempDir::new()?;
         let orig = tmp.path().join("orig.gpkg");
         let copy = tmp.path().join("copy.gpkg");
-        let mut session = GpkgRepository::create_new_survey(&orig, WorkCrs::Epsg5187)?;
+        GpkgRepository::create_new_survey(&orig, WorkCrs::Epsg5187)?;
         let hash_before = sha256_fingerprint(&orig)?;
-        session.ensure_domain_layer(DomainLayerKey::FeaturePoly);
-        save_as_copy(&mut session, &orig, &copy)?;
+        let mut tables = crate::survey_gpkg_read::read_survey_tables(&orig)?;
+        let poly = tables
+            .iter_mut()
+            .find(|t| t.layer.key == Some(DomainLayerKey::FeaturePoly))
+            .ok_or_else(|| strata_types::error::StrataError::Storage("feature_poly".into()))?;
+        poly.layer.add_unsaved_feature("POLYGON ((0 0,1 0,1 1,0 0))".to_owned(), Default::default());
+        crate::survey_gpkg_save::copy_survey_snapshot(&orig, &copy).map_err(strata_types::error::StrataError::Storage)?;
+        crate::survey_gpkg_save::save_survey(&copy, &tables)
+            .map_err(|e| strata_types::error::StrataError::Storage(format!("{e:?}")))?;
         let hash_after = sha256_fingerprint(&orig)?;
         assert!(!hash_before.is_empty());
         assert_eq!(hash_before, hash_after);

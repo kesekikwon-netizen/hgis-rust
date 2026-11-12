@@ -23,6 +23,8 @@ mod gui_tab_home_open;
 #[path = "gui_tab_home_survey.rs"]
 mod gui_tab_home_survey;
 
+pub(crate) use gui_tab_home_open::saved_gpkg_layer_title;
+
 impl StrataAppState {
     pub(crate) fn render_home_tab_ui(&mut self, ui: &mut egui::Ui) {
         let total_w = ui.available_width().clamp(800.0, 3600.0);

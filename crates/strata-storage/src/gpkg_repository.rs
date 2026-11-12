@@ -68,14 +68,8 @@ impl GpkgRepository {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        // 임시 방패: Rust 작업공간 표가 없는 기존 파일(C++ 조사 파일, 2A 이후의 새 조사)은
-        // 덮어쓰지 않는다. 지시 2C 에서 저장이 C++ 형식을 쓰게 되면 지운다.
-        if path.exists() && !Self::has_workspace_table(path) {
-            return Err(StrataError::Storage(
-                "아직 이 판에서는 C++ 형식 조사 파일에 저장하지 못합니다. 파일은 그대로 두었습니다."
-                    .into(),
-            ));
-        }
+        // 조사 저장은 survey_gpkg_save 로 한다. 이 함수는 앱이 스스로 만드는 비상 저장 파일·
+        // 검증용 파일에만 쓰인다(지시 2C 에서 조사 파일 방패를 거뒀다).
         let tmp = Self::workspace_temp_path(path);
         if tmp.exists() {
             std::fs::remove_file(&tmp)?;
@@ -86,23 +80,6 @@ impl GpkgRepository {
             let _ = std::fs::remove_file(&tmp);
         }
         written
-    }
-
-    /// `path` 가 Rust 작업공간 표(`ka_hgis_workspace_state`)를 가진 SQLite 파일인지.
-    fn has_workspace_table(path: &Path) -> bool {
-        Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .and_then(|conn| {
-            conn.query_row(
-                "SELECT COUNT(*) FROM sqlite_master \
-                 WHERE type = 'table' AND name = 'ka_hgis_workspace_state'",
-                [],
-                |r| r.get::<_, i64>(0),
-            )
-        })
-        .is_ok_and(|n| n > 0)
     }
 
     /// 새 파일 `path` 에 GPKG 표와 작업공간 상태를 쓴다. 연결은 끝날 때 닫힌다
