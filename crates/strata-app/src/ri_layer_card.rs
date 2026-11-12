@@ -6,6 +6,13 @@ use crate::app_state::StrataAppState;
 use crate::right_inspector::{KA_STYLE_PALETTE};
 
 impl StrataAppState {
+    /// 레이어 카드의 「저장 (Enter)」. 조사 파일에 쓰지 않으므로 「*」는 건드리지 않는다
+    /// (지시 2C-fix2, 버튼 자체는 지시 4).
+    pub(crate) fn on_layer_card_save_clicked(&mut self) {
+        self.home_map.draw_guide_message =
+            Some("도형 기록을 저장했습니다.".to_owned());
+    }
+
     pub(crate) fn render_ri_layer_card(&mut self, ui: &mut egui::Ui) {
 let layer_name = self
     .right_inspector
@@ -146,9 +153,7 @@ ui.horizontal_wrapped(|ui| {
         .on_hover_text("지금 카드에 적은 값을 도형 기록에 저장합니다.")
         .clicked()
     {
-        self.is_dirty = false;
-        self.home_map.draw_guide_message =
-            Some("도형 기록을 저장했습니다.".to_owned());
+        self.on_layer_card_save_clicked();
     }
     if ui
         .button(egui::RichText::new("되돌리기").size(11.0))

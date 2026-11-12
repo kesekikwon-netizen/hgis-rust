@@ -123,6 +123,15 @@ impl RightInspectorState {
 }
 
 impl StrataAppState {
+    /// 조사카드 창의 「조사카드 저장」. 조사 파일에 쓰지 않으므로 「*」는 건드리지 않는다
+    /// (지시 2C-fix2, 버튼 자체는 지시 4).
+    pub(crate) fn on_survey_card_save_clicked(&mut self) {
+        self.home_map.draw_guide_message = Some(format!(
+            "「{}」 조사카드를 저장했습니다.",
+            self.right_inspector.feature_no
+        ));
+    }
+
     /// C++ `KaInspectorPanel.cpp` + `KaInspectorStyle.cpp` + `KaStylePalette.h` 1:1 재현 (Images 2, 16)
     pub(crate) fn render_cpp_right_inspector(&mut self, ui: &mut egui::Ui) {
         if self.right_inspector.right_panel_collapsed {
@@ -183,11 +192,7 @@ impl StrataAppState {
                         .fill(Color32::from_rgb(181, 87, 58))
                         .corner_radius(5.0);
                         if ui.add(save_btn).clicked() {
-                            self.home_map.draw_guide_message = Some(format!(
-                                "「{}」 조사카드를 저장했습니다.",
-                                self.right_inspector.feature_no
-                            ));
-                            self.is_dirty = false;
+                            self.on_survey_card_save_clicked();
                             close_requested = true;
                         }
                         if ui.button("닫기").clicked() {

@@ -137,6 +137,12 @@ impl StrataAppState {
         let Some(path) = self.survey_path.clone() else {
             return self.save_survey_project_as();
         };
+        if !path.exists() {
+            // C++ SurveyStorage.cpp:868-878 은 이때 복구 사본으로 다시 만든다(지시 2E). 그 전까지는
+            // 없어진 자리에 아무 파일도 만들지 않고 실패한다.
+            self.report_save_failure("원래 조사 파일이 없어 새 조사 파일을 만들지 못했습니다.");
+            return false;
+        }
         self.write_survey_to(&path)
     }
 

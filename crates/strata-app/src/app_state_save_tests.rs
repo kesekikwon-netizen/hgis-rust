@@ -118,3 +118,37 @@ fn drawn_shapes_not_in_a_table_keep_the_star() {
     );
     let _ = std::fs::remove_dir_all(path.parent().expect("temp folder"));
 }
+
+/// 열어 둔 조사 파일이 없어지면(USB 뽑힘·옮김) 「저장」은 그 자리에 아무 파일도 만들지 않고
+/// C++ 문구(`SurveyStorage.cpp:875`)로 실패한다. 편집과 「*」는 그대로다(되살리기는 지시 2E).
+#[test]
+fn saving_a_vanished_survey_file_creates_nothing_and_keeps_edits() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (mut app, path) = opened_demo(dir.path());
+    add_poly(&mut app, NEW_POLY);
+    std::fs::remove_file(&path).expect("remove the opened file");
+
+    assert!(!app.save_survey_project());
+
+    assert!(!path.exists(), "nothing may be created at the missing path");
+    let left: Vec<String> = std::fs::read_dir(dir.path()).expect("list").map(|e| e.expect("entry").file_name().to_string_lossy().into_owned()).collect();
+    assert!(left.iter().all(|n| !n.to_lowercase().contains(".gpkg")), "no survey file may appear: {left:?}");
+    assert!(app.is_dirty);
+    assert_eq!(
+        app.home_map.draw_guide_message.as_deref(),
+        Some("저장 실패 — 원래 조사 파일이 없어 새 조사 파일을 만들지 못했습니다. 미저장 편집은 그대로 있습니다. 다시 저장하세요.")
+    );
+    let poly = app.survey_tables.iter().find(|t| t.table == "feature_poly").unwrap();
+    assert!(poly.layer.features.iter().any(|f| f.fid < 0), "the unsaved edit stays in memory");
+}
+
+/// 조사카드·레이어 카드의 「저장」은 조사 파일에 쓰지 않으므로 「*」를 지우지 않는다.
+#[test]
+fn card_save_buttons_do_not_clear_the_unsaved_star() {
+    let mut app = StrataAppState::new_startup();
+    app.is_dirty = true;
+    app.on_survey_card_save_clicked();
+    assert!(app.is_dirty, "survey card 저장 must not clear '*'");
+    app.on_layer_card_save_clicked();
+    assert!(app.is_dirty, "layer card 저장 must not clear '*'");
+}
