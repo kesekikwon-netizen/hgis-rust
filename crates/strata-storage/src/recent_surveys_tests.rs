@@ -141,8 +141,8 @@ fn last_dir_reads_and_writes_one_line() {
     let ini = dir.path().join("ka-hgis.ini");
     std::fs::write(&ini, shaped(r"items=C:/x/a.gpkg\ta\t5")).expect("fixture");
     assert_eq!(last_dir(&ini), "C:/old");
-    set_last_dir(&ini, "C:/Users/권을/바탕 화면/현장").expect("set");
-    let want = shaped(r"items=C:/x/a.gpkg\ta\t5").replace("LastDir=C:/old", "LastDir=C:/Users/권을/바탕 화면/현장");
+    set_last_dir(&ini, "C:/Users/u/바탕 화면/현장").expect("set");
+    let want = shaped(r"items=C:/x/a.gpkg\ta\t5").replace("LastDir=C:/old", "LastDir=C:/Users/u/바탕 화면/현장");
     assert_eq!(std::fs::read_to_string(&ini).expect("read"), want);
     assert_eq!(last_dir(&dir.path().join("none.ini")), "");
 }
@@ -155,4 +155,19 @@ fn paths_normalize_like_qfileinfo() {
     assert_eq!(normalized_path("   "), "");
     assert_eq!(complete_base_name("C:/a/site.v2.gpkg"), "site.v2");
     assert_eq!(complete_base_name("C:/a/noext"), "noext");
+}
+
+/// 읽지 못하는 ini(잠김·UTF-8 아님)에는 기억·빼기가 아무 것도 쓰지 않는다 — 사용자 목록을 지우지 않는다.
+#[test]
+fn unreadable_ini_is_never_overwritten() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let ini = dir.path().join("ka-hgis.ini");
+    let mut odd = shaped(r"items=C:/x/a.gpkg\ta\t5").into_bytes();
+    odd.push(0xff);
+    std::fs::write(&ini, &odd).expect("fixture");
+    let survey = touch(dir.path(), "new.gpkg");
+    assert!(remember(&ini, &survey, "").is_err());
+    assert!(forget(&ini, "C:/x/a.gpkg").is_err());
+    assert!(set_last_dir(&ini, "C:/y").is_err());
+    assert_eq!(std::fs::read(&ini).expect("read"), odd);
 }

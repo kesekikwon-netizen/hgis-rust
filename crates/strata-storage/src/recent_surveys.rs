@@ -95,9 +95,14 @@ fn read_ini(ini: &Path) -> IniFile {
 }
 
 /// `loadStored` (`RecentSurveys.cpp:143-170`) — 저장된 그대로(겹친 줄만 빼고), 파일은 보지 않는다.
+/// 읽지 못한 파일은 빈 목록(표시용). 쓰기 전에는 `stored_in` 으로 같은 읽기 결과를 쓴다.
 #[must_use]
 pub fn load_stored(ini: &Path) -> Vec<RecentSurvey> {
-    let raw = read_ini(ini).value(SECTION, ITEMS_KEY).map(read_string_list).unwrap_or_default();
+    stored_in(&read_ini(ini))
+}
+
+fn stored_in(file: &IniFile) -> Vec<RecentSurvey> {
+    let raw = file.value(SECTION, ITEMS_KEY).map(read_string_list).unwrap_or_default();
     let mut out: Vec<RecentSurvey> = Vec::new();
     for line in raw {
         let parts: Vec<&str> = line.split('\t').collect();
@@ -124,13 +129,12 @@ pub fn load_stored(ini: &Path) -> Vec<RecentSurvey> {
     out
 }
 
-/// `store` (`RecentSurveys.cpp:172-180`) — 그 한 줄만 바꿔 쓴다. 다시 읽은 파일 위에 쓴다.
-fn store(ini: &Path, items: &[RecentSurvey]) -> io::Result<()> {
+/// `store` (`RecentSurveys.cpp:172-180`) — 목록을 읽은 바로 그 글에서 한 줄만 바꿔 쓴다.
+fn store(ini: &Path, mut file: IniFile, items: &[RecentSurvey]) -> io::Result<()> {
     let raw: Vec<String> = items
         .iter()
         .map(|it| format!("{}\t{}\t{}", it.path, storable_name(&it.name), it.last_opened_ms))
         .collect();
-    let mut file = IniFile::read(ini)?;
     file.set_value(SECTION, ITEMS_KEY, &escaped_string_list(&raw));
     file.write(ini)
 }
@@ -171,6 +175,7 @@ fn now_ms() -> i64 {
 
 /// `remember` (`RecentSurveys.cpp:256-275`) — 맨 앞에 넣고, 같은 조사는 빼고, 열두 개까지.
 /// 파일이 없으면 아무 것도 하지 않는다. 이름이 비면 파일 이름(확장자 뺀 것).
+/// ini 를 읽지 못하면(잠김·UTF-8 아님) 아무 것도 쓰지 않는다 — 사용자 목록을 지우지 않게.
 ///
 /// # Errors
 /// ini 를 읽거나 쓰지 못함.
@@ -181,8 +186,9 @@ pub fn remember(ini: &Path, path: &Path, name: &str) -> io::Result<()> {
     }
     let clean = storable_name(name);
     let shown = if clean.is_empty() { complete_base_name(&abs) } else { clean };
+    let file = IniFile::read(ini)?;
     let mut next = vec![RecentSurvey { name: shown, path: abs.clone(), last_opened_ms: now_ms(), available: true }];
-    for it in load_stored(ini) {
+    for it in stored_in(&file) {
         if same_path(&it.path, &abs) {
             continue;
         }
@@ -194,7 +200,7 @@ pub fn remember(ini: &Path, path: &Path, name: &str) -> io::Result<()> {
             break;
         }
     }
-    store(ini, &next)
+    store(ini, file, &next)
 }
 
 /// `forget` (`RecentSurveys.cpp:276-285`) — 그 조사(와 드라이브 글자만 다른 없는 옛 항목)를 뺀다.
@@ -202,8 +208,9 @@ pub fn remember(ini: &Path, path: &Path, name: &str) -> io::Result<()> {
 /// # Errors
 /// ini 를 읽거나 쓰지 못함.
 pub fn forget(ini: &Path, path: &str) -> io::Result<()> {
+    let file = IniFile::read(ini)?;
     let mut next = Vec::new();
-    for it in load_stored(ini) {
+    for it in stored_in(&file) {
         if same_path(&it.path, path) {
             continue;
         }
@@ -213,7 +220,7 @@ pub fn forget(ini: &Path, path: &str) -> io::Result<()> {
         }
         next.push(it);
     }
-    store(ini, &next)
+    store(ini, file, &next)
 }
 
 /// `Survey/LastDir` — 마지막으로 조사를 저장·연 폴더(없으면 빈 글).

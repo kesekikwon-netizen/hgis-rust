@@ -22,7 +22,7 @@ fn escaped_strings_match_qt6_bytes() {
     assert_eq!(esc("\r\n\u{b}\u{c}\u{7}\u{8}"), r"\r\n\v\f\a\b");
     assert_eq!(esc("\u{1f}A"), r"\x1f\x41");
     assert_eq!(esc("@start"), "@@start");
-    assert_eq!(esc("C:/Users/권을/바탕 화면"), "C:/Users/권을/바탕 화면");
+    assert_eq!(esc("C:/Users/u/바탕 화면"), "C:/Users/u/바탕 화면");
 }
 
 /// `iniEscapedStringList` — 항목은 「, 」로 잇고, 빈 목록은 `@Invalid()`, 한 항목은 쉼표 없이.
@@ -52,7 +52,7 @@ fn string_lists_read_back_like_qt6() {
     // Qt 5 가 쓰던 꼴(한글을 \x 로)도 읽는다. 따옴표 밖 끝 공백은 버린다.
     assert_eq!(read_string_list(r"\xac00\xb098  "), vec!["가나".to_owned()]);
     assert_eq!(read_string("@@start"), "@start");
-    assert_eq!(read_string("C:/Users/권을/바탕 화면"), "C:/Users/권을/바탕 화면");
+    assert_eq!(read_string("C:/Users/u/바탕 화면"), "C:/Users/u/바탕 화면");
 }
 
 /// 실제 사용자 ini 와 같은 모양(CRLF, 앞뒤 다른 절, 같은 절의 다른 키)을 흉내 낸 글.
