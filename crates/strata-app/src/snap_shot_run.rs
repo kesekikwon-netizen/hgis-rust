@@ -116,6 +116,17 @@ impl StrataAppState {
             // 뒤에서 받는 지적 타일이 올 때까지 한 단계 더 기다린다.
             "@wait" => {}
             _ if action.starts_with("@goto=") => self.snap_goto(&action["@goto=".len()..]),
+            // 지도 우클릭 메뉴를 창의 점 X;Y 에 연다. 마우스가 없으므로 우클릭 자리는 지도 가운데로 둔다.
+            _ if action.starts_with("@map_menu=") => {
+                let v: Vec<f32> = action["@map_menu=".len()..].split(';').filter_map(|s| s.trim().parse().ok()).collect();
+                if let [x, y] = v[..] {
+                    self.home_map.cursor_world_xy = self.home_map.viewport.center_xy;
+                    self.map_context_menu_open = true;
+                    self.map_context_menu_pos = [x, y];
+                }
+            }
+            // 열린 지도 메뉴의 「조사 도형 그리기」 하위 메뉴를 펼친다.
+            "@map_menu_sub" => self.map_menu_sub_open = true,
             // 「열기」와 같이 그 파일을 연다 — 임시 폴더 자료만 쓴다.
             _ if action.starts_with("@open=") => {
                 self.open_survey_gpkg(std::path::Path::new(&action["@open=".len()..]));

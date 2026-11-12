@@ -1,183 +1,195 @@
-//! 지도 캔버스·레이어 트리 우클릭 메뉴.
+//! 지도 캔버스 우클릭 메뉴 — 항목은 `map_context_menu_model.rs`(C++ `populateMapContextMenu`,
+//! `MainWindowContextMenus.cpp:112-161`), 여기서는 그리기와 고른 항목의 동작만 한다.
+//!
+//! 여는 곳은 `gui_tab_map_canvas.rs`(그리기·측거 도구가 아닐 때 우클릭, `onMapContextMenu` :163-170).
+//! 우클릭한 자리는 메뉴가 처음 뜨는 프레임의 마우스 지도 좌표(상태줄과 같은 변환)로 잡는다.
+//! 선택 도구는 이미 고른 도형이 있으면 자기 메뉴를 띄우므로(`KaFeatureSelectTool.cpp:276-288`,
+//! 지시 CM3) 이 메뉴를 열지 않는다. 클릭 자리의 도형 집기는 아직 없다.
 
-use eframe::egui::{self, Color32, Stroke};
-
+use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use strata_canvas2d::map_tools::MapToolKind;
+use strata_types::schema::LegendGroup;
 
 use crate::app_state::StrataAppState;
-/// `KaShellGridControls.cpp:41-193` — 좌표격자 토글 + 2줄 `gridDetail`
-/// (미터·경위도, 간격, 회전 / 굵기, 선 모양, 색 견본 셋과 직접 고르기)
-/// MainWindowContextMenus.cpp:112-161 `populateMapContextMenu` — 지도 캔버스
-/// 우클릭 팝업. 도형 위에서 열면 「이 도형 기록 입력」이 먼저 나온다.
-impl StrataAppState {
-    pub(crate) fn render_map_context_menu(&mut self, ctx: &egui::Context) {
-    if !self.map_context_menu_open {
-        return;
+use crate::map_context_menu_model::{map_menu_entries, MapMenuAction, MapMenuEntry, MapMenuInput};
+
+const ROW_W: f32 = 216.0;
+const ROW_H: f32 = 22.0;
+
+/// 메뉴 한 줄(왼쪽 맞춤). 흐린 줄은 이유를, 켜진 줄은 도움말을 툴팁으로(`setToolTipsVisible(true)`).
+fn menu_row(ui: &mut egui::Ui, text: &str, enabled: bool, tooltip: &str, arrow: bool) -> egui::Response {
+    let button = egui::Button::new(egui::RichText::new(text).size(12.0))
+        .fill(Color32::TRANSPARENT)
+        .stroke(Stroke::NONE)
+        .min_size(Vec2::new(ROW_W, ROW_H));
+    let mut resp = ui.add_enabled(enabled, button);
+    if arrow {
+        let at = Pos2::new(resp.rect.right() - 10.0, resp.rect.center().y);
+        let ink = ui.visuals().text_color();
+        ui.painter().text(at, egui::Align2::CENTER_CENTER, "⏵", egui::FontId::proportional(11.0), ink);
     }
-    let pos = egui::Pos2::new(self.map_context_menu_pos[0], self.map_context_menu_pos[1]);
-    let mut close = false;
-    let mut picked: Option<&'static str> = None;
-    egui::Window::new("ka_map_context_menu")
-        .title_bar(false)
-        .resizable(false)
-        .fixed_pos(pos)
-        .show(ctx, |ui| {
-            ui.set_min_width(228.0);
-            let has_hit = self.home_map.selected_feature_idx.is_some();
-            if has_hit {
-                if ui
-                    .add_sized(
-                        [216.0, 24.0],
-                        egui::Button::new(egui::RichText::new("이 도형 기록 입력").size(12.0))
-                            .fill(Color32::TRANSPARENT)
-                            .stroke(Stroke::NONE),
-                    )
-                    .clicked()
-                {
-                    picked = Some("attr");
-                }
-                ui.separator();
-            }
-            ui.label(
-                egui::RichText::new("조사 도형 그리기")
-                    .size(10.5)
-                    .strong()
-                    .color(Color32::from_rgb(120, 118, 110)),
-            );
-            for item in ["조사구역", "유구 면", "유구 선", "단면선 그리기"] {
-                if ui
-                    .add_sized(
-                        [216.0, 22.0],
-                        egui::Button::new(egui::RichText::new(item).size(12.0))
-                            .fill(Color32::TRANSPARENT)
-                            .stroke(Stroke::NONE),
-                    )
-                    .clicked()
-                {
-                    picked = Some(match item {
-                        "조사구역" => "draw_area",
-                        "유구 면" => "draw_poly",
-                        "유구 선" => "draw_line",
-                        _ => "draw_section",
-                    });
-                }
-            }
-            ui.separator();
-            for item in ["이전 지도 범위", "다음 지도 범위"] {
-                if ui
-                    .add_sized(
-                        [216.0, 22.0],
-                        egui::Button::new(egui::RichText::new(item).size(12.0))
-                            .fill(Color32::TRANSPARENT)
-                            .stroke(Stroke::NONE),
-                    )
-                    .clicked()
-                {
-                    picked = Some(if item.starts_with("이전") {
-                        "zoom_prev"
-                    } else {
-                        "zoom_next"
-                    });
-                }
-            }
-            for (label, key) in [
-                ("선택한 레이어로 이동", "layer_zoom"),
-                ("전체 지도 보기", "full"),
-                ("지도 새로고침", "refresh"),
-            ] {
-                if ui
-                    .add_sized(
-                        [216.0, 22.0],
-                        egui::Button::new(egui::RichText::new(label).size(12.0))
-                            .fill(Color32::TRANSPARENT)
-                            .stroke(Stroke::NONE),
-                    )
-                    .clicked()
-                {
-                    picked = Some(key);
-                }
-            }
-            ui.separator();
-            let coord_txt = format!(
-                "{:.3}, {:.3} ({})",
-                self.map_context_menu_world[1],
-                self.map_context_menu_world[0],
-                self.work_crs.auth_id()
-            );
-            if ui
-                .add_sized(
-                    [216.0, 22.0],
-                    egui::Button::new(egui::RichText::new("이 위치 좌표 복사").size(12.0))
-                        .fill(Color32::TRANSPARENT)
-                        .stroke(Stroke::NONE),
-                )
-                .on_hover_text(&coord_txt)
-                .clicked()
-            {
-                picked = Some("copy_coords");
-            }
-        });
-    let coord_txt = format!(
-        "{:.3}, {:.3} ({})",
-        self.map_context_menu_world[1],
-        self.map_context_menu_world[0],
-        self.work_crs.auth_id()
-    );
-    if let Some(key) = picked {
-        match key {
-            "attr" => {
-                self.right_inspector.active_card =
-                    crate::right_inspector::InspectorCardTab::LayerStyleCard;
-                self.home_map.draw_guide_message =
-                    Some("이 도형 기록을 오른쪽 카드에서 고칩니다.".to_owned());
-            }
-            "draw_area" => {
-                self.active_tool = MapToolKind::DrawPolygon;
-            }
-            "draw_poly" => {
-                self.active_tool = MapToolKind::DrawPolygon;
-            }
-            "draw_line" => {
-                self.active_tool = MapToolKind::DrawLine;
-            }
-            "draw_section" => {
-                self.active_tool = MapToolKind::DrawLine;
-            }
-            "zoom_prev" => {
-                self.home_map.draw_guide_message =
-                    Some("이전에 보던 지도 범위로 돌아갈 이력이 없습니다.".to_owned());
-            }
-            "zoom_next" => {
-                self.home_map.draw_guide_message =
-                    Some("이전 범위로 돌아간 뒤에 쓸 수 있습니다.".to_owned());
-            }
-            "layer_zoom" => {
-                if self.right_inspector.selected_layer_key.is_some() {
-                    self.home_map.fit_to_survey();
-                } else {
-                    self.home_map.draw_guide_message =
-                        Some("왼쪽 목록에서 레이어를 선택하세요.".to_owned());
-                }
-            }
-            "full" => {
-                self.home_map.fit_to_survey();
-            }
-            "refresh" => {
-                self.home_map.draw_guide_message = Some("지도를 새로 그렸습니다.".to_owned());
-            }
-            "copy_coords" => {
-                ctx.copy_text(coord_txt.clone());
-                self.home_map.draw_guide_message =
-                    Some(format!("좌표를 복사했습니다: {coord_txt}"));
-            }
-            _ => {}
-        }
-        close = true;
+    if !tooltip.is_empty() {
+        resp = if enabled { resp.on_hover_text(tooltip) } else { resp.on_disabled_hover_text(tooltip) };
     }
-    // 바깥을 누르면 닫는다
-    if close || ctx.input(|i| i.pointer.any_click() && !i.pointer.any_down()) {
-        self.map_context_menu_open = false;
-    }
-    }
+    resp
 }
 
+fn action_row(ui: &mut egui::Ui, a: &MapMenuAction, picked: &mut Option<&'static str>) -> egui::Response {
+    let resp = menu_row(ui, a.text, a.enabled, &a.tooltip, false);
+    if a.enabled && resp.clicked() {
+        *picked = Some(a.id);
+    }
+    resp
+}
+
+impl StrataAppState {
+    /// 범례의 현재 레이어(`m_layerTree->currentLayer()`).
+    fn current_legend_layer(&self) -> Option<&crate::left_layer_panel::LayerTreeEntry> {
+        let name = self.right_inspector.selected_layer_key.as_deref()?;
+        self.left_layers.entries.iter().find(|e| e.label_ko == name)
+    }
+
+    /// 「선택한 레이어로 이동」 — 조사 표는 도형 범위로, 배경지도·지적·참조 그림은 1:50,000 로.
+    fn zoom_to_current_legend_layer(&mut self) {
+        let Some(entry) = self.current_legend_layer().cloned() else { return };
+        let is_raster = matches!(entry.group, LegendGroup::Basemap | LegendGroup::Cadastral | LegendGroup::ReferenceMap);
+        let ext = self
+            .survey_tables
+            .iter()
+            .find(|t| t.table == entry.layer_key)
+            .and_then(|t| crate::survey_paint_layers::table_extent_in(t, self.work_crs));
+        self.home_map.zoom_to_layer_max(ext, is_raster, self.work_crs);
+    }
+
+    fn run_map_menu_action(&mut self, ctx: &egui::Context, id: &str, coords: &str) {
+        match id {
+            "map.drawArea" => self.start_edit_survey_area(),
+            "map.drawFeature" => self.start_edit_feature_poly(),
+            "map.drawLine" => self.start_edit_feature_line(),
+            "map.drawSection" => self.start_edit_section_line(),
+            "map.previous" => {
+                if let Some(r) = self.home_map.extent_history.previous() {
+                    self.home_map.show_history_extent(r);
+                }
+            }
+            "map.next" => {
+                if let Some(r) = self.home_map.extent_history.next() {
+                    self.home_map.show_history_extent(r);
+                }
+            }
+            "map.layerZoom" => self.zoom_to_current_legend_layer(),
+            "map.full" => {
+                // MainWindowSession.cpp:1800-1807 zoomMapToFullMax.
+                self.home_map.zoom_to_full_max(self.work_crs);
+                self.home_map.draw_guide_message = Some("한국 전체 범위".to_owned());
+            }
+            "map.refresh" => {
+                // m_canvas->refresh() — 다시 그린다. 화면 타일은 디스크 캐시에서 다시 읽는다(새로 받지 않음).
+                self.basemap_textures = Default::default();
+                self.cadastral_cells = Default::default();
+                ctx.request_repaint();
+            }
+            "map.copyCoordinates" => ctx.copy_text(coords.to_owned()),
+            _ => {}
+        }
+    }
+
+    pub(crate) fn render_map_context_menu(&mut self, ctx: &egui::Context) {
+        let shown_id = egui::Id::new("ka_map_menu_shown_at");
+        if !self.map_context_menu_open {
+            ctx.data_mut(|d| d.remove::<[f32; 2]>(shown_id));
+            self.map_menu_sub_open = false;
+            return;
+        }
+        let fresh = ctx.data(|d| d.get_temp::<[f32; 2]>(shown_id)) != Some(self.map_context_menu_pos);
+        if fresh {
+            if self.active_tool == MapToolKind::Select && self.home_map.selected_feature_idx.is_some() {
+                self.map_context_menu_open = false;
+                return;
+            }
+            self.map_context_menu_world = self.home_map.cursor_world_xy;
+            self.map_menu_sub_open = false;
+            ctx.data_mut(|d| d.insert_temp(shown_id, self.map_context_menu_pos));
+        }
+        let input = MapMenuInput {
+            survey_open: self.survey_path.is_some(),
+            busy: false,
+            current_layer: self.current_legend_layer().is_some(),
+            can_previous: self.home_map.extent_history.can_previous(),
+            can_next: self.home_map.extent_history.can_next(),
+            click_xy: self.map_context_menu_world,
+            crs_auth: self.work_crs.auth_id(),
+        };
+        let entries = map_menu_entries(&input);
+        let coords = crate::map_context_menu_model::coordinate_text(input.click_xy, input.crs_auth);
+        let pos = Pos2::new(self.map_context_menu_pos[0], self.map_context_menu_pos[1]);
+        let mut picked: Option<&'static str> = None;
+        let mut sub_row: Option<Rect> = None;
+        let mut sub_items: &[MapMenuAction] = &[];
+        let mut sub_open = self.map_menu_sub_open;
+        let win = egui::Window::new("ka_map_context_menu")
+            .title_bar(false)
+            .resizable(false)
+            .fixed_pos(pos)
+            .show(ctx, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                for e in &entries {
+                    match e {
+                        MapMenuEntry::Separator => {
+                            ui.separator();
+                        }
+                        MapMenuEntry::Action(a) => {
+                            if action_row(ui, a, &mut picked).hovered() {
+                                sub_open = false;
+                            }
+                        }
+                        MapMenuEntry::Submenu { title, items, .. } => {
+                            let r = menu_row(ui, title, true, "", true);
+                            if r.hovered() || r.clicked() {
+                                sub_open = true;
+                            }
+                            sub_row = Some(r.rect);
+                            sub_items = items;
+                        }
+                    }
+                }
+            });
+        let main_rect = win.map(|w| w.response.rect);
+        let mut sub_rect = None;
+        if let (true, Some(row)) = (sub_open, sub_row) {
+            let area = egui::Area::new(egui::Id::new("ka_map_context_submenu"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(Pos2::new(row.right() + 6.0, row.top() - 4.0))
+                .show(ctx, |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        for a in sub_items {
+                            action_row(ui, a, &mut picked);
+                        }
+                    });
+                });
+            sub_rect = Some(area.response.rect);
+        }
+        self.map_menu_sub_open = sub_open;
+        let mut close = false;
+        if let Some(id) = picked {
+            self.run_map_menu_action(ctx, id, &coords);
+            close = true;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            close = true;
+        }
+        if !fresh {
+            let click = ctx.input(|i| if i.pointer.any_click() { i.pointer.interact_pos() } else { None });
+            let inside = |p: Pos2| main_rect.is_some_and(|r| r.contains(p)) || sub_rect.is_some_and(|r| r.contains(p));
+            if click.is_some_and(|p| !inside(p)) {
+                close = true;
+            }
+        }
+        if close {
+            self.map_context_menu_open = false;
+            self.map_menu_sub_open = false;
+            ctx.data_mut(|d| d.remove::<[f32; 2]>(shown_id));
+        }
+    }
+}

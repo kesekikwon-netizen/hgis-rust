@@ -211,6 +211,56 @@ pub(crate) fn paint_order(entries: &[LayerTreeEntry], layers: &[PaintLayer]) -> 
         .collect()
 }
 
+/// 직사각형 [xmin, ymin, xmax, ymax] 둘레를 `f` 로 옮긴 점들의 바깥 상자 — QGIS transformBoundingBox
+/// (PROJ 9.7+ 는 proj_trans_bounds 로 변마다 촘촘히 옮긴다).
+pub(crate) fn outer_box_of(f: impl Fn(f64, f64) -> [f64; 2], r: [f64; 4]) -> [f64; 4] {
+    const STEPS: usize = 22;
+    let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+    for i in 0..=STEPS {
+        let t = i as f64 / STEPS as f64;
+        let (x, y) = (r[0] + (r[2] - r[0]) * t, r[1] + (r[3] - r[1]) * t);
+        for q in [f(x, r[1]), f(x, r[3]), f(r[0], y), f(r[2], y)] {
+            b = [b[0].min(q[0]), b[1].min(q[1]), b[2].max(q[0]), b[3].max(q[1])];
+        }
+    }
+    b
+}
+
+/// C++ `zoomToLayerMax` 의 레이어 범위 — 표 좌표계에서 도형들의 바깥 상자(QGIS `layer->extent()`)를
+/// 작업 좌표계로 옮긴 바깥 상자. 도형이 없거나 좌표계를 모르면 None.
+pub(crate) fn table_extent_in(t: &SurveyFileTable, work: strata_types::crs::WorkCrs) -> Option<[f64; 4]> {
+    let src = srs_code(t.srs_id)?;
+    let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+    let mut add = |p: &[f64; 2]| b = [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])];
+    for f in &t.layer.features {
+        for part in wkt_to_parts(&f.wkt_geom).unwrap_or_default() {
+            match part {
+                WkbGeometry::Point(p) => add(&p),
+                WkbGeometry::LineString(l) => l.iter().for_each(&mut add),
+                WkbGeometry::Polygon(rings) => rings.iter().flatten().for_each(&mut add),
+            }
+        }
+    }
+    if !(b[0] <= b[2] && b[1] <= b[3]) {
+        return None;
+    }
+    let dst = match work {
+        strata_types::crs::WorkCrs::Epsg5186 => CrsCode::Epsg5186,
+        strata_types::crs::WorkCrs::Epsg5187 => CrsCode::Epsg5187,
+    };
+    if src == dst {
+        return Some(b);
+    }
+    let tr = CrsTransformer::new(src, dst);
+    if b[2] - b[0] <= 0.0 || b[3] - b[1] <= 0.0 {
+        // 너비나 높이가 0 인 상자(수평·수직 선, 점 하나)는 QGIS(PROJ 9.8 proj_trans_bounds)가 왼쪽 아래 한
+        // 점으로 옮긴다 — qgis-dev 4.3.0 으로 확인. 그래서 C++ 은 그런 선의 시작점 둘레를 보인다.
+        let p = tr.transform_xy(b[0], b[1]);
+        return Some([p[0], p[1], p[0], p[1]]);
+    }
+    Some(outer_box_of(|x, y| tr.transform_xy(x, y), b))
+}
+
 #[cfg(test)]
 #[path = "survey_paint_layers_tests.rs"]
 mod tests;

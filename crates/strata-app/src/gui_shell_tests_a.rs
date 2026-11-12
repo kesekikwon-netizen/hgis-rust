@@ -89,12 +89,9 @@ fn test_d21_map_and_layer_context_menus() {
     assert!(map_items.contains(&"이 위치 좌표 복사"));
     assert!(map_items.contains(&"전체 지도 보기"));
 
-    // 좌표 복사 문구 형식 "{N:.3}, {E:.3} ({EPSG})"
-    let txt = format!(
-        "{:.3}, {:.3} ({})",
-        361_622.354_f64, 219_897.093_f64, "EPSG:5187"
-    );
-    assert!(txt.starts_with("361622.354, "));
+    // 좌표 복사 문구 — MainWindowContextMenus.cpp:153-156 `"%1, %2 (%3)"` = x(동), y(북), 작업 좌표계
+    let txt = crate::map_context_menu_model::coordinate_text([219_897.093, 361_622.354], "EPSG:5187");
+    assert_eq!(txt, "219897.093, 361622.354 (EPSG:5187)");
 
     // MainWindowContextMenus.cpp:176-448 layerContextMenu 항목
     let layer_items = [

@@ -144,7 +144,9 @@ mod tabs_paleo_3d_tests;
 mod svg_path_paint_tests;
 
 mod basemap_cadastral;
+mod extent_history;
 mod home_text;
+mod map_context_menu_model;
 mod user_settings;
 mod basemap_cadastral_jobs;
 mod basemap_fetch;

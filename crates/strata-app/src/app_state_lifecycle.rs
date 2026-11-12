@@ -55,6 +55,8 @@ impl StrataAppState {
             survey_tables: Vec::new(),
             settings_ini: None,
             recent_surveys: Vec::new(),
+            edit_layer_key: None,
+            map_menu_sub_open: false,
             paper_look: true,
             project_title: "새 고고학 지표·시굴조사".to_owned(),
             is_dirty: false,

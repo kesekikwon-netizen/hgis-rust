@@ -9,6 +9,8 @@ mod tabs_home_map_korea;
 mod tabs_home_map_state;
 #[path = "tabs_home_map_undo.rs"]
 mod tabs_home_map_undo;
+#[path = "tabs_home_map_zoom.rs"]
+mod tabs_home_map_zoom;
 
 pub use tabs_home_map_state::*;
 pub use tabs_home_map_undo::*;
