@@ -279,7 +279,8 @@ mod tests {
             Some("먼저 「새 조사」 또는 「열기」로 조사 폴더를 준비하세요.")
         );
 
-        app.survey_path = Some(std::path::PathBuf::from(r"D:\조사자료\경주시_성동동"));
+        let dir = tempfile::tempdir().expect("temp dir");
+        app.survey_path = Some(dir.path().join("현장.gpkg"));
         assert!(app.open_borehole_dialog());
         assert!(app.borehole_dialog.open);
     }

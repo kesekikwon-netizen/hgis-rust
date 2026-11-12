@@ -11,8 +11,6 @@ pub fn configure_korean_fonts_and_theme(ctx: &egui::Context, tokens: &ThemeToken
     let candidate_paths = [
         r"C:\Windows\Fonts\malgun.ttf",
         r"C:\Windows\Fonts\NanumGothic.ttf",
-        "/mnt/c/Windows/Fonts/malgun.ttf",
-        "/mnt/c/Windows/Fonts/NanumGothic.ttf",
         "data/fonts/NotoSansKR-Regular.ttf",
     ];
     for path in candidate_paths {

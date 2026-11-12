@@ -80,10 +80,6 @@ impl AccountSettings {
             }
             return PathBuf::from(local).join("ka-hgis").join("ka-hgis");
         }
-        let wsl_path = PathBuf::from("/mnt/c/Users/권을/AppData/Local/ka-hgis/ka-hgis");
-        if wsl_path.is_dir() {
-            return wsl_path;
-        }
         std::env::temp_dir().join("ka-hgis")
     }
 

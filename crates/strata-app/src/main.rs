@@ -121,6 +121,8 @@ fn main() {
         options,
         Box::new(|cc| {
             let mut state = app_state::StrataAppState::new_startup();
+            // C++ 앱과 같은 사용자 ini(최근 조사·마지막 폴더). 시험 실행은 KA_HGIS_SETTINGS_DIR 로 따로 둔다.
+            state.attach_user_settings(user_settings::user_settings_ini());
             gui_theme_fonts::configure_korean_fonts_and_theme(&cc.egui_ctx, &state.theme);
             if let Some(dir) = snap_dir.clone() {
                 state.snap = Some(snap_shot::SnapRequest::parse(&dir, &snap_steps));
@@ -142,6 +144,8 @@ mod tabs_paleo_3d_tests;
 mod svg_path_paint_tests;
 
 mod basemap_cadastral;
+mod home_text;
+mod user_settings;
 mod basemap_cadastral_jobs;
 mod basemap_fetch;
 mod basemap_mesh;

@@ -24,6 +24,8 @@ use crate::tabs_paleo_3d::PaleoTerrain3dTabState;
 mod app_state_lifecycle;
 #[path = "app_state_projects.rs"]
 mod app_state_projects;
+#[path = "app_state_recent.rs"]
+mod app_state_recent;
 #[path = "app_state_status_bar.rs"]
 mod app_state_status_bar;
 #[path = "app_state_types.rs"]
@@ -71,6 +73,11 @@ pub struct StrataAppState {
     pub survey_path: Option<std::path::PathBuf>,
     /// 열린 조사 파일의 도형 표(gpkg_contents 순서)와 도형 — C++ 은 QGIS 레이어가 들고 있다.
     pub survey_tables: Vec<strata_storage::survey_gpkg_read::SurveyFileTable>,
+    /// C++ `RecentSurveys::userSettings()` 의 ini 파일. `new_startup` 은 비워 두고(시험이 사용자 ini 를
+    /// 읽고 쓰지 않게) 실행 파일만 `attach_user_settings` 로 붙인다.
+    pub settings_ini: Option<std::path::PathBuf>,
+    /// 홈 「최근 조사」 목록 — C++ `KaStartPage::reload` 의 `RecentSurveys::loadAll`.
+    pub recent_surveys: Vec<strata_storage::recent_surveys::RecentSurvey>,
     pub paper_look: bool,
     pub project_title: String,
     pub is_dirty: bool,

@@ -1,7 +1,7 @@
 //! 「홈」 탭 — 최근 조사 목록과 작업 순서 안내.
 //!
 //! `gui_tab_home.rs` 가 300줄 규칙에 맞춰 나눈 파일이다.
-//! 원래 `render_home_tab_ui` 안의 둘째 블록을 그대로 옮겼고, 순서·수치·문구는 바꾸지 않았다.
+//! 개수·「<조사> 기준」은 최근 조사 목록에서 온다. 작업 순서의 단계 상태(C++ SurveyFacts)는 아직 고정이다.
 
 use eframe::egui::{self, Color32, Pos2, Stroke, Vec2};
 use strata_canvas2d::map_tools::MapToolKind;
@@ -25,7 +25,11 @@ impl StrataAppState {
                     ui.allocate_ui_with_layout(Vec2::new(recent_w, 250.0), egui::Layout::top_down(egui::Align::Min), |ui| {
                         ui.horizontal(|ui| {
                             ui.label(egui::RichText::new("최근 조사").size(15.0).strong());
-                            ui.label(egui::RichText::new("4개").size(12.0).color(Color32::from_rgb(110, 108, 102)));
+                            // `KaHomeRecentCard.cpp:121` — 목록이 비면 개수를 쓰지 않는다.
+                            if !self.recent_surveys.is_empty() {
+                                let count = format!("{}개", self.recent_surveys.len());
+                                ui.label(egui::RichText::new(count).size(12.0).color(Color32::from_rgb(110, 108, 102)));
+                            }
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let rf = ui.add(
                                     egui::TextEdit::singleline(&mut self.home_map.recent_filter)
@@ -51,9 +55,12 @@ impl StrataAppState {
                     ui.allocate_ui_with_layout(Vec2::new(guide_w, 250.0), egui::Layout::top_down(egui::Align::Min), |ui| {
                         ui.horizontal(|ui| {
                             ui.label(egui::RichText::new("작업 순서").size(15.0).strong());
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(egui::RichText::new("경주시 기준").size(11.5).color(Color32::from_rgb(105, 103, 96)));
-                            });
+                            // `KaHomeGuideCard.cpp:172-173` — 「<이어서 작업 조사> 기준」, 없으면 숨긴다.
+                            if let Some(basis) = self.continue_survey().map(|it| format!("{} 기준", it.name)) {
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.label(egui::RichText::new(basis).size(11.5).color(Color32::from_rgb(105, 103, 96)));
+                                });
+                            }
                         });
                         ui.add_space(10.0);
                         // C++ KaHomeGuideCard.cpp: 18px circle nodes joined by a 1px vertical
@@ -125,7 +132,7 @@ impl StrataAppState {
                                     ui.horizontal(|ui| {
                                         if ui.link(egui::RichText::new(title).strong().size(13.0)).clicked() {
                                             match step_id {
-                                                1 => self.start_new_survey_project("경주시"),
+                                                1 => self.modals.active = Some(ActiveModalDialog::NewSurvey),
                                                 2 => self.trigger_map_ribbon_tool(MapToolKind::DrawPolygon),
                                                 _ => self.modals.active = Some(ActiveModalDialog::PaperSetup),
                                             }

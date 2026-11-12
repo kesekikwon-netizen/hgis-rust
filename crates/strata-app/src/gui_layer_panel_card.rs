@@ -102,12 +102,9 @@ impl StrataAppState {
             ui.label(egui::RichText::new("파일함").size(13.0).strong());
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 14.0;
-                // KaFileBrowserPanel.cpp:92-111 — 여섯 폴더 단추의 안내말
-                for (t, sub, tip) in [
-                    ("내 PC", r"C:\Users\권을", FILE_BTN_PC_TIP),
-                    ("바탕화면", r"C:\Users\권을\Desktop", FILE_BTN_DESK_TIP),
-                    ("문서", r"C:\Users\권을\Documents", FILE_BTN_DOCS_TIP),
-                ] {
+                // KaFileBrowserPanel.cpp:92-111 — 여섯 폴더 단추의 안내말과 갈 곳(눌렀을 때만 찾는다).
+                // 「내 PC」는 C++ 이 드라이브 목록을 보이지만 파일함이 아직 드라이브 목록을 못 그려 홈 폴더로 간다.
+                for (t, tip) in [("내 PC", FILE_BTN_PC_TIP), ("바탕화면", FILE_BTN_DESK_TIP), ("문서", FILE_BTN_DOCS_TIP)] {
                     if ui
                         .add(
                             egui::Button::new(egui::RichText::new(t).size(11.5))
@@ -116,21 +113,21 @@ impl StrataAppState {
                         .on_hover_text(tip)
                         .clicked()
                     {
-                        self.home_map.real_survey.file_browser_dir = PathBuf::from(sub);
-                        self.home_map.real_survey.refresh_file_browser();
+                        let target = match t {
+                            "내 PC" => Some(crate::user_settings::home_path()),
+                            "바탕화면" => Some(crate::user_settings::resolved_desktop_path()),
+                            _ => crate::user_settings::documents_path(),
+                        };
+                        if let Some(dir) = target {
+                            self.home_map.real_survey.file_browser_dir = dir;
+                            self.home_map.real_survey.refresh_file_browser();
+                        }
                     }
                 }
             });
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 14.0;
-                for (t, sub, tip) in [
-                    ("내려받기", r"C:\Users\권을\Downloads", FILE_BTN_DOWN_TIP),
-                    (
-                        "폴더 직접 찾기",
-                        r"C:\Users\권을\Documents\경주시",
-                        FILE_BTN_PICK_TIP,
-                    ),
-                ] {
+                for (t, tip) in [("내려받기", FILE_BTN_DOWN_TIP), ("폴더 직접 찾기", FILE_BTN_PICK_TIP)] {
                     if ui
                         .add(
                             egui::Button::new(egui::RichText::new(t).size(11.5))
@@ -139,8 +136,19 @@ impl StrataAppState {
                         .on_hover_text(tip)
                         .clicked()
                     {
-                        self.home_map.real_survey.file_browser_dir = PathBuf::from(sub);
-                        self.home_map.real_survey.refresh_file_browser();
+                        let target = if t == "내려받기" {
+                            Some(crate::user_settings::downloads_path())
+                        } else {
+                            // :280-287 pickFolder — 지금 폴더에서 「조사 데이터 폴더 선택」.
+                            rfd::FileDialog::new()
+                                .set_title("조사 데이터 폴더 선택")
+                                .set_directory(&self.home_map.real_survey.file_browser_dir)
+                                .pick_folder()
+                        };
+                        if let Some(dir) = target {
+                            self.home_map.real_survey.file_browser_dir = dir;
+                            self.home_map.real_survey.refresh_file_browser();
+                        }
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

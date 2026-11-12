@@ -27,7 +27,7 @@ impl StrataAppState {
             paper_look: true,
             ..DisplayOptions::default()
         };
-        Self {
+        let mut app = Self {
             active_tab: MainTab::Home,
             open_studio_tabs: Vec::new(),
             scale_menu_open: false,
@@ -53,6 +53,8 @@ impl StrataAppState {
             theme_dirty: true,
             survey_path: None,
             survey_tables: Vec::new(),
+            settings_ini: None,
+            recent_surveys: Vec::new(),
             paper_look: true,
             project_title: "새 고고학 지표·시굴조사".to_owned(),
             is_dirty: false,
@@ -72,7 +74,11 @@ impl StrataAppState {
             accounts,
             modals: ModalDialogController::default(),
             borehole_dialog: crate::dialogs_borehole::BoreholeDialogController::new(),
-        }
+        };
+        // C++ `MainWindow.cpp:1493-1507` ensureStartupViewReady — 지도 탭을 처음 볼 때 한반도 전체.
+        app.home_map.zoom_to_korea(app.work_crs);
+        app.home_map.korea_view_pending = true;
+        app
     }
 
     /// `MainWindowExport.cpp:252` — 도면 화면을 처음 열 때 상태줄에 남기는 C++ 원문.

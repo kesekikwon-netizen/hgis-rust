@@ -1,4 +1,4 @@
-//! 「홈」 탭에서 여는 조사 — 새 조사(빈 프로젝트)·견본·파일 열기·GPKG 읽기.
+//! 「홈」 탭에서 여는 조사 — 새 조사(빈 프로젝트)·파일 열기·GPKG 읽기.
 //!
 //! `gui_tab_home.rs` 가 300줄 규칙에 맞춰 나눈 파일이다.
 //! 원래 같은 `impl` 블록 안에 있던 메서드들을 그대로 옮겼고, 동작·문구는 바꾸지 않았다.
@@ -59,6 +59,9 @@ impl StrataAppState {
             total >= 2,
             "새 조사에는 위성·지적 배경지도가 최소 2개 있어야 한다"
         );
+        // C++ `MainWindowSession.cpp:741-742` — rememberSurvey(path, 대화상자의 이름) · rememberSurveyDir.
+        self.remember_survey(path, name);
+        self.remember_survey_dir(path);
     }
 
     /// `start_new_survey_project` 의 예전 시험·시연용 입구(Ctrl+N). 부를 때마다 임시 폴더 안
@@ -106,25 +109,6 @@ impl StrataAppState {
         self.is_dirty = false;
     }
 
-    /// C++ `MainWindowSession.cpp:1634-1680` `openProject` — 「열기」.
-    /// 파일 대화상자로 조사 파일(.gpkg)을 고르면 실제로 읽어 워크스페이스를 되살린다.
-    /// 취소하면 아무 것도 바꾸지 않는다. 견본(idx) 경로는 테스트·시연용으로 남긴다.
-    pub fn open_sample_survey_project(&mut self, idx: usize) {
-        const SAMPLE_IDX: usize = usize::MAX;
-        if idx != SAMPLE_IDX {
-            // 견본 열기 (기존 동작 유지)
-            self.project_title = "경주시".to_owned();
-            self.left_layers
-                .ensure_domain_layer(DomainLayerKey::SurveyArea);
-            self.left_layers.apply_default_basemaps();
-            self.home_map.fit_to_survey();
-            self.active_tab = MainTab::Map;
-            self.home_map.draw_guide_message =
-                Some("다 그렸으면 리본의 「도면」으로 종이에 옮기세요.".to_owned());
-            return;
-        }
-        self.open_survey_file_dialog();
-    }
 
     pub fn import_demo_dxf_and_csv(&mut self) {
         self.left_layers

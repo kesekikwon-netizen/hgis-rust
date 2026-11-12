@@ -21,6 +21,7 @@ impl StrataAppState {
     pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
         let wants_kb = ctx.wants_keyboard_input();
         let mut save_requested: Option<bool> = None;
+        let mut open_requested = false;
         ctx.input(|i| {
             if i.key_pressed(egui::Key::Escape) {
                 self.home_map.cad.on_escape(&mut self.home_map.scene);
@@ -108,9 +109,11 @@ impl StrataAppState {
             }
             if i.modifiers.ctrl {
                 if i.key_pressed(egui::Key::N) {
-                    self.start_new_survey_project("경주시");
+                    // `MainWindowRibbon.cpp:280` QKeySequence::New → newSurvey(「새 조사」 창).
+                    self.modals.active = Some(ActiveModalDialog::NewSurvey);
                 } else if i.key_pressed(egui::Key::O) {
-                    self.open_sample_survey_project(0);
+                    // :282 QKeySequence::Open → openProject. 파일 창은 입력 잠금 밖에서 연다.
+                    open_requested = true;
                 } else if i.key_pressed(egui::Key::S) {
                     // 저장은 입력 잠금 밖에서 한다(다른 이름으로 저장은 파일 창을 연다).
                     save_requested = Some(i.modifiers.shift);
@@ -140,6 +143,9 @@ impl StrataAppState {
                 }
             }
         });
+        if open_requested {
+            self.open_survey_file_dialog();
+        }
         // C++ Ctrl+S = saveProject, Ctrl+Shift+S = saveProjectAs(리본 「저장」·「다른 이름」과 같은 길).
         match save_requested {
             Some(false) => {

@@ -26,8 +26,8 @@ impl StrataAppState {
         self.open_survey_gpkg(&path);
     }
 
-    /// C++ openSurveyGpkg 의 조사 데이터만 여는 길. 열 수 없으면 알리고 지금 조사는 그대로 둔다.
-    pub fn open_survey_gpkg(&mut self, path: &Path) {
+    /// C++ openSurveyGpkg 의 조사 데이터만 여는 길. 열 수 없으면 알리고 지금 조사는 그대로 둔다(false).
+    pub fn open_survey_gpkg(&mut self, path: &Path) -> bool {
         // C++ :1646-1650 — .qgz/.qgs 를 고르면 옆의 같은 이름 .gpkg 를 연다.
         let mut target = path.to_path_buf();
         if !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("gpkg")) {
@@ -37,7 +37,7 @@ impl StrataAppState {
                     "「{}」은(는) GeoPackage 조사 파일이 아니고 같은 이름의 .gpkg 도 없습니다.",
                     path.display()
                 ));
-                return;
+                return false;
             }
             target = companion;
         }
@@ -48,14 +48,12 @@ impl StrataAppState {
             Ok(t) => t,
             Err(msg) => {
                 self.home_map.draw_guide_message = Some(format!("조사 열기 실패: {msg}"));
-                return;
+                return false;
             }
         };
         // C++ :389 kaSafeClearQgisProject — 이전 조사를 비운다. 작업 좌표계는 바꾸지 않는다(:770).
         let title = target.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-        let recents = self.home_map.recent_files.clone();
         self.reset_survey_workspace(&title);
-        self.home_map.recent_files = recents;
         // C++ 은 이 길에서 상태줄에 아무 말도 띄우지 않는다(빈 글 = 기본 안내도 없음).
         self.home_map.draw_guide_message = Some(String::new());
         // C++ :775 addNonEmptyDomainLayers — 도형이 있는 표만 올린다.
@@ -72,19 +70,11 @@ impl StrataAppState {
         self.home_map.zoom_to_korea(self.work_crs);
         self.home_map.korea_view_pending = true;
         // C++ :412-419 rememberSurvey · showMapWorkspace · rememberSurveyDir · markSurveySaved.
-        let recent = target.to_string_lossy().into_owned();
-        if !self.home_map.recent_files.contains(&recent) {
-            self.home_map.recent_files.insert(0, recent);
-            self.home_map.recent_files.truncate(12);
-        }
+        self.remember_survey(&target, &strata_storage::recent_surveys::complete_base_name(&target.to_string_lossy()));
         self.active_tab = MainTab::Map;
+        self.remember_survey_dir(&target);
         self.is_dirty = false;
-        // C++ `MainWindowTopographic.cpp:90-100` — 조사 폴더 안 「지형도」 저장 위치.
-        let dir = std::path::absolute(&target).ok().and_then(|p| p.parent().map(Path::to_path_buf));
-        if dir.is_some_and(|d| std::fs::create_dir_all(d.join("지형도")).is_err()) {
-            self.home_map.draw_guide_message =
-                Some("조사 폴더의 지형도 저장 위치를 만들지 못했습니다.".to_owned());
-        }
+        true
     }
 }
 

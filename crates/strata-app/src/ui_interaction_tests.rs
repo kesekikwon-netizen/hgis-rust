@@ -185,7 +185,10 @@ fn snap_new_survey_uses_temp_snap_folder_and_stops_on_refusal() {
     let snap_dir = std::env::temp_dir().join(format!("strata-snap-{}", std::process::id()));
     let mut app = StrataAppState::new_startup();
     app.modals.new_survey_name = "스냅조사".to_owned();
-    app.modals.new_survey_dir = elsewhere.path().to_string_lossy().into_owned();
+    // 「저장 폴더」의 시작 폴더(preferredSurveyDir)를 다른 곳으로 — 임시 ini 의 Survey/LastDir.
+    let ini = elsewhere.path().join("ka-hgis.ini");
+    strata_storage::recent_surveys::set_last_dir(&ini, &elsewhere.path().to_string_lossy()).expect("ini");
+    app.attach_user_settings(Some(ini));
     app.modals.active = Some(ActiveModalDialog::NewSurvey);
 
     app.snap_apply_action("@new_survey_go");

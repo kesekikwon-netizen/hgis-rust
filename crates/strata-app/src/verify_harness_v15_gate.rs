@@ -43,7 +43,7 @@ pub fn v15_borehole_ribbon_and_dialog_gate() -> GateResult {
     // 조사 폴더가 없으면 창을 열지 않고 안내만 남긴다(`KaBoreholeDialog.cpp:66-70`).
     let mut app = StrataAppState::new_startup();
     let refused_ok = !app.open_borehole_dialog() && !app.borehole_dialog.open;
-    app.survey_path = Some(std::path::PathBuf::from(r"D:\조사자료\_v15_검증"));
+    app.survey_path = Some(std::env::temp_dir().join("strata-v15-gate.gpkg"));
     let opened_ok = app.open_borehole_dialog() && app.borehole_dialog.open;
 
     // 세 단추가 서로 다른 동작을 가리킨다(`KaBoreholeDialog.cpp:169-192`).

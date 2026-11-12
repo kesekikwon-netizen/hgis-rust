@@ -49,6 +49,7 @@ fn open_demo_copy_matches_the_cpp_app() {
     let path = demo_copy(dir.path(), "demo.gpkg");
     let before = sha(&path);
     let mut app = StrataAppState::new_startup();
+    app.attach_user_settings(Some(dir.path().join("settings").join("ka-hgis.ini")));
     assert_eq!(app.work_crs, WorkCrs::Epsg5187);
 
     app.open_survey_gpkg(&path);
@@ -57,7 +58,8 @@ fn open_demo_copy_matches_the_cpp_app() {
     assert_eq!(app.active_tab, MainTab::Map);
     assert!(!app.is_dirty);
     assert_eq!(app.survey_path.as_deref(), Some(path.as_path()));
-    assert!(app.home_map.recent_files.contains(&path.to_string_lossy().into_owned()));
+    let first = app.recent_surveys.first().map(|it| it.path.clone());
+    assert_eq!(first, Some(strata_storage::recent_surveys::absolute_file_path(&path)), "rememberSurvey");
     assert!(dir.path().join("지형도").is_dir(), "C++ makes <survey dir>\\지형도 on open");
     // C++ 조사 데이터만 여는 길은 m_workCrs 를 바꾸지 않는다(MainWindowSession.cpp:762-773).
     assert_eq!(app.work_crs, WorkCrs::Epsg5187);

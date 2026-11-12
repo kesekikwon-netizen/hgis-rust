@@ -46,6 +46,8 @@ tempfile = "3.13"
 eframe = { version = "0.31", features = ["glow"] }
 egui = "0.31"
 rfd = "0.15"
+dirs = "6.0"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 wgpu = { version = "24.0.5", features = ["wgsl"] }
 lyon = "1.0"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

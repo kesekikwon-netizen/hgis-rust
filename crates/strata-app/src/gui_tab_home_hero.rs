@@ -1,10 +1,12 @@
 //! 「홈」 탭 상단 — 브랜드 히어로(새 조사·조사 열기)와 이어서 작업 표.
 //!
-//! `gui_tab_home.rs` 가 300줄 규칙에 맞춰 나눈 파일이다.
-//! 원래 `render_home_tab_ui` 안의 첫 블록과 `paint_home_title_block` 을 그대로 옮겼고,
-//! 순서·수치·문구는 하나도 바꾸지 않았다.
+//! `gui_tab_home.rs` 가 300줄 규칙에 맞춰 나눈 파일이다. 이어서 작업 표는 최근 조사 목록의
+//! 열 수 있는 첫 조사(`KaStartPage.cpp:263-290`)를 보인다. 상태 외의 기록(좌표계·조사구역·유구·
+//! 검수, C++ SurveyFacts)은 아직 읽지 않는다.
 
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+
+use strata_storage::recent_surveys::RecentSurvey;
 
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::ActiveModalDialog;
@@ -109,18 +111,22 @@ impl StrataAppState {
                                 );
                             }
                             if b2_resp.clicked() {
-                                self.open_sample_survey_project(0);
+                                // `KaStartPage.cpp:132` btnOpen → openProject(파일 창).
+                                self.open_survey_file_dialog();
                             }
                         });
                     });
                     ui.add_space(16.0);
-                    let (tb_rect, _) = ui.allocate_exact_size(Vec2::new(title_w, 146.0), egui::Sense::hover());
-                    self.paint_home_title_block(ui, tb_rect);
+                    // `KaStartPage.cpp:272` — 열 수 있는 최근 조사가 없으면 이어서 작업 표를 숨긴다.
+                    if let Some(target) = self.continue_survey().cloned() {
+                        let (tb_rect, _) = ui.allocate_exact_size(Vec2::new(title_w, 146.0), egui::Sense::hover());
+                        self.paint_home_title_block(ui, tb_rect, &target);
+                    }
                 });
     }
 
-    /// 이어서 작업 표(제목 줄·좌표계·조사 건수).
-    fn paint_home_title_block(&mut self, ui: &mut egui::Ui, rect: Rect) {
+    /// 이어서 작업 표(제목 줄·좌표계·조사 건수) — `KaHomeTitleBlock::setSurvey`(:139-162).
+    fn paint_home_title_block(&mut self, ui: &mut egui::Ui, rect: Rect, target: &RecentSurvey) {
         let p = ui.painter_at(rect);
         let border = Stroke::new(1.0, Color32::from_rgb(35, 35, 32));
         let sub_border = Stroke::new(1.0, Color32::from_rgb(185, 182, 172));
@@ -156,7 +162,7 @@ impl StrataAppState {
         p.text(
             Pos2::new(rect.left() + 14.0, (y1 + y2) * 0.5),
             egui::Align2::LEFT_CENTER,
-            "경주시",
+            &target.name,
             egui::FontId::proportional(26.0),
             Color32::from_rgb(30, 30, 28),
         );
@@ -186,7 +192,7 @@ impl StrataAppState {
             )
             .clicked()
         {
-            self.open_sample_survey_project(0);
+            self.open_recent_survey(&target.path);
         }
 
         // KaHomeTitleBlock.cpp:133-137 crsText — 작업 좌표계는 실제 작업 CRS 에서 만든다.
@@ -202,9 +208,12 @@ impl StrataAppState {
         } else {
             "—".to_owned()
         };
+        // :145-149 — 폴더는 끝 두 마디와 조사 이름, 마지막 열림은 「어제 22:26」 꼴.
+        let folder = crate::home_text::folder_tail(&crate::home_text::folder(&target.path), &target.name);
+        let when = crate::home_text::when(target.last_opened_ms);
         let cells = [
-            ("폴더", "문서 › 경주시"),
-            ("마지막 열림", "어제 22:26"),
+            ("폴더", folder.as_str()),
+            ("마지막 열림", when.as_str()),
             ("작업 좌표계", crs_txt.as_str()),
             ("조사구역", area_cnt.as_str()),
             ("유구", "—"),

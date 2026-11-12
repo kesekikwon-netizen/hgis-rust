@@ -26,6 +26,8 @@ pub mod layer_policy;
 pub mod polygon_pieces;
 pub mod project_actions;
 pub mod project_recent;
+pub mod qt_ini;
+pub mod recent_surveys;
 pub mod session_save;
 pub mod shp_io;
 pub mod shp_writer;

@@ -81,7 +81,19 @@ fn test_d14_region_locator_and_canvas_grid_band() {
         "경북 경주시 인왕동 없는번지 12345".to_owned()
     );
 
-    // 지번이 실제 지적 필지에 있으면 그 필지 중심으로, 1.25 m/px까지 당겨 온다
+    // 지번이 실제 지적 필지에 있으면 그 필지 중심으로, 1.25 m/px까지 당겨 온다.
+    // 지시 3-2: 시작에는 경주시 견본 필지가 없다 — 예전 견본의 필지 하나를 직접 넣는다.
+    app.home_map.real_survey.cadastral_parcels.push(crate::real_survey::RealCadastralParcel {
+        jibun: "76 전".to_owned(),
+        ring: vec![
+            [219_730.0, 360_920.0],
+            [219_760.0, 360_920.0],
+            [219_760.0, 360_940.0],
+            [219_730.0, 360_940.0],
+            [219_730.0, 360_920.0],
+        ],
+        center: [219_745.0, 360_930.0],
+    });
     let parcel = app
         .home_map
         .real_survey

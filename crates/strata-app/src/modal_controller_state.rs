@@ -15,7 +15,6 @@ pub struct ModalDialogController {
     /// KaCadImportNotice.cpp — 끌어 놓은 CAD 도면 경로
     pub cad_import_path: String,
     pub new_survey_name: String,
-    pub new_survey_dir: String,
     pub new_survey_lon_deg: f64,
     pub new_survey_crs: WorkCrs,
     pub new_survey_crs_manual: bool,
@@ -146,7 +145,6 @@ impl Default for ModalDialogController {
             active: None,
             cad_import_path: String::new(),
             new_survey_name: "병산동".to_owned(),
-            new_survey_dir: r"C:\Users\권을\Documents".to_owned(),
             new_survey_lon_deg: 129.21,
             new_survey_crs: WorkCrs::Epsg5187,
             new_survey_crs_manual: false,

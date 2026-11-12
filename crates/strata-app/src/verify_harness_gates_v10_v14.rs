@@ -156,14 +156,9 @@ pub(crate) fn push_v10_to_v14_gates(gates: &mut Vec<GateResult>) {
     }
     gates.push(GateResult {
         gate_id: "V14",
-        title_ko: "10대 실무 모달 대화상자 및 실제 C++ 계정(DPAPI)·경주시 GeoPackage 로드 검증",
-        passed: modal_ok && !gui_state.home_map.real_survey.survey_rings.is_empty(),
-        detail: format!(
-            "10 modals OK, accounts_ready={}, trenches={}, cadastral={}, heritage={}",
-            gui_state.accounts.status_summary_ko,
-            gui_state.home_map.real_survey.trenches.len(),
-            gui_state.home_map.real_survey.cadastral_parcels.len(),
-            gui_state.home_map.real_survey.heritage_polys.len()
-        ),
+        // 지시 3-2: 시작할 때 경주시 GeoPackage 를 읽지 않는다(C++ 은 홈만 띄운다) — 그 검사는 뺐다.
+        title_ko: "10대 실무 모달 대화상자 및 실제 C++ 계정(DPAPI) 검증",
+        passed: modal_ok,
+        detail: format!("10 modals OK, accounts_ready={}", gui_state.accounts.status_summary_ko),
     });
 }

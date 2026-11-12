@@ -16,7 +16,6 @@ use super::tabs_home_map_undo::{HGIS_BASEMAP_DEFAULT_BRIGHTNESS, HGIS_BASEMAP_DE
 
 #[derive(Debug, Clone)]
 pub struct HomeMapTabState {
-    pub recent_files: Vec<String>,
     pub recent_filter: String,
     // D8 KaLayerInformationPanel.cpp:25-190 '표시 설정' 상태
     pub layer_display_settings_open: bool,
@@ -53,14 +52,10 @@ pub struct HomeMapTabState {
 
 impl Default for HomeMapTabState {
     fn default() -> Self {
-        let real_survey = RealSurveyData::load_gyeongju_or_fallback();
+        // 시작에는 조사 자료가 없다(C++ 은 홈 화면만 띄운다). 열기·새 조사가 같은 빈 상태로 비운다.
+        let real_survey = RealSurveyData::new_empty_survey(&std::env::temp_dir());
         let center = real_survey.survey_center;
         Self {
-            recent_files: vec![
-                "경주_월성북편_시굴조사.gpkg".to_owned(),
-                "부여_관북리_지표조사.gpkg".to_owned(),
-                "익산_왕궁리_정밀발굴조사.gpkg".to_owned(),
-            ],
             recent_filter: String::new(),
             layer_display_settings_open: false,
             layer_label_field_idx: 0,
@@ -77,7 +72,7 @@ impl Default for HomeMapTabState {
             viewport: ViewportTransform::new(center, 2.55, [1060.0, 680.0]),
             korea_view_pending: false,
             draw_guide_message: None,
-            scene: MapSceneModel::new_demo_gyeongju_scene(),
+            scene: MapSceneModel::default(),
             selected_sido_idx: 0,
             cad: CadSessionController::default(),
             active_basemap: BasemapSource::VworldSatellite,

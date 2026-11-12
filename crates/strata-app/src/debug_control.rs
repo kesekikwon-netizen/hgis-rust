@@ -26,14 +26,12 @@ impl StrataAppState {
                     self.active_tool = MapToolKind::Pan;
                 }
                 "tab:map" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = None;
                     self.ribbon.sub_toolbar_visible = false;
                     self.active_tool = MapToolKind::Pan;
                 }
                 "tab:drawing" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Drawing;
                     self.modals.active = None;
                     self.ribbon.sub_toolbar_visible = false;
@@ -56,27 +54,22 @@ impl StrataAppState {
                     self.modals.active = Some(ActiveModalDialog::PaperSetup);
                 }
                 "modal:dem_download" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::DemDownload);
                 }
                 "modal:heritage_region" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::HeritageRegionSelect);
                 }
                 "modal:ngii_topo" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::NgiiTopoDownload);
                 }
                 "modal:cadastral" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::CadastralDownload);
                 }
                 "modal:trench" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.ribbon.sub_toolbar_visible = true;
                     self.ribbon.sub_mode = SubToolsMode::Draw;
@@ -84,7 +77,6 @@ impl StrataAppState {
                     self.modals.active = Some(ActiveModalDialog::TrenchGenerator);
                 }
                 "tool:measure" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.ribbon.sub_toolbar_visible = true;
                     self.ribbon.sub_mode = SubToolsMode::Draw;
@@ -92,12 +84,10 @@ impl StrataAppState {
                     self.modals.active = None;
                 }
                 "modal:pdf_preparing" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Drawing;
                     self.modals.active = Some(ActiveModalDialog::PdfPreparing);
                 }
                 "modal:drawing_print" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Drawing;
                     self.modals.active = Some(ActiveModalDialog::DrawingPrint);
                 }
@@ -110,42 +100,34 @@ impl StrataAppState {
                     self.modals.active = Some(ActiveModalDialog::AccountSettings);
                 }
                 "modal:submit" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
                 }
                 "modal:control_point" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::ControlPoint);
                 }
                 "modal:survey_area" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::SurveyArea);
                 }
                 "modal:line_color" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::LineColor);
                 }
                 "modal:dem_class" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::DemClass);
                 }
                 "modal:reference_status" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::ReferenceStatus);
                 }
                 "modal:heritage" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::HeritageBrowser);
                 }
                 "modal:topo_import" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = Some(ActiveModalDialog::TopographicImport);
                 }
@@ -153,14 +135,12 @@ impl StrataAppState {
                     self.modals.active = None;
                 }
                 "subtool:draw" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = None;
                     self.ribbon.sub_toolbar_visible = true;
                     self.ribbon.sub_mode = SubToolsMode::Draw;
                 }
                 "subtool:buffer" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = None;
                     self.ribbon.sub_toolbar_visible = true;
@@ -174,7 +154,6 @@ impl StrataAppState {
                     self.ribbon.app_bar.region_popup_open = !self.ribbon.app_bar.region_popup_open;
                 }
                 "inspector:style" => {
-                    self.open_sample_survey_project(0);
                     self.active_tab = MainTab::Map;
                     self.modals.active = None;
                     self.ribbon.sub_toolbar_visible = false;

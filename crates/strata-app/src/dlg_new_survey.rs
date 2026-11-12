@@ -186,7 +186,7 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                         // 아무 것도 바꾸지 않는다(현재 조사를 그대로 둔다).
                         let dir = rfd::FileDialog::new()
                             .set_title("저장 폴더")
-                            .set_directory(&app.modals.new_survey_dir)
+                            .set_directory(app.preferred_survey_dir())
                             .pick_folder();
                         if let Some(dir) = dir {
                             let name = app.modals.new_survey_name.trim().to_owned();
@@ -197,8 +197,6 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                             ) {
                                 Ok(_) => {
                                     app.start_new_survey_project_with_path(&name, &path, crs);
-                                    app.modals.new_survey_dir =
-                                        dir.to_string_lossy().into_owned();
                                     app.modals.new_survey_error = None;
                                     app.modals.active = None;
                                 }

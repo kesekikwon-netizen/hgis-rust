@@ -164,8 +164,11 @@ impl StrataAppState {
             .add_filter("고고학 조사 파일", &["gpkg", "qgz"])
             .add_filter("GeoPackage", &["gpkg"])
             .set_file_name(&default_name);
+        // C++ :1425-1431 — 조사가 있으면 그 폴더, 없으면 preferredSurveyDir.
         if let Some(dir) = self.survey_path.as_ref().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
+        } else {
+            dialog = dialog.set_directory(self.preferred_survey_dir());
         }
         let Some(picked) = dialog.save_file() else {
             return false;
@@ -231,11 +234,9 @@ impl StrataAppState {
         if let Some(stem) = written.file_stem() {
             self.project_title = stem.to_string_lossy().into_owned();
         }
-        let recent = written.to_string_lossy().into_owned();
-        if !self.home_map.recent_files.contains(&recent) {
-            self.home_map.recent_files.insert(0, recent);
-            self.home_map.recent_files.truncate(12);
-        }
+        // C++ :963-964 rememberSurvey(파일 이름) · rememberSurveyDir.
+        self.remember_survey(&written, &strata_storage::recent_surveys::complete_base_name(&written.to_string_lossy()));
+        self.remember_survey_dir(&written);
         self.survey_path = Some(written);
         if self.home_map.real_survey.drawn_rings > 0 {
             // 그린 도형은 아직 조사 표에 들어가지 않는다(도면별 그리기 지시). 「*」를 남긴다.
