@@ -5,14 +5,16 @@
 //!
 //! 좌표 변환 경로:
 //!   화면 px → work-CRS 미터(TM) → 경위도(WGS84) → XYZ 타일 번호
-//! 변환은 `strata_geo::crs_transform::{tm_to_lonlat, lonlat_to_tm}` 을 쓴다.
+//! 타일은 `basemap_mesh` 로 기울기까지 따라 펴서 그린다(이음매 없음).
 
 
 use eframe::egui::{self, Color32, Pos2, Rect};
-use strata_geo::crs_transform::{lonlat_to_tm, tm_to_lonlat, TmParams};
+use strata_geo::crs_transform::TmParams;
 
+use crate::basemap_cadastral_jobs::CadKey;
 use crate::basemap_fetch::{fetch_tile, tile_filename_key};
-use crate::basemap_tiles::{lon_lat_to_tile, tile_lon_lat, TileKind};
+use crate::basemap_mesh::{paint_tile_mesh, screen_tile_range, tile_mesh_points};
+use crate::basemap_tiles::TileKind;
 
 /// 타일 텍스처 캐시 키.
 type TexKey = (TileKind, u8, u32, u32);
@@ -43,9 +45,9 @@ impl TileTextureCache {
     }
 }
 
-/// 지적 격자 칸별 텍스처 캐시.
+/// 지적 타일 `(z, x, y)` 별 텍스처 캐시.
 #[derive(Clone, Default)]
-pub struct CadastralCellCache(pub std::collections::HashMap<[i64; 2], egui::TextureHandle>);
+pub struct CadastralCellCache(pub std::collections::HashMap<CadKey, egui::TextureHandle>);
 
 impl std::fmt::Debug for CadastralCellCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -58,13 +60,24 @@ impl std::fmt::Debug for CadastralCellCache {
 impl CadastralCellCache {
     /// 칸 텍스처를 얻는다.
     #[must_use]
-    pub fn get(&self, k: &[i64; 2]) -> Option<&egui::TextureHandle> {
+    pub fn get(&self, k: &CadKey) -> Option<&egui::TextureHandle> {
         self.0.get(k)
     }
 
     /// 칸 텍스처를 넣는다.
-    pub fn insert(&mut self, k: [i64; 2], v: egui::TextureHandle) {
+    pub fn insert(&mut self, k: CadKey, v: egui::TextureHandle) {
         self.0.insert(k, v);
+    }
+
+    /// 들고 있는 텍스처 수.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// `keep` 에 없는 텍스처를 버린다(그래픽 메모리 보호).
+    pub fn retain_keys(&mut self, keep: &std::collections::HashSet<CadKey>) {
+        self.0.retain(|k, _| keep.contains(k));
     }
 }
 
@@ -89,28 +102,9 @@ pub fn paint_basemap_tiles(
     let mut painted = 0usize;
 
     // 화면 네 모서리 → 경위도 → 타일 범위.
-    let corners = [
-        view.screen_to_meters(rect, rect.left_top()),
-        view.screen_to_meters(rect, rect.right_top()),
-        view.screen_to_meters(rect, rect.left_bottom()),
-        view.screen_to_meters(rect, rect.right_bottom()),
-    ];
-    let mut lon_min = f64::INFINITY;
-    let mut lon_max = f64::NEG_INFINITY;
-    let mut lat_min = f64::INFINITY;
-    let mut lat_max = f64::NEG_INFINITY;
-    for m in corners {
-        let [lon, lat] = tm_to_lonlat(m[0], m[1], &params);
-        if !lon.is_finite() || !lat.is_finite() {
-            return 0;
-        }
-        lon_min = lon_min.min(lon);
-        lon_max = lon_max.max(lon);
-        lat_min = lat_min.min(lat);
-        lat_max = lat_max.max(lat);
-    }
-    let (x0, y0) = lon_lat_to_tile(lon_min, lat_max, z);
-    let (x1, y1) = lon_lat_to_tile(lon_max, lat_min, z);
+    let Some((x0, y0, x1, y1)) = screen_tile_range(view, &params, rect, z) else {
+        return 0;
+    };
     let count = (x1.saturating_sub(x0) + 1) as u64 * (y1.saturating_sub(y0) + 1) as u64;
     if count == 0 || count > 256 {
         return 0; // 너무 넓거나 좁으면 타일을 그리지 않는다(성능 보호)
@@ -118,10 +112,10 @@ pub fn paint_basemap_tiles(
 
     for ty in y0..=y1 {
         for tx in x0..=x1 {
-            let Some(tile_rect) = tile_screen_rect(view, &params, tx, ty, z, rect) else {
+            let Some(pts) = tile_mesh_points(view, &params, rect, z, tx, ty) else {
                 continue;
             };
-            if !tile_rect.intersect(rect).is_positive() {
+            if !Rect::from_points(&pts).intersects(rect) {
                 continue;
             }
             let k = (kind, z, tx, ty);
@@ -134,12 +128,7 @@ pub fn paint_basemap_tiles(
                 textures.0.insert(k, tex.clone());
                 tex
             };
-            painter.image(
-                handle.id(),
-                tile_rect,
-                Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0)),
-                Color32::WHITE,
-            );
+            paint_tile_mesh(painter, handle.id(), &pts, FULL_UV, Color32::WHITE);
             painted += 1;
         }
     }
@@ -169,28 +158,8 @@ fn load_tile_texture(
     ))
 }
 
-/// 타일 하나가 화면에서 차지하는 사각형(px).
-fn tile_screen_rect(
-    view: &TileView,
-    params: &TmParams,
-    tx: u32,
-    ty: u32,
-    z: u8,
-    rect: Rect,
-) -> Option<Rect> {
-    // 타일의 북서·남동 모서리를 경위도로.
-    let (lon_w, lat_n) = tile_lon_lat(z, tx, ty);
-    let (lon_e, lat_s) = tile_lon_lat(z, tx + 1, ty + 1);
-    let nw = lonlat_to_tm(lon_w, lat_n, params);
-    let se = lonlat_to_tm(lon_e, lat_s, params);
-    let a = view.meters_to_screen(rect, nw);
-    let b = view.meters_to_screen(rect, se);
-    let r = Rect::from_min_max(
-        Pos2::new(a.x.min(b.x), a.y.min(b.y)),
-        Pos2::new(a.x.max(b.x), a.y.max(b.y)),
-    );
-    r.is_positive().then_some(r)
-}
+/// 텍스처 전체(0..1).
+pub const FULL_UV: Rect = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0));
 
 /// 화면 ↔ work-CRS 미터 변환기.
 #[derive(Debug, Clone, Copy)]

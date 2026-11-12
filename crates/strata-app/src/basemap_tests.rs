@@ -123,25 +123,25 @@ fn test_cadastral_scale_range_matches_cpp() {
     assert_eq!(cadastral_target_scale(5_000.0), None);
 }
 
-/// 지적 격자 칸이 1km 이고, 화면 이동에도 같은 칸을 재사용해야 한다.
+/// 화면이 조금 움직이거나 축척이 조금 바뀌어도 같은 지적 타일을 다시 쓴다.
 /// 화면 전체를 한 장으로 받으면 1px 흔들림에도 매번 새로 받아 화면이 빈다.
+/// (예전 1 km 고정 격자 시험을 z/x/y 타일 격자로 바꿨다 — 2026-11-12.)
 #[test]
-fn test_cadastral_grid_cells_are_reused() {
-    use crate::basemap_cadastral::{cadastral_cell_bbox, cadastral_grid_range, CADASTRAL_CELL_M};
+fn test_cadastral_tiles_are_reused() {
+    use crate::basemap_cadastral::{cadastral_tile_bbox_3857, cadastral_zoom_for};
+    use crate::basemap_tiles::tile_point_lon_lat;
 
-    // 거의 같은 두 영역은 같은 칸 범위를 내야 한다.
-    let a = [1_000_100.0, 2_000_100.0, 1_001_900.0, 2_001_900.0];
-    let b = [1_000_140.0, 2_000_130.0, 1_001_860.0, 2_001_870.0];
-    assert_eq!(cadastral_grid_range(a), cadastral_grid_range(b));
+    // 축척이 4% 흔들려도 같은 줌.
+    assert_eq!(cadastral_zoom_for(0.50, 37.88), cadastral_zoom_for(0.52, 37.88));
 
-    // 칸 경계는 정확히 격자 배수여야 한다.
-    let bb = cadastral_cell_bbox(12, -3);
-    assert!((bb[0] - 12.0 * CADASTRAL_CELL_M).abs() < 1e-6);
-    assert!((bb[1] + 3.0 * CADASTRAL_CELL_M).abs() < 1e-6);
-    assert!((bb[2] - 13.0 * CADASTRAL_CELL_M).abs() < 1e-6);
-    assert!((bb[3] + 2.0 * CADASTRAL_CELL_M).abs() < 1e-6);
+    // 약 2 m 움직여도 같은 타일.
+    let (tx, ty) = lon_lat_to_tile(127.73, 37.88, 17);
+    let (clon, clat) = tile_point_lon_lat(17, f64::from(tx) + 0.5, f64::from(ty) + 0.5);
+    assert_eq!(lon_lat_to_tile(clon + 0.000_02, clat - 0.000_02, 17), (tx, ty));
 
-    // 넓게 벌어진 영역은 다른 범위여야 한다.
-    let far = [1_010_000.0, 2_010_000.0, 1_011_000.0, 2_011_000.0];
-    assert_ne!(cadastral_grid_range(a), cadastral_grid_range(far));
+    // 타일 경계는 줌·번호로만 정해진다(화면 위치와 무관) — 멀리 떨어진 타일은 경계가 다르다.
+    assert_ne!(
+        cadastral_tile_bbox_3857(17, tx, ty),
+        cadastral_tile_bbox_3857(17, tx + 10, ty)
+    );
 }

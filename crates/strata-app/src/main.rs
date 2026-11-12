@@ -142,8 +142,9 @@ mod tabs_paleo_3d_tests;
 mod svg_path_paint_tests;
 
 mod basemap_cadastral;
-mod basemap_coords;
+mod basemap_cadastral_jobs;
 mod basemap_fetch;
+mod basemap_mesh;
 mod basemap_paint;
 mod basemap_tiles;
 mod diag_layout;
@@ -225,3 +226,6 @@ mod ui_interaction_tests;
 #[cfg(test)]
 #[path = "basemap_tests.rs"]
 mod basemap_tests;
+#[cfg(test)]
+#[path = "basemap_mesh_tests.rs"]
+mod basemap_mesh_tests;

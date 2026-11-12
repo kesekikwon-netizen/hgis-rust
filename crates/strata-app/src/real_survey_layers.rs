@@ -113,6 +113,10 @@ impl RealSurveyData {
             "국가지정유산보호구역",
             "시도지정유산",
             "시도지정유산보호구역",
+            // 새 조사의 기본 두 레이어(위성·지적)도 함께 끄고 켠다.
+            "위성지도 (VWorld)",
+            "일반지도 (VWorld)",
+            "연속지적도 (VWorld WMS)",
         ] {
             self.layer_visible.insert(k.to_owned(), visible);
         }

@@ -52,47 +52,84 @@ pub fn cadastral_target_scale(scale_denom: f64) -> Option<f64> {
     }
 }
 
-/// 지적 타일 격자 한 칸의 EPSG:3857 미터 크기.
+/// 지적은 위성과 같은 **웹 메르카토르 z/x/y 타일 격자**로 받는다. 한 장은 512px.
 ///
-/// 위성은 XYZ 타일(줌별 격자)을 쓰지만 지적 WMS 는 줌 개념이 없어 경계를
-/// 직접 준다. 화면이 흔들려도 같은 칸을 재사용하도록 **고정 격자**를 쓴다.
-/// 512px 짜리 한 장이 1km 를 덮게 하면, 확대해도 선명하고 이동해도 캐시가 산다.
-pub const CADASTRAL_CELL_M: f64 = 1000.0;
+/// C++ 은 QGIS 가 WMS 를 화면 해상도(물리 픽셀) 그대로 받아 선·글자가 부드럽다.
+/// 예전 Rust 는 1 km 를 512px 한 장으로 고정해, 가까이 볼수록 그 그림을 몇 배로
+/// 늘려 붙였다(선이 굵고 흐림). 여기서는 화면 해상도에 가장 가까운 줌을 고른다.
+///
+/// VWorld 는 요청 1픽셀이 약 2 m(EPSG:3857)보다 거칠면 **빈 그림**을 준다
+/// (2026-11-12 실측: 1 km/512px = 1.95 m 는 필지선, z15/512px = 2.39 m 는 6.7 KB 빈 PNG).
+/// C++ 은 QGIS 가 화면 해상도로 요청하므로 그보다 넓게 보면 지적이 비어 보인다. 같게 맞춘다.
+pub const CADASTRAL_COARSEST_REQUEST_M: f64 = 2.0;
 
-/// 화면 영역이 걸치는 지적 타일 격자 범위 `(x0, y0, x1, y1)` (칸 번호).
+/// 가장 거친 줌. z16/512px = 1.19 m 로 서버가 늘 그린다.
+pub const CADASTRAL_MIN_ZOOM: u8 = 16;
+
+/// 가장 가까이 볼 때의 줌(1:200 에서도 그림이 늘어나지 않는 수준).
+pub const CADASTRAL_MAX_ZOOM: u8 = 21;
+
+/// 한 화면에 그리는 지적 타일 상한(안전장치). 200% 배율 화면에서
+/// 지적이 보이는 가장 넓은 축척일 때 약 85장이 든다.
+pub const CADASTRAL_MAX_TILES: usize = 96;
+
+/// 지구 둘레(EPSG:3857 의 x 범위 전체, m).
+const WEB_MERCATOR_SPAN: f64 = 40_075_016.685_578_49;
+
+/// 줌 `z` 에서 512px 지적 그림 1픽셀이 덮는 지상 거리(m).
 #[must_use]
-pub fn cadastral_grid_range(bbox: [f64; 4]) -> (i64, i64, i64, i64) {
-    (
-        (bbox[0] / CADASTRAL_CELL_M).floor() as i64,
-        (bbox[1] / CADASTRAL_CELL_M).floor() as i64,
-        (bbox[2] / CADASTRAL_CELL_M).floor() as i64,
-        (bbox[3] / CADASTRAL_CELL_M).floor() as i64,
-    )
+pub fn cadastral_image_ground_mpp(z: u8, lat_deg: f64) -> f64 {
+    WEB_MERCATOR_SPAN * lat_deg.to_radians().cos()
+        / (f64::from(CADASTRAL_TILE_PX) * f64::from(1_u32 << z))
 }
 
-/// 칸 번호 → EPSG:3857 미터 경계.
+/// 화면 물리 픽셀 하나가 덮는 지상 거리(m)에 맞는 지적 줌.
+/// VWorld 가 빈 그림을 줄 만큼 넓게 보고 있으면 `None`(C++ 에서도 지적이 비어 보인다).
 #[must_use]
-pub fn cadastral_cell_bbox(cx: i64, cy: i64) -> [f64; 4] {
-    [
-        cx as f64 * CADASTRAL_CELL_M,
-        cy as f64 * CADASTRAL_CELL_M,
-        (cx + 1) as f64 * CADASTRAL_CELL_M,
-        (cy + 1) as f64 * CADASTRAL_CELL_M,
-    ]
+pub fn cadastral_zoom_for(ground_m_per_px: f64, lat_deg: f64) -> Option<u8> {
+    let cos_lat = lat_deg.to_radians().cos();
+    if !ground_m_per_px.is_finite() || ground_m_per_px <= 0.0 || cos_lat.is_nan() || cos_lat <= 0.0
+    {
+        return None;
+    }
+    if ground_m_per_px / cos_lat > CADASTRAL_COARSEST_REQUEST_M {
+        return None;
+    }
+    let z = (cadastral_image_ground_mpp(0, lat_deg) / ground_m_per_px)
+        .log2()
+        .round();
+    if !z.is_finite() {
+        return None;
+    }
+    Some(z.clamp(f64::from(CADASTRAL_MIN_ZOOM), f64::from(CADASTRAL_MAX_ZOOM)) as u8)
 }
 
-/// 한 칸의 캐시 경로.
+/// 타일 `(z, x, y)` 의 EPSG:3857 미터 경계 `(minx, miny, maxx, maxy)`.
+/// 이웃 타일과 같은 식으로 경계를 계산하므로 맞닿은 변이 정확히 같다.
 #[must_use]
-pub fn cadastral_cell_path(cx: i64, cy: i64) -> PathBuf {
-    cadastral_cache_dir().join(format!("{cx}_{cy}.png"))
+pub fn cadastral_tile_bbox_3857(z: u8, x: u32, y: u32) -> [f64; 4] {
+    let half = WEB_MERCATOR_SPAN / 2.0;
+    let size = WEB_MERCATOR_SPAN / f64::from(1_u32 << z);
+    let east = |i: u32| -half + f64::from(i) * size;
+    let north = |j: u32| half - f64::from(j) * size;
+    [east(x), north(y + 1), east(x + 1), north(y)]
 }
 
-/// 한 칸을 받아 캐시 경로를 돌려준다.
-pub fn fetch_cadastral_cell(key: &str, cx: i64, cy: i64) -> Option<PathBuf> {
+/// 타일 하나의 캐시 경로 `cadastral/<z>/<x>/<y>.png`.
+#[must_use]
+pub fn cadastral_tile_path(z: u8, x: u32, y: u32) -> PathBuf {
+    cadastral_cache_dir()
+        .join(z.to_string())
+        .join(x.to_string())
+        .join(format!("{y}.png"))
+}
+
+/// 타일 하나를 받아 캐시 경로를 돌려준다(작업 스레드에서 부른다).
+pub fn fetch_cadastral_tile(key: &str, z: u8, x: u32, y: u32) -> Option<PathBuf> {
     if key.trim().is_empty() {
         return None;
     }
-    let dest = cadastral_cell_path(cx, cy);
+    let dest = cadastral_tile_path(z, x, y);
     if dest.is_file() {
         if let Ok(b) = std::fs::read(&dest) {
             if is_png(&b) {
@@ -104,7 +141,7 @@ pub fn fetch_cadastral_cell(key: &str, cx: i64, cy: i64) -> Option<PathBuf> {
     if let Some(dir) = dest.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let bbox = cadastral_cell_bbox(cx, cy);
+    let bbox = cadastral_tile_bbox_3857(z, x, y);
     let url = cadastral_wms_url(key, bbox, CADASTRAL_TILE_PX);
     if !run_curl(&url, &dest) {
         return None;

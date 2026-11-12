@@ -110,8 +110,31 @@ impl StrataAppState {
             "@tab_drawing" => self.open_studio_tab(crate::app_state::MainTab::Drawing),
             "@tab_paleo" => self.open_studio_tab(crate::app_state::MainTab::Paleo),
             "@tab_terrain3d" => self.open_studio_tab(crate::app_state::MainTab::Terrain3d),
+            // 뒤에서 받는 지적 타일이 올 때까지 한 단계 더 기다린다.
+            "@wait" => {}
+            _ if action.starts_with("@goto=") => self.snap_goto(&action["@goto=".len()..]),
             _ => self.handle_ribbon_click(action),
         }
+    }
+
+    /// `@goto=경도;위도;축척분모` — 지도를 그 자리·축척으로 옮긴다(예: `@goto=127.73;37.88;2500`).
+    /// 경주(5187 중앙자오선 근처)에서는 타일 기울기가 거의 없어 이음매를 볼 수 없으므로,
+    /// 사용자 화면(춘천)처럼 자오선에서 먼 곳을 찍을 때 쓴다.
+    fn snap_goto(&mut self, spec: &str) {
+        let v: Vec<f64> = spec
+            .split(';')
+            .filter_map(|s| s.trim().parse::<f64>().ok())
+            .collect();
+        let (Some(&lon), Some(&lat), Some(&scale)) = (v.first(), v.get(1), v.get(2)) else {
+            eprintln!("[SNAP] @goto 형식은 경도;위도;축척분모 입니다: {spec}");
+            return;
+        };
+        let Some(params) = crate::basemap_paint::tm_params_for(self.work_crs) else {
+            return;
+        };
+        let c = strata_geo::crs_transform::lonlat_to_tm(lon, lat, &params);
+        self.home_map.viewport.center_xy = c;
+        self.home_map.viewport.meters_per_pixel = scale / 3780.0;
     }
 }
 

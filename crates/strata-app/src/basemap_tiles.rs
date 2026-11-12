@@ -65,11 +65,20 @@ pub fn lon_lat_to_tile(lon: f64, lat: f64, z: u8) -> (u32, u32) {
 ///
 /// 역변환은 `lat = atan(sinh(π(1 - 2y/n)))` 이다. (atan·tan 조합을 쓰면
 /// 60도대 값이 나와 지도가 엉뚱한 곳을 가리킨다 — 시험이 잡았다.)
+/// 시험에서만 쓴다 — 앱은 메시 꼭짓점을 `tile_point_lon_lat` 으로 구한다.
+#[cfg(test)]
 #[must_use]
 pub fn tile_lon_lat(z: u8, x: u32, y: u32) -> (f64, f64) {
+    tile_point_lon_lat(z, f64::from(x), f64::from(y))
+}
+
+/// 전역 타일 좌표(소수 허용) → 경위도. 정수면 그 타일의 북서 모서리다.
+/// 타일을 메시로 펴서 그릴 때 타일 안의 점을 구하는 데 쓴다.
+#[must_use]
+pub fn tile_point_lon_lat(z: u8, fx: f64, fy: f64) -> (f64, f64) {
     let n = f64::from(2_u32.pow(u32::from(z)));
-    let lon = f64::from(x) / n * 360.0 - 180.0;
-    let lat = (std::f64::consts::PI * (1.0 - 2.0 * f64::from(y) / n))
+    let lon = fx / n * 360.0 - 180.0;
+    let lat = (std::f64::consts::PI * (1.0 - 2.0 * fy / n))
         .sinh()
         .atan()
         .to_degrees();
