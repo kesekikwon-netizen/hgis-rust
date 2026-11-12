@@ -167,6 +167,7 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                         .add_sized([68.0, 30.0], egui::Button::new("취소"))
                         .clicked()
                     {
+                        app.modals.new_survey_error = None;
                         app.modals.active = None;
                     }
                     let valid =

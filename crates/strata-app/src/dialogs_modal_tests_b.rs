@@ -135,3 +135,43 @@ fn test_d11_paper_dialog_scale_note_and_print_tile_options() {
         "기본은 A4 세로입니다. A4 가로는 좌·우·위 1cm를 더 줍니다."
     );
 }
+
+/// 새 조사 창(고정 크기)에 「같은 이름…」 거절 문구가 떠도 「다음」·「취소」가 창 밖으로
+/// 잘리지 않는다. 화면 없이 egui 한 프레임을 그려 글자 위치를 잰다.
+#[test]
+fn test_new_survey_dialog_keeps_buttons_visible_with_refusal_text() {
+    use eframe::egui;
+    const REFUSAL: &str = "같은 이름의 조사 파일이 이미 있습니다. 기존 파일은 그대로 두었습니다. 다른 조사명이나 폴더를 선택해 주세요.";
+    let ctx = egui::Context::default();
+    let mut app = StrataAppState::new_startup();
+    crate::gui_theme_fonts::configure_korean_fonts_and_theme(&ctx, &app.theme);
+    app.modals.new_survey_error = Some(REFUSAL.to_owned());
+    let raw = egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(1440.0, 900.0),
+        )),
+        ..Default::default()
+    };
+    let mut out = None;
+    for _ in 0..3 {
+        let mut open = true;
+        out = Some(ctx.run(raw.clone(), |ctx| {
+            crate::dlg_new_survey::render_new_survey(&mut app, ctx, &mut open);
+        }));
+    }
+    let out = out.expect("one frame was drawn");
+    let drawn = |needle: &str| {
+        out.shapes.iter().find_map(|cs| match &cs.shape {
+            egui::epaint::Shape::Text(t) if t.galley.job.text == needle => {
+                Some((t.galley.rect.translate(t.pos.to_vec2()), cs.clip_rect))
+            }
+            _ => None,
+        })
+    };
+    assert!(drawn(REFUSAL).is_some(), "the refusal text must be drawn");
+    for label in ["다음", "취소"] {
+        let (rect, clip) = drawn(label).unwrap_or_else(|| panic!("{label} must be drawn"));
+        assert!(clip.contains_rect(rect), "{label} is clipped: {rect:?} outside {clip:?}");
+    }
+}
