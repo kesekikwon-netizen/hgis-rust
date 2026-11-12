@@ -68,8 +68,8 @@
 | # | 문제 | 지금 Rust | C++ | Rust 위치 |
 |---|---|---|---|---|
 | 1 | **저장이 도형을 저장하지 않음** | 리본 「저장」은 기존 파일을 지우고 레이어 이름만 다시 씀. Ctrl+S·Ctrl+Shift+S 는 쓰지도 않고 「저장했습니다」 + * 지움. 닫을 때 「저장하고 끝내기」는 저장 없이 닫음 | 사본을 만들어 검증 뒤 교체, 실패하면 창을 열어 둠 | `app_state_projects.rs:147`, `gpkg_repository.rs:61`, `gui_shell.rs:113`, `shell_dialogs.rs:168-215` |
-| 2 | **같은 이름 조사 파일을 묻지 않고 지움** | 새 조사가 같은 이름 .gpkg 를 지우고 새로 만듦. 「다른 이름」에서 .qgz 를 고르면 옆 .gpkg(C++ 원본일 수 있음)를 빈 파일로 덮어씀 | 「같은 이름의 조사 파일이 이미 있습니다」로 거절 | `dlg_new_survey.rs:179`, `gpkg_repository.rs:61-63`, `app_state_projects.rs:122-136` |
-| 3 | **원본 조사 자료에 바로 씀** | 다각형을 닫는 순간 시작 때 읽어 둔 `문서\경주시\경주시.gpkg` 에 쓰려 함(없는 `name` 칸이라 실패, 실패를 숨기고 「저장했습니다」) | 저장할 때만 씀. 원본은 건드리지 않음 | `real_survey_actions.rs:14-26`, `gui_tab_map_canvas.rs:256` |
+| 2 | **같은 이름 조사 파일을 묻지 않고 지움**<br>고침(검수 대기) — `111f0a4` | 새 조사가 같은 이름 .gpkg 를 지우고 새로 만듦. 「다른 이름」에서 .qgz 를 고르면 옆 .gpkg(C++ 원본일 수 있음)를 빈 파일로 덮어씀 | 「같은 이름의 조사 파일이 이미 있습니다」로 거절 | `dlg_new_survey.rs:179`, `gpkg_repository.rs:61-63`, `app_state_projects.rs:122-136` |
+| 3 | **원본 조사 자료에 바로 씀**<br>고침(검수 대기) — `111f0a4` | 다각형을 닫는 순간 시작 때 읽어 둔 `문서\경주시\경주시.gpkg` 에 쓰려 함(없는 `name` 칸이라 실패, 실패를 숨기고 「저장했습니다」) | 저장할 때만 씀. 원본은 건드리지 않음 | `real_survey_actions.rs:14-26`, `gui_tab_map_canvas.rs:256` |
 | 4 | **C++ 조사 파일을 못 엶 · 파일 형식이 다름** | 자체 표(`ka_hgis_workspace_state`, JSON)만 찾아 C++ 파일은 「데이터베이스 오류」. Rust 파일에는 도형 표·.qgz 가 없음 | 도형 표 7개 + 파일 안 작업공간(qgis_projects) + .qgz | `gpkg_repository.rs:49-168`, `gui_tab_home_survey.rs:132` |
 | 5 | **제출 SHP 가 가짜** | 내 도형이 아니라 (0,0)~(100,100) 고정 네모 하나. 진짜 SHP 형식이 아니고 DBF 4바이트. 5179 변환 없음 | 조사 레이어 7종을 5179 SHP 로, 다시 열어 도형 수·좌표계 확인 | `submit_export.rs:35-41`, `shp_writer.rs:65-95` |
 | 6 | **조사도면 PDF 가 빈 네모** | 지도·글자·축척 없이 네모 5개. 도면 탭 PDF 도 같고 저장 위치를 묻지 않음 | QGIS 조판 300 DPI, 저장 창 | `sheet_pdf_export.rs:27-56`, `tab_drawing.rs:75-81` |
