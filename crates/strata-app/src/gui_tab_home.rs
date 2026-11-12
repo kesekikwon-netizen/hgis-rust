@@ -18,6 +18,8 @@ mod gui_tab_home_recent;
 mod gui_tab_home_recent_box;
 #[path = "gui_tab_home_status.rs"]
 mod gui_tab_home_status;
+#[path = "gui_tab_home_open.rs"]
+mod gui_tab_home_open;
 #[path = "gui_tab_home_survey.rs"]
 mod gui_tab_home_survey;
 

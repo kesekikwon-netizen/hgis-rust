@@ -4,6 +4,9 @@
 pub const UX_LEFT_PANEL_WIDTH: f32 = 351.0;
 pub const UX_LAYER_CARD_HEIGHT: f32 = 507.0;
 pub const UX_FILE_DRAWER_HEIGHT: f32 = 168.0;
+/// `KaLayerInformationView.cpp:18-21` labelColumnWidth — max(88, 「이름·면적」 너비 + 체크칸 + 18).
+/// 이 글꼴(10.5)에서는 뒤쪽이 88 보다 작아 88 이다.
+pub const UX_LABEL_COLUMN_WIDTH: f32 = 88.0;
 /// `KaFileBrowserPanel.cpp:92-136` — 폴더 단추 여섯 개와 목록 칸의 안내말
 pub const FILE_BTN_PC_TIP: &str = "컴퓨터 드라이브 목록으로 이동합니다";
 pub const FILE_BTN_DESK_TIP: &str = "바탕화면 폴더로 이동합니다";

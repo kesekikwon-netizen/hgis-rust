@@ -69,6 +69,8 @@ pub struct StrataAppState {
     pub theme_dirty: bool,
     /// C++ `MainWindow::m_surveyPath` — 지금 열려 있는 조사 파일(.gpkg) 경로
     pub survey_path: Option<std::path::PathBuf>,
+    /// 열린 조사 파일의 도형 표(gpkg_contents 순서)와 도형 — C++ 은 QGIS 레이어가 들고 있다.
+    pub survey_tables: Vec<strata_storage::survey_gpkg_read::SurveyFileTable>,
     pub paper_look: bool,
     pub project_title: String,
     pub is_dirty: bool,
@@ -142,7 +144,8 @@ mod tests {
         let mut app = StrataAppState::new_startup();
         assert_eq!(app.active_tab, MainTab::Home);
         assert_eq!(app.work_crs, WorkCrs::Epsg5187);
-        assert!(!app.window_title().ends_with(" *"));
+        // C++ `KaSurveyBadge.cpp:40-44` windowTitleFor — 조사가 없으면 「Strata」.
+        assert_eq!(app.window_title(), "Strata");
         assert!(app.left_layers.entries.is_empty());
 
         app.active_tab = MainTab::Drawing;
@@ -151,8 +154,12 @@ mod tests {
         assert_eq!(app.active_tool, MapToolKind::TrenchPlace);
 
         app.is_dirty = true;
-        assert!(app.window_title().ends_with("[EPSG:5187]"));
-        assert!(app.window_title().contains(" * "));
+        assert_eq!(app.window_title(), "Strata *");
+        app.survey_path = Some(std::path::PathBuf::from("병산동.gpkg"));
+        assert_eq!(app.window_title(), "병산동 * - Strata");
+        app.is_dirty = false;
+        assert_eq!(app.window_title(), "병산동 - Strata");
+        app.survey_path = None;
 
         app.open_studio_tab(MainTab::Drawing);
         assert_eq!(app.active_tab, MainTab::Drawing);

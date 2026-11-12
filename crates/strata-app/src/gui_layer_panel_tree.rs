@@ -152,7 +152,10 @@ impl StrataAppState {
                     Color32::from_rgb(95, 94, 88),
                 );
                 hp.text(
-                    Pos2::new(hdr_r.left() + avail_w - 42.0, hdr_r.center().y),
+                    Pos2::new(
+                        hdr_r.right() - super::gui_layer_panel_consts::UX_LABEL_COLUMN_WIDTH + 4.0,
+                        hdr_r.center().y,
+                    ),
                     egui::Align2::LEFT_CENTER,
                     "글자",
                     egui::FontId::proportional(11.0),

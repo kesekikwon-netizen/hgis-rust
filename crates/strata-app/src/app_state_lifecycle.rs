@@ -52,6 +52,7 @@ impl StrataAppState {
             theme: ThemeTokens::for_options(&default_opts),
             theme_dirty: true,
             survey_path: None,
+            survey_tables: Vec::new(),
             paper_look: true,
             project_title: "새 고고학 지표·시굴조사".to_owned(),
             is_dirty: false,
@@ -96,15 +97,22 @@ impl StrataAppState {
         }
     }
 
+    /// C++ `MainWindowSession.cpp:1327-1335` refreshWindowTitle + `KaSurveyBadge.cpp:40-44`
+    /// windowTitleFor — 「<조사 파일 이름>[ *] - Strata」, 조사가 없으면 「Strata[ *]」.
     #[must_use]
     pub fn window_title(&self) -> String {
-        let dirty_suffix = if self.is_dirty { " *" } else { "" };
-        format!(
-            "Strata (ka-hgis) — {}{} [{}]",
-            self.project_title,
-            dirty_suffix,
-            self.work_crs.auth_id()
-        )
+        let star = if self.is_dirty { " *" } else { "" };
+        let name = self
+            .survey_path
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .map(|s| s.to_string_lossy().trim().to_owned())
+            .unwrap_or_default();
+        if name.is_empty() {
+            format!("Strata{star}")
+        } else {
+            format!("{name}{star} - Strata")
+        }
     }
 
     pub fn trigger_map_ribbon_tool(&mut self, tool: MapToolKind) {

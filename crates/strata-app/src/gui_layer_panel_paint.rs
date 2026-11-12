@@ -1,16 +1,19 @@
 //! 레이어 한 줄에 쓰는 체크상자·기호 견본을 그린다.
 
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum SwatchKind {
     CadastralOutline,
-    TrenchBeige,
     RasterChecker,
-    SurveyOrange,
-    DistanceBox,
     BufferBand,
     GroupFolder,
     HeritageSub,
+    /// 조사 면 레이어 — C++ `LayerStyleDefaults::forKey` 채움(투명도 포함)·외곽선.
+    DomainFill { fill: Color32, stroke: Color32 },
+    /// 조사 선 레이어 — 단면선은 흰 테두리(casing) 위에 색 선.
+    DomainLine { stroke: Color32, casing: bool },
+    /// 조사 점 레이어 — 채운 원과 테두리.
+    DomainMarker { fill: Color32, stroke: Color32 },
 }
 pub(crate) fn paint_checkbox_state(p: &egui::Painter, center: Pos2, check_state: u8) {
     let r = Rect::from_center_size(center, Vec2::new(13.0, 13.0));
@@ -60,15 +63,6 @@ pub(crate) fn paint_symbol_swatch(p: &egui::Painter, center: Pos2, kind: SwatchK
                 egui::StrokeKind::Middle,
             );
         }
-        SwatchKind::TrenchBeige => {
-            p.rect_filled(r, 1.0, Color32::from_rgb(237, 226, 216));
-            p.rect_stroke(
-                r,
-                1.0,
-                Stroke::new(1.1, Color32::from_rgb(38, 37, 34)),
-                egui::StrokeKind::Middle,
-            );
-        }
         SwatchKind::RasterChecker => {
             let s = 4.5;
             let tl = Pos2::new(center.x - s, center.y - s);
@@ -91,24 +85,6 @@ pub(crate) fn paint_symbol_swatch(p: &egui::Painter, center: Pos2, kind: SwatchK
                 Rect::from_min_size(tl + Vec2::new(s, s), Vec2::new(s, s)),
                 0.0,
                 Color32::from_rgb(135, 168, 210),
-            );
-        }
-        SwatchKind::SurveyOrange => {
-            p.rect_filled(r, 1.0, Color32::from_rgb(245, 208, 182));
-            p.rect_stroke(
-                r,
-                1.0,
-                Stroke::new(2.0, Color32::from_rgb(214, 78, 22)),
-                egui::StrokeKind::Middle,
-            );
-        }
-        SwatchKind::DistanceBox => {
-            p.rect_filled(r, 1.0, Color32::WHITE);
-            p.rect_stroke(
-                r,
-                1.0,
-                Stroke::new(1.1, Color32::from_rgb(38, 37, 34)),
-                egui::StrokeKind::Middle,
             );
         }
         SwatchKind::BufferBand => {
@@ -149,6 +125,22 @@ pub(crate) fn paint_symbol_swatch(p: &egui::Painter, center: Pos2, kind: SwatchK
                 Stroke::new(1.0, Color32::from_rgb(212, 209, 200)),
                 egui::StrokeKind::Middle,
             );
+        }
+        SwatchKind::DomainFill { fill, stroke } => {
+            p.rect_filled(r, 1.0, Color32::WHITE);
+            p.rect_filled(r, 1.0, fill);
+            p.rect_stroke(r, 1.0, Stroke::new(1.6, stroke), egui::StrokeKind::Middle);
+        }
+        SwatchKind::DomainLine { stroke, casing } => {
+            let ends = [Pos2::new(r.left(), center.y), Pos2::new(r.right(), center.y)];
+            if casing {
+                p.line_segment(ends, Stroke::new(5.0, Color32::WHITE));
+            }
+            p.line_segment(ends, Stroke::new(3.0, stroke));
+        }
+        SwatchKind::DomainMarker { fill, stroke } => {
+            p.circle_filled(center, 5.0, fill);
+            p.circle_stroke(center, 5.0, Stroke::new(1.2, stroke));
         }
     }
 }

@@ -38,7 +38,8 @@ impl SnapRequest {
             if raw.is_empty() {
                 continue;
             }
-            match raw.split_once(':') {
+            // 마지막 ':' 로 나눈다 — 「@open=C:...」 처럼 경로에 ':' 가 있어도 된다.
+            match raw.rsplit_once(':') {
                 Some((act, name)) if !act.is_empty() => {
                     list.push(SnapStep {
                         action: Some(act.to_owned()),

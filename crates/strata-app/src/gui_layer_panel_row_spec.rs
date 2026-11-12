@@ -8,7 +8,7 @@
 use eframe::egui::Color32;
 use strata_types::schema::LegendGroup;
 
-use super::gui_layer_panel_paint::SwatchKind;
+pub(crate) use super::gui_layer_panel_paint::SwatchKind;
 use crate::left_layer_panel::{LayerTreeEntry, LeftLayerPanel};
 
 /// 한 행을 그리는 데 필요한 값.
@@ -42,16 +42,41 @@ fn swatch_for(entry: &LayerTreeEntry) -> SwatchKind {
     if entry.group == LegendGroup::Basemap {
         return SwatchKind::RasterChecker;
     }
+    // C++ `LayerStyleDefaults.cpp:42-86` forKey — 조사 레이어 기본 색(다른 조사 표는 기본 파랑).
+    let rgba = Color32::from_rgba_unmultiplied;
+    let rgb = Color32::from_rgb;
     match entry.layer_key.as_str() {
-        "survey_area" => SwatchKind::SurveyOrange,
-        "trial_trench" => SwatchKind::TrenchBeige,
-        "control_points" => SwatchKind::DistanceBox,
+        "survey_area" => SwatchKind::DomainFill { fill: rgba(180, 83, 9, 70), stroke: rgb(146, 64, 14) },
+        "feature_poly" => SwatchKind::DomainFill { fill: rgba(22, 163, 74, 90), stroke: rgb(17, 94, 44) },
+        "feature_line" => SwatchKind::DomainLine { stroke: rgb(202, 138, 4), casing: false },
+        "section_line" => SwatchKind::DomainLine { stroke: rgb(190, 24, 93), casing: true },
+        "control_points" => SwatchKind::DomainMarker { fill: rgb(234, 179, 8), stroke: rgb(161, 98, 7) },
+        "artifact_point" => SwatchKind::DomainMarker { fill: rgb(185, 28, 28), stroke: rgb(127, 29, 29) },
+        "trial_trench" => SwatchKind::DomainFill { fill: rgba(220, 38, 38, 18), stroke: rgb(220, 38, 38) },
         // 버퍼 반경 레이어(C++ 「주변 500m」)는 띠 견본을 쓴다.
         k if k.contains("buffer") => SwatchKind::BufferBand,
         // 지정유산 하위 항목은 흰 견본(C++ 트리의 하위 노드).
         k if k.contains("heritage") => SwatchKind::HeritageSub,
+        _ if entry.group == LegendGroup::SurveyData => {
+            SwatchKind::DomainFill { fill: rgba(37, 99, 235, 90), stroke: rgb(37, 99, 235) }
+        }
         _ => SwatchKind::RasterChecker,
     }
+}
+
+/// 조사 레이어의 「글자」 칸 이름 — C++ `LayerLabelControls.cpp:140-145` 가 새 레이어 기본
+/// 라벨(`LayerOps.cpp:227-233` applyDomainDrawStyle)에 붙이는 이름: 시굴격자는 이름+면적,
+/// 다른 면은 면적, 선·점은 이름.
+fn label_caption(entry: &LayerTreeEntry) -> Option<&'static str> {
+    if entry.group != LegendGroup::SurveyData {
+        return None;
+    }
+    Some(match entry.layer_key.as_str() {
+        "trial_trench" => "이름·면적",
+        "survey_area" | "feature_poly" => "면적",
+        k if k.starts_with("user_poly_") => "면적",
+        _ => "이름",
+    })
 }
 
 /// 패널의 실제 레이어 목록에서 행 목록을 만든다.
@@ -108,7 +133,7 @@ pub fn layer_rows(
             swatch: swatch_for(entry),
             name: entry.label_ko.clone(),
             show_count: entry.feature_count > 0,
-            right_label: None,
+            right_label: label_caption(entry),
             alt_bg: false,
             ink,
         });

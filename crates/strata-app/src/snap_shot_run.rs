@@ -116,6 +116,10 @@ impl StrataAppState {
             // 뒤에서 받는 지적 타일이 올 때까지 한 단계 더 기다린다.
             "@wait" => {}
             _ if action.starts_with("@goto=") => self.snap_goto(&action["@goto=".len()..]),
+            // 「열기」와 같이 그 파일을 연다 — 임시 폴더 자료만 쓴다.
+            _ if action.starts_with("@open=") => {
+                self.open_survey_gpkg(std::path::Path::new(&action["@open=".len()..]));
+            }
             _ => self.handle_ribbon_click(action),
         }
     }

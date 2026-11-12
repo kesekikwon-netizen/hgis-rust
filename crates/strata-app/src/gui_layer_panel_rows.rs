@@ -51,7 +51,7 @@ impl StrataAppState {
                 egui::Vec2::new(avail_w, band_h + row_h),
                 egui::Sense::click(),
             );
-            let right_col_x = full_r.right() - 52.0;
+            let right_col_x = full_r.right() - super::gui_layer_panel_consts::UX_LABEL_COLUMN_WIDTH;
             let is_section = !spec.section.is_empty();
 
             if !is_section {

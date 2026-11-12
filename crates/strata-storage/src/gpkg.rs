@@ -19,3 +19,11 @@ mod gpkg_project_tests;
 #[cfg(test)]
 #[path = "survey_gpkg_create_tests.rs"]
 mod survey_gpkg_create_tests;
+
+#[cfg(test)]
+#[path = "gpkg_geometry_tests.rs"]
+mod gpkg_geometry_tests;
+
+#[cfg(test)]
+#[path = "survey_gpkg_read_tests.rs"]
+mod survey_gpkg_read_tests;
