@@ -17,6 +17,9 @@ use crate::dialogs_borehole_spec::{
 
 pub use crate::dialogs_borehole_spec::{BoreholeDialogAction, BoreholeDialogState};
 
+/// Tooltip of a control not ported yet (format of `modal_export_footer.rs:9`).
+const DEFERRED_P1: &str = "아직 Rust 판에서 연결하지 않았습니다 (지시 P1)";
+
 /// C++ `KaBoreholeDialog.cpp:37-64` `makeMapCard` 의 Strata 테마 카드 한 장.
 fn render_map_card(
     ui: &mut egui::Ui,
@@ -65,6 +68,7 @@ fn render_map_card(
 /// `state` 는 앱이 들고 있는 창 상태다. `loaded_count` 는 지금 적재된 시추공 수,
 /// `can_run` 은 조사 폴더가 준비됐는지다. 돌려주는 [`BoreholeDialogAction`] 이 있으면
 /// 호출부가 실제 동작(받기/재생성/조판 열기)을 한다.
+/// F1c-1: rebuild is disabled until P1, so only fetch and layout come back.
 pub fn render_borehole_dialog(
     ctx: &egui::Context,
     state: &mut BoreholeDialogState,
@@ -92,7 +96,7 @@ pub fn render_borehole_dialog(
             ui.add_space(8.0);
             render_map_cards(ui, state);
             ui.add_space(10.0);
-            action = render_action_buttons(ui, state, loaded_count, can_run);
+            action = render_action_buttons(ui, state, can_run);
             if !can_run {
                 ui.add_space(6.0);
                 ui.label(
@@ -172,7 +176,6 @@ fn render_map_cards(ui: &mut egui::Ui, state: &mut BoreholeDialogState) {
 fn render_action_buttons(
     ui: &mut egui::Ui,
     state: &BoreholeDialogState,
-    loaded_count: usize,
     can_run: bool,
 ) -> Option<BoreholeDialogAction> {
     let mut action = None;
@@ -201,19 +204,18 @@ fn render_action_buttons(
                 radius_meters: state.radius_meters,
             });
         }
-        if ui
-            .add_enabled(
-                can_run && loaded_count > 0,
-                egui::Button::new(egui::RichText::new(BOREHOLE_BTN_REBUILD).size(12.5))
-                    .fill(Color32::WHITE)
-                    .stroke(Stroke::new(1.0, Color32::from_rgb(0x91, 0x8E, 0x86)))
-                    .corner_radius(6.0)
-                    .min_size(Vec2::new(rebuild_w, 34.0)),
-            )
-            .clicked()
-        {
-            action = Some(BoreholeDialogAction::Regenerate);
-        }
+        // F1c-1: rebuilt maps from the synthetic paleo boreholes into the survey folder
+        // (GeoInfoBoreholeMaps.cpp:247-250); cpp KaBoreholeDialog.cpp:170-181 rebuilds from real
+        // loaded logs — disabled until P1.
+        ui.add_enabled(
+            false,
+            egui::Button::new(egui::RichText::new(BOREHOLE_BTN_REBUILD).size(12.5))
+                .fill(Color32::WHITE)
+                .stroke(Stroke::new(1.0, Color32::from_rgb(0x91, 0x8E, 0x86)))
+                .corner_radius(6.0)
+                .min_size(Vec2::new(rebuild_w, 34.0)),
+        )
+        .on_disabled_hover_text(DEFERRED_P1);
         if ui
             .add(
                 egui::Button::new(egui::RichText::new(BOREHOLE_BTN_LAYOUT).size(12.5))
@@ -235,8 +237,6 @@ fn render_action_buttons(
 pub struct BoreholeDialogController {
     pub state: BoreholeDialogState,
     pub open: bool,
-    /// 마지막으로 만든 도면 수. C++ `generateBoreholeGisMaps` 의 반환값과 같다.
-    pub last_created_count: usize,
 }
 
 impl BoreholeDialogController {
@@ -245,7 +245,6 @@ impl BoreholeDialogController {
         Self {
             state: BoreholeDialogState::default(),
             open: false,
-            last_created_count: 0,
         }
     }
 }
@@ -290,7 +289,6 @@ mod tests {
     fn test_borehole_dialog_controller_defaults_to_closed_cpp_options() {
         let c = BoreholeDialogController::new();
         assert!(!c.open);
-        assert_eq!(c.last_created_count, 0);
         assert_eq!(c.state, BoreholeDialogState::default());
         assert_eq!(c.state.radius_meters, 5000);
         assert!(c.state.groundwater_map);

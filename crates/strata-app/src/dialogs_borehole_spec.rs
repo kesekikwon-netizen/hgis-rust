@@ -95,21 +95,6 @@ impl BoreholeDialogState {
             .position(|(meters, _)| *meters == self.radius_meters)
             .unwrap_or(1)
     }
-
-    /// C++ `KaBoreholeDialog.cpp:149-160` `readOpts()` — 다섯 체크를 읽어 엔진 옵션을 만든다.
-    /// 4-A 깊이와 4-B 해발고도는 한 카드의 두 체크이므로 서로 독립이다.
-    #[must_use]
-    pub fn to_map_options(&self) -> strata_paleo::borehole_map_options::BoreholeMapOptions {
-        strata_paleo::borehole_map_options::BoreholeMapOptions {
-            radius_meters: self.radius_meters,
-            marker_map: self.marker_map,
-            alluvial_isopach_map: self.alluvial_isopach_map,
-            fill_thickness_map: self.fill_thickness_map,
-            bedrock_depth_map: self.bedrock_depth_map,
-            bedrock_elev_map: self.bedrock_elev_map,
-            groundwater_map: self.groundwater_map,
-        }
-    }
 }
 
 /// C++ `KaBoreholeDialog.cpp:161-166` `refreshCounts()` — 지금 적재된 시추공 수를 보여 준다.
@@ -122,13 +107,11 @@ pub fn borehole_count_text(count: usize) -> String {
     }
 }
 
-/// 창에서 누른 단추. C++ 의 세 `connect` 와 1:1.
+/// Button pressed in the window (cpp connects KaBoreholeDialog.cpp:169-192; rebuild is disabled until P1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoreholeDialogAction {
     /// 「시추자료 받기 및 선택 도면 생성」 — 반경을 넘겨 수집을 시작한다.
     FetchAndGenerate { radius_meters: i32 },
-    /// 「적재된 시추공으로 선택 도면 다시 생성」 — 이미 받은 주상도로 도면만 다시 만든다.
-    Regenerate,
     /// 「도면 조판 열기」 — 읽은 옵션을 저장하고 도면 스튜디오로 간다.
     OpenLayout,
 }
@@ -184,17 +167,13 @@ mod tests {
         assert!(BOREHOLE_MAP_CARDS[4].0.contains("평균 지하수위(GL-m)"));
     }
 
-    /// 세 단추는 서로 다른 동작을 가리킨다(`KaBoreholeDialog.cpp:169-192`).
+    /// The two enabled buttons point to different actions (`KaBoreholeDialog.cpp:169-192`).
     #[test]
     fn test_borehole_actions_are_distinct() {
         assert_ne!(
             BoreholeDialogAction::FetchAndGenerate {
                 radius_meters: 5000
             },
-            BoreholeDialogAction::Regenerate
-        );
-        assert_ne!(
-            BoreholeDialogAction::Regenerate,
             BoreholeDialogAction::OpenLayout
         );
     }

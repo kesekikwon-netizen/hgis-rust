@@ -47,10 +47,10 @@ pub fn v15_borehole_ribbon_and_dialog_gate() -> GateResult {
     let opened_ok = app.open_borehole_dialog() && app.borehole_dialog.open;
 
     // 세 단추가 서로 다른 동작을 가리킨다(`KaBoreholeDialog.cpp:169-192`).
+    // F1c-1: the rebuild button is disabled until P1, so two actions remain.
     let actions_ok = BoreholeDialogAction::FetchAndGenerate {
         radius_meters: 5000,
-    } != BoreholeDialogAction::Regenerate
-        && BoreholeDialogAction::Regenerate != BoreholeDialogAction::OpenLayout;
+    } != BoreholeDialogAction::OpenLayout;
 
     GateResult {
         gate_id: "V15",

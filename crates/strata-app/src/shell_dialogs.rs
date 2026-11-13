@@ -8,6 +8,7 @@ use crate::dialogs_modal::{ActiveModalDialog};
 impl StrataAppState {
     /// C++ `KaBoreholeDialog::openBoreholeMapDialog` 의 매 프레임 화면 (`d7afcc8`).
     /// 창은 비모달이라 다른 작업을 막지 않는다. 세 단추의 동작은 여기서 이어 받는다.
+    /// F1c-1: the rebuild button is disabled until P1; only two actions arrive here.
     pub(crate) fn render_borehole_dialog_frame(&mut self, ctx: &egui::Context) {
         if !self.borehole_dialog.open {
             return;
@@ -41,69 +42,11 @@ impl StrataAppState {
                 );
                 self.open_studio_tab(MainTab::Paleo);
             }
-            // 이미 받은 주상도로 도면만 다시 만든다(`KaBoreholeDialog.cpp:170-181`).
-            // C++ `GeoInfoBoreholeService::generateBoreholeGisMaps` 를 그대로 부른다.
-            BoreholeDialogAction::Regenerate => {
-                let created = self.regenerate_borehole_maps();
-                self.borehole_dialog.last_created_count = created;
-                if created == 0 {
-                    self.status_bar_hint =
-                        "적재된 시추공이 2공 미만이라 시추 도면을 만들지 않았습니다.".to_owned();
-                } else {
-                    self.status_bar_hint = format!(
-                        "적재된 시추공 {loaded_count}공으로 시추 도면 {created}장을 다시 만들었습니다."
-                    );
-                }
-                self.open_studio_tab(MainTab::Paleo);
-            }
             // 옵션을 읽고 도면 스튜디오로 간다(`KaBoreholeDialog.cpp:182-186`).
             BoreholeDialogAction::OpenLayout => {
                 self.borehole_dialog.open = false;
                 self.open_studio_tab(MainTab::Drawing);
             }
-        }
-    }
-    /// C++ `GeoInfoBoreholeService::generateBoreholeGisMaps` (`GeoInfoBoreholeMaps.cpp:179-294`)
-    /// 를 지금 적재된 주상도로 다시 부른다.
-    ///
-    /// 돌려주는 값은 C++ `int created` 와 같은 "만든 도면 수"다. 조사 폴더가 없거나
-    /// 적재된 시추공이 2공 미만이면 아무것도 만들지 않고 0 을 돌려준다
-    /// (`GeoInfoBoreholeMaps.cpp:226` `xs.size() < 2` 조기 반환).
-    pub(crate) fn regenerate_borehole_maps(&mut self) -> usize {
-        let Some(survey_path) = self.survey_path.clone() else {
-            return 0;
-        };
-        let Some(output) = self.paleo_3d.last_paleo_output.as_ref() else {
-            return 0;
-        };
-        if output.parsed_boreholes.len() < strata_paleo::borehole_maps::BOREHOLE_MIN_POINTS {
-            return 0;
-        }
-        // C++ `:247-250` — 조사 폴더 아래 `지형분석/` 에 쓴다.
-        let out_dir = survey_path
-            .parent()
-            .map(|p| p.join("지형분석"))
-            .unwrap_or_else(|| survey_path.clone());
-        let holes = crate::borehole_bridge::borehole_records_from_parsed(&output.parsed_boreholes);
-        let opts = self.borehole_dialog.state.to_map_options();
-        match strata_paleo::borehole_maps::generate_borehole_gis_maps(
-            &holes,
-            &[],
-            self.work_crs,
-            &out_dir,
-            &opts,
-        ) {
-            Ok(bundle) => {
-                let created = bundle.created_count;
-                // 파일만 만들고 끝내면 지도에 색이 안 칠해진다. 화면에 그릴 격자·램프를
-                // 함께 들고 있어야 `gui_tab_paleo` 가 실제로 칠할 수 있다.
-                if !bundle.painted_grids.is_empty() {
-                    self.paleo_3d.shown_borehole_map_idx = Some(0);
-                }
-                self.paleo_3d.last_borehole_maps = Some(bundle);
-                created
-            }
-            Err(_) => 0,
         }
     }
     /// `MainWindowFiles.cpp:259-289` `tryAddDroppedPaths` — 창에 끌어 놓은 파일을
@@ -241,3 +184,7 @@ impl StrataAppState {
             });
     }
 }
+
+#[cfg(test)]
+#[path = "shell_dialogs_tests.rs"]
+mod tests;
