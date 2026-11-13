@@ -144,16 +144,23 @@ impl StrataAppState {
             // 그리기 줄의 「유구 그리기」, 지도 가운데에서 dx;dy m 떨어진 자리 누름, Enter.
             "@draw_poly" => self.start_edit_feature_poly(),
             "@draw_area" => self.start_edit_survey_area(),
-            // 열린 「이름·번호」 창에 종류(이름);시대를 적고(번호는 다음 번호로), 「저장」.
+            // 열린 「이름·번호」 창에 종류(이름);시대[;번호]를 적고(번호를 안 주면 다음 번호), 「저장」·「건너뛰기」.
             _ if action.starts_with("@form=") => {
-                let mut parts = action["@form=".len()..].splitn(2, ';');
+                let mut parts = action["@form=".len()..].splitn(3, ';');
                 if let Some(form) = self.home_map.feature_form.as_mut() {
                     form.name = parts.next().unwrap_or_default().to_owned();
                     form.period = parts.next().unwrap_or_default().to_owned();
+                    if let Some(number) = parts.next() {
+                        form.number = number.to_owned();
+                        form.number_typed = true;
+                    }
                     form.update_number_hint();
                 }
             }
             "@form_save" => self.save_feature_form(),
+            "@form_skip" => self.skip_feature_form(),
+            // 「조사구역 그리기 설정」 창의 「그리기 시작」.
+            "@area_setup_ok" => self.accept_survey_area_setup(),
             "@sketch_finish" => self.sketch_finish(),
             _ if action.starts_with("@sketch=") => {
                 let v: Vec<f64> = action["@sketch=".len()..].split(';').filter_map(|s| s.trim().parse().ok()).collect();

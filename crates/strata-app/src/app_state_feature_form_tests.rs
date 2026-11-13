@@ -134,3 +134,24 @@ fn shape_and_values_undo_as_one_step() {
     assert_eq!(before - after, 1);
     assert_eq!(app.status_left_message(), "이전 상태로 되돌렸습니다.");
 }
+
+/// 옛 조사 파일은 첫 「저장」에서 기록 항목(uid·created_at·updated_at)을 얻고(migrateGenerationCopy), C++ 은 저장한 사본을
+/// 다시 붙이므로(remountCopiedSurveyLayers) 그다음 그린 도형에는 그 값이 찍힌다.
+#[test]
+fn shapes_drawn_after_the_first_save_get_record_stamps() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (mut app, path) = opened_demo(dir.path());
+    draw_pit(&mut app);
+    app.skip_feature_form();
+    assert!(app.save_survey_project());
+    draw_pit(&mut app);
+    app.home_map.feature_form.as_mut().expect("form").name = "수혈".to_owned();
+    app.save_feature_form();
+    assert!(app.save_survey_project());
+    let conn = rusqlite::Connection::open(&path).expect("open");
+    let stamps: (Option<String>, Option<String>, Option<String>) = conn
+        .query_row("SELECT uid, created_at, updated_at FROM feature_poly ORDER BY fid DESC LIMIT 1", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .expect("stamps");
+    assert!(stamps.0.as_ref().is_some_and(|s| s.len() == 36), "uid {stamps:?}");
+    assert!(stamps.1.is_some_and(|s| !s.is_empty()) && stamps.2.is_some_and(|s| !s.is_empty()), "times");
+}

@@ -18,6 +18,10 @@ pub const KA_STATUS_SCALE_PRESETS: [u32; 13] = [
 impl StrataAppState {
     /// C++ `MainWindow.cpp` + `MainWindowRibbon.cpp` + `KaShellFocus.h` 단축키 1:1 처리
     pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
+        // C++ 모달 창(KaFeatureFormDialog·조사구역 설정) 뒤에서는 주 창 단축키가 듣지 않는다 — 창이 Enter·Esc 를 맡는다.
+        if self.home_map.feature_form.is_some() || self.home_map.survey_area_setup.is_some() {
+            return;
+        }
         let wants_kb = ctx.wants_keyboard_input();
         let mut save_requested: Option<bool> = None;
         let mut open_requested = false;
@@ -27,7 +31,7 @@ impl StrataAppState {
         ctx.input(|i| {
             if capture && i.key_pressed(egui::Key::Escape) {
                 self.sketch_cancel();
-            } else if i.key_pressed(egui::Key::Escape) && self.home_map.survey_area_setup.is_none() && self.home_map.feature_form.is_none() {
+            } else if i.key_pressed(egui::Key::Escape) {
                 self.home_map.cad.on_escape(&mut self.home_map.scene);
                 self.modals.active = None;
                 self.ribbon.sub_toolbar_visible = false;

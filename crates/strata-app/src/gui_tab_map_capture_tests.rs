@@ -41,11 +41,17 @@ impl Harness {
     }
 
     fn frame(&mut self, events: Vec<Event>) {
+        self.frame_with(events, Modifiers::default());
+    }
+
+    /// egui 는 단축키의 Ctrl 을 RawInput.modifiers 에서 읽는다.
+    fn frame_with(&mut self, events: Vec<Event>, modifiers: Modifiers) {
         self.time += 0.05;
         let raw = RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1680.0, 960.0))),
             time: Some(self.time),
             events,
+            modifiers,
             ..Default::default()
         };
         let app = &mut self.app;
@@ -177,4 +183,23 @@ fn escape_skips_the_form_and_keeps_the_tool() {
     assert!(h.app.home_map.feature_form.is_none());
     assert_eq!(h.last_ring_len(), (3, 4));
     assert_eq!(h.app.active_tool, MapToolKind::DrawPolygon);
+}
+
+/// 창이 열린 동안 Ctrl+Z·Ctrl+S 같은 주 창 단축키는 듣지 않는다(C++ 모달 창 뒤의 QShortcut) — 막 그린 도형이 지워지거나
+/// 창이 붙은 채 파일에 쓰이지 않는다.
+#[test]
+fn main_shortcuts_wait_while_the_form_is_open() {
+    let mut h = Harness::new();
+    h.three_points();
+    h.key(Key::Enter);
+    h.frame(vec![]);
+    for key in [Key::Z, Key::S] {
+        let ctrl = Modifiers::CTRL;
+        h.frame_with(vec![Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: ctrl }], ctrl);
+        h.frame_with(vec![Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers: ctrl }], ctrl);
+    }
+    assert_eq!(h.app.status_left_message(), "도형은 넣었습니다. 이름·번호를 적거나 Esc로 건너뛰세요.");
+    assert!(h.app.home_map.feature_form.is_some(), "the form stays open");
+    assert_eq!(h.last_ring_len(), (3, 4), "Ctrl+Z did not remove the shape just drawn");
+    assert!(h.app.is_dirty, "Ctrl+S did not save behind the form");
 }
