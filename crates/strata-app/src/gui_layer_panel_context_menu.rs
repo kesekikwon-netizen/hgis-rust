@@ -224,10 +224,10 @@ impl StrataAppState {
                         Some("폴리곤 묶기 — 이어 붙일 두 면을 차례로 고르세요.".to_owned());
                 }
                 "area_check" => {
-                    let n = self.home_map.real_survey.trenches.len();
-                    self.home_map.draw_guide_message = Some(format!(
-                        "「{key}」 면적·조사 비율 — 시굴격자 {n}개, 조사구역 비율 10.0%."
-                    ));
+                    // showLayerAreaSummary — C++ 은 알림 창(「면적 확인」)이다. 알림 창이 생기기 전까지 상태줄에 줄을 이어 쓴다.
+                    if let Some(text) = self.layer_area_summary(&key, is_trench_layer) {
+                        self.show_status_message(text.replace('\n', " — "));
+                    }
                 }
                 "trench_10" | "trench_2" | "trench_custom" => {
                     self.modals.active =

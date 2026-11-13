@@ -27,3 +27,12 @@ fn survey_area_contains_with_half_metre_tolerance() {
     assert!(!area.contains("POLYGON ((15 5, 25 5, 25 8, 15 8, 15 5))").expect("contains"));
     assert!(SurveyArea::new(&[], 0.5).expect("empty").is_none());
 }
+
+/// 겹친 두 네모의 합친 넓이는 겹친 곳을 한 번만 센다.
+#[test]
+fn union_area_counts_overlap_once() {
+    let a = "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))".to_owned();
+    let b = "POLYGON ((5 0, 15 0, 15 10, 5 10, 5 0))".to_owned();
+    assert!((union_area(&[a, b]).expect("union") - 150.0).abs() < 1e-9);
+    assert_eq!(union_area(&[]).expect("empty"), 0.0);
+}

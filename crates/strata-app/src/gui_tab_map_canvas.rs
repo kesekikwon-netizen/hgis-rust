@@ -44,7 +44,7 @@ impl StrataAppState {
                 .iter()
                 .map(|t| t.area_m2)
                 .sum();
-            let survey_area: f64 = self.home_map.real_survey.survey_area_m2.max(1.0);
+            let survey_area: f64 = self.trench_survey_area_m2().max(1.0);
             let ratio_pct = (trench_area / survey_area * 100.0).clamp(0.0, 100.0);
             let shape_lbl = if self.modals.trench_shape.arm_bend().is_some() {
                 self.modals.trench_shape.label_ko()

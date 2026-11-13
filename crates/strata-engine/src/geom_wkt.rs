@@ -22,6 +22,18 @@ pub fn wkt_area(wkt: &str) -> Result<f64, EngineError> {
     Ok(Geometry::new_from_wkt(wkt)?.area()?)
 }
 
+/// 도형들을 합친(unaryUnion) 넓이 — 겹친 곳은 한 번만 센다(C++ pickAutoFillArea 의 OGR Union 넓이).
+///
+/// # Errors
+/// WKT 를 읽지 못하거나 GEOS 가 합치지 못함.
+pub fn union_area(wkts: &[String]) -> Result<f64, EngineError> {
+    if wkts.is_empty() {
+        return Ok(0.0);
+    }
+    let parts = wkts.iter().map(|w| Geometry::new_from_wkt(w)).collect::<Result<Vec<_>, _>>()?;
+    Ok(Geometry::create_geometry_collection(parts)?.unary_union()?.area()?)
+}
+
 /// 조사구역들을 합쳐 허용치만큼 넓힌 면.
 pub struct SurveyArea {
     area: Geometry,

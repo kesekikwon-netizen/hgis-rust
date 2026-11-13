@@ -28,6 +28,8 @@ pub struct HomeMapTabState {
     pub files_open: bool,
     pub layer_filter: String,
     pub selected_feature_idx: Option<usize>,
+    /// 도형선택으로 고른 조사 도형(표 이름, fid) — C++ layer->selectedFeatureIds.
+    pub selected_shape: Option<(String, i64)>,
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
     /// 마우스가 지도 칸 위에 한 번이라도 왔는가 — 그 전에는 상태줄 좌표가 「X —    Y —」(KaStatusBar.cpp:173-175).
@@ -71,6 +73,7 @@ impl Default for HomeMapTabState {
             files_open: true,
             layer_filter: String::new(),
             selected_feature_idx: None,
+            selected_shape: None,
             grid_enabled: false,
             cursor_world_xy: center,
             cursor_seen: false,

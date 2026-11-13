@@ -25,6 +25,14 @@ impl StrataAppState {
         self.ribbon.sub_mode = SubToolsMode::Draw;
         self.show_status_message(DRAW_ROW_OPEN_TEXT);
     }
+
+    /// QgsMapTool::deactivate(KaCaptureMapTool.cpp:245-258) — 다른 지도 도구로 바뀌면 그리던 점을 버린다. 탭만 바꾸면
+    /// 도구가 그대로라 점이 남는다(C++ parkSketchForOtherTab). 버퍼 줄을 열어도 C++ 은 그리기 도구를 그대로 둔다.
+    pub(crate) fn drop_sketch_when_tool_changed(&mut self) {
+        if self.active_tool != strata_canvas2d::map_tools::MapToolKind::DrawPolygon {
+            self.draw_sketch.points.clear();
+        }
+    }
 }
 
 #[cfg(test)]
@@ -53,5 +61,22 @@ mod tests {
         assert_eq!(app.active_tool, MapToolKind::Pan);
         assert!(app.draw_sketch.points.is_empty());
         assert_eq!(app.status_left_message(), DRAW_ROW_OPEN_TEXT, "hideSubTools shows no message");
+    }
+
+    /// 다른 도구(도형선택)로 바꾸면 그리던 점이 없어지고, 버퍼 줄을 열거나 탭만 바꾸면 남는다(C++ 과 같다).
+    #[test]
+    fn the_sketch_lives_only_while_the_polygon_tool_is_on() {
+        let mut app = StrataAppState::new_startup();
+        app.handle_ribbon_click("그리기");
+        app.active_tool = MapToolKind::DrawPolygon;
+        app.draw_sketch.points = vec![[1.0, 2.0], [3.0, 4.0]];
+        app.handle_ribbon_click("버퍼");
+        app.active_tab = MainTab::Home;
+        app.drop_sketch_when_tool_changed();
+        assert_eq!(app.draw_sketch.points.len(), 2, "buffer row and tab switch keep the sketch");
+        app.active_tab = MainTab::Map;
+        app.handle_ribbon_click("선택");
+        app.drop_sketch_when_tool_changed();
+        assert!(app.draw_sketch.points.is_empty(), "another map tool drops it");
     }
 }

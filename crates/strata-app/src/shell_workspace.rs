@@ -12,6 +12,7 @@ impl StrataAppState {
     pub fn render_workspace_egui(&mut self, ctx: &egui::Context) -> egui::Rect {
         self.poll_debug_remote_commands(ctx);
         self.handle_cpp_keyboard_shortcuts(ctx);
+        self.drop_sketch_when_tool_changed();
 
         // C++ refreshWindowTitle(`MainWindowSession.cpp:1327-1335`) — 탭과 관계없이 조사 파일 이름.
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));

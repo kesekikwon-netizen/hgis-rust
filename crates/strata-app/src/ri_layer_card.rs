@@ -160,8 +160,8 @@ ui.horizontal_wrapped(|ui| {
         .on_hover_text("마지막 편집을 되돌립니다 (Ctrl+Z).")
         .clicked()
     {
-        self.home_map.draw_guide_message =
-            Some("마지막 편집을 되돌렸습니다.".to_owned());
+        // Ctrl+Z 와 같은 undoMapAction(예전에는 아무것도 하지 않고 「되돌렸습니다」만 띄웠다).
+        self.undo_map_action();
     }
     if ui
         .button(egui::RichText::new("도형 삭제 (Del)").size(11.0))

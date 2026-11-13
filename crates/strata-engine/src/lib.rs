@@ -15,7 +15,7 @@ mod geom_wkt;
 
 pub use crs::Transformer;
 pub use geom::{make_valid_polygon_parts, normalized_wkt, polygon_area, polygon_is_valid, polygon_perimeter, PolygonRings};
-pub use geom_wkt::{wkt_area, wkt_is_valid, SurveyArea};
+pub use geom_wkt::{union_area, wkt_area, wkt_is_valid, SurveyArea};
 
 /// 엔진 오류(PROJ·GEOS 가 돌려준 글).
 #[derive(Debug, Clone, PartialEq, Eq)]

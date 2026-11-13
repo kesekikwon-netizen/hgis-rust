@@ -41,8 +41,8 @@ if manual {
     let trench_count = app.home_map.real_survey.trenches.len().max(1);
     let total_trench_area: f64 =
         app.home_map.real_survey.trenches.iter().map(|t| t.area_m2).sum();
-    let survey_area: f64 =
-        app.home_map.real_survey.survey_area_m2.max(1.0);
+    // pickAutoFillArea — 고른(없으면 fid 가 가장 큰) 조사구역의 넓이, 열어 둔 조사 표에서.
+    let survey_area: f64 = app.trench_survey_area_m2().max(1.0);
     let ratio_pct =
         (total_trench_area / survey_area * 100.0).clamp(0.0, 100.0);
     let shape_desc = if app.modals.trench_shape.arm_bend().is_some() {
