@@ -5,13 +5,11 @@
 use super::*;
 use crate::layer_menu_label::{describe_label, LabelSetting};
 
-fn input(key: &str, geom: Option<MenuGeom>, reference: bool) -> LayerMenuInput<'static> {
-    let key: &'static str = Box::leak(key.to_owned().into_boxed_str());
+fn input(key: &str, geom: Option<MenuGeom>, reference: bool) -> LayerMenuInput {
     let vector = geom.is_some();
     let fields: Vec<String> = ["fid", "kind", "period", "feature_no", "note"].iter().map(|s| (*s).to_owned()).collect();
     let label = describe_label(&LabelSetting::Area(None), &fields, vector, geom == Some(MenuGeom::Polygon), key, false);
     LayerMenuInput {
-        layer_key: key,
         kind: menu_kind(key, vector, reference),
         vector,
         valid: true,

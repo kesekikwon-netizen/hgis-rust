@@ -55,7 +55,7 @@ impl StrataAppState {
                 self.on_layer_row_clicked(&spec.name, full_r, &resp, right_col_x);
             }
             if resp.secondary_clicked() {
-                self.on_layer_row_secondary(&spec.name, full_r, &resp);
+                self.on_layer_row_secondary(spec, full_r, &resp, band_h);
             }
             if resp.double_clicked() {
                 self.on_layer_row_double_clicked(&spec.name);
@@ -155,6 +155,11 @@ impl StrataAppState {
                 );
             }
         }
+        // 목록의 빈 곳 우클릭 — 레이어 아닌 줄 메뉴(:195-213).
+        let (_, blank) = ui.allocate_exact_size(egui::Vec2::new(avail_w, ui.available_height().max(24.0)), egui::Sense::click());
+        if let (true, Some(at)) = (blank.secondary_clicked(), blank.interact_pointer_pos()) {
+            self.open_blank_layer_menu(at);
+        }
     }
 
     /// 행 클릭 — 왼쪽 체크박스는 표시 토글, 오른쪽 칸은 라벨 토글, 나머지는 선택.
@@ -189,16 +194,28 @@ impl StrataAppState {
         }
     }
 
-    /// 우클릭 — C++ `MainWindowContextMenus.cpp:176-448` layerContextMenu.
-    fn on_layer_row_secondary(&mut self, name: &str, full_r: Rect, resp: &egui::Response) {
-        let anchor = resp
-            .interact_pointer_pos()
-            .unwrap_or_else(|| full_r.center());
-        self.right_inspector.selected_layer_key = Some(name.to_owned());
+    /// 우클릭 — C++ `MainWindowContextMenus.cpp:176-448`. 줄을 먼저 현재 레이어로 하고(:218-219) 그 layer_key 로 메뉴를 연다.
+    /// 줄 위 묶음 띠를 누르면 묶음 머리 메뉴(:195-213).
+    fn on_layer_row_secondary(&mut self, spec: &LayerRowSpec, full_r: Rect, resp: &egui::Response, band_h: f32) {
+        let anchor = resp.interact_pointer_pos().unwrap_or_else(|| full_r.center());
         self.layer_context_menu_open = true;
         self.layer_context_menu_pos = [anchor.x, anchor.y];
-        self.layer_context_menu_key = Some(name.to_owned());
-        self.layer_menu_sub = 0;
+        if anchor.y < full_r.top() + band_h {
+            self.layer_context_menu_key = None;
+            self.home_map.layer_menu_group = Some(spec.group);
+        } else {
+            self.right_inspector.selected_layer_key = Some(spec.name.clone());
+            self.layer_context_menu_key = Some(spec.key.clone());
+            self.home_map.layer_menu_group = None;
+        }
+    }
+
+    /// 목록의 빈 곳 우클릭 — 레이어 아닌 줄 메뉴(「참고 자료 불러오기…」).
+    pub(crate) fn open_blank_layer_menu(&mut self, at: egui::Pos2) {
+        self.layer_context_menu_open = true;
+        self.layer_context_menu_pos = [at.x, at.y];
+        self.layer_context_menu_key = None;
+        self.home_map.layer_menu_group = None;
     }
 
     /// 더블클릭 — 면·외곽선 색 (`KaDrawingStudio.cpp:738-744`).

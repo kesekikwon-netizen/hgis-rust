@@ -50,7 +50,7 @@ impl StrataAppState {
     }
 
     /// 「선택한 레이어로 이동」 — 조사 표는 도형 범위로, 배경지도·지적·참조 그림은 1:50,000 로.
-    fn zoom_to_current_legend_layer(&mut self) {
+    pub(crate) fn zoom_to_current_legend_layer(&mut self) {
         let Some(entry) = self.current_legend_layer().cloned() else { return };
         let is_raster = matches!(entry.group, LegendGroup::Basemap | LegendGroup::Cadastral | LegendGroup::ReferenceMap);
         let ext = self

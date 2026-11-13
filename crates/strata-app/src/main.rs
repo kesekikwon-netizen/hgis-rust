@@ -171,10 +171,11 @@ mod dlg_feature_record_figure;
 mod feature_card;
 mod app_state_feature_card;
 mod ri_attr_card_rows;
-#[allow(dead_code)] // CM2a-1b 의 메뉴 그리기가 붙으면 지운다
 mod layer_menu_label;
-#[allow(dead_code)] // CM2a-1b 의 메뉴 그리기가 붙으면 지운다
+mod snap_shot_steps;
 mod layer_menu_model;
+mod layer_menu_input;
+mod menu_popup;
 mod user_settings;
 mod basemap_cadastral_jobs;
 mod basemap_fetch;

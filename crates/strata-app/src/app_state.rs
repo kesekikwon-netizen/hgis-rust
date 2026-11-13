@@ -61,7 +61,6 @@ pub struct StrataAppState {
     pub layer_context_menu_pos: [f32; 2],
     pub layer_context_menu_key: Option<String>,
     /// 라벨 하위 메뉴 펼침 상태 (라벨·명칭 속성 / 투명도 / 깨진 한글)
-    pub layer_menu_sub: u8,
     // MainWindowFiles.cpp:259-289 — 파일 끌어 놓기
     pub last_drop_message: Option<String>,
     /// 종료 확인 (KaClosePrompt.cpp)

@@ -23,6 +23,10 @@ pub(crate) struct LayerRowSpec {
     pub swatch: SwatchKind,
     /// 화면에 보이는 이름(한국어).
     pub name: String,
+    /// 그 레이어의 layer_key(메뉴·동작은 이름이 아니라 이것으로).
+    pub key: String,
+    /// 묶음(띠 우클릭 = 묶음 머리 메뉴).
+    pub group: LegendGroup,
     /// 오른쪽에 셀 개수 배지를 그릴지.
     pub show_count: bool,
     /// 그 레이어의 도형 수(이름이 같은 레이어가 있어도 행마다 제 수).
@@ -111,6 +115,8 @@ pub fn layer_rows(panel: &LeftLayerPanel, dark: Color32, purple_leaf: Color32) -
             arrow: None,
             swatch: swatch_for(entry),
             name: entry.label_ko.clone(),
+            key: entry.layer_key.clone(),
+            group,
             show_count: entry.feature_count > 0,
             count: entry.feature_count,
             right_label: label_caption(entry),

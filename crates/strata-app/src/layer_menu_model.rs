@@ -60,8 +60,7 @@ pub(crate) enum MenuEntry {
 
 /// 메뉴를 만들 때 보는 레이어 상태.
 #[derive(Debug, Clone)]
-pub(crate) struct LayerMenuInput<'a> {
-    pub(crate) layer_key: &'a str,
+pub(crate) struct LayerMenuInput {
     pub(crate) kind: LayerMenuKind,
     pub(crate) vector: bool,
     pub(crate) valid: bool,
@@ -139,7 +138,7 @@ pub(crate) fn collapse_separators(entries: Vec<MenuEntry>) -> Vec<MenuEntry> {
 }
 
 /// 「표시할 항목」 — 항목이 10개를 넘으면 「항목 1–10」 묶음, 90개마다 「다음 항목…」(:311-325).
-fn field_rows(m: &LayerMenuInput<'_>) -> Vec<MenuEntry> {
+fn field_rows(m: &LayerMenuInput) -> Vec<MenuEntry> {
     let n = m.fields.len();
     let value = |f: &String| MenuEntry::Row(checkable(row("layer.labelFieldValue", field_title(f), "", ""), *f == m.current_label_field, f.clone()));
     if n <= 10 {
@@ -165,7 +164,7 @@ fn field_rows(m: &LayerMenuInput<'_>) -> Vec<MenuEntry> {
 }
 
 /// 레이어 줄의 메뉴.
-pub(crate) fn layer_menu_entries(m: &LayerMenuInput<'_>) -> Vec<MenuEntry> {
+pub(crate) fn layer_menu_entries(m: &LayerMenuInput) -> Vec<MenuEntry> {
     let domain = matches!(m.kind, LayerMenuKind::Area | LayerMenuKind::Feature | LayerMenuKind::Control | LayerMenuKind::Section | LayerMenuKind::Trench);
     let invalid = if m.valid { "" } else { "레이어 파일을 찾을 수 없습니다. 자료를 다시 열어 주세요." };
     let empty = if !m.valid { invalid } else if m.vector && m.feature_count == 0 { "이 레이어에는 도형이 없습니다." } else { "" };
@@ -174,7 +173,7 @@ pub(crate) fn layer_menu_entries(m: &LayerMenuInput<'_>) -> Vec<MenuEntry> {
     let edit_unavailable = if !m.valid { "레이어 파일을 다시 열어 주세요." } else if m.read_only { "읽기 전용 자료입니다. 편집 가능한 조사 자료를 선택하세요." } else { "" };
     let draw_reason = if m.busy { busy } else if domain && !m.own_survey { not_own } else { edit_unavailable };
     let vertex_reason = if m.busy { busy } else if domain && !m.own_survey { not_own } else if !empty.is_empty() { empty } else { edit_unavailable };
-    let mut out = vec![MenuEntry::Row(deferred(row("layer.import", "레이어 불러오기 (SHP·DXF·GPKG)", busy, ""), "미정")), MenuEntry::Separator];
+    let mut out = vec![MenuEntry::Row(deferred(row("layer.import", "레이어 불러오기 (SHP·DXF·GPKG)", busy, ""), "W-A12")), MenuEntry::Separator];
     // appearance — 이름 바꾸기, 면·외곽선 색, 도형 속성, 라벨·명칭 속성 ▸, (깨진 한글 바로잡기 ▸).
     out.push(MenuEntry::Row(row("layer.rename", "이름 바꾸기 (두 번 클릭)", "", "")));
     out.push(MenuEntry::Row(row("layer.style", "면·외곽선 색", if m.vector { invalid } else { "영상 지도는 투명도로 표시를 조절하세요." }, "")));
@@ -229,7 +228,7 @@ pub(crate) fn layer_menu_entries(m: &LayerMenuInput<'_>) -> Vec<MenuEntry> {
         out.push(MenuEntry::Row(deferred(submenu("layer.trenchCreate", "시굴격자", reason, "", items), "W-T1")));
     }
     if m.xyz {
-        out.push(MenuEntry::Row(deferred(row("layer.offline", "오프라인 저장 — 지금 화면 범위", invalid, ""), "미정")));
+        out.push(MenuEntry::Row(deferred(row("layer.offline", "오프라인 저장 — 지금 화면 범위", invalid, ""), "R4b")));
     }
     if domain {
         out.push(MenuEntry::Separator);
@@ -247,7 +246,7 @@ pub(crate) fn layer_menu_entries(m: &LayerMenuInput<'_>) -> Vec<MenuEntry> {
 }
 
 /// 「라벨·명칭 속성」 ▸(:288-345).
-fn label_menu(m: &LayerMenuInput<'_>) -> MenuRow {
+fn label_menu(m: &LayerMenuInput) -> MenuRow {
     if !m.vector {
         return submenu("layer.labels", "라벨·명칭 속성", "영상에 포함된 글자는 별도로 크기를 바꿀 수 없습니다.", "", Vec::new());
     }
@@ -282,7 +281,7 @@ pub(crate) fn blank_menu_entries(removable: bool, group: bool) -> Vec<MenuEntry>
         };
         out.push(MenuEntry::Row(row("layer.remove", "레이어 삭제", "", help)));
     }
-    out.push(MenuEntry::Row(deferred(row("layer.import", "참고 자료 불러오기…", "", ""), "미정")));
+    out.push(MenuEntry::Row(deferred(row("layer.import", "참고 자료 불러오기…", "", ""), "W-A12")));
     out
 }
 

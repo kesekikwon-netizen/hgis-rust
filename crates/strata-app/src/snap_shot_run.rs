@@ -144,49 +144,8 @@ impl StrataAppState {
             // 그리기 줄의 「유구 그리기」, 지도 가운데에서 dx;dy m 떨어진 자리 누름, Enter.
             "@draw_poly" => self.start_edit_feature_poly(),
             "@draw_area" => self.start_edit_survey_area(),
-            // 열린 「이름·번호」 창에 종류(이름);시대[;번호]를 적고(번호를 안 주면 다음 번호), 「저장」·「건너뛰기」.
-            _ if action.starts_with("@form=") => {
-                let mut parts = action["@form=".len()..].splitn(3, ';');
-                if let Some(form) = self.home_map.feature_form.as_mut() {
-                    form.name = parts.next().unwrap_or_default().to_owned();
-                    form.period = parts.next().unwrap_or_default().to_owned();
-                    if let Some(number) = parts.next() {
-                        form.number = number.to_owned();
-                        form.number_typed = true;
-                    }
-                    form.update_number_hint();
-                }
-            }
-            "@form_save" => self.save_feature_form(),
-            "@form_skip" => self.skip_feature_form(),
-            // 「조사구역 그리기 설정」 창의 「그리기 시작」.
-            "@area_setup_ok" => self.accept_survey_area_setup(),
-            // 「도형 속성」 창: 표;fid 로 열기, 칸=글 적기, 「저장」.
-            _ if action.starts_with("@record=") => {
-                if let Some((table, fid)) = action["@record=".len()..].split_once(';') {
-                    self.open_feature_record(table, fid.parse().unwrap_or(0));
-                }
-            }
-            _ if action.starts_with("@record_set=") => {
-                if let (Some((field, text)), Some(form)) = (action["@record_set=".len()..].split_once('='), self.home_map.feature_record.as_mut()) {
-                    if let Some(row) = form.rows.iter_mut().find(|r| r.field == field) {
-                        row.text = text.to_owned();
-                    }
-                }
-            }
-            "@record_save" => self.save_feature_record(),
-            // 도형선택으로 표;fid 를 고른 것처럼(카드가 따라간다), 카드 칸=글 고치기.
-            _ if action.starts_with("@select=") => {
-                if let Some((table, fid)) = action["@select=".len()..].split_once(';') {
-                    self.home_map.selected_shape = Some((table.to_owned(), fid.parse().unwrap_or(0)));
-                    self.sync_card_with_selection();
-                }
-            }
-            _ if action.starts_with("@card_set=") => {
-                if let Some((field, text)) = action["@card_set=".len()..].split_once('=') {
-                    self.card_set_value(field, text);
-                }
-            }
+            // 창·카드·메뉴 단계(snap_shot_steps.rs).
+            _ if self.snap_apply_window_step(action) => {}
             "@sketch_finish" => self.sketch_finish(),
             _ if action.starts_with("@sketch=") => {
                 let v: Vec<f64> = action["@sketch=".len()..].split(';').filter_map(|s| s.trim().parse().ok()).collect();
