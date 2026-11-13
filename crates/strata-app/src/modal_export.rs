@@ -41,27 +41,6 @@ pub(crate) fn render_export_submit_package(app: &mut StrataAppState, ctx: &egui:
         let status_txt = ChecklistEngine::status_bar_text(&results);
         app.home_map.draw_guide_message = Some(status_txt.clone());
 
-        let findings: Vec<strata_check_export::checklist_engine::ChecklistFinding> = results
-            .iter()
-            .map(|r| {
-                let sev = if r.passed {
-                    strata_check_export::checklist_engine::ChecklistSeverity::Pass
-                } else if r.severity == "error" {
-                    strata_check_export::checklist_engine::ChecklistSeverity::Error
-                } else {
-                    strata_check_export::checklist_engine::ChecklistSeverity::Warning
-                };
-                strata_check_export::checklist_engine::ChecklistFinding {
-                    rule_id: r.id.clone(),
-                    category_ko: r.basis_ko.clone(),
-                    message_ko: r.message_ko.clone(),
-                    severity: sev,
-                    passed: r.passed,
-                    target_world_xy: None,
-                }
-            })
-            .collect();
-
         // KaSubmitDialogPlate.cpp:12-62, 73-94 — 상단 헤드라인 + 3개 카운트 박스(오류 / 주의 / 통과)
         let headline = if err_cnt > 0 {
             format!("오류 {err_cnt}건을 확인하세요 ({status_txt})")
@@ -175,7 +154,6 @@ pub(crate) fn render_export_submit_package(app: &mut StrataAppState, ctx: &egui:
             &status_txt,
         );
         paint_export_submit_footer(app, ui, open,
-            &findings,
             &status_txt,
         );
         });

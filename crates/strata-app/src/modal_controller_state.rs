@@ -48,7 +48,6 @@ pub struct ModalDialogController {
     pub trench_prefix: String,
     // D6 KaSurveyContourDialog.cpp — 파일 좌표계 선택 (5개 라벨)
     pub contour_file_crs_idx: usize,
-    pub last_export_status: String,
     pub custom_paper_mode: bool,
     pub print_single_sheet: bool,
     pub print_paper: SheetPaperSize,
@@ -171,7 +170,6 @@ impl Default for ModalDialogController {
             trench_cols: 2,
             trench_prefix: "Tr-".to_owned(),
             contour_file_crs_idx: 0,
-            last_export_status: String::new(),
             custom_paper_mode: false,
             print_single_sheet: true,
             // KaPrintDialog.cpp:124 — 기본은 A4 다. A3 는 프린터가 A3 를 지원할 때만
