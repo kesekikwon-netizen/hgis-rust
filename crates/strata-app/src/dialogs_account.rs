@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use strata_secrets::accounts::{AccountKind, AccountSettings, Credentials};
 use strata_secrets::mask::SecretMask;
+use strata_secrets::secret_store::parse_qt_ini_file;
 use strata_secrets::vworld::VworldSettings;
+use strata_types::error::StrataError;
 
 #[derive(Debug, Clone, Default)]
 pub struct AccountDialogState {
@@ -31,6 +33,14 @@ impl AccountDialogState {
 
     #[must_use]
     pub fn probe_local_accounts(config_dir: &Path) -> Self {
+        // SEC2 — 진짜 DPAPI 꾸러미는 PowerShell 로 푼다: 계정 파일들의 값을 한 번에(시작이 느려지지 않게).
+        let blobs: Vec<String> = [AccountKind::VworldCadastral, AccountKind::NgiiTopographic, AccountKind::HeritageIntranet]
+            .iter()
+            .flat_map(|k| [k.file_name(), k.alt_file_name()])
+            .filter_map(|name| parse_qt_ini_file(&config_dir.join(name)).ok())
+            .flat_map(|map| map.into_iter().filter(|(k, _)| k.ends_with("/password_dpapi")).map(|(_, v)| v))
+            .collect();
+        strata_secrets::dpapi::prefetch_unprotect(&blobs);
         let vworld_ini = config_dir.join("ka-hgis-vworld.ini");
         let vworld_key = VworldSettings::load_from_ini(&vworld_ini)
             .ok()
@@ -120,7 +130,12 @@ impl AccountDialogState {
         self.status_summary_ko = SecretMask::redact(&raw_summary, &[]);
     }
 
-    pub fn save_all_to_disk(&mut self) {
+    /// 저장 — 계정 비밀번호를 암호화하지 못하면 그 파일은 쓰지 않고 C++ 의 알림 글을 돌려준다
+    /// (KaSecretStore.cpp:156-158, TopographicSettings.cpp:83).
+    ///
+    /// # Errors
+    /// 처음 실패한 계정의 알림 글.
+    pub fn save_all_to_disk(&mut self) -> Result<(), String> {
         let dir = if self.config_dir.as_os_str().is_empty() {
             AccountSettings::user_config_dir()
         } else {
@@ -129,24 +144,20 @@ impl AccountDialogState {
         let vworld_ini = dir.join("ka-hgis-vworld.ini");
         let _ = VworldSettings::save_to_ini(&vworld_ini, &self.vworld_key);
         let _ = VworldSettings::save_history_gis_to_ini(&vworld_ini, &self.history_gis_key);
-        let _ = AccountSettings::save_to_file(
-            &dir.join(AccountKind::VworldCadastral.file_name()),
-            AccountKind::VworldCadastral,
-            &self.cadastral_creds,
-            false,
-        );
-        let _ = AccountSettings::save_to_file(
-            &dir.join(AccountKind::NgiiTopographic.file_name()),
-            AccountKind::NgiiTopographic,
-            &self.ngii_creds,
-            false,
-        );
-        let _ = AccountSettings::save_to_file(
-            &dir.join(AccountKind::HeritageIntranet.file_name()),
-            AccountKind::HeritageIntranet,
-            &self.heritage_creds,
-            false,
-        );
+        let mut first_error = None;
+        for (kind, creds) in [
+            (AccountKind::VworldCadastral, &self.cadastral_creds),
+            (AccountKind::NgiiTopographic, &self.ngii_creds),
+            (AccountKind::HeritageIntranet, &self.heritage_creds),
+        ] {
+            if let Err(e) = AccountSettings::save_to_file(&dir.join(kind.file_name()), kind, creds, false) {
+                first_error.get_or_insert(match e {
+                    StrataError::Secret(message) => message,
+                    _ => "계정 설정을 기록하지 못했습니다. 저장 공간과 폴더 권한을 확인하세요.".to_owned(),
+                });
+            }
+        }
         self.recompute_flags();
+        first_error.map_or(Ok(()), Err)
     }
 }

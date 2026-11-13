@@ -6,8 +6,11 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod account_migration;
 pub mod accounts;
 pub mod dpapi;
+#[cfg(windows)]
+mod dpapi_win;
 pub mod mask;
 pub mod secret_store;
 pub mod vworld;

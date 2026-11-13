@@ -69,20 +69,26 @@ impl SecretStore {
         password: &str,
         portable: bool,
     ) -> StrataResult<()> {
+        // KaSecretStore::writePassword (KaSecretStore.cpp:138-164) — 암호화하지 못하면 원래 칸들을 그대로 두고 오류.
         let plain_k = format!("{group}/password");
         let dpapi_k = format!("{group}/password_dpapi");
         let port_k = format!("{group}/password_portable");
+        let (keep_k, value) = if password.is_empty() {
+            (None, String::new())
+        } else if portable {
+            (Some(port_k.clone()), Self::wrap_portable(password))
+        } else {
+            let blob = protect_bytes(password.as_bytes())
+                .ok()
+                .filter(|b| !b.is_empty())
+                .ok_or_else(|| StrataError::Secret("비밀번호를 암호화하지 못했습니다. 평문으로는 저장하지 않습니다.".into()))?;
+            (Some(dpapi_k.clone()), blob)
+        };
         map.remove(&plain_k);
         map.remove(&dpapi_k);
         map.remove(&port_k);
-        if password.is_empty() {
-            return Ok(());
-        }
-        if portable {
-            map.insert(port_k, Self::wrap_portable(password));
-        } else {
-            let blob = protect_bytes(password.as_bytes())?;
-            map.insert(dpapi_k, blob);
+        if let Some(k) = keep_k {
+            map.insert(k, value);
         }
         Ok(())
     }
@@ -91,25 +97,19 @@ impl SecretStore {
         map: &BTreeMap<String, String>,
         group: &str,
     ) -> StrataResult<String> {
+        // KaSecretStore::readPassword (KaSecretStore.cpp:166-190) — 포터블 → DPAPI(풀리면) → 평문 칸.
         let port_k = format!("{group}/password_portable");
-        if let Some(v) = map.get(&port_k) {
-            if !v.trim().is_empty() {
-                return Self::unwrap_portable(v);
-            }
+        let portable = map.get(&port_k).map(|v| Self::unwrap_portable(v).unwrap_or_default()).unwrap_or_default();
+        if !portable.is_empty() {
+            return Ok(portable);
         }
         let dpapi_k = format!("{group}/password_dpapi");
-        if let Some(v) = map.get(&dpapi_k) {
-            if !v.trim().is_empty() {
-                let bytes = unprotect_bytes(v)?;
-                return String::from_utf8(bytes)
-                    .map_err(|e| StrataError::Secret(format!("비밀번호 UTF-8 오류: {e}")));
+        if let Some(v) = map.get(&dpapi_k).filter(|v| !v.trim().is_empty()) {
+            if let Ok(bytes) = unprotect_bytes(v) {
+                return Ok(String::from_utf8_lossy(&bytes).into_owned());
             }
         }
-        let plain_k = format!("{group}/password");
-        if let Some(v) = map.get(&plain_k) {
-            return Ok(v.clone());
-        }
-        Ok(String::new())
+        Ok(map.get(&format!("{group}/password")).cloned().unwrap_or_default())
     }
 
     pub fn has_undecryptable_password(map: &BTreeMap<String, String>, group: &str) -> bool {
@@ -218,5 +218,22 @@ mod tests {
             Some("VWORLD_KEY_12345!@#")
         );
         assert_eq!(SecretStore::load_secret(&store, "MISSING_KEY"), None);
+    }
+
+    /// KaSecretStore.cpp:170-184 — DPAPI 칸을 풀 수 없으면 평문 칸으로 넘어간다(앞에서 멈추지 않는다).
+    #[cfg(windows)]
+    #[test]
+    fn read_falls_back_to_the_plain_key_when_dpapi_cannot_be_read() -> StrataResult<()> {
+        let mut framed = b"DPAPI1:".to_vec();
+        framed.extend(xor_entropy(b"FAKE-old".to_vec()));
+        let mut map = BTreeMap::new();
+        map.insert("ngii/password_dpapi".to_owned(), BASE64.encode(framed));
+        assert_eq!(SecretStore::read_password_from_map(&map, "ngii")?, "");
+        map.insert("ngii/password".to_owned(), "FAKE-plain".to_owned());
+        assert_eq!(SecretStore::read_password_from_map(&map, "ngii")?, "FAKE-plain");
+        SecretStore::write_password_to_map(&mut map, "ngii", "FAKE-new", false)?;
+        assert!(!map.contains_key("ngii/password"), "writePassword clears the other two keys");
+        assert_eq!(SecretStore::read_password_from_map(&map, "ngii")?, "FAKE-new");
+        Ok(())
     }
 }

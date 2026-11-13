@@ -1,20 +1,17 @@
+//! 계정 비밀번호 암호화 — C++ `KaSecretStore`(core/KaSecretStore.cpp:36-93)와 같은 꼴. Windows 는 진짜 DPAPI
+//! (CryptProtectData: CurrentUser, 엔트로피 ka-hgis-account-v1, 설명 "ka-hgis")만 쓰고 읽는다 — C++ 이 못 읽는 꼴은
+//! Rust 도 못 읽는다(같은 「설정 필요」). 다른 OS 는 C++ `#else` 처럼 XOR. Windows 호출은 `dpapi_win`.
+
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
-use std::collections::BTreeMap;
-use std::io::Write;
-use std::process::{Command, Stdio};
-use std::sync::{Mutex, OnceLock};
 use strata_types::error::{StrataError, StrataResult};
 
+/// KaSecretStore.cpp:37 kEntropy.
 pub const ENTROPY: &[u8] = b"ka-hgis-account-v1";
-pub const DPAPI_BLOB_PREFIX: &[u8] = b"DPAPI1:";
-const WIN_DPAPI_HEADER: &[u8] = &[0x01, 0x00, 0x00, 0x00, 0xD0, 0x8C, 0x9D, 0xDF];
+/// CryptProtectData 꾸러미의 앞 8바이트(dwVersion 1 + 공급자 GUID 앞).
+pub const WIN_DPAPI_HEADER: &[u8] = &[0x01, 0x00, 0x00, 0x00, 0xD0, 0x8C, 0x9D, 0xDF];
 
-fn dpapi_cache() -> &'static Mutex<BTreeMap<String, Vec<u8>>> {
-    static CACHE: OnceLock<Mutex<BTreeMap<String, Vec<u8>>>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(BTreeMap::new()))
-}
-
+/// xorEntropy (:39-45).
 pub fn xor_entropy(mut data: Vec<u8>) -> Vec<u8> {
     let n = ENTROPY.len();
     for (i, b) in data.iter_mut().enumerate() {
@@ -23,119 +20,99 @@ pub fn xor_entropy(mut data: Vec<u8>) -> Vec<u8> {
     data
 }
 
+/// 다 쓴 비밀 바이트를 0 으로(C++ secureWipe).
+pub fn wipe(buf: &mut [u8]) {
+    buf.fill(0);
+    std::hint::black_box(&*buf);
+}
+
+/// protectBytes (:47-68) — 빈 값은 빈 글, 암호화하지 못하면 오류(평문으로 두지 않는다).
+///
+/// # Errors
+/// DPAPI 암호화 실패.
 pub fn protect_bytes(plain: &[u8]) -> StrataResult<String> {
     if plain.is_empty() {
         return Ok(String::new());
     }
-    let mut framed = Vec::with_capacity(DPAPI_BLOB_PREFIX.len() + plain.len());
-    framed.extend_from_slice(DPAPI_BLOB_PREFIX);
-    framed.extend_from_slice(&xor_entropy(plain.to_vec()));
-    Ok(BASE64.encode(framed))
+    protect_verified_many(&[plain])
+        .pop()
+        .flatten()
+        .ok_or_else(|| StrataError::Secret("비밀번호를 암호화하지 못했습니다.".into()))
 }
 
-/// 스크립트를 표준입력에서 읽는 PowerShell(명령줄에는 옵션만).
-fn dpapi_powershell() -> Command {
-    let mut cmd = Command::new("powershell.exe");
-    cmd.args(["-NoProfile", "-NonInteractive", "-Command", "-"]);
-    cmd
+/// 여러 값을 한 번에 암호화하고, 바로 풀어 같은지 확인한 꾸러미(Base64). 못 한 칸은 None.
+#[cfg(windows)]
+#[must_use]
+pub fn protect_verified_many(plains: &[&[u8]]) -> Vec<Option<String>> {
+    crate::dpapi_win::protect_verified_many(plains)
 }
 
-/// DPAPI(CurrentUser, 엔트로피 ka-hgis-account-v1)로 꾸러미를 풀어 Base64 로 내는 한 줄.
-fn unprotect_script(trimmed_b64: &str) -> String {
-    format!(
-        "Add-Type -AssemblyName System.Security; \
-         $b = [Convert]::FromBase64String('{trimmed_b64}'); \
-         $e = [System.Text.Encoding]::ASCII.GetBytes('ka-hgis-account-v1'); \
-         $p = [System.Security.Cryptography.ProtectedData]::Unprotect($b, $e, [System.Security.Cryptography.DataProtectionScope]::CurrentUser); \
-         [Convert]::ToBase64String($p)\n"
-    )
+/// 다른 OS — C++ `#else` 의 XOR.
+#[cfg(not(windows))]
+#[must_use]
+pub fn protect_verified_many(plains: &[&[u8]]) -> Vec<Option<String>> {
+    plains.iter().map(|p| Some(BASE64.encode(xor_entropy(p.to_vec())))).collect()
 }
 
-fn unprotect_windows_dpapi_b64(trimmed_b64: &str) -> StrataResult<Vec<u8>> {
-    if let Ok(guard) = dpapi_cache().lock() {
-        if let Some(cached) = guard.get(trimmed_b64) {
-            return Ok(cached.clone());
-        }
-    }
-    // SEC1 — 암호화된 계정 값이 든 스크립트는 명령줄이 아니라 표준입력으로(`-Command -`).
-    let output = (|| {
-        let mut child = dpapi_powershell().stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(unprotect_script(trimmed_b64).as_bytes())?;
-        }
-        child.wait_with_output()
-    })()
-    .map_err(|e| StrataError::Secret(format!("Windows DPAPI 호출 실패: {e}")))?;
-    if !output.status.success() {
-        return Err(StrataError::Secret("Windows DPAPI 복호화 거부".into()));
-    }
-    let out_b64 = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let plain = BASE64
-        .decode(&out_b64)
-        .map_err(|e| StrataError::Secret(format!("DPAPI 평문 Base64 오류: {e}")))?;
-    if let Ok(mut guard) = dpapi_cache().lock() {
-        guard.insert(trimmed_b64.to_string(), plain.clone());
-    }
-    Ok(plain)
-}
-
+/// unprotectBytes (:70-93).
+///
+/// # Errors
+/// Base64 가 아니거나, 비었거나, (Windows) 이 사용자의 DPAPI 로 풀 수 없음.
 pub fn unprotect_bytes(b64: &str) -> StrataResult<Vec<u8>> {
     let trimmed = b64.trim().trim_matches('"');
-    if trimmed.is_empty() {
-        return Err(StrataError::Secret("빈 암호화 데이터".into()));
-    }
     let decoded = BASE64
         .decode(trimmed)
         .map_err(|e| StrataError::Secret(format!("Base64 복호화 실패: {e}")))?;
     if decoded.is_empty() {
-        return Err(StrataError::Secret(
-            "복호화된 바이트가 비어 있습니다".into(),
-        ));
+        return Err(StrataError::Secret("복호화된 바이트가 비어 있습니다".into()));
     }
-    if let Some(payload) = decoded.strip_prefix(DPAPI_BLOB_PREFIX) {
-        if payload.is_empty() {
-            return Err(StrataError::Secret("DPAPI 페이로드가 비어 있습니다".into()));
-        }
-        return Ok(xor_entropy(payload.to_vec()));
+    unprotect_decoded(trimmed, decoded)
+}
+
+/// Windows — CryptUnprotectData 만. 진짜 DPAPI 꾸러미가 아니면 C++ 처럼 못 읽는다.
+#[cfg(windows)]
+fn unprotect_decoded(trimmed: &str, decoded: Vec<u8>) -> StrataResult<Vec<u8>> {
+    if !decoded.starts_with(WIN_DPAPI_HEADER) {
+        return Err(StrataError::Secret("Windows DPAPI 꾸러미가 아닙니다".into()));
     }
-    if decoded.starts_with(WIN_DPAPI_HEADER) {
-        return unprotect_windows_dpapi_b64(trimmed);
-    }
+    crate::dpapi_win::unprotect_cached(trimmed)
+}
+
+#[cfg(not(windows))]
+#[allow(clippy::unnecessary_wraps)]
+fn unprotect_decoded(_trimmed: &str, decoded: Vec<u8>) -> StrataResult<Vec<u8>> {
     Ok(xor_entropy(decoded))
+}
+
+/// 여러 꾸러미를 한 번에 미리 풀어 둔다(앱 시작에 계정 파일 셋을 읽을 때 PowerShell 한 번).
+pub fn prefetch_unprotect(values: &[String]) {
+    #[cfg(windows)]
+    crate::dpapi_win::prefetch(values);
+    #[cfg(not(windows))]
+    let _ = values;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn dpapi_framed_blob_and_legacy_raw_blob_both_unprotect_cleanly() -> StrataResult<()> {
-        let secret = b"HeritagePass#2026";
-        let framed_b64 = protect_bytes(secret)?;
-        let recovered = unprotect_bytes(&framed_b64)?;
-        assert_eq!(recovered, secret);
-
-        let legacy_b64 = BASE64.encode(xor_entropy(secret.to_vec()));
-        let recovered_legacy = unprotect_bytes(&legacy_b64)?;
-        assert_eq!(recovered_legacy, secret);
-        Ok(())
-    }
-
-    /// SEC1 — C++ 앱이 쓴 진짜 Windows DPAPI 꾸러미(가짜 비밀번호)를 풀고, PowerShell 명령줄에는 그 꾸러미가 없다.
+    /// 예전 Rust 꼴("DPAPI1:" + XOR)과 머리 없는 XOR 는 Windows 에서 C++ 처럼 못 읽는다.
     #[cfg(windows)]
     #[test]
-    fn windows_dpapi_blob_unprotects_without_the_blob_on_the_command_line() -> StrataResult<()> {
-        let protect = "Add-Type -AssemblyName System.Security; \
-             $e = [System.Text.Encoding]::ASCII.GetBytes('ka-hgis-account-v1'); \
-             $p = [System.Text.Encoding]::UTF8.GetBytes('FAKE-PW-1234'); \
-             [Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::Protect($p, $e, 'CurrentUser'))";
-        let out = Command::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", protect]).output().expect("powershell");
-        let blob = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-        assert!(BASE64.decode(&blob).expect("b64").starts_with(WIN_DPAPI_HEADER));
-        assert_eq!(unprotect_bytes(&blob)?, b"FAKE-PW-1234");
-        let args: Vec<String> = dpapi_powershell().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(args, ["-NoProfile", "-NonInteractive", "-Command", "-"]);
-        assert!(!unprotect_script(&blob).is_empty());
+    fn windows_reader_refuses_legacy_rust_and_raw_xor_forms() {
+        let mut framed = b"DPAPI1:".to_vec();
+        framed.extend(xor_entropy(b"FAKE-pw".to_vec()));
+        assert!(unprotect_bytes(&BASE64.encode(framed)).is_err());
+        assert!(unprotect_bytes(&BASE64.encode(xor_entropy(b"FAKE-pw".to_vec()))).is_err());
+    }
+
+    /// 다른 OS 는 C++ `#else` 처럼 XOR 로 쓰고 읽는다.
+    #[cfg(not(windows))]
+    #[test]
+    fn xor_form_round_trips_off_windows() -> StrataResult<()> {
+        let blob = protect_bytes(b"FAKE-pw")?;
+        assert_eq!(BASE64.decode(&blob).unwrap_or_default(), xor_entropy(b"FAKE-pw".to_vec()));
+        assert_eq!(unprotect_bytes(&blob)?, b"FAKE-pw");
         Ok(())
     }
 }

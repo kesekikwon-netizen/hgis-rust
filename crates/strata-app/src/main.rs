@@ -88,6 +88,15 @@ fn main() {
         .and_then(|i| args.get(i + 1))
         .cloned()
         .unwrap_or_default();
+    // SEC2 — 예전 Rust 판이 C++ 이 못 읽는 꼴로 쓴 계정 비밀번호를 진짜 DPAPI 로 한 번 바꾼다. 보통으로 켤 때만
+    // (--snap·--smoke-quit·--verify-all·시험에서는 하지 않는다). 아래 창의 계정 읽기가 바뀐 파일을 읽는다.
+    if snap_dir.is_none() {
+        let config_dir = strata_secrets::accounts::AccountSettings::user_config_dir();
+        let report = strata_secrets::account_migration::migrate_legacy_rust_passwords(&config_dir);
+        if report.failed > 0 {
+            eprintln!("[계정] 예전 꼴 비밀번호 {}개를 바꾸지 못했습니다(파일은 그대로)", report.failed);
+        }
+    }
 
     const APP_ICON_RGBA: &[u8] = include_bytes!("../../../data/theme/ka-hgis-app-paper-96.rgba");
     let icon_data = std::sync::Arc::new(eframe::egui::IconData {

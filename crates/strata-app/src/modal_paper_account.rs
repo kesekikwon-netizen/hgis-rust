@@ -242,12 +242,17 @@ pub(crate) fn render_account_settings(app: &mut StrataAppState, ctx: &egui::Cont
                     .corner_radius(6.0)
                     .min_size(Vec2::new(78.0, 30.0));
                     if ui.add(save_b).clicked() && app.accounts.validate_credentials() {
-                        app.accounts.save_all_to_disk();
-                        app.home_map.draw_guide_message = Some(
-                            "API 키와 사이트 계정(DPAPI 암호화)을 저장했습니다."
-                                .to_owned(),
-                        );
-                        app.modals.active = None;
+                        match app.accounts.save_all_to_disk() {
+                            Ok(()) => {
+                                app.home_map.draw_guide_message = Some(
+                                    "API 키와 사이트 계정(DPAPI 암호화)을 저장했습니다."
+                                        .to_owned(),
+                                );
+                                app.modals.active = None;
+                            }
+                            // 암호화하지 못하면 창을 닫지 않고 그 까닭을 보인다.
+                            Err(message) => app.accounts.validation_error = Some(message),
+                        }
                     }
                 });
             });
