@@ -133,6 +133,19 @@ impl StrataAppState {
         preferred_survey_dir_from(&last, self.survey_path.as_deref(), &recent, crate::user_settings::resolved_desktop_path)
     }
 
+    /// `importTopographicFolder` start folder (MainWindowTopographic.cpp:103-106): no survey -> ini
+    /// `topographic/folder`, else Documents; with a survey -> `QFileInfo(survey).absoluteDir()/지형도`.
+    pub(crate) fn topographic_picker_start(&self) -> Option<PathBuf> {
+        if let Some(survey) = self.survey_path.as_deref() {
+            return Some(PathBuf::from(absolute_dir(survey)).join("지형도"));
+        }
+        self.settings_ini
+            .as_deref()
+            .and_then(recent_surveys::topographic_folder)
+            .map(PathBuf::from)
+            .or_else(crate::user_settings::documents_path)
+    }
+
     /// `openRecentSurvey` — 홈 목록 줄·「이어서 열기」. 없는 조사는 알리고 목록에 그대로 둔다
     /// (USB·네트워크 드라이브가 빠졌을 수 있다). C++ 은 경고 창, 여기서는 상태줄에 같은 글을 쓴다.
     pub(crate) fn open_recent_survey(&mut self, path: &str) {

@@ -112,7 +112,7 @@ impl StrataAppState {
         self.home_map.pick_cycle = None;
         self.home_map.cad = strata_canvas2d::cad_session::CadSessionController::default();
         self.home_map.real_survey =
-            crate::real_survey::RealSurveyData::new_empty_survey(&std::env::temp_dir());
+            crate::real_survey::RealSurveyData::new_empty_survey();
         self.align = crate::gui_ribbon_bar::AlignSessionState::default();
         self.ribbon.sub_toolbar_visible = false;
         self.ribbon.sub_mode = crate::ribbon::SubToolsMode::None;

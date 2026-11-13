@@ -77,14 +77,8 @@ pub(crate) fn render_topographic_import(
                 if ui.button("받은 폴더 고르기…").clicked() {
                     let mut picker = rfd::FileDialog::new()
                         .set_title("수치지형도 폴더 선택 — 하위 폴더도 확인합니다");
-                    let survey_dir = app.home_map.real_survey.survey_dir.clone();
-                    // :124-126 — 조사 폴더가 있으면 그 안의 「지형도」에서 시작한다.
-                    let start = if survey_dir.as_os_str().is_empty() {
-                        std::env::current_dir().unwrap_or_default()
-                    } else {
-                        survey_dir.join("지형도")
-                    };
-                    if start.is_dir() {
+                    // MainWindowTopographic.cpp:103-106 — start folder derived from the survey path.
+                    if let Some(start) = app.topographic_picker_start().filter(|s| s.is_dir()) {
                         picker = picker.set_directory(start);
                     }
                     if let Some(folder) = picker.pick_folder() {

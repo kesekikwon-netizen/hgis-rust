@@ -67,13 +67,14 @@ pub(crate) fn heritage_start_fetch(app: &mut StrataAppState) {
     }
     let sido = app.modals.heritage_sido.clone();
     let city = app.modals.heritage_city.clone();
-    let survey_dir = app.home_map.real_survey.survey_dir.clone();
+    // ReferenceStorage.cpp:39-43 — derived from the survey path; no survey file -> None ->
+    // MainWindow.cpp:3095-3099 text from heritage_preflight.
+    let survey_dir = crate::survey_folder::survey_folder(app.survey_path.as_deref());
     let have_account = app.accounts.heritage_configured;
-    let survey_arg = (!survey_dir.as_os_str().is_empty()).then_some(survey_dir.clone());
 
     if let Err(why) = strata_net::heritage_intranet::heritage_preflight(
         have_account,
-        survey_arg.as_deref(),
+        survey_dir.as_deref(),
         &sido,
         &city,
     ) {
@@ -88,7 +89,10 @@ pub(crate) fn heritage_start_fetch(app: &mut StrataAppState) {
         .map(|(label, tab)| ((*label).to_owned(), (*tab).to_owned()))
         .collect();
     let (tx, rx) = std::sync::mpsc::channel();
-    let worker_dir = survey_dir.clone();
+    // heritage_preflight above already refused a missing survey folder.
+    let Some(worker_dir) = survey_dir else {
+        return;
+    };
     let worker_sido = sido.clone();
     let worker_city = city.clone();
     std::thread::spawn(move || {

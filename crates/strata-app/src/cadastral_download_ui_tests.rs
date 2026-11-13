@@ -17,11 +17,15 @@ use crate::cadastral_download_ui::{
     // C++ `MainWindowCadastral.cpp:121` — 조사 폴더 안 `지적도/원본`
     #[test]
     fn test_cadastral_raw_dir_follows_cpp_folder_rule() {
-        let survey = std::path::Path::new(r"C:\조사\경주_월성북편.gpkg");
-        let dir = cadastral_raw_dir(Some(survey)).expect("조사 파일이 있으면 경로가 나온다");
+        let folder = tempfile::tempdir().expect("temp dir");
+        let survey = folder.path().join("경주_월성북편.gpkg");
+        std::fs::write(&survey, b"").expect("survey file");
+        let dir = cadastral_raw_dir(Some(&survey)).expect("조사 파일이 있으면 경로가 나온다");
         assert!(dir.ends_with(r"지적도\원본"), "{}", dir.display());
-        assert!(dir.starts_with(r"C:\조사"), "{}", dir.display());
+        assert!(dir.starts_with(folder.path()), "{}", dir.display());
         assert_eq!(cadastral_raw_dir(None), None);
+        // F1c-4 — ReferenceStorage.cpp:39-43: a survey path whose file is missing has no folder.
+        assert_eq!(cadastral_raw_dir(Some(std::path::Path::new("Z:/없는/조사.gpkg"))), None);
     }
 
     #[test]
@@ -111,4 +115,25 @@ fn cadastral_scope_is_the_survey_area() {
     let mut state = CadastralState::idle();
     start_download(&app, &mut state);
     assert_eq!((state.status.as_str(), state.running), (NO_SURVEY_AREA_MESSAGE, false));
+}
+
+/// F1c-4 — MainWindowCadastral.cpp:85-87: a survey path whose file is missing stops with the cpp text and
+/// writes nothing; after 다른 이름으로 저장 the folder follows the new survey path (:121).
+#[test]
+fn cadastral_needs_an_existing_survey_file_and_follows_save_as() {
+    use crate::cadastral_download_ui::cadastral_download_ui_state::{start_download, CadastralState};
+    let a = tempfile::tempdir().expect("temp dir");
+    let b = tempfile::tempdir().expect("temp dir");
+    let mut app = crate::app_state::StrataAppState::new_startup();
+    app.survey_path = Some(a.path().join("저장 안 됨.gpkg"));
+    let mut state = CadastralState::idle();
+    start_download(&app, &mut state);
+    assert_eq!((state.status.as_str(), state.running), (VworldClient::NO_SURVEY_MESSAGE, false));
+    assert!(std::fs::read_dir(a.path()).expect("list").next().is_none(), "nothing written");
+    std::fs::write(a.path().join("조사.gpkg"), b"").expect("survey a");
+    let moved = b.path().join("조사.gpkg");
+    std::fs::write(&moved, b"").expect("survey b");
+    app.survey_path = Some(moved);
+    let raw = cadastral_raw_dir(app.survey_path.as_deref()).expect("folder");
+    assert!(raw.starts_with(b.path()), "{}", raw.display());
 }

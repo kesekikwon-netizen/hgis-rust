@@ -91,7 +91,7 @@ pub struct HomeMapTabState {
 impl Default for HomeMapTabState {
     fn default() -> Self {
         // 시작에는 조사 자료가 없다(C++ 은 홈 화면만 띄운다). 열기·새 조사가 같은 빈 상태로 비운다.
-        let real_survey = RealSurveyData::new_empty_survey(&std::env::temp_dir());
+        let real_survey = RealSurveyData::new_empty_survey();
         // 처음 지도 가운데는 한반도 범위 가운데(C++ 은 한반도 범위로 연다) — 경주 기본점이 아니다.
         let center = super::tabs_home_map_korea::korea_fill_extent(strata_types::crs::WorkCrs::Epsg5187)
             .map_or([0.0, 0.0], |e| [(e[0] + e[2]) * 0.5, (e[1] + e[3]) * 0.5]);

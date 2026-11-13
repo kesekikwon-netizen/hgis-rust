@@ -20,16 +20,14 @@ pub struct CadastralOutcome {
     pub error: String,
 }
 
-/// C++ `MainWindowCadastral.cpp:121` — 조사 폴더 안 `지적도/원본`
+/// C++ `MainWindowCadastral.cpp:121` — 조사 폴더 안 `지적도/원본`. No path or a missing survey
+/// file gives `None` (`MainWindowCadastral.cpp:85-87`, `ReferenceStorage.cpp:39-43`).
 #[must_use]
 pub fn cadastral_raw_dir(survey_path: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
-    let profile = survey_path?;
-    let parent = profile.parent().unwrap_or_else(|| std::path::Path::new("."));
-    Some(
-        parent
-            .join(vworld_client::CADASTRAL_FOLDER_NAME)
-            .join(vworld_client::CADASTRAL_RAW_FOLDER_NAME),
-    )
+    crate::survey_folder::survey_folder(survey_path).map(|dir| {
+        dir.join(vworld_client::CADASTRAL_FOLDER_NAME)
+            .join(vworld_client::CADASTRAL_RAW_FOLDER_NAME)
+    })
 }
 
 /// C++ `CadastralPortal.cpp:312` — ZIP 크기가 자동 수신 범위를 벗어났을 때

@@ -38,7 +38,6 @@ pub struct DistanceRing {
 
 #[derive(Debug, Clone)]
 pub struct RealSurveyData {
-    pub survey_dir: PathBuf,
     pub survey_name: String,
     pub site_name: String,
     pub survey_rings: Vec<Vec<[f64; 2]>>,

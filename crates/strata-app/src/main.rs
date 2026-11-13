@@ -248,6 +248,7 @@ mod shell_workspace;
 mod shell_dialogs;
 mod survey_style;
 mod survey_paint_layers;
+mod survey_folder;
 
 #[cfg(test)]
 #[path = "gui_shell_tests_a.rs"]

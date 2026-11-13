@@ -229,6 +229,13 @@ pub fn last_dir(ini: &Path) -> String {
     read_ini(ini).value("Survey", "LastDir").map(read_string).unwrap_or_default()
 }
 
+/// `topographic/folder` — start folder of the topographic folder picker
+/// (MainWindowTopographic.cpp:105); `None` when the key is absent.
+#[must_use]
+pub fn topographic_folder(ini: &Path) -> Option<String> {
+    read_ini(ini).value("topographic", "folder").map(read_string)
+}
+
 /// `rememberSurveyDir` 의 쓰기 — 그 한 줄만 바꾼다.
 ///
 /// # Errors

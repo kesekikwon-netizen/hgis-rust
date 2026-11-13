@@ -171,3 +171,15 @@ fn unreadable_ini_is_never_overwritten() {
     assert!(set_last_dir(&ini, "C:/y").is_err());
     assert_eq!(std::fs::read(&ini).expect("read"), odd);
 }
+
+/// `topographic/folder` (MainWindowTopographic.cpp:105) — an absent key gives `None` so the caller uses Documents.
+#[test]
+fn topographic_folder_reads_the_cpp_key() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let ini = dir.path().join("ka-hgis.ini");
+    std::fs::write(&ini, "[topographic]\nfolder=C:/Users/u/지형 자료\n").expect("fixture");
+    assert_eq!(topographic_folder(&ini).as_deref(), Some("C:/Users/u/지형 자료"));
+    std::fs::write(&ini, "[Survey]\nLastDir=C:/old\n").expect("fixture");
+    assert_eq!(topographic_folder(&ini), None);
+    assert_eq!(topographic_folder(&dir.path().join("none.ini")), None);
+}
