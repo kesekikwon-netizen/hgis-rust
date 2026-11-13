@@ -97,18 +97,9 @@ ui.horizontal(|ui| {
                         app.modals.heritage_dataset_checks[di],
                     );
                 }
-                // 서약서 동의 영수증 (MainWindow.cpp:3246-3262).
-                let receipt_dir = app
-                    .home_map
-                    .real_survey
-                    .survey_dir
-                    .join("주변유적")
-                    .join("receipts");
-                let _ = std::fs::create_dir_all(&receipt_dir);
-                let _ = std::fs::write(
-                    receipt_dir.join("pledge_receipt.txt"),
-                    "서약서에 자동 동의했습니다. 원문은 조사폴더 주변유적/receipts 에 남습니다.\n받은 자료는 동국문화재연구원 소유입니다.",
-                );
+                // No pledge receipt here: cpp writes one only after the intranet answers
+                // status=agreed with the terms text (target/cpp-ref/src/app/MainWindow.cpp:3227-3244,
+                // KaHeritageBrowser.cpp:988-993). The Rust HTTP flow has no agree step, so nothing is written.
                 // 실제 인트라넷 작업: 화면 → 목록 → 폼 → 시·군 검색 → ZIP
                 heritage_start_fetch(app);
             }
@@ -116,3 +107,7 @@ ui.horizontal(|ui| {
     });
 });
 }
+
+#[cfg(test)]
+#[path = "dlg_heritage_browser_footer_tests.rs"]
+mod tests;
