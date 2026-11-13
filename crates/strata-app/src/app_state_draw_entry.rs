@@ -14,23 +14,18 @@ use crate::left_layer_panel::LayerTreeEntry;
 use crate::survey_style::GeomKind;
 
 impl StrataAppState {
-    /// `startEditSurveyArea` — 이 조사의 조사구역 레이어(범례에서 고른 것, 아니면 처음 보이는 것)에 그린다.
-    /// 이어 그릴 레이어가 없으면 C++ 은 새 조사구역 창을 띄운다 — 그 창 전에는 survey_area 표에 그린다.
+    /// `startEditSurveyArea` — 이 조사의 조사구역 레이어(범례에서 고른 것, 아니면 처음 보이는 것)에 이어 그린다.
+    /// 이어 그릴 레이어가 없으면 「조사구역 그리기 설정」 창을 연다(MainWindowEditing.cpp:1100-1104).
     pub(crate) fn start_edit_survey_area(&mut self) {
-        let current = self.right_inspector.selected_layer_key.clone();
-        let own: Vec<&LayerTreeEntry> = self
-            .left_layers
-            .entries
-            .iter()
-            .filter(|e| e.layer_key == "survey_area" || e.layer_key.starts_with("survey_area_"))
-            .collect();
-        let picked = own
-            .iter()
-            .find(|e| current.as_deref() == Some(e.label_ko.as_str()))
-            .or_else(|| own.iter().find(|e| self.home_map.real_survey.is_layer_visible(&e.label_ko)))
-            .map(|e| e.layer_key.clone());
-        let key = picked.unwrap_or_else(|| "survey_area".to_owned());
-        self.begin_edit_layer(&key, "조사구역");
+        if self.survey_path.is_none() {
+            // C++ 은 「새 조사」를 묻는다 — begin_edit_layer 가 그 글을 띄운다.
+            self.begin_edit_layer("survey_area", "조사구역");
+            return;
+        }
+        match self.survey_area_layer_to_continue() {
+            Some((key, label)) => self.begin_edit_layer(&key, &label),
+            None => self.home_map.survey_area_setup = Some(crate::survey_area_setup::SurveyAreaSetup::default()),
+        }
     }
 
     /// `startEditFeaturePoly` — 범례의 현재 레이어가 유구 면이면 그것, 아니면 유구 면 레이어(없으면 「유구면」).
@@ -62,7 +57,7 @@ impl StrataAppState {
     }
 
     /// `ensureDomainLayerForEdit` + `beginEdit`.
-    fn begin_edit_layer(&mut self, key: &str, title_ko: &str) {
+    pub(crate) fn begin_edit_layer(&mut self, key: &str, title_ko: &str) {
         if self.survey_path.is_none() {
             // C++ 은 여기서 「새 조사」를 물어본다(:805-812).
             self.home_map.draw_guide_message = Some("먼저 「새 조사」로 저장 경로를 만드세요.".to_owned());

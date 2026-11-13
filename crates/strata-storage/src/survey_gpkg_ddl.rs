@@ -107,9 +107,13 @@ CREATE TABLE gpkg_metadata_reference (reference_scope TEXT NOT NULL,table_name T
 
 /// 레이어 표 하나와 GDAL 공간 색인(rtree)·트리거 아홉 개의 SQL(GDAL 이 만드는 순서 그대로).
 pub(crate) fn layer_sql(layer: &SurveyLayerDef, srs_id: u32, first: bool) -> String {
-    let id = layer.id;
+    layer_sql_named(layer.id, layer.geometry, layer.fields, srs_id, first)
+}
+
+/// `layer_sql` 의 표 이름을 그때 정하는 판(조사구역 표를 더 만들 때 survey_area_N).
+pub(crate) fn layer_sql_named(id: &str, geometry: &str, fields: &[SurveyFieldDef], srs_id: u32, first: bool) -> String {
     let mut cols = String::new();
-    for f in layer.fields {
+    for f in fields {
         cols.push_str(&format!(r#", "{}" {}"#, f.name, if f.real { "REAL" } else { "TEXT" }));
     }
     let mut s = format!(
@@ -118,7 +122,7 @@ INSERT INTO gpkg_contents (table_name, data_type, identifier, description, srs_i
 INSERT INTO gpkg_geometry_columns VALUES ('{id}', 'geom', '{}', {srs_id}, 0, 0);
 INSERT INTO gpkg_ogr_contents VALUES ('{id}', 0);
 "#,
-        layer.geometry, layer.geometry
+        geometry, geometry
     );
     if first {
         s.push_str(GPKG_EXTENSIONS_DDL);

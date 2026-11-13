@@ -158,6 +158,8 @@ mod checklist_state_fields;
 mod checklist_state_geometry;
 mod survey_measure;
 mod feature_pick;
+mod survey_area_setup;
+mod dlg_survey_area;
 mod user_settings;
 mod basemap_cadastral_jobs;
 mod basemap_fetch;

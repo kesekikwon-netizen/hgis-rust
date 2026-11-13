@@ -116,6 +116,7 @@ fn unsaved_survey_area_counts_and_a_triangle_is_a_symbol() {
     app.home_map.viewport.meters_per_pixel = 0.05;
     assert!(failed_ids(&app).contains(&"REQ_DRAWING_SURVEY_AREA".to_owned()));
     app.start_edit_survey_area();
+    app.accept_survey_area_setup(); // 이어 그릴 조사구역이 없으면 「조사구역 그리기 설정」 창 → 「그리기 시작」
     for p in [[21_100.0, 451_800.0], [21_160.0, 451_800.0], [21_130.0, 451_850.0]] {
         app.sketch_press(p);
     }
@@ -125,6 +126,7 @@ fn unsaved_survey_area_counts_and_a_triangle_is_a_symbol() {
     assert!(failed.contains(&"SURVEY_NO_ABSTRACT_MARKER".to_owned()), "{failed:?}");
     app.undo_map_action();
     app.start_edit_survey_area();
+    app.accept_survey_area_setup(); // 이어 그릴 조사구역이 없으면 「조사구역 그리기 설정」 창 → 「그리기 시작」
     for p in [[21_100.0, 451_800.0], [21_160.0, 451_800.0], [21_160.0, 451_850.0], [21_100.0, 451_850.0]] {
         app.sketch_press(p);
     }

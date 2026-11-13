@@ -19,6 +19,7 @@ use crate::survey_paint_layers::{
     build_paint_layers, line_length, paint_order, point_along, PaintFeature, PaintLayer, PaintPart,
 };
 use crate::survey_style::{
+    DomainStyle,
     label_font_size_points, label_ink, mm_to_points, qt_premultiplied, GeomKind, LABEL_HALO_MM, LABEL_HALO_RGBA,
     LABEL_SIZE_PT,
     MARKER_OUTLINE_MM,
@@ -83,8 +84,7 @@ pub(super) fn fill_mesh(rings: &[Vec<Pos2>], fill: Color32) -> Shape {
     Shape::mesh(mesh)
 }
 
-fn paint_feature(p: &egui::Painter, rect: Rect, vp: &ViewportTransform, layer: &PaintLayer, f: &PaintFeature) {
-    let s = &layer.style;
+fn paint_feature(p: &egui::Painter, rect: Rect, vp: &ViewportTransform, s: &DomainStyle, f: &PaintFeature) {
     let to = |xy: &[f64; 2]| w2s(rect, vp, *xy);
     for part in &f.parts {
         match part {
@@ -228,13 +228,17 @@ impl StrataAppState {
         let (mut reqs, mut draws) = (Vec::new(), Vec::new());
         for i in paint_order(&self.left_layers.entries, layers) {
             let layer = &layers[i];
-            if !rs.is_layer_visible(&layer.title) {
+            // 범례 줄(그 표의 layer_key)의 이름으로 켜고 끈다 — 「조사구역 그리기 설정」에서 이름을 붙인 레이어는 표 이름과 다르다.
+            let title = self.left_layers.entries.iter().find(|e| e.layer_key == layer.table).map_or(layer.title.as_str(), |e| e.label_ko.as_str());
+            if !rs.is_layer_visible(title) {
                 continue;
             }
+            // 레이어마다 정한 모양(조사구역 그리기 설정의 선 색·채움·굵기)이 있으면 그것.
+            let style = rs.layer_styles.get(&layer.table).unwrap_or(&layer.style);
             for f in &layer.features {
-                paint_feature(p, rect, vp, layer, f);
+                paint_feature(p, rect, vp, style, f);
             }
-            if rs.is_label_visible(&layer.title) {
+            if rs.is_label_visible(title) {
                 for (req, draw) in layer.features.iter().filter_map(|f| label_for(ctx, &font, rect, vp, layer, f)) {
                     reqs.push(req);
                     draws.push(draw);

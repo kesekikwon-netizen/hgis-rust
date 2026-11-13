@@ -48,6 +48,8 @@ pub struct RealSurveyData {
     pub trenches: Vec<RealTrenchPoly>,
     /// 주변 거리 경계(C++ user:buffer_ring_<m>·user:buffer_label_<m> 레이어) — 거리(m)마다 경계선과 거리 글자 자리(작업 좌표계).
     pub distance_rings: BTreeMap<u32, DistanceRing>,
+    /// 레이어(표 이름)마다 정한 모양 — 「조사구역 그리기 설정」의 선 색·채움·굵기(C++ ka_hgis/style_* 속성).
+    pub(crate) layer_styles: BTreeMap<String, crate::survey_style::DomainStyle>,
     pub cadastral_parcels: Vec<RealCadastralParcel>,
     pub heritage_polys: Vec<RealHeritagePoly>,
     pub layer_visible: BTreeMap<String, bool>,

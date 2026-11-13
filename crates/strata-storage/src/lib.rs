@@ -31,6 +31,7 @@ pub mod recent_surveys;
 pub mod session_save;
 pub mod shp_io;
 pub mod shp_writer;
+pub mod survey_gpkg_add_table;
 pub mod survey_gpkg_apply;
 pub mod survey_gpkg_create;
 pub mod survey_gpkg_ddl;

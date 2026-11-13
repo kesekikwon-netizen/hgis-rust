@@ -23,6 +23,7 @@ impl RealSurveyData {
             survey_center: [219_745.6, 360_930.5],
             trenches: Vec::new(),
             distance_rings: BTreeMap::new(),
+            layer_styles: BTreeMap::new(),
             cadastral_parcels: Vec::new(),
             heritage_polys: Vec::new(),
             layer_visible: BTreeMap::new(),

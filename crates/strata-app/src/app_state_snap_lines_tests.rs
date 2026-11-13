@@ -39,6 +39,7 @@ fn just_drawn_area_snaps_to_the_line_and_undoes() {
     });
     app.home_map.viewport.meters_per_pixel = 0.125;
     app.start_edit_survey_area();
+    app.accept_survey_area_setup(); // 이어 그릴 조사구역이 없으면 「조사구역 그리기 설정」 창 → 「그리기 시작」
     for p in [[200_001.2, 449_999.1], [200_019.0, 450_000.8], [200_020.8, 450_019.2], [199_999.3, 450_020.6]] {
         app.sketch_press(p);
     }

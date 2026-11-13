@@ -249,6 +249,7 @@ impl StrataAppState {
         self.handle_dropped_files(ctx);
         self.render_close_prompt(ctx);
         render_active_modal_dialogs(self, ctx);
+        self.render_survey_area_setup(ctx);
         self.render_borehole_dialog_frame(ctx);
         central_rect
     }

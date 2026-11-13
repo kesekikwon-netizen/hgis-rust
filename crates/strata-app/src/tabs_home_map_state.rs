@@ -37,6 +37,8 @@ pub struct HomeMapTabState {
     pub last_drawn_shape: Option<(String, i64)>,
     /// 도형선택 겹친 도형 돌기 — (지난 후보, 고른 차례, 누른 화면 자리)(m_lastPickCandidates·Index·Pos).
     pub pick_cycle: Option<PickCycle>,
+    /// 열려 있는 「조사구역 그리기 설정」 창의 값(없으면 창이 닫혀 있다).
+    pub(crate) survey_area_setup: Option<crate::survey_area_setup::SurveyAreaSetup>,
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
     /// 마우스가 지도 칸 위에 한 번이라도 왔는가 — 그 전에는 상태줄 좌표가 「X —    Y —」(KaStatusBar.cpp:173-175).
@@ -83,6 +85,7 @@ impl Default for HomeMapTabState {
             selected_shape: None,
             last_drawn_shape: None,
             pick_cycle: None,
+            survey_area_setup: None,
             grid_enabled: false,
             cursor_world_xy: center,
             cursor_seen: false,
