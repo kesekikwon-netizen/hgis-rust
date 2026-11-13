@@ -39,6 +39,21 @@ cargo run -p strata-app --bin ka-hgis -- --verify-all
 cargo run -p strata-app --bin ka-hgis
 ```
 
+### 제출 SHP 엔진(GDAL) — `strata-engine --features gdal`
+
+앱은 아직 이 기능을 켜지 않는다(지시 R2-3 에서 GDAL DLL 과 함께 켠다). 엔진만 빌드·시험할 때:
+
+```bash
+# 빌드: GDAL_HOME = OSGeo4W 의 apps/gdal-dev (lib/gdal_i.lib, include/). GDAL_VERSION 은 gdal-sys 의
+# 미리 만든 3.12 바인딩을 고른다(bindgen 은 3.14 헤더에서 gdal 0.19 를 깨뜨린다).
+export GDAL_HOME='<OSGeo4W>\apps\gdal-dev' GDAL_VERSION=3.12.0
+# 실행: 시험 프로세스의 PATH 에 <OSGeo4W>/apps/gdal-dev/bin 과 <OSGeo4W>/bin (GDAL DLL)
+cargo clippy -p strata-engine --features gdal --all-targets -- -D warnings
+cargo test -p strata-engine --features gdal
+```
+
+PROJ 자료(`proj.db`)는 GDAL 이 쓰는 PROJ 가 제 옆 `share/proj` 에서 찾는다. 앱은 환경 변수를 바꾸지 않고 `strata_engine::set_gdal_proj_search_paths` 로 폴더를 넘긴다. 제출 SHP 의 `.prj` 글은 `proj.db` 판을 따른다: C++ 기준 꾸러미(`crates/strata-engine/tests/fixtures/cpp_submit_demo/`)는 PROJ 9.8.1 의 `proj.db` 로 만들었다. CI 는 GISInternals GDAL 3.12.1 과 OSGeo4W `proj-runtime-data-9.8.1-1` 을 sha256 으로 고정해 받는다(`.github/workflows/ci.yml`).
+
 ## C++ (`95d15a9`) ↔ Rust 1:1 대조 계획서
 - [`docs/superpowers/plans/2026-11-07-cpp-to-rust-1to1-대조-전환-계획.md`](docs/superpowers/plans/2026-11-07-cpp-to-rust-1to1-대조-전환-계획.md)
 - [`docs/superpowers/specs/2026-11-07-strata-pure-rust-conversion-design.md`](docs/superpowers/specs/2026-11-07-strata-pure-rust-conversion-design.md)

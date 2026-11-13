@@ -25,9 +25,42 @@ jobs:
           if ($hash -ne "adbefda5f92d471cbde9cb3232775485bd1bad61ba97376c9661c37dfd6ad027") { throw "sqlite-tools sha256 mismatch: $hash" }
           Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\sqlite-tools"
           "$env:RUNNER_TEMP\sqlite-tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      # strata-engine --features gdal (submit SHP writer): GDAL 3.12.1 MSVC x64 from GISInternals release-1944
+      # (binaries + SDK lib/include) and proj.db of PROJ 9.8.1 (OSGeo4W proj-runtime-data-9.8.1-1), the proj.db
+      # the cpp reference package was made with; its ESRI names decide the .prj bytes. GDAL_VERSION picks the
+      # gdal-sys prebuilt 3.12 bindings. The GDAL DLLs go on PATH only in the gdal step below.
+      - name: Put GDAL 3.12.1 (GISInternals) and PROJ 9.8.1 data in RUNNER_TEMP
+        shell: pwsh
+        run: |
+          $root = "$env:RUNNER_TEMP\gdal"
+          New-Item -ItemType Directory -Force $root | Out-Null
+          $pkgs = @(
+            @("https://download.gisinternals.com/sdk/downloads/release-1944-x64-gdal-3-12-1-mapserver-8-6-0.zip", "f4e0775554be71d51840cd55a3a214b4b4bb8ff29b6e323fcaff304416aabdad"),
+            @("https://download.gisinternals.com/sdk/downloads/release-1944-x64-gdal-3-12-1-mapserver-8-6-0-libs.zip", "dd59e6bf2261253d0556d3ec04a85b99f17a9863a5690bf5a0026f8eb4c2c9df"),
+            @("https://download.osgeo.org/osgeo4w/v2/x86_64/release/proj/proj-runtime-data/proj-runtime-data-9.8.1-1.tar.bz2", "599b2307ed72001ab1b28b9cf4ac007523687571ee0cc1ec54c511a893f74f1d")
+          )
+          foreach ($p in $pkgs) {
+            $file = Join-Path $env:RUNNER_TEMP ([IO.Path]::GetFileName($p[0]))
+            Invoke-WebRequest -Uri $p[0] -OutFile $file
+            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+            if ($hash -ne $p[1]) { throw "$file sha256 mismatch: $hash" }
+            if ($file.EndsWith(".zip")) { Expand-Archive $file -DestinationPath $root -Force }
+            else { & "$env:SystemRoot\System32\tar.exe" -xjf $file -C $root; if ($LASTEXITCODE -ne 0) { throw "tar failed: $file" } }
+          }
+          "GDAL_HOME=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "GDAL_VERSION=3.12.0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Run Workspace Unit Tests
         run: cargo test --workspace
+      - name: Run Clippy and tests for strata-engine --features gdal
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:GDAL_HOME\bin;$env:PATH"
+          $env:PROJ_DATA = "$env:GDAL_HOME\share\proj"
+          cargo clippy -p strata-engine --features gdal --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test -p strata-engine --features gdal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Run V1-V14 Verification Harness
         run: cargo run -p strata-app --bin ka-hgis -- --verify-all

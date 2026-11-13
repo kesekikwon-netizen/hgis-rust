@@ -36,6 +36,8 @@ Rust 판은 QGIS 를 링크하지 않는다. 좌표 변환·도형 고치기 엔
 | Rust 크레이트 `geos` 11.3.1 · `geos-sys` 2.0.10 · `geos-src` 0.2.5 | — | MIT | https://github.com/georust/geos |
 | Rust 크레이트 `libsqlite3-sys` 0.30.1 | — | MIT | https://github.com/rusqlite/rusqlite |
 | Rust 크레이트 `link-cplusplus` 1.0.12 | — | MIT 또는 Apache-2.0 | https://github.com/dtolnay/link-cplusplus |
+| GDAL/OGR (동적 링크, 기능 `gdal` 에서만 — 앱은 아직 켜지 않는다, 지시 R2-3) | 개발 PC 3.14 dev(OSGeo4W), CI 3.12.1(GISInternals) | MIT/X. 일부 파일 BSD 등 | https://gdal.org/en/stable/license.html |
+| Rust 크레이트 `gdal` 0.19.0 · `gdal-sys` 0.12.0 | — | MIT | https://github.com/georust/gdal |
 
 C++ 앱(OSGeo4W)은 PROJ 9.8.1(EPSG v12.029)·GEOS 3.15.0 이다. 한반도 기준점 변환은 1 mm 안, makeValid 결과는 정규화 비교로 같다(`crates/strata-engine/src/*_tests.rs`).
 

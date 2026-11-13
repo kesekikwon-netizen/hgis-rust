@@ -7,17 +7,25 @@
 //!
 //! 다른 크레이트는 proj·geos 를 직접 쓰지 않고 이 크레이트의 함수만 부른다. 판 고정도 여기에 있다.
 
-#![forbid(unsafe_code)]
+// unsafe: only the one FFI call of feature `gdal` (submit_shp::set_gdal_proj_search_paths).
+#![cfg_attr(not(feature = "gdal"), forbid(unsafe_code))]
+#![cfg_attr(feature = "gdal", deny(unsafe_code))]
 
 mod crs;
 mod geom;
 mod geom_wkt;
 mod rings;
+#[cfg(feature = "gdal")]
+mod submit_shp;
+#[cfg(feature = "gdal")]
+mod submit_shp_names;
 
 pub use crs::Transformer;
 pub use geom::{make_valid_polygon_parts, normalized_wkt, polygon_area, polygon_is_valid, polygon_perimeter, PolygonRings};
 pub use geom_wkt::{union_area, wkt_area, wkt_is_valid, wkt_length, wkt_point_relation, SurveyArea};
 pub use rings::{distance_rings, ring_label_points};
+#[cfg(feature = "gdal")]
+pub use submit_shp::{set_gdal_proj_search_paths, write_submit_shapefiles, ShpLayerReport, SubmitEncoding, SubmitSource};
 
 /// 엔진 오류(PROJ·GEOS 가 돌려준 글).
 #[derive(Debug, Clone, PartialEq, Eq)]
