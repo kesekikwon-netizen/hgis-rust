@@ -1,0 +1,6 @@
+# cpp submit package of the tracked samples/bad_survey (not user data): kept despite the root SHP rules.
+!*.shp
+!*.shx
+!*.dbf
+!*.prj
+!*.cpg
