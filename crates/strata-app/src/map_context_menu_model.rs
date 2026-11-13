@@ -2,7 +2,7 @@
 //!
 //! 화면 그리기(`gui_tab_map_context.rs`)와 나눠 항목·흐림·툴팁만 만든다. C++ `addMenuAction`(:70-79)
 //! 처럼 못 쓰는 이유가 있으면 흐리게 하고 그 이유를 툴팁으로, 쓸 수 있으면 도움말(좌표 복사의 글)을 툴팁으로.
-//! 「이 도형 기록 입력」(:124-133)은 도형 속성 창(지시 CM1b)이 생길 때까지 넣지 않는다.
+//! 「이 도형 기록 입력」(:120-133)은 우클릭 자리에 조사 도형이 있을 때 맨 위에(창은 dlg_feature_record.rs).
 
 /// 메뉴 한 줄.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,6 +32,8 @@ pub(crate) struct MapMenuInput<'a> {
     pub(crate) current_layer: bool,
     pub(crate) can_previous: bool,
     pub(crate) can_next: bool,
+    /// 우클릭 자리에 조사 레이어 도형이 있는가(KaAttributeMapTool::pickAtScreen = FeaturePick).
+    pub(crate) shape_under_click: bool,
     /// 우클릭한 자리(작업 좌표계).
     pub(crate) click_xy: [f64; 2],
     /// 작업 좌표계 `destinationCrs().authid()`.
@@ -58,6 +60,11 @@ pub(crate) fn map_menu_entries(m: &MapMenuInput<'_>) -> Vec<MapMenuEntry> {
         ""
     };
     let mut out = Vec::new();
+    if m.shape_under_click {
+        // :126-131 — 조사 파일의 도형이므로(ownSurvey) 처리 중일 때만 흐리다(GPKG 는 속성을 고칠 수 있다).
+        let reason = if m.busy { survey_reason } else { "" };
+        out.push(MapMenuEntry::Action(action("map.attributes", "이 도형 기록 입력", reason, "")));
+    }
     if m.survey_open {
         out.push(MapMenuEntry::Submenu {
             id: "map.draw",

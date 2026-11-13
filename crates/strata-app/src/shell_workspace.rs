@@ -251,6 +251,7 @@ impl StrataAppState {
         render_active_modal_dialogs(self, ctx);
         self.render_survey_area_setup(ctx);
         self.render_feature_form(ctx);
+        self.render_feature_record(ctx);
         self.render_borehole_dialog_frame(ctx);
         central_rect
     }

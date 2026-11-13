@@ -18,8 +18,8 @@ pub const KA_STATUS_SCALE_PRESETS: [u32; 13] = [
 impl StrataAppState {
     /// C++ `MainWindow.cpp` + `MainWindowRibbon.cpp` + `KaShellFocus.h` 단축키 1:1 처리
     pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
-        // C++ 모달 창(KaFeatureFormDialog·조사구역 설정) 뒤에서는 주 창 단축키가 듣지 않는다 — 창이 Enter·Esc 를 맡는다.
-        if self.home_map.feature_form.is_some() || self.home_map.survey_area_setup.is_some() {
+        // C++ 모달 창(KaFeatureFormDialog·조사구역 설정·도형 속성) 뒤에서는 주 창 단축키가 듣지 않는다 — 창이 Enter·Esc 를 맡는다.
+        if self.modal_window_open() {
             return;
         }
         let wants_kb = ctx.wants_keyboard_input();

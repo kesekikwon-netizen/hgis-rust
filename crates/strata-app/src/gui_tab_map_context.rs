@@ -63,6 +63,11 @@ impl StrataAppState {
 
     fn run_map_menu_action(&mut self, ctx: &egui::Context, id: &str, coords: &str) {
         match id {
+            "map.attributes" => {
+                if let Some((table, fid)) = self.home_map.menu_hit.clone() {
+                    self.open_feature_record(&table, fid);
+                }
+            }
             "map.drawArea" => self.start_edit_survey_area(),
             "map.drawFeature" => self.start_edit_feature_poly(),
             "map.drawLine" => self.start_edit_feature_line(),
@@ -108,11 +113,14 @@ impl StrataAppState {
                 return;
             }
             self.map_context_menu_world = self.home_map.cursor_world_xy;
+            // pickAtScreen(MainWindowContextMenus.cpp:123) — 도형선택과 같은 FeaturePick 의 첫 도형.
+            self.home_map.menu_hit = self.pick_at_work_xy(self.map_context_menu_world).into_iter().next();
             self.map_menu_sub_open = false;
             ctx.data_mut(|d| d.insert_temp(shown_id, self.map_context_menu_pos));
         }
         let input = MapMenuInput {
             survey_open: self.survey_path.is_some(),
+            shape_under_click: self.home_map.menu_hit.is_some(),
             busy: false,
             current_layer: self.current_legend_layer().is_some(),
             can_previous: self.home_map.extent_history.can_previous(),

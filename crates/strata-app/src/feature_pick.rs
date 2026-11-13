@@ -55,7 +55,7 @@ pub(crate) fn pick_candidates(layers: &[PickLayer], xy: [f64; 2], tolerance: f64
 
 impl StrataAppState {
     /// 보이는 조사 레이어를 범례 차례로, 점·허용치는 그 표의 좌표계로 옮겨(C++ toLayer.transform) 고른다.
-    fn pick_at_work_xy(&self, xy: [f64; 2]) -> Vec<(String, i64)> {
+    pub(crate) fn pick_at_work_xy(&self, xy: [f64; 2]) -> Vec<(String, i64)> {
         let work = strata_types::crs::CrsCode::from(self.work_crs).epsg_number();
         let tol = self.home_map.viewport.meters_per_pixel * PICK_PX;
         let mut layers: Vec<(PickLayer, [f64; 2], f64)> = Vec::new();

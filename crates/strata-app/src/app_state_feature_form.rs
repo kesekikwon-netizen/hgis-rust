@@ -45,7 +45,7 @@ impl StrataAppState {
         self.show_status_message(text);
     }
 
-    /// `applyTo` — 이름·번호(applyFeatureFormValues: 칸이 있으면 빈 글도 쓴다), 시대(적었을 때만), updated_at(touch).
+    /// `applyTo` — 이름·번호(applyFeatureFormValues: 칸이 있으면 쓰고, 비었으면 NULL), 시대(적었을 때만), updated_at(touch).
     fn apply_feature_form(&mut self, form: &FeatureForm) -> Result<(), String> {
         let idx = self.survey_tables.iter().position(|t| t.table == form.table).ok_or("레이어가 없습니다.")?;
         let t = &self.survey_tables[idx];
@@ -53,11 +53,13 @@ impl StrataAppState {
         let has_updated_at = t.columns.iter().find(|(c, _)| c.eq_ignore_ascii_case("updated_at")).map(|(c, _)| c.clone());
         let fields = form.fields.clone();
         let feature = self.survey_tables[idx].layer.features.iter_mut().find(|f| f.fid == form.fid).ok_or("도형을 찾지 못했습니다.")?;
-        if let Some(field) = fields.name_field {
-            feature.attributes.insert(field, name);
-        }
-        if let Some(field) = fields.number_field {
-            feature.attributes.insert(field, number);
+        // 빈 이름·번호는 NULL(C++ 빈 QString 은 QgsVariantUtils::isNull — hgis-2e 결정 2026-11-13).
+        for (field, value) in [(fields.name_field, name), (fields.number_field, number)] {
+            match (field, value.is_empty()) {
+                (Some(field), true) => feature.attributes.remove(&field),
+                (Some(field), false) => feature.attributes.insert(field, value),
+                (None, _) => None,
+            };
         }
         if form.has_period && !period.is_empty() {
             feature.attributes.insert("period".to_owned(), period);

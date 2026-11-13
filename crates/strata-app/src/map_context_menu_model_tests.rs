@@ -6,6 +6,7 @@ use super::*;
 fn input(survey_open: bool) -> MapMenuInput<'static> {
     MapMenuInput {
         survey_open,
+        shape_under_click: false,
         busy: false,
         current_layer: false,
         can_previous: false,
@@ -103,4 +104,20 @@ fn copied_coordinates_are_x_then_y_with_the_work_crs() {
     assert_eq!(coordinate_text([219_897.093, 361_622.354], "EPSG:5187"), "219897.093, 361622.354 (EPSG:5187)");
     assert_eq!(coordinate_text([200_010.0, 450_010.5], "EPSG:5186"), "200010.000, 450010.500 (EPSG:5186)");
     assert_eq!(coordinate_text([219745.6, 360930.12345], "EPSG:5187"), "219745.600, 360930.123 (EPSG:5187)");
+}
+
+/// :120-133 — 우클릭 자리에 조사 도형이 있으면 「이 도형 기록 입력」이 맨 위, 처리 중이면 흐리고 C++ 이유.
+#[test]
+fn attributes_item_comes_first_over_a_survey_shape() {
+    let mut m = input(true);
+    assert!(!outline(&map_menu_entries(&m)).contains(&"이 도형 기록 입력".to_owned()));
+    m.shape_under_click = true;
+    let entries = map_menu_entries(&m);
+    assert_eq!(outline(&entries)[0], "이 도형 기록 입력");
+    let MapMenuEntry::Action(a) = &entries[0] else { panic!("action") };
+    assert_eq!(a.id, "map.attributes");
+    m.busy = true;
+    let MapMenuEntry::Action(a) = &map_menu_entries(&m)[0] else { panic!("action") };
+    assert!(!a.enabled);
+    assert_eq!(a.tooltip, "조사 파일 처리가 끝난 뒤 다시 실행하세요.");
 }

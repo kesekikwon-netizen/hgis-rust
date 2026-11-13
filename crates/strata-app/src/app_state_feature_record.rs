@@ -6,6 +6,11 @@ use crate::app_state::StrataAppState;
 use crate::feature_record::FeatureRecordForm;
 
 impl StrataAppState {
+    /// C++ 모달 창(조사구역 설정·이름·번호·도형 속성)이 열려 있는가 — 열려 있으면 지도 그리기와 주 창 단축키가 기다린다.
+    pub(crate) fn modal_window_open(&self) -> bool {
+        self.home_map.feature_form.is_some() || self.home_map.survey_area_setup.is_some() || self.home_map.feature_record.is_some()
+    }
+
     /// 그 표의 도형 `fid` 로 창을 연다.
     pub(crate) fn open_feature_record(&mut self, table: &str, fid: i64) {
         let name = self.left_layers.entries.iter().find(|e| e.layer_key == table).map(|e| e.label_ko.clone()).unwrap_or_default();

@@ -97,7 +97,6 @@ pub struct RightInspectorState {
     pub feature_type: String,
     pub feature_period: String,
     pub feature_memo: String,
-    pub survey_card_modal_open: bool,
     pub style_color_index: usize,
     pub no_fill: bool,
     pub no_stroke: bool,

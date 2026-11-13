@@ -155,3 +155,21 @@ fn shapes_drawn_after_the_first_save_get_record_stamps() {
     assert!(stamps.0.as_ref().is_some_and(|s| s.len() == 36), "uid {stamps:?}");
     assert!(stamps.1.is_some_and(|s| !s.is_empty()) && stamps.2.is_some_and(|s| !s.is_empty()), "times");
 }
+
+/// 빈 종류·번호로 「저장」하면 파일에는 NULL(C++ 과 같은 파일 — hgis-2e 결정). 빈 글 '' 이 아니다.
+#[test]
+fn empty_name_and_number_are_saved_as_null() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (mut app, path) = opened_demo(dir.path());
+    draw_pit(&mut app);
+    let form = app.home_map.feature_form.as_mut().expect("form");
+    form.number = String::new();
+    form.number_typed = true;
+    app.save_feature_form();
+    assert!(app.save_survey_project());
+    let conn = rusqlite::Connection::open(&path).expect("open");
+    let nulls: (bool, bool) = conn
+        .query_row("SELECT kind IS NULL, feature_no IS NULL FROM feature_poly ORDER BY fid DESC LIMIT 1", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .expect("row");
+    assert_eq!(nulls, (true, true));
+}

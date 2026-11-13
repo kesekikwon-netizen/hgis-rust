@@ -41,8 +41,9 @@ pub struct HomeMapTabState {
     pub(crate) survey_area_setup: Option<crate::survey_area_setup::SurveyAreaSetup>,
     /// 열려 있는 「이름·번호」 창(그린 도형 하나의 값).
     pub(crate) feature_form: Option<crate::feature_form_state::FeatureForm>,
+    /// 지도 우클릭 메뉴를 연 자리의 조사 도형(표, fid) — 「이 도형 기록 입력」.
+    pub(crate) menu_hit: Option<(String, i64)>,
     /// 열려 있는 「도형 속성」 창.
-    #[allow(dead_code)] // CM1b 2/3 의 창이 읽으면 지운다
     pub(crate) feature_record: Option<crate::feature_record::FeatureRecordForm>,
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
@@ -93,6 +94,7 @@ impl Default for HomeMapTabState {
             survey_area_setup: None,
             feature_form: None,
             feature_record: None,
+            menu_hit: None,
             grid_enabled: false,
             cursor_world_xy: center,
             cursor_seen: false,

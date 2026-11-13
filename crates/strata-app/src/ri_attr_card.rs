@@ -272,7 +272,10 @@ if let Some(ring) = active_ring {
         .on_hover_text("이 유구의 전체 조사카드(모든 칸)를 창으로 엽니다.")
         .clicked()
     {
-        self.right_inspector.survey_card_modal_open = true;
+        // MainWindowFeatureCard.cpp:66 formRequested → 「도형 속성」 창. 카드가 고른 도형을 읽는 일은 CM1b 3/3.
+        if let Some((table, fid)) = self.home_map.selected_shape.clone() {
+            self.open_feature_record(&table, fid);
+        }
     }
 } else {
     let is_drawing = self.ribbon.sub_toolbar_visible

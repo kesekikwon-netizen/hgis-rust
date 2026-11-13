@@ -26,7 +26,6 @@ impl RightInspectorState {
             feature_type: "주거지".to_owned(),
             feature_period: "삼국".to_owned(),
             feature_memo: "경주 인왕동 76번지 일원 지표·시굴조사 구역 및 유구 기록".to_owned(),
-            survey_card_modal_open: false,
             style_color_index: 1,
             no_fill: false,
             no_stroke: false,
@@ -123,15 +122,6 @@ impl RightInspectorState {
 }
 
 impl StrataAppState {
-    /// 조사카드 창의 「조사카드 저장」. 조사 파일에 쓰지 않으므로 「*」는 건드리지 않는다
-    /// (지시 2C-fix2, 버튼 자체는 지시 4).
-    pub(crate) fn on_survey_card_save_clicked(&mut self) {
-        self.home_map.draw_guide_message = Some(format!(
-            "「{}」 조사카드를 저장했습니다.",
-            self.right_inspector.feature_no
-        ));
-    }
-
     /// C++ `KaInspectorPanel.cpp` + `KaInspectorStyle.cpp` + `KaStylePalette.h` 1:1 재현 (Images 2, 16)
     pub(crate) fn render_cpp_right_inspector(&mut self, ui: &mut egui::Ui) {
         if self.right_inspector.right_panel_collapsed {
@@ -148,59 +138,5 @@ impl StrataAppState {
             .show_inside(ui, |ui| {
             self.render_ri_body(ui);
             });
-
-        if self.right_inspector.survey_card_modal_open {
-            let mut open = self.right_inspector.survey_card_modal_open;
-            let mut close_requested = false;
-            egui::Window::new("조사카드 상세 기록 — Strata")
-                .open(&mut open)
-                .collapsible(false)
-                .resizable(false)
-                .default_width(380.0)
-                .show(ui.ctx(), |ui| {
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "조사명: {} · 유구번호: {}",
-                            self.right_inspector.survey_name, self.right_inspector.feature_no
-                        ))
-                        .size(13.0)
-                        .strong(),
-                    );
-                    ui.label(format!(
-                        "종류: {} · 시대: {}",
-                        self.right_inspector.feature_type, self.right_inspector.feature_period
-                    ));
-                    ui.separator();
-                    ui.label("현장 조사 메모 및 층위·출토유물 기록:");
-                    if ui
-                        .add(
-                            egui::TextEdit::multiline(&mut self.right_inspector.feature_memo)
-                                .desired_rows(5)
-                                .desired_width(f32::INFINITY),
-                        )
-                        .changed()
-                    {
-                        self.is_dirty = true;
-                    }
-                    ui.add_space(6.0);
-                    ui.horizontal(|ui| {
-                        let save_btn = egui::Button::new(
-                            egui::RichText::new("조사카드 저장")
-                                .color(Color32::WHITE)
-                                .strong(),
-                        )
-                        .fill(Color32::from_rgb(181, 87, 58))
-                        .corner_radius(5.0);
-                        if ui.add(save_btn).clicked() {
-                            self.on_survey_card_save_clicked();
-                            close_requested = true;
-                        }
-                        if ui.button("닫기").clicked() {
-                            close_requested = true;
-                        }
-                    });
-                });
-            self.right_inspector.survey_card_modal_open = open && !close_requested;
-        }
     }
 }

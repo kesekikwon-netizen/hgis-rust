@@ -48,12 +48,11 @@ fn polygon_wkt(rings: &PolygonRings) -> String {
 impl StrataAppState {
     /// 지도 탭에서 면 그리기 도구가 그릴 레이어를 갖고 켜져 있는가(C++ mapTool() == m_captureTool, 면 모드).
     pub(crate) fn polygon_capture_active(&self) -> bool {
-        // 창(조사구역 설정·이름·번호)이 열려 있으면 지도 입력을 받지 않는다(C++ 창은 모달).
+        // 창(조사구역 설정·이름·번호·도형 속성)이 열려 있으면 지도 입력을 받지 않는다(C++ 창은 모달).
         self.active_tab == MainTab::Map
             && self.active_tool == MapToolKind::DrawPolygon
             && self.edit_layer_key.is_some()
-            && self.home_map.feature_form.is_none()
-            && self.home_map.survey_area_setup.is_none()
+            && !self.modal_window_open()
     }
 
     /// 왼쪽 누름 — 점 더하기.

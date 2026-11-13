@@ -262,7 +262,7 @@ fn bad_number(row: &RecordRow, kind: &str, text: &str) -> RecordWarning {
 }
 
 /// KaElevationFigure.cpp:18-20 metres — 소수 둘째 자리, 모르면 「—」.
-fn metres(value: Option<f64>) -> String {
+pub(crate) fn metres(value: Option<f64>) -> String {
     match value {
         Some(v) if v.is_nan() => "nan".to_owned(),
         Some(v) => format!("{v:.2}"),
