@@ -7,6 +7,9 @@
 use eframe::egui::{self, Color32, Stroke, Vec2};
 
 use crate::app_state::StrataAppState;
+
+/// Tooltip of a print feature not yet ported (rules_v1 deferred-control text).
+const DEFERRED_W50: &str = "아직 Rust 판에서 연결하지 않았습니다 (지시 W-50)";
 use strata_layout::tile_print::{
     compute_tile_print_plan_with_overlap, format_print_dispatched_message,
     verify_requested_device_paper,
@@ -37,20 +40,9 @@ pub(crate) fn render_print_actions(app: &mut StrataAppState, ui: &mut egui::Ui) 
                         .stroke(Stroke::new(1.0, Color32::from_rgb(155, 152, 142)))
                         .corner_radius(6.0)
                         .min_size(Vec2::new(150.0, 34.0));
-                if ui
-                    .add(save_pdf)
-                    .on_hover_text(
-                        "프린터가 없는 PC나 출력소에서 찍을 수 있게 한 장이 한 쪽인 PDF로 저장합니다.",
-                    )
-                    .clicked()
-                {
-                    if let Ok(path) = app.drawing.export_pdf_to_temp() {
-                        app.home_map.draw_guide_message = Some(format!(
-                            "나눈 장을 PDF로 저장했습니다: {}",
-                            path.display()
-                        ));
-                    }
-                }
+                // Deferred until W-50: cpp saves the real tiled PDF (KaPrintDialog.cpp:592-620);
+                // the Rust writer drew empty rectangles.
+                ui.add_enabled(false, save_pdf).on_disabled_hover_text(DEFERRED_W50);
                 ui.with_layout(
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
@@ -93,3 +85,7 @@ pub(crate) fn render_print_actions(app: &mut StrataAppState, ui: &mut egui::Ui) 
                 );
             });
 }
+
+#[cfg(test)]
+#[path = "dlg_drawing_print_actions_tests.rs"]
+mod tests;

@@ -146,65 +146,17 @@ impl StrataAppState {
                     crate::dialogs_modal::default_print_paper_for_printer();
                 self.modals.active = Some(ActiveModalDialog::DrawingPrint);
             }
-            // MainWindowRibbon.cpp:566-573 + KaShellUi.cpp:48-50 + MainWindow.cpp:1086 —
-            // GeoTIFF 는 「지도」 탭에서만 쓴다. 다른 탭이면 사유만 알리고 끝낸다.
-            "GeoTIFF" => {
-                if self.active_tab != MainTab::Map {
-                    self.home_map.draw_guide_message =
-                        Some(crate::dialogs_download_print::MAP_TAB_ONLY_REASON.to_owned());
-                    return;
-                }
-                // MainWindowExport.cpp:63-67 — 저장할 레이어가 없으면 안내만 한다.
-                if self.left_layers.entries.is_empty() {
-                    self.home_map.draw_guide_message =
-                        Some("지도에 저장할 레이어가 없습니다.".to_owned());
-                    return;
-                }
-                // MainWindowExport.cpp:68-75 — 저장 대화상자: 기본 이름 지도_EPSG_5187.tif,
-                // 필터 "GeoTIFF (*.tif *.tiff)", 기본 확장자 tif, 시작 폴더는 조사 폴더.
-                let default_name =
-                    crate::dialogs_download_print::geotiff_default_file_name(self.work_crs.auth_id());
-                let Some(path) = ::rfd::FileDialog::new()
-                    .set_title("현재 지도 GeoTIFF 저장")
-                    .add_filter("GeoTIFF", &["tif", "tiff"])
-                    .set_file_name(&default_name)
-                    .set_directory(&self.home_map.real_survey.survey_dir)
-                    .save_file()
-                else {
-                    return;
-                };
-                // MapGeoTiffExport.cpp:94-103 — 화면 캔버스 출력 크기 그대로, 상한만 검사한다.
-                let size = match crate::dialogs_download_print::geotiff_canvas_size_px(
-                    self.home_map.viewport.screen_size_px,
-                ) {
-                    Ok(sz) => sz,
-                    Err(reason) => {
-                        self.home_map.draw_guide_message = Some(reason.to_owned());
-                        return;
-                    }
-                };
-                // MapGeoTiffExport.cpp:187-190 — 좌표계는 지도 좌표계 그대로 기록한다.
-                let auth_id = self.work_crs.auth_id();
-                if strata_layout::pdf_geotiff::export_geotiff_with_cancel(
-                    &path,
-                    size.0,
-                    size.1,
-                    self.work_crs.epsg_code(),
-                    None,
-                )
-                .is_ok()
-                {
-                    // MainWindowExport.cpp:90-91 — "GeoTIFF 저장 완료 · EPSG:5187 · 경로"
-                    self.home_map.draw_guide_message =
-                        Some(format!("GeoTIFF 저장 완료 · {} · {}", auth_id, path.display()));
-                } else {
-                    self.home_map.draw_guide_message =
-                        Some("GeoTIFF를 저장하지 못했습니다".to_owned());
-                }
-            }
+            // Deferred until R7 (gui_ribbon_draw::deferred_ribbon_tooltip): cpp writes a real map
+            // GeoTIFF (MainWindowExport.cpp:58-96 + MapGeoTiffExport.cpp); the Rust writer made a
+            // header-only TIFF, so the click opens no dialog, writes nothing and says nothing.
+            "GeoTIFF" => {}
             "검수·제출" => self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage),
             "더보기" => self.modals.active = Some(ActiveModalDialog::AccountSettings),
             _ => self.active_tab = MainTab::Map,
         }
     }
 }
+
+#[cfg(test)]
+#[path = "gui_ribbon_click_b_tests.rs"]
+mod tests;

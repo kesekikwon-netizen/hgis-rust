@@ -17,6 +17,10 @@ use crate::app_state::{MainTab, StrataAppState};
 /// 파일 대화상자를 연다(`MainWindowSession.cpp:1409-1418`).
 const OPENS_FILE_DIALOG: [&str; 4] = ["열기", "저장", "다른 이름", "폴더"];
 
+/// Deferred chips (gui_ribbon_draw::deferred_ribbon_tooltip) do nothing on click by design:
+/// GeoTIFF until R7 (order F1c-3).
+const DEFERRED: [&str; 1] = ["GeoTIFF"];
+
 /// 리본 단추 중 **파일 대화상자를 여는 것 말고는** 눌렀을 때 뭔가 바뀌어야 한다.
 ///
 /// 확인하는 상태 필드(하나라도 바뀌면 "동작함"):
@@ -30,6 +34,9 @@ fn test_ribbon_buttons_change_state() {
         for label in items {
             if OPENS_FILE_DIALOG.contains(label) {
                 continue; // 파일 창은 시험에서 열 수 없다
+            }
+            if DEFERRED.contains(label) {
+                continue;
             }
             let mut app = StrataAppState::new_startup();
             app.active_tab = MainTab::Map;

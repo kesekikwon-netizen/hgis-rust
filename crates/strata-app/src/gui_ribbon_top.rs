@@ -134,10 +134,9 @@ impl StrataAppState {
                         label, bx, cw, btn_rect.left(), btn_rect.right());
                 }
                 bx += cw;
-                // MainWindowRibbon.cpp:572 / MainWindow.cpp:1086 — GeoTIFF 는 「지도」 탭에서만
-                // 켜진다. 다른 탭(홈·도면·고지형·입체지형)에서는 흐리게 그린다.
+                // Deferred chips (GeoTIFF until R7) are muted on every tab.
                 let muted = (is_home && *g_title == "기록")
-                    || (label == "GeoTIFF" && self.active_tab != MainTab::Map);
+                    || super::gui_ribbon_draw::deferred_ribbon_tooltip(label).is_some();
                 let highlight_save = label == "저장" && dirty_save;
                 let dark_active = (label == "선택" && self.active_tool == MapToolKind::Select)
                     || (label == "측거" && self.active_tool == MapToolKind::Measure)

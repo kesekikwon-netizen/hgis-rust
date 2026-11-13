@@ -52,6 +52,14 @@ pub(crate) fn draw_buffer_pill(
 /// Rust 범례(`gui_layer_panel.rs`)는 이 이름을 `지표모델(DSM) 30m · Coperni...` 로 줄여
 /// 쓰므로 DEM 토글은 두 키를 함께 맞춘다.
 pub(crate) const DEM_LEGEND_KEY: &str = "지표모델(DSM) 30m · Coperni...";
+/// Tooltip of a ribbon feature not yet ported (rules_v1 deferred-control text).
+const DEFERRED_R7: &str = "아직 Rust 판에서 연결하지 않았습니다 (지시 R7)";
+/// Chips deferred until their order lands: drawn muted, hover = deferred text, click does nothing.
+/// GeoTIFF: cpp writes a real map GeoTIFF (MainWindowExport.cpp:58-96 + MapGeoTiffExport.cpp);
+/// the Rust writer made a header-only TIFF.
+pub(crate) fn deferred_ribbon_tooltip(label: &str) -> Option<&'static str> {
+    (label == "GeoTIFF").then_some(DEFERRED_R7)
+}
 impl StrataAppState {
     pub(crate) fn draw_ribbon_chip(
         &self,
@@ -198,7 +206,9 @@ impl StrataAppState {
             egui::FontId::proportional(12.5),
             txt_col,
         );
-        let resp = resp.on_hover_text(cpp_ribbon_tooltip(label));
+        let resp = resp.on_hover_text(
+            deferred_ribbon_tooltip(label).unwrap_or_else(|| cpp_ribbon_tooltip(label)),
+        );
         let clicked = resp.clicked()
             && resp
                 .interact_pointer_pos()

@@ -6,6 +6,9 @@ use eframe::egui::{self, Color32, Stroke, Vec2};
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::ActiveModalDialog;
 
+/// Tooltip of a drawing feature not yet ported (rules_v1 deferred-control text).
+const DEFERRED_R3: &str = "아직 Rust 판에서 연결하지 않았습니다 (지시 R3)";
+
 impl StrataAppState {
     /// 축척 프리셋·용지 크기·도면 정보 칸.
     pub(crate) fn paint_drawing_right_items_b(&mut self, ui: &mut egui::Ui) {
@@ -136,14 +139,9 @@ impl StrataAppState {
                         .fill(Color32::from_rgb(181, 87, 58))
                         .corner_radius(6.0)
                         .min_size(Vec2::new(172.0, 36.0));
-                        if ui.add(pdf_btn).clicked() {
-                            if let Ok(path) = self.drawing.export_pdf_to_temp() {
-                                self.home_map.draw_guide_message = Some(format!(
-                                    "조사도면 PDF를 저장했습니다: {}",
-                                    path.display()
-                                ));
-                            }
-                        }
+                        // Deferred until R3: cpp saves the real layout PDF
+                        // (KaDrawingStudio.cpp:3819-3851); the Rust writer drew empty rectangles.
+                        ui.add_enabled(false, pdf_btn).on_disabled_hover_text(DEFERRED_R3);
                         let prt_btn =
                             egui::Button::new(egui::RichText::new("인쇄").size(12.5).strong())
                                 .fill(Color32::WHITE)

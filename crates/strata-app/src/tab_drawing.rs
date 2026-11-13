@@ -1,6 +1,4 @@
-use std::path::PathBuf;
 use strata_check_export::checklist_engine::{ChecklistEngine, ChecklistFinding};
-use strata_layout::pdf_geotiff::render_sheet_pdf_bytes;
 use strata_layout::sheet_composer::{DrawingSheet, SheetOrientation, SheetPaperSize};
 use strata_types::crs::SubmitCrs;
 
@@ -73,14 +71,6 @@ impl DrawingTabState {
         self.sheet.change_paper(size, ori);
         self.last_findings =
             ChecklistEngine::evaluate_sheet(&self.sheet, SubmitCrs::Epsg5179, true);
-    }
-
-    pub fn export_pdf_to_temp(&self) -> std::io::Result<PathBuf> {
-        let bytes = render_sheet_pdf_bytes(&self.sheet, &self.title_ko)
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        let out = std::env::temp_dir().join("조사도면.pdf");
-        std::fs::write(&out, bytes)?;
-        Ok(out)
     }
 
     pub const HGIS_DPI_DRAFT: i32 = 150;

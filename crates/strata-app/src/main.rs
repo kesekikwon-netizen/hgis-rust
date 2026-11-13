@@ -202,7 +202,6 @@ mod snap_shot_run;
 mod dlg_cad_import_notice;
 mod dlg_cadastral_download;
 mod dlg_drawing_print;
-mod dlg_geotiff_limits;
 mod dlg_heritage_browser;
 mod dlg_heritage_region_select;
 mod dlg_new_survey;

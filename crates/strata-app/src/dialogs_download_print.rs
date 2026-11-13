@@ -20,7 +20,6 @@ pub(crate) use crate::dlg_survey_contour::render_survey_contour;
 pub(crate) use crate::dlg_heritage_browser::render_heritage_browser;
 pub(crate) use crate::dlg_topographic_import::render_topographic_import;
 pub(crate) use crate::dlg_cad_import_notice::render_cad_import_notice;
-pub use crate::dlg_geotiff_limits::{geotiff_canvas_size_px, geotiff_default_file_name, MAP_TAB_ONLY_REASON, HGIS_GEOTIFF_MAX_SIDE_PX, HGIS_GEOTIFF_MAX_TOTAL_PX};
 
 
 
