@@ -62,6 +62,24 @@ impl LayerEditBuffer {
         true
     }
 
+    /// 속성만 바꾼다(QgsVectorLayer::changeAttributeValue 여러 번을 한 편집 명령으로, 되돌리기 한 단계).
+    /// `None` 은 그 값을 지운다(NULL). 그 fid 가 없으면 false.
+    pub fn change_attributes(&mut self, fid: i64, values: &[(String, Option<String>)]) -> bool {
+        let Some(i) = self.features.iter().position(|f| f.fid == fid) else {
+            return false;
+        };
+        self.undo_stack.push(self.features.clone());
+        self.redo_stack.clear();
+        let attributes = &mut self.features[i].attributes;
+        for (field, value) in values {
+            match value {
+                Some(v) => attributes.insert(field.clone(), v.clone()),
+                None => attributes.remove(field),
+            };
+        }
+        true
+    }
+
     pub fn undo(&mut self) -> bool {
         if let Some(prev) = self.undo_stack.pop() {
             let current = std::mem::replace(&mut self.features, prev);
@@ -152,5 +170,23 @@ mod change_tests {
         assert_eq!(b.features[0].wkt_geom, "POINT (1 1)");
         assert!(b.redo());
         assert_eq!(b.features[0].wkt_geom, "POINT (2 2)");
+    }
+
+    /// 속성 바꾸기(C++ 「속성 편집」 한 명령)는 되돌리기 한 단계 — None 은 값을 지운다(NULL). 없는 fid 는 아무것도 안 한다.
+    #[test]
+    fn change_attributes_is_one_undo_step() {
+        let mut b = LayerEditBuffer::new(DomainLayerKey::FeaturePoly);
+        let attrs = BTreeMap::from([("kind".to_owned(), "주거지".to_owned()), ("note".to_owned(), "숯".to_owned())]);
+        let fid = b.add_unsaved_feature("POINT (1 1)".to_owned(), attrs.clone());
+        let changes = [("kind".to_owned(), Some("수혈".to_owned())), ("note".to_owned(), None), ("period".to_owned(), Some("삼국".to_owned()))];
+        assert!(b.change_attributes(fid, &changes));
+        assert!(!b.change_attributes(99, &changes));
+        let changed = BTreeMap::from([("kind".to_owned(), "수혈".to_owned()), ("period".to_owned(), "삼국".to_owned())]);
+        assert_eq!(b.features[0].attributes, changed);
+        assert!(b.undo());
+        assert_eq!(b.features.len(), 1);
+        assert_eq!(b.features[0].attributes, attrs);
+        assert!(b.redo());
+        assert_eq!(b.features[0].attributes, changed);
     }
 }

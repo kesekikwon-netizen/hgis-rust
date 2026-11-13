@@ -164,6 +164,10 @@ mod feature_form;
 mod feature_form_state;
 mod app_state_feature_form;
 mod dlg_feature_form;
+#[allow(dead_code)] // CM1b 2/3 의 「도형 속성」 창이 붙으면 지운다
+mod feature_record;
+#[allow(dead_code)] // CM1b 2/3 의 「도형 속성」 창이 붙으면 지운다
+mod app_state_feature_record;
 mod user_settings;
 mod basemap_cadastral_jobs;
 mod basemap_fetch;
