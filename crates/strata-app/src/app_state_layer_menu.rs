@@ -110,20 +110,45 @@ impl StrataAppState {
             self.show_status_message("이름을 바꾸지 못했습니다 — 이름은 비울 수 없습니다. 한 글자 이상 넣으세요.".to_owned());
             return;
         }
-        let old = std::mem::replace(&mut e.label_ko, new.clone());
-        if old == new {
-            return;
+        let old = e.label_ko.clone();
+        if self.rename_layer_to(&r.key, &new) {
+            self.show_status_message(format!("이름 변경: {old} → {new}"));
         }
+    }
+
+    /// 이름을 바꾼다(layer->setName) — 이름으로 묶여 있던 표시·라벨 체크·현재 줄을 새 이름으로 옮긴다. 같으면 false.
+    pub(crate) fn rename_layer_to(&mut self, key: &str, new: &str) -> bool {
+        let Some(e) = self.left_layers.entries.iter_mut().find(|e| e.layer_key == key) else { return false };
+        if new.is_empty() || e.label_ko == new {
+            return false;
+        }
+        let old = std::mem::replace(&mut e.label_ko, new.to_owned());
         let rs = &mut self.home_map.real_survey;
         for map in [&mut rs.layer_visible, &mut rs.label_visible] {
             if let Some(v) = map.remove(&old) {
-                map.insert(new.clone(), v);
+                map.insert(new.to_owned(), v);
             }
         }
         if self.right_inspector.selected_layer_key.as_deref() == Some(old.as_str()) {
-            self.right_inspector.selected_layer_key = Some(new.clone());
+            self.right_inspector.selected_layer_key = Some(new.to_owned());
         }
-        self.show_status_message(format!("이름 변경: {old} → {new}"));
+        true
+    }
+
+    /// 목록 줄 두 번 클릭 — 그 자리에서 이름 고치기(MainWindow.cpp:1676-1683 onLayerTreeDoubleClicked → m_layerTree->edit).
+    pub(crate) fn start_inline_rename(&mut self, key: &str) {
+        if let Some(e) = self.left_layers.entries.iter().find(|e| e.layer_key == key) {
+            self.home_map.inline_rename = Some((key.to_owned(), e.label_ko.clone(), true));
+        }
+    }
+
+    /// 그 자리 고치기를 마친다 — QGIS 트리처럼 상태 글 없이, 비면 그대로.
+    pub(crate) fn finish_inline_rename(&mut self, keep: bool) {
+        if let Some((key, text, _)) = self.home_map.inline_rename.take() {
+            if keep {
+                self.rename_layer_to(&key, text.trim());
+            }
+        }
     }
 }
 

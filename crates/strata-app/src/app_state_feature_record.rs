@@ -52,7 +52,7 @@ impl StrataAppState {
             return;
         }
         self.redo_tables.clear();
-        self.undo_tables.push(form.table.clone());
+        self.undo_tables.push(crate::app_state_layer_remove::UndoStep::Table(form.table.clone()));
         self.is_dirty = true;
         self.after_layer_edit(&form.table);
         self.show_status_message(format!(

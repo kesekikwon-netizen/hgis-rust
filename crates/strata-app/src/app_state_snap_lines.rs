@@ -113,7 +113,7 @@ impl StrataAppState {
         let t = self.survey_tables.iter_mut().find(|t| t.table == table)?;
         t.layer.change_geometry(fid, wkt).then_some(())?;
         self.redo_tables.clear();
-        self.undo_tables.push(table);
+        self.undo_tables.push(crate::app_state_layer_remove::UndoStep::Table(table));
         self.is_dirty = true;
         Some((moved_n, inserted))
     }

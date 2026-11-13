@@ -232,6 +232,9 @@ impl StrataAppState {
         if let Ok(tables) = strata_storage::survey_gpkg_read::read_survey_tables(&written) {
             self.survey_tables = tables;
         }
+        // 빼 둔 레이어(되돌리기 단계 안)는 저장하지 않았고 목록에도 없다 — 다시 읽은 표에서도 뺀다.
+        let removed = self.removed_table_keys();
+        self.survey_tables.retain(|t| !removed.contains(&t.table));
         // 저장 안 한 도형은 새 번호를 받는다 — 그 도형을 보이던 카드는 비운다(KaFeatureCard.cpp:249-251).
         self.drop_card_if_gone();
         let name = written.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();

@@ -105,7 +105,7 @@ impl StrataAppState {
                     return false;
                 }
                 self.redo_tables.clear();
-                self.undo_tables.push(c.table.clone());
+                self.undo_tables.push(crate::app_state_layer_remove::UndoStep::Table(c.table.clone()));
                 self.is_dirty = true;
                 self.home_map.card_failure = None;
                 self.after_layer_edit(&c.table);

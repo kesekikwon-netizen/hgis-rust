@@ -92,7 +92,7 @@ pub struct StrataAppState {
     /// C++ `KaCaptureMapTool::m_points` — 그리던 면.
     pub(crate) draw_sketch: crate::draw_sketch::DrawSketch,
     /// 되돌리기·다시 실행 차례(표 이름, 최근 것이 끝) — C++ newestUndoLayer·newestRedoLayer.
-    pub(crate) undo_tables: Vec<String>,
+    pub(crate) undo_tables: Vec<crate::app_state_layer_remove::UndoStep>,
     pub(crate) redo_tables: Vec<String>,
     /// 지도 우클릭 메뉴의 「조사 도형 그리기」 하위 메뉴가 펼쳐져 있는가.
     pub map_menu_sub_open: bool,

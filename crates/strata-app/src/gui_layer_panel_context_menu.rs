@@ -98,7 +98,16 @@ impl StrataAppState {
             "layer.bottom" => {
                 self.layer_to_group_bottom(key.unwrap_or_default());
             }
-            // 레이어 삭제는 CM2a-1d. 깨진 한글 바로잡기는 .shp 레이어에만 보인다(조사 GPKG 에는 없다).
+            // removeLayersFromTree — 그 줄(묶음 머리면 그 묶음의 레이어 모두). 깨진 한글 바로잡기는 .shp 레이어에만 보인다.
+            "layer.remove" => match (key, self.home_map.layer_menu_group) {
+                (Some(k), _) => {
+                    self.remove_layers(&[k.to_owned()]);
+                }
+                (None, Some(g)) => {
+                    self.remove_group_layers(g);
+                }
+                (None, None) => {}
+            },
             _ => {}
         }
     }

@@ -133,7 +133,7 @@ impl StrataAppState {
         self.home_map.last_drawn_shape = Some((key.clone(), fid));
         self.draw_sketch.points.clear();
         self.redo_tables.clear();
-        self.undo_tables.push(key.clone());
+        self.undo_tables.push(crate::app_state_layer_remove::UndoStep::Table(key.clone()));
         self.is_dirty = true;
         self.after_layer_edit(&key);
         // 이름·번호 창(연속 그리기 꺼짐)과 그 뒤 상태 글 — app_state_feature_form.rs.
@@ -159,12 +159,20 @@ impl StrataAppState {
     }
 
     /// Ctrl+Z — 그리던 점이 있으면 마지막 점, 없으면 가장 최근에 바꾼 레이어의 편집 하나
-    /// (MainWindowUndo.cpp:325-363 undoMapAction). 레이어를 지운 일 등의 되돌리기는 아직 없다.
+    /// (MainWindowUndo.cpp:325-363 undoMapAction), 레이어 삭제면 그 레이어들을 되돌린다(:369-389, 다시 실행은 없다).
     pub(crate) fn undo_map_action(&mut self) {
         if self.sketch_undo_vertex() {
             return;
         }
-        while let Some(key) = self.undo_tables.pop() {
+        while let Some(step) = self.undo_tables.pop() {
+            let key = match step {
+                crate::app_state_layer_remove::UndoStep::Table(key) => key,
+                crate::app_state_layer_remove::UndoStep::LayersRemoved(removed) => {
+                    self.restore_removed_layers(removed);
+                    self.show_status_message("이전 상태로 되돌렸습니다.".to_owned());
+                    return;
+                }
+            };
             let undone = self.survey_tables.iter_mut().find(|t| t.table == key).is_some_and(|t| t.layer.undo());
             if undone {
                 self.redo_tables.push(key.clone());
@@ -182,7 +190,7 @@ impl StrataAppState {
         while let Some(key) = self.redo_tables.pop() {
             let redone = self.survey_tables.iter_mut().find(|t| t.table == key).is_some_and(|t| t.layer.redo());
             if redone {
-                self.undo_tables.push(key.clone());
+                self.undo_tables.push(crate::app_state_layer_remove::UndoStep::Table(key.clone()));
                 self.is_dirty = true;
                 self.after_layer_edit(&key);
                 self.show_status_message("다시 실행했습니다.".to_owned());

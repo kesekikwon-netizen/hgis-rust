@@ -58,7 +58,7 @@ impl StrataAppState {
                 self.on_layer_row_secondary(spec, full_r, &resp, band_h);
             }
             if resp.double_clicked() {
-                self.on_layer_row_double_clicked(&spec.name);
+                self.start_inline_rename(&spec.key);
             }
 
             let is_sel =
@@ -114,13 +114,11 @@ impl StrataAppState {
             let l_state = self.home_map.real_survey.layer_check_state(&spec.name);
             paint_checkbox_state(&p, Pos2::new(x + 27.0, ry), l_state);
             paint_symbol_swatch(&p, Pos2::new(x + 51.0, ry), spec.swatch);
-            p.text(
-                Pos2::new(x + 69.0, ry),
-                egui::Align2::LEFT_CENTER,
-                &spec.name,
-                egui::FontId::proportional(11.0),
-                spec.ink,
-            );
+            if self.home_map.inline_rename.as_ref().is_some_and(|r| r.0 == spec.key) {
+                self.paint_inline_rename(ui, Rect::from_min_max(Pos2::new(x + 66.0, ry - 10.0), Pos2::new(right_col_x - 8.0, ry + 10.0)));
+            } else {
+                p.text(Pos2::new(x + 69.0, ry), egui::Align2::LEFT_CENTER, &spec.name, egui::FontId::proportional(11.0), spec.ink);
+            }
 
             if spec.show_count {
                 p.text(
@@ -212,18 +210,26 @@ impl StrataAppState {
         }
     }
 
+    /// 그 자리 이름 고치기 상자(QTreeView 편집기) — Enter·칸을 떠나면 바꾸고, Esc 는 그대로.
+    fn paint_inline_rename(&mut self, ui: &mut egui::Ui, rect: Rect) {
+        let Some((_, text, first)) = self.home_map.inline_rename.as_mut() else { return };
+        let r = ui.put(rect, egui::TextEdit::singleline(text).font(egui::FontId::proportional(11.0)));
+        if *first {
+            r.request_focus();
+            *first = false;
+        }
+        let cancel = ui.input(|i| i.key_pressed(egui::Key::Escape));
+        if r.lost_focus() || cancel {
+            self.finish_inline_rename(!cancel);
+        }
+    }
+
     /// 목록의 빈 곳 우클릭 — 레이어 아닌 줄 메뉴(「참고 자료 불러오기…」).
     pub(crate) fn open_blank_layer_menu(&mut self, at: egui::Pos2) {
         self.layer_context_menu_open = true;
         self.layer_context_menu_pos = [at.x, at.y];
         self.layer_context_menu_key = None;
         self.home_map.layer_menu_group = None;
-    }
-
-    /// 더블클릭 — 면·외곽선 색 (`KaDrawingStudio.cpp:738-744`).
-    fn on_layer_row_double_clicked(&mut self, name: &str) {
-        self.right_inspector.selected_layer_key = Some(name.to_owned());
-        self.modals.active = Some(crate::dialogs_modal::ActiveModalDialog::LineColor);
     }
 }
 

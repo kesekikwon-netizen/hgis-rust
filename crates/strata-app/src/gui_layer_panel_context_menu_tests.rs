@@ -63,3 +63,28 @@ fn actions_apply_to_the_clicked_layer() {
     app.run_layer_menu_action(Some("feature_poly"), &MenuPick { id: "layer.draw", value: String::new() });
     assert_eq!(app.edit_layer_key.as_deref(), Some("feature_poly"));
 }
+
+/// 두 번 클릭 = 그 자리에서 이름 고치기(m_layerTree->edit): 적고 Enter 면 바뀌고, Esc 면 그대로.
+#[test]
+fn inline_rename_on_the_row() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut app = opened_demo(dir.path());
+    let ctx = egui::Context::default();
+    let key = |pressed, k| Event::Key { key: k, physical_key: None, pressed, repeat: false, modifiers: Modifiers::default() };
+    let name = |app: &StrataAppState| app.left_layers.entries.iter().find(|e| e.layer_key == "feature_poly").unwrap().label_ko.clone();
+    let old = name(&app);
+    app.start_inline_rename("feature_poly");
+    frame(&mut app, &ctx, vec![]);
+    frame(&mut app, &ctx, vec![key(true, Key::A), key(false, Key::A)]);
+    frame(&mut app, &ctx, vec![Event::Text(" 북".to_owned())]);
+    frame(&mut app, &ctx, vec![key(true, Key::Enter)]);
+    frame(&mut app, &ctx, vec![key(false, Key::Enter)]);
+    assert!(app.home_map.inline_rename.is_none());
+    assert_eq!(name(&app), format!("{old} 북"));
+    app.start_inline_rename("feature_poly");
+    frame(&mut app, &ctx, vec![]);
+    frame(&mut app, &ctx, vec![Event::Text("x".to_owned())]);
+    frame(&mut app, &ctx, vec![key(true, Key::Escape)]);
+    assert!(app.home_map.inline_rename.is_none());
+    assert_eq!(name(&app), format!("{old} 북"), "Esc keeps the name");
+}
