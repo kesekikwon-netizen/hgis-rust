@@ -10,15 +10,23 @@ use strata_storage::survey_facts_probe::{drive_kinds, probe_counts_if_unknown};
 
 use crate::app_state::{MainTab, StrataAppState};
 
-/// 이 PC 의 드라이브 종류 — 처음 셀 조사가 있을 때 한 번만 읽는다.
-fn drive_kind(letter: char) -> Option<String> {
+/// 이 PC 의 드라이브 종류 — 처음 부를 때 뒤 실행(스레드)에서 한 번 읽기 시작하고, 다 읽었으면 그 표.
+/// (PowerShell 이 0.2초쯤 걸려 화면이 멈추지 않게 — C++ GetDriveTypeW 는 바로 끝난다.)
+fn drive_kinds_ready() -> Option<&'static HashMap<char, String>> {
     static KINDS: OnceLock<HashMap<char, String>> = OnceLock::new();
-    KINDS.get_or_init(drive_kinds).get(&letter).cloned()
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    STARTED.call_once(|| {
+        std::thread::spawn(|| {
+            let _ = KINDS.set(drive_kinds());
+        });
+    });
+    KINDS.get()
 }
 
 impl StrataAppState {
     /// 매 프레임 — 홈 탭에 들어올 때 한 번 센다(probeSurveyFacts), 다른 탭으로 가면 다음 방문에 다시.
-    pub(crate) fn home_facts_on_visit(&mut self) {
+    /// 드라이브 종류를 아직 읽는 중이면 다음 프레임에(그동안 기록된 사실만 보인다).
+    pub(crate) fn home_facts_on_visit(&mut self, ctx: Option<&eframe::egui::Context>) {
         if self.active_tab != MainTab::Home {
             self.home_map.facts_probed = false;
             return;
@@ -26,11 +34,18 @@ impl StrataAppState {
         if self.home_map.facts_probed {
             return;
         }
+        let Some(kinds) = drive_kinds_ready() else {
+            if let Some(ctx) = ctx {
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            }
+            return;
+        };
         self.home_map.facts_probed = true;
         if let Some(ini) = self.settings_ini.clone() {
             // probeCandidates — 지금 있는 로컬 조사만.
             let paths: Vec<String> = self.recent_surveys.iter().filter(|it| it.available && !it.path.starts_with("//")).map(|it| it.path.clone()).collect();
             let open: Vec<String> = self.survey_path.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+            let drive_kind = |letter: char| kinds.get(&letter).cloned();
             if let Err(e) = probe_counts_if_unknown(&ini, &paths, &open, MAX_PROBES, &drive_kind) {
                 eprintln!("[facts] 조사 개수를 기록하지 못했습니다: {e}");
             }

@@ -23,6 +23,8 @@ pub struct AccountDialogState {
     pub show_passwords: bool,
     /// Set by `validate_credentials` when a site account has only one of ID/PW.
     pub validation_error: Option<String>,
+    /// 저장소에 넣어져 있는 자료 연결 다섯 곳(C++ AccountStatus::snapshot) — 홈 「연결 상태」.
+    pub status: Vec<strata_secrets::account_status::Entry>,
 }
 
 impl AccountDialogState {
@@ -72,6 +74,7 @@ impl AccountDialogState {
             status_summary_ko: String::new(),
             show_passwords: false,
             validation_error: None,
+            status: strata_secrets::account_status::Stores::in_dir(config_dir).snapshot(),
         };
         st.recompute_flags();
         st
@@ -158,6 +161,8 @@ impl AccountDialogState {
             }
         }
         self.recompute_flags();
+        // 저장한 뒤 홈 「연결 상태」를 다시 센다(KaHomeConnectionCard::refresh).
+        self.status = strata_secrets::account_status::Stores::in_dir(&dir).snapshot();
         first_error.map_or(Ok(()), Err)
     }
 }

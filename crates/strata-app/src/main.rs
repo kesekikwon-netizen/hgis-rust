@@ -157,6 +157,7 @@ mod svg_path_paint_tests;
 
 mod basemap_cadastral;
 mod extent_history;
+mod home_connection_model;
 mod home_text;
 mod map_context_menu_model;
 mod status_bar_text;

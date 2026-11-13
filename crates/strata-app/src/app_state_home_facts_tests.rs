@@ -21,7 +21,14 @@ fn home_visit_counts_an_unopened_recent_survey() {
     app.attach_user_settings(Some(dir.path().join("ka-hgis.ini")));
     app.remember_survey(&survey, "a");
     app.active_tab = MainTab::Home;
-    app.home_facts_on_visit();
+    // 드라이브 종류는 뒤 실행에서 읽는다 — 다 읽을 때까지 매 프레임처럼 부른다.
+    for _ in 0..200 {
+        app.home_facts_on_visit(None);
+        if app.home_map.facts_probed {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
     let f = app.facts_of(&app.recent_surveys[0].path.clone());
     assert!(f.has_counts(), "{f:?}");
     assert!(f.areas >= 1);
@@ -54,6 +61,6 @@ fn without_an_ini_nothing_is_known() {
     app.open_survey_gpkg(&survey);
     assert!(app.save_survey_project());
     app.active_tab = MainTab::Home;
-    app.home_facts_on_visit();
+    app.home_facts_on_visit(None);
     assert!(!app.facts_of(&survey.to_string_lossy()).known);
 }

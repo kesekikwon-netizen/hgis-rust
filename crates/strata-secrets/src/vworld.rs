@@ -1,36 +1,12 @@
-use crate::accounts::AccountSettings;
 use crate::secret_store::{parse_qt_ini_file, serialize_qt_ini};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use strata_types::error::StrataResult;
 
 #[derive(Debug, Clone, Copy)]
 pub struct VworldSettings;
 
 impl VworldSettings {
-    pub fn default_ini_path() -> Option<PathBuf> {
-        let dir = AccountSettings::user_config_dir();
-        let candidate = dir.join("ka-hgis-vworld.ini");
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            let legacy = PathBuf::from(&local_app_data)
-                .join("ka-hgis")
-                .join("ka-hgis-vworld.ini");
-            if legacy.is_file() {
-                return Some(legacy);
-            }
-            return Some(
-                PathBuf::from(local_app_data)
-                    .join("ka-hgis")
-                    .join("ka-hgis")
-                    .join("ka-hgis-vworld.ini"),
-            );
-        }
-        Some(candidate)
-    }
-
     pub fn load_from_ini(path: &Path) -> StrataResult<String> {
         if !path.is_file() {
             return Ok(String::new());
@@ -47,44 +23,16 @@ impl VworldSettings {
         Ok(String::new())
     }
 
+    /// C++ `VworldSettings::loadApiKey` 의 순서(ini → 레지스트리 → 환경 변수 → 저장소 secrets.ini, `KeyStores`).
+    #[must_use]
     pub fn load_api_key() -> String {
-        if let Some(ini) = Self::default_ini_path() {
-            if let Ok(k) = Self::load_from_ini(&ini) {
-                if !k.is_empty() {
-                    return k;
-                }
-            }
-        }
-        if let Ok(env_k) = std::env::var("VWORLD_API_KEY") {
-            let trimmed = env_k.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
-        }
-        let repo_secrets = Path::new("config/secrets.ini");
-        if let Ok(k) = Self::load_from_ini(repo_secrets) {
-            if !k.is_empty() {
-                return k;
-            }
-        }
-        String::new()
+        crate::key_stores::KeyStores::user().api_key()
     }
 
+    /// C++ `VworldSettings::loadHistoryGisApiKey` 의 순서(ini → 레지스트리 → 환경 변수).
+    #[must_use]
     pub fn load_history_gis_api_key() -> String {
-        if let Some(ini) = Self::default_ini_path() {
-            if let Ok(k) = Self::load_history_gis_from_ini(&ini) {
-                if !k.is_empty() {
-                    return k;
-                }
-            }
-        }
-        if let Ok(env_k) = std::env::var("HISTORY_GIS_API_KEY") {
-            let trimmed = env_k.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
-        }
-        String::new()
+        crate::key_stores::KeyStores::user().history_key()
     }
 
     pub fn save_to_ini(path: &Path, key: &str) -> StrataResult<()> {

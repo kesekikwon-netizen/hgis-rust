@@ -27,7 +27,8 @@ pub struct HomeMapTabState {
     pub layer_label_size_pt: i32,
     pub layer_label_ink_idx: usize,
     pub layer_label_buffer_halo: bool,
-    pub internet_checked: bool,
+    /// 홈 「인터넷 확인」(KaHomeConnectionCard::checkInternet).
+    pub(crate) internet: crate::home_connection_model::InternetCheck,
     pub files_open: bool,
     pub layer_filter: String,
     pub selected_feature_idx: Option<usize>,
@@ -100,7 +101,7 @@ impl Default for HomeMapTabState {
             layer_label_size_pt: 9,
             layer_label_ink_idx: 0,
             layer_label_buffer_halo: true,
-            internet_checked: false,
+            internet: crate::home_connection_model::InternetCheck::NotChecked,
             files_open: true,
             layer_filter: String::new(),
             selected_feature_idx: None,
