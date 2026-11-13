@@ -43,6 +43,10 @@ pub struct HomeMapTabState {
     pub(crate) feature_form: Option<crate::feature_form_state::FeatureForm>,
     /// 지도 우클릭 메뉴를 연 자리의 조사 도형(표, fid) — 「이 도형 기록 입력」.
     pub(crate) menu_hit: Option<(String, i64)>,
+    /// 오른쪽 카드가 보이는 도형, 적는 중인 글(칸 → 글), 마지막으로 못 바꾼 이유.
+    pub(crate) card: Option<crate::app_state_feature_card::CardTarget>,
+    pub(crate) card_drafts: std::collections::BTreeMap<String, String>,
+    pub(crate) card_failure: Option<String>,
     /// 열려 있는 「도형 속성」 창.
     pub(crate) feature_record: Option<crate::feature_record::FeatureRecordForm>,
     pub grid_enabled: bool,
@@ -95,6 +99,9 @@ impl Default for HomeMapTabState {
             feature_form: None,
             feature_record: None,
             menu_hit: None,
+            card: None,
+            card_drafts: std::collections::BTreeMap::new(),
+            card_failure: None,
             grid_enabled: false,
             cursor_world_xy: center,
             cursor_seen: false,

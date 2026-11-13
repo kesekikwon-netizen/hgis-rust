@@ -13,6 +13,8 @@ impl StrataAppState {
 
     /// 그 표의 도형 `fid` 로 창을 연다.
     pub(crate) fn open_feature_record(&mut self, table: &str, fid: i64) {
+        // 카드에 적던 글을 먼저 쓴다 — 창은 연 때의 값을 저장 때 모든 칸에 다시 쓰므로 그 글이 지워지지 않게.
+        self.commit_card_typing();
         let name = self.left_layers.entries.iter().find(|e| e.layer_key == table).map(|e| e.label_ko.clone()).unwrap_or_default();
         let Some(t) = self.survey_tables.iter().find(|t| t.table == table) else { return };
         match FeatureRecordForm::new(t, fid, &name) {

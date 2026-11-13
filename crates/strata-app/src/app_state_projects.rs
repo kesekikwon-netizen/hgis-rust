@@ -207,6 +207,8 @@ impl StrataAppState {
     pub(crate) fn write_survey_to(&mut self, path: &std::path::Path) -> bool {
         use strata_storage::survey_gpkg_save::{save_survey, SaveFailure};
 
+        // 카드에 적던 글도 함께 쓴다(C++ 은 「저장」 단추를 누르면 칸을 떠나며 먼저 쓴다 — Ctrl+S 때도 잃지 않게).
+        self.commit_card_typing();
         if !path.exists() {
             if let Err(e) = strata_storage::gpkg::GpkgRepository::create_new_survey(path, self.work_crs) {
                 let detail = crate::dlg_new_survey::new_survey_error_text(&e);
@@ -230,6 +232,8 @@ impl StrataAppState {
         if let Ok(tables) = strata_storage::survey_gpkg_read::read_survey_tables(&written) {
             self.survey_tables = tables;
         }
+        // 저장 안 한 도형은 새 번호를 받는다 — 그 도형을 보이던 카드는 비운다(KaFeatureCard.cpp:249-251).
+        self.drop_card_if_gone();
         let name = written.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         if let Some(stem) = written.file_stem() {
             self.project_title = stem.to_string_lossy().into_owned();

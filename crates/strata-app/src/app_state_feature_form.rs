@@ -19,6 +19,8 @@ impl StrataAppState {
                 return;
             }
         }
+        // MainWindowEditing.cpp:873 — 속성 카드에 그린 도형을(고르지 않은 채).
+        self.set_card_target(key, fid, false);
         let text = self.captured_status(key, offer && self.ribbon.continuous_draw, notice.as_deref());
         self.show_status_message(text);
     }
@@ -26,6 +28,7 @@ impl StrataAppState {
     /// 창의 「저장」(Enter).
     pub(crate) fn save_feature_form(&mut self) {
         let Some(form) = self.home_map.feature_form.take() else { return };
+        self.set_card_target(&form.table, form.fid, false);
         match self.apply_feature_form(&form) {
             Ok(()) => {
                 let text = self.captured_status(&form.table, false, form.repair_notice.as_deref());
@@ -41,6 +44,7 @@ impl StrataAppState {
     /// 창의 「건너뛰기」(Esc) — 그린 도형은 빈 값으로 남는다.
     pub(crate) fn skip_feature_form(&mut self) {
         let Some(form) = self.home_map.feature_form.take() else { return };
+        self.set_card_target(&form.table, form.fid, false);
         let text = self.captured_status(&form.table, false, form.repair_notice.as_deref());
         self.show_status_message(text);
     }

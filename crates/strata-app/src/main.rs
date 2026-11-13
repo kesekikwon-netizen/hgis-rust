@@ -168,6 +168,10 @@ mod feature_record;
 mod app_state_feature_record;
 mod dlg_feature_record;
 mod dlg_feature_record_figure;
+#[allow(dead_code)] // CM1b 3b 의 카드 그리기가 붙으면 지운다
+mod feature_card;
+#[allow(dead_code)] // CM1b 3b 의 카드 그리기가 붙으면 지운다(card_view_now·card_draft)
+mod app_state_feature_card;
 mod user_settings;
 mod basemap_cadastral_jobs;
 mod basemap_fetch;

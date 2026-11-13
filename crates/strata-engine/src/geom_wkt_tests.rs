@@ -36,3 +36,11 @@ fn union_area_counts_overlap_once() {
     assert!((union_area(&[a, b]).expect("union") - 150.0).abs() < 1e-9);
     assert_eq!(union_area(&[]).expect("empty"), 0.0);
 }
+
+/// 길이 — 면은 바깥(과 구멍) 테두리 길이(QgsGeometry::length), 선은 선 길이, 점은 0. C++ test_feature_card 의 둘레 30.00 m.
+#[test]
+fn length_is_the_outline_for_polygons() {
+    assert!((wkt_length("POLYGON ((0 0, 10 0, 10 5, 0 5, 0 0))").expect("len") - 30.0).abs() < 1e-9);
+    assert!((wkt_length("LINESTRING (0 0, 3 4)").expect("len") - 5.0).abs() < 1e-9);
+    assert_eq!(wkt_length("POINT (1 1)").expect("len"), 0.0);
+}

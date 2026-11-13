@@ -126,6 +126,8 @@ impl StrataAppState {
             _ => rings,
         };
         let attrs = stamped_attributes(&table.columns);
+        // MainWindowEditing.cpp:826 — 카드에 적던 값은 그 도형의 따로 한 단계로 먼저 쓴다.
+        self.commit_card_typing();
         let fid = self.survey_tables[idx].layer.add_unsaved_feature(polygon_wkt(&rings), attrs);
         // m_lastDrawnLayer·m_lastDrawnFid(MainWindowEditing.cpp:846-847, 면 레이어만).
         self.home_map.last_drawn_shape = Some((key.clone(), fid));
@@ -196,6 +198,8 @@ impl StrataAppState {
         if let Some(e) = self.left_layers.entries.iter_mut().find(|e| e.layer_key == key) {
             e.feature_count = n;
         }
+        // 되돌리기로 도형이 없어졌으면 카드를 비운다(KaFeatureCard.cpp:198-203 featureDeleted).
+        self.drop_card_if_gone();
     }
 
     /// C++ `missingAttributeCounterText`(KaSubmitFlow.cpp:269-290) — 종류·시대가 빈 유구 면 수.

@@ -23,7 +23,14 @@ impl StrataAppState {
             return;
         }
         match self.survey_area_layer_to_continue() {
-            Some((key, label)) => self.begin_edit_layer(&key, &label),
+            Some((key, label)) => {
+                self.begin_edit_layer(&key, &label);
+                // MainWindowEditing.cpp:1126-1129 — 이어 그리는 조사구역의 첫 기록을 오른쪽 속성에 보인다.
+                let first = self.survey_tables.iter().find(|t| t.table == key).and_then(|t| t.layer.features.first()).map(|f| f.fid);
+                if let Some(fid) = first {
+                    self.set_card_target(&key, fid, false);
+                }
+            }
             None => self.home_map.survey_area_setup = Some(crate::survey_area_setup::SurveyAreaSetup::default()),
         }
     }

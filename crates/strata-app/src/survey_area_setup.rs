@@ -64,7 +64,7 @@ impl SurveyAreaSetup {
     }
 }
 
-fn is_survey_area_key(key: &str) -> bool {
+pub(crate) fn is_survey_area_key(key: &str) -> bool {
     key == "survey_area" || key.starts_with("survey_area_")
 }
 

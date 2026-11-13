@@ -22,6 +22,14 @@ pub fn wkt_area(wkt: &str) -> Result<f64, EngineError> {
     Ok(Geometry::new_from_wkt(wkt)?.area()?)
 }
 
+/// 평면 길이(GEOSLength) — 면은 테두리 길이(C++ FeatureRecord::measure 의 둘레 = QgsGeometry::length), 선은 선 길이.
+///
+/// # Errors
+/// WKT 를 읽지 못함.
+pub fn wkt_length(wkt: &str) -> Result<f64, EngineError> {
+    Ok(Geometry::new_from_wkt(wkt)?.length()?)
+}
+
 /// 점이 도형 안에 있는가(GEOSContains)와 점까지 거리(GEOSDistance) — C++ FeaturePick 의 contains·distance.
 ///
 /// # Errors

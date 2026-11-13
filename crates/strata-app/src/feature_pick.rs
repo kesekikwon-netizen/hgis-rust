@@ -91,6 +91,8 @@ impl StrataAppState {
         };
         self.home_map.selected_shape = candidates.get(pick).cloned();
         self.home_map.pick_cycle = (!candidates.is_empty()).then(|| (candidates.clone(), pick, screen));
+        // canvas selectionChanged → syncFeatureCard(MainWindowFeatureCard.cpp:32).
+        self.sync_card_with_selection();
         if candidates.is_empty() {
             self.show_status_message("선택된 도형 없음");
         } else if candidates.len() > 1 {
