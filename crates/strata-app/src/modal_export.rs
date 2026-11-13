@@ -30,49 +30,8 @@ pub(crate) fn render_export_submit_package(app: &mut StrataAppState, ctx: &egui:
         ui.set_width(modal_w - 24.0);
         ui.set_max_width(modal_w - 24.0);
         render_strata_modal_header(ui, "검수·제출 - Strata", open);
-        let has_boundary = !app.home_map.real_survey.survey_rings.is_empty();
-        let gcp_cnt = app
-            .left_layers
-            .entries
-            .iter()
-            .find(|e| e.layer_key == "control_points")
-            .map_or(0, |e| e.feature_count as i64);
-        let feat_cnt = (app.home_map.real_survey.trenches.len()
-            + app.home_map.scene.polygons.len()) as i64;
-        let bounds_ok = app.drawing.sheet.all_decorations_inside_sheet();
-        let detail_ok = app.drawing.sheet.scale_denominator <= 200;
-        let state_json = serde_json::json!({
-            "survey_area_count": i64::from(has_boundary),
-            "control_points_count": gcp_cnt,
-            "feature_poly_count": feat_cnt,
-            "feature_line_count": 0,
-            "project_crs_set": true,
-            "project_crs_authid": app.work_crs.auth_id(),
-            "has_datum": gcp_cnt >= 2,
-            "has_ellipsoid": gcp_cnt >= 2,
-            "has_projection": gcp_cnt >= 2,
-            "has_origin": true,
-            "has_accuracy": true,
-            "has_kind_period": true,
-            "has_abstract_marker": false,
-            "survey_is_polygon": has_boundary,
-            "features_within_survey": true,
-            "features_real_geometry": true,
-            "geometries_valid": true,
-            "geometries_nonempty": has_boundary,
-            "geometries_nonzero_area": has_boundary,
-            "export_crs_valid": true,
-            "required_fields_filled": true,
-            "control_points_point_id_unique": true,
-            "feature_poly_feature_no_unique": true,
-            "sheet_covers_targets": bounds_ok,
-            "sheet_has_elements": bounds_ok,
-            "HERITAGE_PLEDGE_SCOPE": app.home_map.real_survey.heritage_polys.is_empty(),
-            "layout_exists:site_location": has_boundary && bounds_ok,
-            "layout_exists:feature_plan": feat_cnt > 0 && bounds_ok,
-            "layout_exists:feature_detail": detail_ok,
-            "layout_exists:survey_area_map": has_boundary,
-        });
+        // KaSubmitDialog 을 열 때 ProjectStateBuilder::fromProject — 열어 둔 조사 표·편집 버퍼로 판정한다.
+        let state_json = app.checklist_state();
 
         let engine = ChecklistEngine::with_default_rules();
         let results = engine.evaluate(&state_json);

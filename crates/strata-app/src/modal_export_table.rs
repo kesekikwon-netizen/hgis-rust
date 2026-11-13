@@ -7,6 +7,15 @@ use crate::modal_types::ModalDialogController;
 use crate::dialogs_modal::ActiveModalDialog;
 use eframe::egui::{self, Color32, Stroke};
 
+/// KaSubmitDialog::addResultRow(KaSubmitDialog.cpp:181-201)의 단추 — 실패한 줄에만, 「위치 보기」는 걸린 도형이 있을 때,
+/// 바로가기(actionLabel)는 동작이 있을 때.
+pub(crate) fn row_buttons(r: &strata_check_export::checklist_engine::CheckResult) -> (bool, Option<&'static str>) {
+    if r.passed {
+        return (false, None);
+    }
+    (r.targets.iter().any(|t| !t.layer_id.is_empty()), ModalDialogController::submit_action_label(&r.action))
+}
+
 pub(crate) fn paint_export_submit_table(
     app: &mut StrataAppState,
     ui: &mut egui::Ui,
@@ -58,7 +67,8 @@ pub(crate) fn paint_export_submit_table(
                         .show(ui, |ui| {
                             ui.set_max_width(modal_w - 44.0);
                             ui.horizontal(|ui| {
-                                if ui.small_button("위치 보기").clicked() {
+                                let (has_targets, tool_label) = row_buttons(r);
+                                if has_targets && ui.small_button("위치 보기").clicked() {
                                     app.home_map.viewport.center_xy =
                                         app.home_map.real_survey.survey_center;
                                     app.home_map.viewport.meters_per_pixel = 1.8;
@@ -70,21 +80,22 @@ pub(crate) fn paint_export_submit_table(
                                     app.modals.active = None;
                                 }
                                 // KaSubmitDialog.cpp:180-200 — 실패 항목의 바로가기 버튼
-                                if !r.passed {
-                                    if let Some(lbl) =
-                                        ModalDialogController::submit_action_label(&r.action)
-                                    {
+                                {
+                                    if let Some(lbl) = tool_label {
                                         if ui.small_button(lbl).clicked() {
                                             let mut next_modal = None;
                                             match r.action.as_str() {
                                                 "open_layout" => {
                                                     app.active_tab = MainTab::Drawing;
                                                 }
-                                                "draw_survey_area"
-                                                | "draw_feature" => {
+                                                // 그릴 대상을 정하는 C++ 입구(startEditSurveyArea·startEditFeaturePoly) — 도구만 켜지 않는다.
+                                                "draw_survey_area" => {
                                                     app.active_tab = MainTab::Map;
-                                                    app.active_tool =
-                                                        strata_canvas2d::map_tools::MapToolKind::DrawPolygon;
+                                                    app.start_edit_survey_area();
+                                                }
+                                                "draw_feature" => {
+                                                    app.active_tab = MainTab::Map;
+                                                    app.start_edit_feature_poly();
                                                 }
                                                 "add_control_point" => {
                                                     app.active_tab = MainTab::Map;
