@@ -34,6 +34,16 @@ fn sample(rel: &str) -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel)
 }
 
+/// The cpp-made new survey, rebuilt in `dir` from its committed SQL dump (tests/fixtures/cpp_new_survey_5186.sql;
+/// the dump's rtree lines need SQLite's default non-defensive mode).
+fn cpp_new_survey(dir: &Path) -> std::path::PathBuf {
+    let sql = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cpp_new_survey_5186.sql"))
+        .expect("fixture");
+    let path = dir.join("cpp-new-survey-5186.gpkg");
+    rusqlite::Connection::open(&path).expect("create gpkg").execute_batch(&sql).expect("rebuild gpkg");
+    path
+}
+
 fn rule(id: &str, severity: &str, message: &str) -> (String, String, String) {
     (id.to_owned(), severity.to_owned(), message.to_owned())
 }
@@ -83,7 +93,8 @@ fn bad_matches_cpp() {
 /// C++ 이 만든 빈 새 조사 — 오류 7 · 주의 1 · 통과 19. 기준점이 0개여도 측지기준계·타원체·투영법이 오류다(C++ 그대로).
 #[test]
 fn cpp_new_survey_matches_cpp() {
-    let (e, w, p, failed) = outcome_of(&sample("docs/senior/ref-files/cpp-new-survey-5186.gpkg"), &["qgz"]);
+    let fixture = tempfile::tempdir().expect("temp dir");
+    let (e, w, p, failed) = outcome_of(&cpp_new_survey(fixture.path()), &[]);
     let mut want = vec![rule("REQ_DRAWING_SURVEY_AREA", "error", "조사구역도가 없습니다."), site(), plan(), detail()];
     want.extend(gcp());
     let mut got = failed;
@@ -196,6 +207,7 @@ fn failed_rows_show_the_cpp_buttons() {
         assert_eq!(find(&bad, id), vec!["속성 고치기"], "{id}: no points, so no 위치 보기");
     }
     assert_eq!(find(&bad, "FEATURE_LEGEND_FIELDS"), vec!["위치 보기", "속성 고치기"]);
-    let newcpp = buttons(&sample("docs/senior/ref-files/cpp-new-survey-5186.gpkg"), &["qgz"]);
+    let fixture = tempfile::tempdir().expect("temp dir");
+    let newcpp = buttons(&cpp_new_survey(fixture.path()), &[]);
     assert_eq!(find(&newcpp, "REQ_DRAWING_SURVEY_AREA"), vec!["조사구역 그리기"]);
 }

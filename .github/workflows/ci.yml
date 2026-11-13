@@ -25,10 +25,34 @@ jobs:
           if ($hash -ne "adbefda5f92d471cbde9cb3232775485bd1bad61ba97376c9661c37dfd6ad027") { throw "sqlite-tools sha256 mismatch: $hash" }
           Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\sqlite-tools"
           "$env:RUNNER_TEMP\sqlite-tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      # strata-engine --features gdal (submit SHP writer): GDAL 3.12.1 MSVC x64 from GISInternals release-1944
-      # (binaries + SDK lib/include) and proj.db of PROJ 9.8.1 (OSGeo4W proj-runtime-data-9.8.1-1), the proj.db
-      # the cpp reference package was made with; its ESRI names decide the .prj bytes. GDAL_VERSION picks the
-      # gdal-sys prebuilt 3.12 bindings. The GDAL DLLs go on PATH only in the gdal step below.
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Run Workspace Unit Tests
+        run: cargo test --workspace
+      - name: Run V1-V14 Verification Harness
+        run: cargo run -p strata-app --bin ka-hgis -- --verify-all
+
+  # Feature `gdal` (submit SHP writer and package builder) in its own job, so a failure elsewhere never skips it.
+  gdal-feature:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      # Same sqlite3 tool as above: strata-engine builds PROJ from source in this job too.
+      - name: Put SQLite 3.46.0 command-line tool on PATH
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP\sqlite-tools.zip"
+          Invoke-WebRequest -Uri "https://www.sqlite.org/2024/sqlite-tools-win-x64-3460000.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "adbefda5f92d471cbde9cb3232775485bd1bad61ba97376c9661c37dfd6ad027") { throw "sqlite-tools sha256 mismatch: $hash" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\sqlite-tools"
+          "$env:RUNNER_TEMP\sqlite-tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      # GDAL 3.12.1 MSVC x64 from GISInternals release-1944 (binaries + SDK lib/include) and proj.db of PROJ 9.8.1
+      # (OSGeo4W proj-runtime-data-9.8.1-1), the proj.db the cpp reference package was made with; its ESRI names
+      # decide the .prj bytes. GDAL_VERSION picks the gdal-sys prebuilt 3.12 bindings.
       - name: Put GDAL 3.12.1 (GISInternals) and PROJ 9.8.1 data in RUNNER_TEMP
         shell: pwsh
         run: |
@@ -49,18 +73,14 @@ jobs:
           }
           "GDAL_HOME=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "GDAL_VERSION=3.12.0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Run Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Run Workspace Unit Tests
-        run: cargo test --workspace
-      - name: Run Clippy and tests for strata-engine --features gdal
+      - name: Run Clippy and tests for strata-engine and strata-check-export --features gdal
         shell: pwsh
         run: |
           $env:PATH = "$env:GDAL_HOME\bin;$env:PATH"
           $env:PROJ_DATA = "$env:GDAL_HOME\share\proj"
-          cargo clippy -p strata-engine --features gdal --all-targets -- -D warnings
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo test -p strata-engine --features gdal
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Run V1-V14 Verification Harness
-        run: cargo run -p strata-app --bin ka-hgis -- --verify-all
+          foreach ($crate in @("strata-engine", "strata-check-export")) {
+            cargo clippy -p $crate --features gdal --all-targets -- -D warnings
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cargo test -p $crate --features gdal
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
