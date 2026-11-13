@@ -115,22 +115,35 @@ pub fn fetch_tile(kind: TileKind, key: &str, z: u8, x: u32, y: u32) -> Option<Pa
     }
 }
 
-/// curl 로 받아 파일로 쓴다. VWorld 는 Referer 를 인증에 쓰므로 반드시 보낸다.
+/// 타일 받기 curl 명령(주소 없이). VWorld 는 Referer 를 인증에 쓰므로 반드시 보낸다.
+pub(crate) fn tile_curl(dest: &Path) -> Command {
+    let mut cmd = Command::new("curl");
+    cmd.args(["-sS", "-L", "--max-time", "12", "-H", "Referer: https://localhost", "-H", "User-Agent: Mozilla/5.0", "-o"]).arg(dest);
+    cmd
+}
+
+/// curl 로 받아 파일로 쓴다. 키가 든 주소는 명령줄이 아니라 표준입력으로 준다(SEC1).
 fn run_curl(url: &str, dest: &Path) -> bool {
-    let out = Command::new("curl")
-        .args([
-            "-sS",
-            "-L",
-            "--max-time",
-            "12",
-            "-H",
-            "Referer: https://localhost",
-            "-H",
-            "User-Agent: Mozilla/5.0",
-            "-o",
-        ])
-        .arg(dest)
-        .arg(url)
-        .output();
+    let out = strata_net::curl_stdin::output_with_url_on_stdin(tile_curl(dest), url);
     matches!(out, Ok(o) if o.status.success())
+}
+
+#[cfg(test)]
+mod sec1_tests {
+    use std::path::Path;
+
+    /// SEC1 — 위성 타일·지적 WMS 받기의 curl 명령줄에는 「key=」·키 값이 없다(주소는 표준입력으로). 가짜 키만.
+    #[test]
+    fn keyed_urls_stay_off_the_command_line() {
+        const FAKE: &str = "FAKE-TEST-KEY-0000";
+        let dest = Path::new("tile.png");
+        let tile = format!("https://api.vworld.kr/req/wmts/1.0.0/{FAKE}/Satellite/18/1/2.jpeg");
+        let wms = format!("https://api.vworld.kr/req/wms?SERVICE=WMS&KEY={FAKE}&key={FAKE}&crs=EPSG:3857");
+        for (cmd, url) in [(super::tile_curl(dest), tile), (crate::basemap_cadastral::cadastral_curl(dest), wms)] {
+            let (cmd, config) = strata_net::curl_stdin::with_url_on_stdin(cmd, &url);
+            let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+            assert!(args.iter().all(|a| !a.to_ascii_lowercase().contains("key=") && !a.contains(FAKE)), "{args:?}");
+            assert!(config.contains(FAKE));
+        }
+    }
 }

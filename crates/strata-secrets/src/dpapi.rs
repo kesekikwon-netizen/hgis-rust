@@ -1,7 +1,8 @@
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::collections::BTreeMap;
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use strata_types::error::{StrataError, StrataResult};
 
@@ -32,23 +33,39 @@ pub fn protect_bytes(plain: &[u8]) -> StrataResult<String> {
     Ok(BASE64.encode(framed))
 }
 
+/// 스크립트를 표준입력에서 읽는 PowerShell(명령줄에는 옵션만).
+fn dpapi_powershell() -> Command {
+    let mut cmd = Command::new("powershell.exe");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", "-"]);
+    cmd
+}
+
+/// DPAPI(CurrentUser, 엔트로피 ka-hgis-account-v1)로 꾸러미를 풀어 Base64 로 내는 한 줄.
+fn unprotect_script(trimmed_b64: &str) -> String {
+    format!(
+        "Add-Type -AssemblyName System.Security; \
+         $b = [Convert]::FromBase64String('{trimmed_b64}'); \
+         $e = [System.Text.Encoding]::ASCII.GetBytes('ka-hgis-account-v1'); \
+         $p = [System.Security.Cryptography.ProtectedData]::Unprotect($b, $e, [System.Security.Cryptography.DataProtectionScope]::CurrentUser); \
+         [Convert]::ToBase64String($p)\n"
+    )
+}
+
 fn unprotect_windows_dpapi_b64(trimmed_b64: &str) -> StrataResult<Vec<u8>> {
     if let Ok(guard) = dpapi_cache().lock() {
         if let Some(cached) = guard.get(trimmed_b64) {
             return Ok(cached.clone());
         }
     }
-    let script = format!(
-        "Add-Type -AssemblyName System.Security; \
-         $b = [Convert]::FromBase64String('{trimmed_b64}'); \
-         $e = [System.Text.Encoding]::ASCII.GetBytes('ka-hgis-account-v1'); \
-         $p = [System.Security.Cryptography.ProtectedData]::Unprotect($b, $e, [System.Security.Cryptography.DataProtectionScope]::CurrentUser); \
-         [Convert]::ToBase64String($p)"
-    );
-    let output = Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-        .output()
-        .map_err(|e| StrataError::Secret(format!("Windows DPAPI 호출 실패: {e}")))?;
+    // SEC1 — 암호화된 계정 값이 든 스크립트는 명령줄이 아니라 표준입력으로(`-Command -`).
+    let output = (|| {
+        let mut child = dpapi_powershell().stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(unprotect_script(trimmed_b64).as_bytes())?;
+        }
+        child.wait_with_output()
+    })()
+    .map_err(|e| StrataError::Secret(format!("Windows DPAPI 호출 실패: {e}")))?;
     if !output.status.success() {
         return Err(StrataError::Secret("Windows DPAPI 복호화 거부".into()));
     }
@@ -101,6 +118,24 @@ mod tests {
         let legacy_b64 = BASE64.encode(xor_entropy(secret.to_vec()));
         let recovered_legacy = unprotect_bytes(&legacy_b64)?;
         assert_eq!(recovered_legacy, secret);
+        Ok(())
+    }
+
+    /// SEC1 — C++ 앱이 쓴 진짜 Windows DPAPI 꾸러미(가짜 비밀번호)를 풀고, PowerShell 명령줄에는 그 꾸러미가 없다.
+    #[cfg(windows)]
+    #[test]
+    fn windows_dpapi_blob_unprotects_without_the_blob_on_the_command_line() -> StrataResult<()> {
+        let protect = "Add-Type -AssemblyName System.Security; \
+             $e = [System.Text.Encoding]::ASCII.GetBytes('ka-hgis-account-v1'); \
+             $p = [System.Text.Encoding]::UTF8.GetBytes('FAKE-PW-1234'); \
+             [Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::Protect($p, $e, 'CurrentUser'))";
+        let out = Command::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", protect]).output().expect("powershell");
+        let blob = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+        assert!(BASE64.decode(&blob).expect("b64").starts_with(WIN_DPAPI_HEADER));
+        assert_eq!(unprotect_bytes(&blob)?, b"FAKE-PW-1234");
+        let args: Vec<String> = dpapi_powershell().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert_eq!(args, ["-NoProfile", "-NonInteractive", "-Command", "-"]);
+        assert!(!unprotect_script(&blob).is_empty());
         Ok(())
     }
 }

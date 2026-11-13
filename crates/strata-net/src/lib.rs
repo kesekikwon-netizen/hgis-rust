@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 
 pub mod address_search;
+pub mod curl_stdin;
 pub mod dem_copernicus;
 pub mod geoinfo_borehole;
 pub mod heritage_intranet;

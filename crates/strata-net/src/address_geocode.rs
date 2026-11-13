@@ -25,15 +25,14 @@ pub(crate) fn http_get_bytes(url: &str) -> Result<Vec<u8>, String> {
         "ka-hgis/0.3 (Korean archaeology HGIS; contact: local)",
         "-H",
         "Accept: application/json",
-        url,
     ]);
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
-    let output = cmd
-        .output()
+    // VWorld 검색·행정구역 주소에는 키가 든다 — 명령줄이 아니라 표준입력으로(SEC1).
+    let output = crate::curl_stdin::output_with_url_on_stdin(cmd, url)
         .map_err(|e| format!("위치 검색 호출 실패: {e}"))?;
     if !output.status.success() {
         return Err("network_error".to_owned());

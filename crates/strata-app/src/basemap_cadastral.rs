@@ -186,21 +186,15 @@ pub fn is_png(bytes: &[u8]) -> bool {
     bytes.len() > 16 && bytes.starts_with(&[0x89, b'P', b'N', b'G'])
 }
 
+/// 지적 WMS 받기 curl 명령(주소 없이).
+pub(crate) fn cadastral_curl(dest: &Path) -> Command {
+    let mut cmd = Command::new("curl");
+    cmd.args(["-sS", "-L", "--max-time", "15", "-H", "Referer: https://localhost", "-H", "User-Agent: Mozilla/5.0", "-o"]).arg(dest);
+    cmd
+}
+
+/// 키(KEY=)가 든 GetMap 주소는 명령줄이 아니라 표준입력으로 준다(SEC1).
 fn run_curl(url: &str, dest: &Path) -> bool {
-    let out = Command::new("curl")
-        .args([
-            "-sS",
-            "-L",
-            "--max-time",
-            "15",
-            "-H",
-            "Referer: https://localhost",
-            "-H",
-            "User-Agent: Mozilla/5.0",
-            "-o",
-        ])
-        .arg(dest)
-        .arg(url)
-        .output();
+    let out = strata_net::curl_stdin::output_with_url_on_stdin(cadastral_curl(dest), url);
     matches!(out, Ok(o) if o.status.success())
 }
