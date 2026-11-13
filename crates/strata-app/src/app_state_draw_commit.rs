@@ -130,7 +130,9 @@ impl StrataAppState {
             _ => rings,
         };
         let attrs = stamped_attributes(&table.columns);
-        self.survey_tables[idx].layer.add_unsaved_feature(polygon_wkt(&rings), attrs);
+        let fid = self.survey_tables[idx].layer.add_unsaved_feature(polygon_wkt(&rings), attrs);
+        // m_lastDrawnLayer·m_lastDrawnFid(MainWindowEditing.cpp:846-847, 면 레이어만).
+        self.home_map.last_drawn_shape = Some((key.clone(), fid));
         self.draw_sketch.points.clear();
         self.redo_tables.clear();
         self.undo_tables.push(key.clone());

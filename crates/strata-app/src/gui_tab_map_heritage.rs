@@ -190,34 +190,24 @@ impl StrataAppState {
             }
         }
 
-        if rs.is_layer_visible("주변 500m") && !rs.buffer_500m.is_empty() {
-            let b_col = layer_color("주변 500m", Color32::from_rgb(184, 58, 24));
-            let ring_pts: Vec<Pos2> = rs.buffer_500m.iter().map(|&pt| w2s(rect, vp, pt)).collect();
-            p.add(egui::Shape::line(ring_pts, Stroke::new(2.6, b_col)));
-        }
-        if rs.show_buffer_1000m && !rs.buffer_1000m.is_empty() {
-            let ring_pts: Vec<Pos2> = rs
-                .buffer_1000m
-                .iter()
-                .map(|&pt| w2s(rect, vp, pt))
-                .collect();
-            p.add(egui::Shape::line(
-                ring_pts,
-                Stroke::new(2.2, Color32::from_rgb(148, 42, 18)),
-            ));
-        }
-        if rs.is_layer_visible("주변 500m 거리") && rs.is_label_visible("주변 500m 거리") {
-            for (lbl, pt) in &rs.dist_labels_500m {
-                let bp = w2s(rect, vp, *pt);
-                let b500 = Rect::from_center_size(bp, Vec2::new(36.0, 15.0));
-                p.rect_filled(b500, 3.0, Color32::WHITE);
-                p.text(
-                    b500.center(),
-                    egui::Align2::CENTER_CENTER,
-                    lbl,
-                    FontId::proportional(9.5),
-                    Color32::from_rgb(184, 58, 24),
-                );
+        // 「주변 Nm」 경계선(user:buffer_ring_N)과 「주변 Nm 거리」 글자(user:buffer_label_N) — 범례에서 켠 것만.
+        for (meters, ring) in &rs.distance_rings {
+            let title = format!("주변 {meters}m");
+            if rs.is_layer_visible(&title) {
+                let b_col = layer_color(&title, Color32::from_rgb(184, 58, 24));
+                for line in &ring.lines {
+                    let ring_pts: Vec<Pos2> = line.iter().map(|&pt| w2s(rect, vp, pt)).collect();
+                    p.add(egui::Shape::line(ring_pts, Stroke::new(2.6, b_col)));
+                }
+            }
+            let label_layer = format!("{title} 거리");
+            if rs.is_layer_visible(&label_layer) && rs.is_label_visible(&label_layer) {
+                for pt in &ring.labels {
+                    let b = Rect::from_center_size(w2s(rect, vp, *pt), Vec2::new(36.0, 15.0));
+                    p.rect_filled(b, 3.0, Color32::WHITE);
+                    let text = format!("{meters}m");
+                    p.text(b.center(), egui::Align2::CENTER_CENTER, text, FontId::proportional(9.5), Color32::from_rgb(184, 58, 24));
+                }
             }
         }
         self.paint_heritage_overlays(HeritageOverlayCtx {

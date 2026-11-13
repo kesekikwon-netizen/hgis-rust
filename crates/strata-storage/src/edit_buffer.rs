@@ -51,6 +51,17 @@ impl LayerEditBuffer {
         fid
     }
 
+    /// 도형만 바꾼다(QgsVectorLayer::changeGeometry, 되돌리기 한 단계). 그 fid 가 없으면 false.
+    pub fn change_geometry(&mut self, fid: i64, wkt_geom: String) -> bool {
+        let Some(i) = self.features.iter().position(|f| f.fid == fid) else {
+            return false;
+        };
+        self.undo_stack.push(self.features.clone());
+        self.redo_stack.clear();
+        self.features[i].wkt_geom = wkt_geom;
+        true
+    }
+
     pub fn undo(&mut self) -> bool {
         if let Some(prev) = self.undo_stack.pop() {
             let current = std::mem::replace(&mut self.features, prev);
@@ -122,5 +133,24 @@ mod tests {
         commit_buf.assign_positive_ids_on_commit();
         let promoted: Vec<i64> = commit_buf.features.iter().map(|f| f.fid).collect();
         assert_eq!(promoted, vec![1, 2, 3]);
+    }
+}
+
+#[cfg(test)]
+mod change_tests {
+    use super::*;
+
+    /// 도형 바꾸기는 되돌리기 한 단계 — 되돌리면 옛 도형, 다시 실행하면 새 도형. 없는 fid 는 아무것도 안 한다.
+    #[test]
+    fn change_geometry_is_one_undo_step() {
+        let mut b = LayerEditBuffer::new(DomainLayerKey::SurveyArea);
+        let fid = b.add_unsaved_feature("POINT (1 1)".to_owned(), BTreeMap::new());
+        assert!(b.change_geometry(fid, "POINT (2 2)".to_owned()));
+        assert!(!b.change_geometry(99, "POINT (3 3)".to_owned()));
+        assert_eq!(b.features[0].wkt_geom, "POINT (2 2)");
+        assert!(b.undo());
+        assert_eq!(b.features[0].wkt_geom, "POINT (1 1)");
+        assert!(b.redo());
+        assert_eq!(b.features[0].wkt_geom, "POINT (2 2)");
     }
 }

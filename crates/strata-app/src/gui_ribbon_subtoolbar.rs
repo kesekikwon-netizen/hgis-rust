@@ -27,13 +27,12 @@ impl StrataAppState {
                         match self.ribbon.sub_mode {
                             SubToolsMode::Buffer => {
                                 ui.label(egui::RichText::new("주변유적경계 ›").size(12.5).strong());
+                                // MainWindowRibbon.cpp:798-801 runSiteBuffer500·1000 — 열어 둔 조사 면으로 경계를 (다시) 그린다.
                                 if draw_buffer_pill(ui, "버퍼", true, "500m", 78.0) {
-                                    self.home_map.real_survey.toggle_layer_visible("주변 500m");
-                                    self.home_map.draw_guide_message = Some("조사구역 주변 500m 경계를 갱신했습니다.".to_owned());
+                                    self.run_site_buffer(500);
                                 }
                                 if draw_buffer_pill(ui, "버퍼", true, "1000m", 84.0) {
-                                    self.home_map.real_survey.show_buffer_1000m = !self.home_map.real_survey.show_buffer_1000m;
-                                    self.home_map.draw_guide_message = Some("조사구역 주변 1,000m 경계를 지도에 표시했습니다.".to_owned());
+                                    self.run_site_buffer(1000);
                                 }
                                 if draw_buffer_pill(ui, "수치지형", false, "엑셀 내보내기", 118.0) {
                                     if let Some(out) = self.home_map.real_survey.export_nearby_heritage_csv() {

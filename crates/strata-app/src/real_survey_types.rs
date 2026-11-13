@@ -29,6 +29,13 @@ pub struct RealTrenchPoly {
     pub center: [f64; 2],
 }
 
+/// 「주변 Nm」 경계선들과 「Nm」 글자 자리.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DistanceRing {
+    pub lines: Vec<Vec<[f64; 2]>>,
+    pub labels: Vec<[f64; 2]>,
+}
+
 #[derive(Debug, Clone)]
 pub struct RealSurveyData {
     pub survey_dir: PathBuf,
@@ -39,10 +46,8 @@ pub struct RealSurveyData {
     pub survey_area_m2: f64,
     pub survey_center: [f64; 2],
     pub trenches: Vec<RealTrenchPoly>,
-    pub buffer_500m: Vec<[f64; 2]>,
-    pub buffer_1000m: Vec<[f64; 2]>,
-    pub show_buffer_1000m: bool,
-    pub dist_labels_500m: Vec<(String, [f64; 2])>,
+    /// 주변 거리 경계(C++ user:buffer_ring_<m>·user:buffer_label_<m> 레이어) — 거리(m)마다 경계선과 거리 글자 자리(작업 좌표계).
+    pub distance_rings: BTreeMap<u32, DistanceRing>,
     pub cadastral_parcels: Vec<RealCadastralParcel>,
     pub heritage_polys: Vec<RealHeritagePoly>,
     pub layer_visible: BTreeMap<String, bool>,

@@ -3,14 +3,14 @@
 //! `tabs_home_map.rs` 가 300줄 규칙에 맞춰 나눈 파일이다.
 //! 옮긴 항목의 이름·시그니처·동작은 그대로다.
 
-use strata_canvas2d::cad_interaction::{snap_ring_to_nearest_lines, CadSessionController};
+use strata_canvas2d::cad_interaction::CadSessionController;
 use strata_canvas2d::canvas_painter::MapSceneModel;
 use strata_canvas2d::map_tools::MapToolKind;
 use strata_canvas2d::viewport::ViewportTransform;
 use strata_net::address_search::sido_presets;
 use strata_net::tile_fetcher::BasemapSource;
 
-use crate::real_survey::{ring_area_m2, RealSurveyData};
+use crate::real_survey::RealSurveyData;
 
 use super::tabs_home_map_undo::{HGIS_BASEMAP_DEFAULT_BRIGHTNESS, HGIS_BASEMAP_DEFAULT_OPACITY};
 
@@ -30,6 +30,8 @@ pub struct HomeMapTabState {
     pub selected_feature_idx: Option<usize>,
     /// 도형선택으로 고른 조사 도형(표 이름, fid) — C++ layer->selectedFeatureIds.
     pub selected_shape: Option<(String, i64)>,
+    /// 방금 그린 면(표 이름, fid) — C++ m_lastDrawnLayer·m_lastDrawnFid(「가까운 선에 붙이기」가 고른 것이 없을 때 쓴다).
+    pub last_drawn_shape: Option<(String, i64)>,
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
     /// 마우스가 지도 칸 위에 한 번이라도 왔는가 — 그 전에는 상태줄 좌표가 「X —    Y —」(KaStatusBar.cpp:173-175).
@@ -74,6 +76,7 @@ impl Default for HomeMapTabState {
             layer_filter: String::new(),
             selected_feature_idx: None,
             selected_shape: None,
+            last_drawn_shape: None,
             grid_enabled: false,
             cursor_world_xy: center,
             cursor_seen: false,
@@ -186,57 +189,4 @@ impl HomeMapTabState {
         );
     }
 
-    /// `SnapTraceOps::snapCanvasShapesToNearestLines` 1:1 대응
-    pub fn snap_drawn_shapes_to_nearest_lines(&mut self) -> (usize, usize, usize) {
-        if self.real_survey.survey_rings.is_empty() && self.scene.polygons.is_empty() {
-            self.draw_guide_message = Some(
-                "먼저 지적도·도면 위에 도형을 그리거나 도형선택으로 도형을 고르세요.".to_owned(),
-            );
-            return (0, 0, 0);
-        }
-        let refs = self.snap_reference_rings(self.real_survey.survey_center, 800.0);
-        let mupp = self.viewport.meters_per_pixel;
-        let mut changed_count = 0usize;
-        let mut total_moved = 0usize;
-        let mut total_inserted = 0usize;
-
-        if let Some(last_ring) = self.real_survey.survey_rings.last_mut() {
-            let (snapped, moved, ins) = snap_ring_to_nearest_lines(last_ring, true, &refs, mupp);
-            if moved > 0 || ins > 0 {
-                *last_ring = snapped;
-                changed_count += 1;
-                total_moved += moved;
-                total_inserted += ins;
-            }
-        }
-        if changed_count > 0 {
-            self.real_survey.survey_area_m2 = self
-                .real_survey
-                .survey_rings
-                .iter()
-                .map(|r| ring_area_m2(r))
-                .sum();
-        }
-        for poly in &mut self.scene.polygons {
-            if poly.layer_key == "survey_area" || poly.layer_key == "feature_poly" {
-                let (snapped, moved, ins) =
-                    snap_ring_to_nearest_lines(&poly.world_pts, true, &refs, mupp);
-                if moved > 0 || ins > 0 {
-                    poly.world_pts = snapped;
-                    changed_count += 1;
-                    total_moved += moved;
-                    total_inserted += ins;
-                }
-            }
-        }
-        self.draw_guide_message = Some(if changed_count > 0 {
-            format!(
-                "도형을 가장 가까운 선에 붙였습니다 (꼭짓점 {total_moved}개 맞춤 · 사이점 {total_inserted}개 채움). Ctrl+Z로 되돌릴 수 있습니다."
-            )
-        } else {
-            "이미 가장 가까운 선에 붙어 있거나 주변에 붙일 기준 선(지적·도면)이 없습니다."
-                .to_owned()
-        });
-        (changed_count, total_moved, total_inserted)
-    }
 }

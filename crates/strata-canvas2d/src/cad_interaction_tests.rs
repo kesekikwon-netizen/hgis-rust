@@ -84,7 +84,9 @@ fn snap_trace_graph_fills_intermediate_parcel_vertices_and_snaps_rough_polygon()
     let (snapped, moved, inserted) = snap_ring_to_nearest_lines(&rough, true, &refs, 0.2);
     assert_eq!(moved, 4);
     assert_eq!(inserted, 2);
-    assert_eq!(snapped.len(), 6);
+    // SnapTraceOps.cpp processRing — 닫힌 고리는 첫 점으로 다시 닫는다: 꼭짓점 6 + 닫는 점.
+    assert_eq!(snapped.len(), 7);
+    assert_eq!(snapped.first(), snapped.last());
     assert!(snapped.contains(&[10.0, 1.5]));
     assert!(snapped.contains(&[20.0, 0.5]));
 }

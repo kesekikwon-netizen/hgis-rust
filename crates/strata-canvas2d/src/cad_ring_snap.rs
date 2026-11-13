@@ -48,7 +48,9 @@ pub fn snap_ring_to_nearest_lines(
         if graph.full() {
             break;
         }
-        graph.add_ring(ref_ring, box_min, box_max, true);
+        // BoundaryGraph::addGeometries — QGIS 고리는 끝 점이 첫 점과 같아 닫힌다. 열린 선(사업자 도면 선)에 닫는 변을
+        // 덧붙이지 않는다(덧붙이면 그 곧은 변이 사이 꼭짓점을 가린다).
+        graph.add_ring(ref_ring, box_min, box_max, false);
     }
     if graph.nodes.is_empty() {
         return (in_ring.to_vec(), 0, 0);
@@ -94,12 +96,41 @@ pub fn snap_ring_to_nearest_lines(
         }
         clean.push(pt);
     }
-    if closed && clean.len() >= 3 && sqr_dist(clean[0], clean[clean.len() - 1]) <= graph.merge_sq {
-        clean.pop();
+    // SnapTraceOps.cpp processRing — 닫힌 고리는 끝 점을 첫 점으로 다시 닫고, 닫은 뒤 4점 이상이어야 쓴다.
+    if closed && clean.len() >= 3 {
+        if sqr_dist(clean[0], clean[clean.len() - 1]) <= graph.merge_sq {
+            clean.pop();
+        }
+        if clean.len() >= 3 {
+            clean.push(clean[0]);
+        }
     }
-    if clean.len() >= min_pts {
+    if clean.len() >= if closed { 4 } else { 2 } {
         (clean, moved_count, inserted_count)
     } else {
         (in_ring.to_vec(), 0, 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::snap_ring_to_nearest_lines;
+
+    /// ported from tests/test_parcel_copy_keys.cpp:snapTraceShowsNearbyVerticesOnlyWhenCloseAndFillsSkippedVertex —
+    /// 사업자 도면 선 위에 대략 그린 조사구역을 붙이면 모서리 넷 + 빠진 사이 꼭짓점 (200010, 450001.2) + 닫는 점 = 6점.
+    /// 지도 칸 80 m 를 640 px 로 보던 C++ 시험이라 점당 m 는 0.125.
+    #[test]
+    fn rough_area_snaps_and_fills_the_skipped_vertex() {
+        let cad = vec![vec![[200_000.0, 450_000.0], [200_010.0, 450_001.2], [200_020.0, 450_000.0]]];
+        let rough = [
+            [200_001.2, 449_999.1],
+            [200_019.0, 450_000.8],
+            [200_020.8, 450_019.2],
+            [199_999.3, 450_020.6],
+            [200_001.2, 449_999.1],
+        ];
+        let (snapped, _, _) = snap_ring_to_nearest_lines(&rough, true, &cad, 0.125);
+        assert_eq!(snapped.len(), 6, "{snapped:?}");
+        assert!(snapped.iter().any(|p| (p[0] - 200_010.0).abs() < 1e-9 && (p[1] - 450_001.2).abs() < 1e-9));
     }
 }

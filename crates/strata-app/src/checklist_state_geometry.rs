@@ -87,7 +87,7 @@ pub(crate) fn parts_wkt(parts: &[WkbGeometry]) -> String {
     format!("MULTI{name} ({})", parts.iter().map(part_body).collect::<Vec<_>>().join(", "))
 }
 
-fn moved(parts: &[WkbGeometry], tr: &Transformer) -> Option<Vec<WkbGeometry>> {
+pub(crate) fn moved(parts: &[WkbGeometry], tr: &Transformer) -> Option<Vec<WkbGeometry>> {
     let all = |pts: &[[f64; 2]]| tr.transform_all(pts).ok();
     parts
         .iter()

@@ -148,38 +148,25 @@ impl StrataAppState {
             }
         }
 
-        // (c) 실제 주변 500m / 1000m 버퍼 및 거리 라벨
-        if rs.is_layer_visible("주변 500m") && !rs.buffer_500m.is_empty() {
-            let buf_pts: Vec<Pos2> = rs.buffer_500m.iter().map(|&pt| f.w2m(pt)).collect();
-            map_p.add(egui::Shape::line(
-                buf_pts,
-                Stroke::new(1.6, Color32::from_rgb(184, 58, 24)),
-            ));
-        }
-        if rs.show_buffer_1000m && !rs.buffer_1000m.is_empty() {
-            let buf1000_pts: Vec<Pos2> = rs.buffer_1000m.iter().map(|&pt| f.w2m(pt)).collect();
-            map_p.add(egui::Shape::line(
-                buf1000_pts,
-                Stroke::new(1.3, Color32::from_rgb(148, 42, 18)),
-            ));
-        }
-        if rs.is_layer_visible("주변 500m 거리") && rs.is_label_visible("주변 500m 거리") {
-            for (lbl, pt) in &rs.dist_labels_500m {
-                let bp = f.w2m(*pt);
-                if map_rect.shrink(12.0).contains(bp) {
-                    let b_rect = Rect::from_center_size(bp, Vec2::new(32.0, 13.0));
-                    map_p.rect_filled(
-                        b_rect,
-                        2.5,
-                        Color32::from_rgba_unmultiplied(255, 255, 255, 230),
-                    );
-                    map_p.text(
-                        b_rect.center(),
-                        egui::Align2::CENTER_CENTER,
-                        lbl,
-                        egui::FontId::proportional(8.0),
-                        Color32::from_rgb(184, 58, 24),
-                    );
+        // (c) 「주변 Nm」 경계선과 「Nm」 거리 글자(범례에서 켠 것만)
+        for (meters, ring) in &rs.distance_rings {
+            let title = format!("주변 {meters}m");
+            if rs.is_layer_visible(&title) {
+                for line in &ring.lines {
+                    let buf_pts: Vec<Pos2> = line.iter().map(|&pt| f.w2m(pt)).collect();
+                    map_p.add(egui::Shape::line(buf_pts, Stroke::new(1.6, Color32::from_rgb(184, 58, 24))));
+                }
+            }
+            let label_layer = format!("{title} 거리");
+            if rs.is_layer_visible(&label_layer) && rs.is_label_visible(&label_layer) {
+                for pt in &ring.labels {
+                    let bp = f.w2m(*pt);
+                    if map_rect.shrink(12.0).contains(bp) {
+                        let b_rect = Rect::from_center_size(bp, Vec2::new(32.0, 13.0));
+                        map_p.rect_filled(b_rect, 2.5, Color32::from_rgba_unmultiplied(255, 255, 255, 230));
+                        let text = format!("{meters}m");
+                        map_p.text(b_rect.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(8.0), Color32::from_rgb(184, 58, 24));
+                    }
                 }
             }
         }

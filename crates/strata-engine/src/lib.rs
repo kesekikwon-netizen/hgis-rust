@@ -12,10 +12,12 @@
 mod crs;
 mod geom;
 mod geom_wkt;
+mod rings;
 
 pub use crs::Transformer;
 pub use geom::{make_valid_polygon_parts, normalized_wkt, polygon_area, polygon_is_valid, polygon_perimeter, PolygonRings};
 pub use geom_wkt::{union_area, wkt_area, wkt_is_valid, SurveyArea};
+pub use rings::{distance_rings, ring_label_points};
 
 /// 엔진 오류(PROJ·GEOS 가 돌려준 글).
 #[derive(Debug, Clone, PartialEq, Eq)]

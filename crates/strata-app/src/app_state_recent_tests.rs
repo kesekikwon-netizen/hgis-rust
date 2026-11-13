@@ -47,7 +47,7 @@ fn startup_has_no_survey_data_and_no_user_settings() {
     assert_eq!(app.window_title(), "Strata");
     let rs = &app.home_map.real_survey;
     assert!(rs.survey_rings.is_empty() && rs.trenches.is_empty());
-    assert!(rs.cadastral_parcels.is_empty() && rs.heritage_polys.is_empty() && rs.buffer_500m.is_empty());
+    assert!(rs.cadastral_parcels.is_empty() && rs.heritage_polys.is_empty() && rs.distance_rings.is_empty());
     assert!(app.home_map.scene.polygons.is_empty() && app.home_map.scene.heritage_badges_world.is_empty());
     assert!(app.home_map.korea_view_pending, "the first map view is all of Korea (ensureStartupViewReady)");
     assert!(app.left_layers.entries.is_empty());

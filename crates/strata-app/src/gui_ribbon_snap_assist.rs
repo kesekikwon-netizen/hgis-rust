@@ -28,10 +28,8 @@ impl StrataAppState {
                                 "지적도·사업자 도면 위에 그린 도형(방금 그린 도형 또는 선택한 도형)을\n가장 가까운 지적선·도면선에 자동으로 붙이고 빠진 사이 꺾임점도 채웁니다 (Ctrl+Z 되돌리기 가능).",
                             );
                         if snap_now.clicked() {
-                            let (changed, _, _) = self.home_map.snap_drawn_shapes_to_nearest_lines();
-                            if changed > 0 {
-                                self.is_dirty = true;
-                            }
+                            // runSnapToLines — 열어 둔 조사 표의 고른·방금 그린 도형을 붙인다(상태줄 글도 거기서).
+                            self.snap_shapes_to_nearest_lines();
                             self.ribbon.snap_assist_menu_open = false;
                         }
                         ui.separator();
@@ -48,14 +46,11 @@ impl StrataAppState {
                                 self.home_map.cad.snap_enabled = true;
                             }
                             if on && !prev_trace {
-                                let (changed, _, _) = self.home_map.snap_drawn_shapes_to_nearest_lines();
-                                if changed == 0 {
-                                    self.home_map.draw_guide_message = Some(
-                                        "선 따라 자동채움 켜짐 — 자석점을 한두 칸 건너뛰어 찍어도 사이 꼭짓점을 자동으로 채웁니다."
-                                            .to_owned(),
+                                // addSnapToggle — 붙인 도형이 있으면 그 글, 없으면 켜짐 글.
+                                if self.snap_shapes_to_nearest_lines() == 0 {
+                                    self.show_status_message(
+                                        "선 따라 자동채움 켜짐 — 자석점을 한두 칸 건너뛰어 찍어도 사이 꼭짓점을 자동으로 채웁니다.",
                                     );
-                                } else {
-                                    self.is_dirty = true;
                                 }
                             } else if !on {
                                 self.home_map.draw_guide_message = Some("선 따라 자동채움 꺼짐".to_owned());

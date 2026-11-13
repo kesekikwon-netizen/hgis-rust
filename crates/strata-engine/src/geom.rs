@@ -14,12 +14,12 @@ fn ring_wkt(ring: &[[f64; 2]]) -> String {
     format!("({})", pts.join(", "))
 }
 
-fn to_geos(rings: &PolygonRings) -> Result<Geometry, EngineError> {
+pub(crate) fn to_geos(rings: &PolygonRings) -> Result<Geometry, EngineError> {
     let body: Vec<String> = rings.iter().map(|r| ring_wkt(r)).collect();
     Ok(Geometry::new_from_wkt(&format!("POLYGON ({})", body.join(", ")))?)
 }
 
-fn ring_points<G: Geom>(ring: &G) -> Result<Vec<[f64; 2]>, EngineError> {
+pub(crate) fn ring_points<G: Geom>(ring: &G) -> Result<Vec<[f64; 2]>, EngineError> {
     let seq = ring.get_coord_seq()?;
     (0..seq.size()?).map(|i| Ok([seq.get_x(i)?, seq.get_y(i)?])).collect()
 }
@@ -34,7 +34,7 @@ fn polygon_rings<G: Geom>(poly: &G) -> Result<PolygonRings, EngineError> {
 
 /// QGIS EditGeometryRepair `collectPolygons` — 면이면 그대로, 다중 면은 조각마다, 묶음은 안을 차례로.
 /// 선·점은 버린다.
-fn collect_polygons<G: Geom>(g: &G, out: &mut Vec<PolygonRings>) -> Result<(), EngineError> {
+pub(crate) fn collect_polygons<G: Geom>(g: &G, out: &mut Vec<PolygonRings>) -> Result<(), EngineError> {
     match g.geometry_type()? {
         GeometryTypes::Polygon => {
             if !g.is_empty()? {
