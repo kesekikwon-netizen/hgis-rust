@@ -50,6 +50,8 @@ pub struct RealSurveyData {
     pub distance_rings: BTreeMap<u32, DistanceRing>,
     /// 레이어(표 이름)마다 정한 모양 — 「조사구역 그리기 설정」의 선 색·채움·굵기(C++ ka_hgis/style_* 속성).
     pub(crate) layer_styles: BTreeMap<String, crate::survey_style::DomainStyle>,
+    /// 레이어(layer_key)마다 메뉴로 바꾼 라벨 — 내용(replaceManagedContent)과 글자 크기(setLabelFontSize). 없으면 처음 모양.
+    pub(crate) label_views: BTreeMap<String, LabelView>,
     pub cadastral_parcels: Vec<RealCadastralParcel>,
     pub heritage_polys: Vec<RealHeritagePoly>,
     pub layer_visible: BTreeMap<String, bool>,
@@ -98,4 +100,12 @@ pub fn ring_centroid(ring: &[[f64; 2]]) -> [f64; 2] {
     }
     let n = ring.len() as f64;
     [sx / n, sy / n]
+}
+
+/// 레이어 메뉴 「라벨·명칭 속성」이 바꾼 것(C++ 은 그 레이어의 라벨 설정·ka_hgis/label_font_size).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub(crate) struct LabelView {
+    pub(crate) rule: Option<crate::survey_style::LabelRule>,
+    /// pt 의 10배(3–14 pt, 해시·비교가 되게).
+    pub(crate) size_tenths: Option<u16>,
 }

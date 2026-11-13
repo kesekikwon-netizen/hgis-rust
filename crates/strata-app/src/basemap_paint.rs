@@ -82,6 +82,7 @@ impl CadastralCellCache {
 }
 
 /// 화면에 보이는 타일을 칠한다. 칠한 장수를 돌려준다.
+#[allow(clippy::too_many_arguments)]
 pub fn paint_basemap_tiles(
     ctx: &egui::Context,
     painter: &egui::Painter,
@@ -90,6 +91,7 @@ pub fn paint_basemap_tiles(
     z: u8,
     view: &TileView,
     textures: &mut TileTextureCache,
+    tint: Color32,
 ) -> usize {
     if !kind.is_xyz() || !rect.is_positive() {
         return 0;
@@ -128,7 +130,7 @@ pub fn paint_basemap_tiles(
                 textures.0.insert(k, tex.clone());
                 tex
             };
-            paint_tile_mesh(painter, handle.id(), &pts, FULL_UV, Color32::WHITE);
+            paint_tile_mesh(painter, handle.id(), &pts, FULL_UV, tint);
             painted += 1;
         }
     }

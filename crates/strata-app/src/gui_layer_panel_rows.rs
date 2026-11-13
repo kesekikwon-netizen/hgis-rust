@@ -131,7 +131,9 @@ impl StrataAppState {
                     Color32::from_rgb(115, 113, 106),
                 );
             }
-            if let Some(rl) = spec.right_label {
+            // 글자 칸은 그 레이어의 지금 라벨 글자(LayerLabelControls::describe — 메뉴로 항목·면적을 바꾸면 따라간다).
+            let live = spec.right_label.and_then(|_| self.layer_menu_input(&spec.key)).filter(|i| i.has_labeling).map(|i| i.label.caption);
+            if let Some(rl) = live.as_deref().or(spec.right_label) {
                 let lbl_vis = self.home_map.real_survey.is_label_visible(&spec.name);
                 paint_checkbox_state(
                     &p,

@@ -5,6 +5,12 @@
 use crate::layer_menu_label::{field_title, LabelInfo};
 use crate::survey_area_setup::is_survey_area_key;
 
+/// 동작이 있는 줄의 C++ 객체 이름(스냅 단계가 이름을 &'static str 로 찾는다).
+pub(crate) const MENU_IDS: [&str; 12] = [
+    "layer.style", "layer.draw", "layer.area", "layer.zoom", "layer.fullExtent", "layer.labelsVisible", "layer.rename",
+    "layer.labelFieldValue", "layer.labelArea", "layer.labelSizeValue", "layer.opacityValue", "layer.bottom",
+];
+
 /// menuKind 의 가지.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LayerMenuKind {

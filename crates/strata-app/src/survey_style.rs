@@ -69,7 +69,7 @@ impl GeomKind {
 }
 
 /// 라벨 글을 만드는 규칙(C++ 라벨 식).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum LabelRule {
     /// `coalesce("f", '') || '\n(' || format_number(area($geometry), 1) || ' ㎡)'` (`LabelOps.cpp:91-93`)
     NameWithArea(String),
@@ -79,7 +79,19 @@ pub(crate) enum LabelRule {
     Area2,
     /// `"f"` (`LabelOps.cpp:94-96`)
     Field(String),
+    /// 면적을 끄고 항목도 없는 빈 식 `''`(LayerLabelControls.cpp:57-62 managedExpression) — 아무것도 그리지 않는다.
+    Empty,
     None,
+}
+
+/// LayerLabelControls replaceManagedContent 가 쓰는 식(managedExpression, :55-62) — 면적+항목·면적만·항목·빈 식.
+pub(crate) fn managed_rule(field: &str, area: bool) -> LabelRule {
+    match (area, field.is_empty()) {
+        (true, false) => LabelRule::NameWithArea(field.to_owned()),
+        (true, true) => LabelRule::Area1,
+        (false, true) => LabelRule::Empty,
+        (false, false) => LabelRule::Field(field.to_owned()),
+    }
 }
 
 /// `LayerStyleDefaults::forKey` — 모르는 표는 일반 파란색.
@@ -226,7 +238,7 @@ pub(crate) fn label_text(rule: &LabelRule, attrs: &BTreeMap<String, String>, are
         LabelRule::Area1 => Some(format!("{} ㎡", format_number(area_m2, 1))),
         LabelRule::Area2 => Some(format!("{} ㎡", format_number(area_m2, 2))),
         LabelRule::Field(f) => attrs.get(f).cloned(),
-        LabelRule::None => None,
+        LabelRule::Empty | LabelRule::None => None,
     }
 }
 

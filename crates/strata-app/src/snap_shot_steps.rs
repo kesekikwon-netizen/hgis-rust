@@ -58,6 +58,14 @@ impl StrataAppState {
                 self.layer_context_menu_pos = [180.0, 260.0];
                 self.layer_context_menu_open = true;
             }
+            // 레이어 메뉴 줄을 누른 것처럼: layer_key;C++ 객체 이름;값(라벨 항목·글자 크기·투명도 %).
+            _ if action.starts_with("@layer_action=") => {
+                let mut parts = action["@layer_action=".len()..].splitn(3, ';');
+                let (key, id, value) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
+                if let Some(id) = crate::layer_menu_model::MENU_IDS.iter().find(|i| **i == id) {
+                    self.run_layer_menu_action(Some(key), &crate::menu_popup::MenuPick { id, value: value.to_owned() });
+                }
+            }
             _ if action.starts_with("@layer_menu_path=") => {
                 self.home_map.layer_menu_path = action["@layer_menu_path=".len()..].split(',').filter_map(|s| s.trim().parse().ok()).collect();
             }

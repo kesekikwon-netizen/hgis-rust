@@ -77,8 +77,28 @@ impl StrataAppState {
             "layer.zoom" => self.zoom_to_current_legend_layer(),
             // zoomMapToFullMax(MainWindowSession.cpp:1800).
             "layer.fullExtent" => self.home_map.zoom_to_full_max(self.work_crs),
-            "layer.labelsVisible" => self.home_map.real_survey.toggle_label_visible(&label),
-            // 이름 바꾸기·표시할 항목·면적 함께 표시·글자 크기·투명도·맨 아래로는 CM2a-1c, 레이어 삭제는 1d.
+            "layer.labelsVisible" => {
+                // setVisible → refreshViews(프로젝트 고침).
+                self.home_map.real_survey.toggle_label_visible(&label);
+                self.is_dirty = true;
+            }
+            "layer.rename" => self.open_rename_layer(key.unwrap_or_default()),
+            "layer.labelFieldValue" => {
+                self.layer_label_field(key.unwrap_or_default(), &pick.value);
+            }
+            "layer.labelArea" => {
+                self.layer_label_area(key.unwrap_or_default());
+            }
+            "layer.labelSizeValue" => {
+                self.layer_label_size(key.unwrap_or_default(), pick.value.parse().unwrap_or(0.0));
+            }
+            "layer.opacityValue" => {
+                self.layer_set_transparency(key.unwrap_or_default(), pick.value.parse().unwrap_or(0));
+            }
+            "layer.bottom" => {
+                self.layer_to_group_bottom(key.unwrap_or_default());
+            }
+            // 레이어 삭제는 CM2a-1d. 깨진 한글 바로잡기는 .shp 레이어에만 보인다(조사 GPKG 에는 없다).
             _ => {}
         }
     }

@@ -52,6 +52,8 @@ pub struct HomeMapTabState {
     /// 레이어 메뉴의 열린 하위 메뉴(겹마다 줄 번호), 우클릭한 묶음 머리(레이어 아닌 줄).
     pub(crate) layer_menu_path: Vec<usize>,
     pub(crate) layer_menu_group: Option<strata_types::schema::LegendGroup>,
+    /// 열린 「이름 바꾸기」 창.
+    pub(crate) rename_layer: Option<crate::app_state_layer_menu::RenameLayer>,
     /// 열려 있는 「도형 속성」 창.
     pub(crate) feature_record: Option<crate::feature_record::FeatureRecordForm>,
     pub grid_enabled: bool,
@@ -110,6 +112,7 @@ impl Default for HomeMapTabState {
             card_tool: None,
             layer_menu_path: Vec::new(),
             layer_menu_group: None,
+            rename_layer: None,
             grid_enabled: false,
             cursor_world_xy: center,
             cursor_seen: false,

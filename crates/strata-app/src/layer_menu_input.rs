@@ -14,6 +14,7 @@ fn label_setting(rule: &LabelRule) -> LabelSetting {
         LabelRule::Area1 | LabelRule::Area2 => LabelSetting::Area(None),
         LabelRule::NameWithArea(f) => LabelSetting::Area(Some(f.clone())),
         LabelRule::Field(f) => LabelSetting::Field(f.clone()),
+        LabelRule::Empty => LabelSetting::Empty,
         LabelRule::None => LabelSetting::Unconfigured,
     }
 }
@@ -42,7 +43,13 @@ impl StrataAppState {
             Some(MenuGeom::Line) => GeomKind::Line,
             _ => GeomKind::Point,
         };
-        let rule = if table.is_some() { label_rule(key, geom_kind, &columns) } else { LabelRule::None };
+        // 메뉴로 바꾼 라벨이 있으면 그것(replaceManagedContent), 없으면 처음 모양.
+        let view = self.home_map.real_survey.label_views.get(key);
+        let rule = match (table, view.and_then(|v| v.rule.clone())) {
+            (Some(_), Some(r)) => r,
+            (Some(_), None) => label_rule(key, geom_kind, &columns),
+            (None, _) => LabelRule::None,
+        };
         let setting = label_setting(&rule);
         let label = describe_label(&setting, &fields, vector, geom == Some(MenuGeom::Polygon), key, entry.group == LegendGroup::Cadastral);
         let same_group: Vec<&str> = self.left_layers.entries.iter().filter(|e| e.group == entry.group).map(|e| e.layer_key.as_str()).collect();
@@ -69,7 +76,7 @@ impl StrataAppState {
                 _ => String::new(),
             },
             show_area: matches!(rule, LabelRule::Area1 | LabelRule::Area2 | LabelRule::NameWithArea(_)),
-            label_size_pt: f64::from(LABEL_SIZE_PT),
+            label_size_pt: view.and_then(|v| v.size_tenths).map_or(f64::from(LABEL_SIZE_PT), |t| f64::from(t) / 10.0),
             label,
             fields,
         })

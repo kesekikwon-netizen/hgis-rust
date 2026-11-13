@@ -32,15 +32,21 @@ impl StrataAppState {
     /// 예전에는 `active_basemap` 만 보고 체크 상태를 보지 않았다.
     pub(crate) fn basemap_kind_to_paint(&self) -> Option<TileKind> {
         use strata_net::tile_fetcher::BasemapSource;
-        let (kind, key, row) = match self.home_map.active_basemap {
-            BasemapSource::VworldSatellite => (TileKind::Satellite, "vworld_satellite", "위성지도 (VWorld)"),
-            BasemapSource::VworldBase => (TileKind::Base, "vworld_base", "일반지도 (VWorld)"),
+        let (kind, key) = match self.home_map.active_basemap {
+            BasemapSource::VworldSatellite => (TileKind::Satellite, "vworld_satellite"),
+            BasemapSource::VworldBase => (TileKind::Base, "vworld_base"),
             _ => return None,
         };
         // 범례에 그 배경지도 레이어가 있을 때만 — C++ 은 조사를 열거나 만들 때만 배경지도를 올린다
-        // (MainWindowSession.cpp:400, :728). 켠 직후 지도는 흰 바탕이다(지시 S1).
-        let listed = self.left_layers.entries.iter().any(|e| e.layer_key == key);
-        (listed && self.home_map.real_survey.is_layer_visible(row)).then_some(kind)
+        // (MainWindowSession.cpp:400, :728). 켠 직후 지도는 흰 바탕이다(지시 S1). 체크는 그 줄의 지금 이름으로(이름을 바꿔도).
+        let entry = self.left_layers.entries.iter().find(|e| e.layer_key == key)?;
+        self.home_map.real_survey.is_layer_visible(&entry.label_ko).then_some(kind)
+    }
+
+    /// 그 배경지도 줄의 투명도(applyLayerOpacity) — 타일 색에 곱한다.
+    fn basemap_opacity(&self, kind: TileKind) -> f32 {
+        let key = if kind == TileKind::Satellite { "vworld_satellite" } else { "vworld_base" };
+        self.left_layers.entries.iter().find(|e| e.layer_key == key).map_or(1.0, |e| e.opacity.clamp(0.0, 1.0))
     }
 
     /// 범례에 VWorld 지적 그림 레이어가 있는가(없으면 지적을 칠하지 않는다).
@@ -62,15 +68,8 @@ impl StrataAppState {
         let mpp = self.home_map.viewport.meters_per_pixel.max(1e-6);
         let z = crate::basemap_tiles::basemap_zoom_for(mpp, rect);
         let view = TileView::from_viewport(&self.home_map.viewport, rect, self.work_crs);
-        let n = crate::basemap_paint::paint_basemap_tiles(
-            ctx,
-            p,
-            rect,
-            kind,
-            z,
-            &view,
-            &mut self.basemap_textures,
-        );
+        let tint = egui::Color32::WHITE.gamma_multiply(self.basemap_opacity(kind));
+        let n = crate::basemap_paint::paint_basemap_tiles(ctx, p, rect, kind, z, &view, &mut self.basemap_textures, tint);
         self.basemap_tiles_painted = n;
     }
 

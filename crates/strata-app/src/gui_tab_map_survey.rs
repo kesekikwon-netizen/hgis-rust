@@ -16,7 +16,7 @@ use strata_types::crs::CrsCode;
 
 use crate::app_state::StrataAppState;
 use crate::survey_paint_layers::{
-    build_paint_layers, line_length, paint_order, point_along, PaintFeature, PaintLayer, PaintPart,
+    line_length, paint_order, point_along, PaintFeature, PaintLayer, PaintPart,
 };
 use crate::survey_style::{
     DomainStyle,
@@ -39,9 +39,10 @@ fn rgba(c: [u8; 4]) -> Color32 {
 }
 
 /// 표가 바뀌었을 때만 다시 만든다(도형·속성·좌표계가 같으면 앞 프레임 것을 쓴다).
-fn cached_layers(ctx: &egui::Context, tables: &[SurveyFileTable], work: CrsCode) -> Cached {
+fn cached_layers(ctx: &egui::Context, tables: &[SurveyFileTable], work: CrsCode, views: &std::collections::BTreeMap<String, crate::real_survey::LabelView>) -> Cached {
     let mut h = DefaultHasher::new();
     work.auth_id().hash(&mut h);
+    views.hash(&mut h);
     for t in tables {
         (&t.table, t.srs_id, &t.geometry_type, &t.columns).hash(&mut h);
         for f in &t.layer.features {
@@ -53,7 +54,7 @@ fn cached_layers(ctx: &egui::Context, tables: &[SurveyFileTable], work: CrsCode)
     if let Some(c) = ctx.data(|d| d.get_temp::<Cached>(id)).filter(|c| c.0 == sig) {
         return c;
     }
-    let c: Cached = Arc::new((sig, build_paint_layers(tables, work)));
+    let c: Cached = Arc::new((sig, crate::survey_paint_layers::build_paint_layers_with(tables, work, views)));
     ctx.data_mut(|d| d.insert_temp(id, c.clone()));
     c
 }
@@ -220,7 +221,7 @@ impl StrataAppState {
         if self.survey_tables.is_empty() {
             return;
         }
-        let cached = cached_layers(ctx, &self.survey_tables, self.work_crs.into());
+        let cached = cached_layers(ctx, &self.survey_tables, self.work_crs.into(), &self.home_map.real_survey.label_views);
         let layers = &cached.1;
         let rs = &self.home_map.real_survey;
         let vp = &self.home_map.viewport;
@@ -234,10 +235,21 @@ impl StrataAppState {
                 continue;
             }
             // 레이어마다 정한 모양(조사구역 그리기 설정의 선 색·채움·굵기)이 있으면 그것.
-            let style = rs.layer_styles.get(&layer.table).unwrap_or(&layer.style);
-            for f in &layer.features {
-                paint_feature(p, rect, vp, style, f);
+            let mut style = *rs.layer_styles.get(&layer.table).unwrap_or(&layer.style);
+            // 레이어 투명도(applyLayerOpacity) — 도형만 흐리게(라벨은 라벨 엔진이 따로 그린다).
+            let opacity = self.left_layers.entries.iter().find(|e| e.layer_key == layer.table).map_or(1.0, |e| e.opacity.clamp(0.0, 1.0));
+            if opacity < 1.0 {
+                let fade = |c: [u8; 4]| [c[0], c[1], c[2], (f32::from(c[3]) * opacity).round() as u8];
+                style.fill = fade(style.fill);
+                style.stroke = fade(style.stroke);
+                style.casing = style.casing.map(|(c, w)| (fade(c), w));
             }
+            for f in &layer.features {
+                paint_feature(p, rect, vp, &style, f);
+            }
+            // 레이어마다 고른 글자 크기(setLabelFontSize), 없으면 8 pt.
+            let size = rs.label_views.get(&layer.table).and_then(|v| v.size_tenths);
+            let font = size.map_or_else(|| font.clone(), |t| FontId::new(label_font_size_points(f32::from(t) / 10.0), font.family.clone()));
             if rs.is_label_visible(title) {
                 for (req, draw) in layer.features.iter().filter_map(|f| label_for(ctx, &font, rect, vp, layer, f)) {
                     reqs.push(req);

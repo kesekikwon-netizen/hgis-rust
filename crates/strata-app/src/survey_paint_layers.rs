@@ -178,14 +178,24 @@ fn build_feature(
 }
 
 /// 조사 표들을 작업 좌표계 `work` 의 그릴 레이어로. 형식·좌표계를 모르는 표는 뺀다.
+#[cfg(test)]
 pub(crate) fn build_paint_layers(tables: &[SurveyFileTable], work: CrsCode) -> Vec<PaintLayer> {
+    build_paint_layers_with(tables, work, &std::collections::BTreeMap::new())
+}
+
+/// 레이어 메뉴로 바꾼 라벨 내용(`views`, layer_key 마다)이 있으면 그것으로.
+pub(crate) fn build_paint_layers_with(
+    tables: &[SurveyFileTable],
+    work: CrsCode,
+    views: &std::collections::BTreeMap<String, crate::real_survey::LabelView>,
+) -> Vec<PaintLayer> {
     let mut out = Vec::new();
     for t in tables {
         let (Some(kind), Some(tr)) = (GeomKind::from_type_name(&t.geometry_type), transformer(t.srs_id, work.epsg_number()))
         else {
             continue;
         };
-        let rule = label_rule(&t.table, kind, &t.columns);
+        let rule = views.get(&t.table).and_then(|v| v.rule.clone()).unwrap_or_else(|| label_rule(&t.table, kind, &t.columns));
         let features = t
             .layer
             .features
