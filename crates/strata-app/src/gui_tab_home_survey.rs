@@ -106,6 +106,10 @@ impl StrataAppState {
         self.right_inspector = crate::right_inspector::RightInspectorState::new_default();
         self.home_map.scene = strata_canvas2d::painter_scene::MapSceneModel::default();
         self.home_map.selected_feature_idx = None;
+        // 이전 조사의 고른 도형·방금 그린 도형·겹친 도형 돌기도 남기지 않는다.
+        self.home_map.selected_shape = None;
+        self.home_map.last_drawn_shape = None;
+        self.home_map.pick_cycle = None;
         self.home_map.cad = strata_canvas2d::cad_session::CadSessionController::default();
         self.home_map.real_survey =
             crate::real_survey::RealSurveyData::new_empty_survey(&std::env::temp_dir());

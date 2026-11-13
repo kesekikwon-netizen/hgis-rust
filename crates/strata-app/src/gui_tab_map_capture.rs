@@ -72,6 +72,42 @@ impl StrataAppState {
     }
 }
 
+impl StrataAppState {
+    /// 고른 조사 도형 — QGIS 선택 색(255,235,59, 알파 45, MainWindowChrome.cpp setSelectionColor)으로 면은 채움만, 선·점은 그 색.
+    pub(crate) fn paint_selected_shape(&self, p: &egui::Painter, rect: Rect) {
+        use strata_storage::wkb_codec::WkbGeometry;
+        let Some((table, fid)) = &self.home_map.selected_shape else { return };
+        let Some(t) = self.survey_tables.iter().find(|t| &t.table == table) else { return };
+        let Some(f) = t.layer.features.iter().find(|f| f.fid == *fid) else { return };
+        let Ok(parts) = strata_storage::gpkg_wkt::wkt_to_parts(&f.wkt_geom) else { return };
+        let work = strata_types::crs::CrsCode::from(self.work_crs).epsg_number();
+        let parts = match u32::try_from(t.srs_id).ok().filter(|s| *s > 0 && *s != work) {
+            Some(src) => match strata_engine::Transformer::new(src, work).ok().and_then(|tr| crate::checklist_state_geometry::moved(&parts, &tr)) {
+                Some(moved) => moved,
+                None => return,
+            },
+            None => parts,
+        };
+        let sel = Color32::from_rgba_unmultiplied(255, 235, 59, 45);
+        let vp = &self.home_map.viewport;
+        let to = |pts: &[[f64; 2]]| pts.iter().map(|xy| w2s(rect, vp, *xy)).collect::<Vec<Pos2>>();
+        for part in &parts {
+            match part {
+                WkbGeometry::Polygon(rings) => {
+                    let screen: Vec<Vec<Pos2>> = rings.iter().map(|r| to(r)).collect();
+                    p.add(fill_mesh(&screen, sel));
+                }
+                WkbGeometry::LineString(l) => {
+                    p.add(egui::Shape::line(to(l), Stroke::new(3.0, sel)));
+                }
+                WkbGeometry::Point(xy) => {
+                    p.circle_filled(w2s(rect, vp, *xy), 5.0, sel);
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "gui_tab_map_capture_tests.rs"]
 mod tests;

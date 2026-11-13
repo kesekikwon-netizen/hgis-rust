@@ -153,6 +153,9 @@ impl StrataAppState {
                             "시굴격자 {name} ({area_m2:.1} m²)을(를) 배치했습니다 — 화살표 키(Shift: 1 m)로 미세 이동할 수 있습니다."
                         ));
                     }
+                    // 도형선택은 열어 둔 조사 표에서 C++ FeaturePick 차례로 고른다(feature_pick.rs). 못 고르면 Rust 의
+                    // 메모리 시굴격자(아직 표가 아님)를 본다.
+                    MapToolKind::Select if self.select_at(wxy, [cp.x, cp.y]) => {}
                     MapToolKind::Select | MapToolKind::Pan => {
                         let mpp = self.home_map.viewport.meters_per_pixel;
                         if let Some((idx, tr)) = self
@@ -199,29 +202,6 @@ impl StrataAppState {
                                 Some("시굴격자".to_owned());
                             self.home_map.draw_guide_message = Some(format!(
                                 "도형 선택: 시굴격자 #{idx} ({tr_name}, {tr_area:.1} m²) — 화살표 키(0.1 m) 또는 Shift+화살표(1.0 m)로 이동"
-                            ));
-                        } else if let Some((r_idx, _)) = self
-                            .home_map
-                            .real_survey
-                            .survey_rings
-                            .iter()
-                            .enumerate()
-                            .find(|(_, r)| {
-                                let min_x = r.iter().map(|p| p[0]).fold(f64::INFINITY, f64::min);
-                                let max_x = r.iter().map(|p| p[0]).fold(f64::NEG_INFINITY, f64::max);
-                                let min_y = r.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min);
-                                let max_y = r.iter().map(|p| p[1]).fold(f64::NEG_INFINITY, f64::max);
-                                wxy[0] >= min_x && wxy[0] <= max_x && wxy[1] >= min_y && wxy[1] <= max_y
-                            })
-                        {
-                            self.home_map.selected_feature_idx = Some(r_idx);
-                            self.right_inspector.selected_layer_key =
-                                Some("조사구역".to_owned());
-                        } else if effective_tool == MapToolKind::Select {
-                            self.home_map.selected_feature_idx = None;
-                            self.home_map.draw_guide_message = Some(format!(
-                                "클릭 좌표 (X {:.2}, Y {:.2}) 주변 10px 이내에 선택된 도형이 없습니다.",
-                                wxy[0], wxy[1]
                             ));
                         } else {
                             self.home_map.selected_feature_idx = None;
@@ -279,6 +259,7 @@ impl StrataAppState {
             },
         );
         self.paint_map_overlays(ctx, ui, &p, rect);
+        self.paint_selected_shape(&p, rect);
         self.paint_polygon_sketch(&p, rect, response.hover_pos());
     }
 }

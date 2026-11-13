@@ -22,6 +22,16 @@ pub fn wkt_area(wkt: &str) -> Result<f64, EngineError> {
     Ok(Geometry::new_from_wkt(wkt)?.area()?)
 }
 
+/// 점이 도형 안에 있는가(GEOSContains)와 점까지 거리(GEOSDistance) — C++ FeaturePick 의 contains·distance.
+///
+/// # Errors
+/// WKT 를 읽지 못함.
+pub fn wkt_point_relation(wkt: &str, xy: [f64; 2]) -> Result<(bool, f64), EngineError> {
+    let g = Geometry::new_from_wkt(wkt)?;
+    let p = Geometry::new_from_wkt(&format!("POINT ({} {})", xy[0], xy[1]))?;
+    Ok((g.contains(&p)?, g.distance(&p)?))
+}
+
 /// 도형들을 합친(unaryUnion) 넓이 — 겹친 곳은 한 번만 센다(C++ pickAutoFillArea 의 OGR Union 넓이).
 ///
 /// # Errors

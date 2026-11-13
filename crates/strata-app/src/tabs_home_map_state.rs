@@ -14,6 +14,9 @@ use crate::real_survey::RealSurveyData;
 
 use super::tabs_home_map_undo::{HGIS_BASEMAP_DEFAULT_BRIGHTNESS, HGIS_BASEMAP_DEFAULT_OPACITY};
 
+/// 도형선택 겹친 도형 돌기 — (지난 후보 (표, fid), 고른 차례, 누른 화면 자리).
+pub type PickCycle = (Vec<(String, i64)>, usize, [f32; 2]);
+
 #[derive(Debug, Clone)]
 pub struct HomeMapTabState {
     pub recent_filter: String,
@@ -32,6 +35,8 @@ pub struct HomeMapTabState {
     pub selected_shape: Option<(String, i64)>,
     /// 방금 그린 면(표 이름, fid) — C++ m_lastDrawnLayer·m_lastDrawnFid(「가까운 선에 붙이기」가 고른 것이 없을 때 쓴다).
     pub last_drawn_shape: Option<(String, i64)>,
+    /// 도형선택 겹친 도형 돌기 — (지난 후보, 고른 차례, 누른 화면 자리)(m_lastPickCandidates·Index·Pos).
+    pub pick_cycle: Option<PickCycle>,
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
     /// 마우스가 지도 칸 위에 한 번이라도 왔는가 — 그 전에는 상태줄 좌표가 「X —    Y —」(KaStatusBar.cpp:173-175).
@@ -77,6 +82,7 @@ impl Default for HomeMapTabState {
             selected_feature_idx: None,
             selected_shape: None,
             last_drawn_shape: None,
+            pick_cycle: None,
             grid_enabled: false,
             cursor_world_xy: center,
             cursor_seen: false,
