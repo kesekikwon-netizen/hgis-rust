@@ -15,15 +15,14 @@ use super::tests::{gdal_lock, key_sources, package_differences, sample_copy, DEM
 use super::{write_submit_shapefiles, ShpLayerReport, SubmitEncoding, SubmitSource};
 
 /// The demo copy whose feature_poly gains the typed columns of the cpp fixture recipe
-/// (docs/senior/ref-files/cpp-submit-package-types-UTF-8-5187/make-fixture.ps1), same SQL.
-fn types_gpkg(dir: &Path) -> PathBuf {
+/// (docs/senior/ref-files/cpp-submit-package-types-UTF-8-5187/make-fixture.ps1), same SQL; `long` = c_long.
+fn types_gpkg(dir: &Path, long: &str) -> PathBuf {
     let gpkg = sample_copy(dir, "demo_survey/demo.gpkg");
     let flags = GdalOpenFlags::GDAL_OF_UPDATE | GdalOpenFlags::GDAL_OF_VECTOR;
     let ds = Dataset::open_ex(&gpkg, DatasetOptions { open_flags: flags, ..DatasetOptions::default() }).expect("open");
     for c in ["c_int MEDIUMINT", "c_i64 INTEGER", "c_real REAL", "c_date DATE", "c_dt DATETIME", "c_bool BOOLEAN", "c_t20 TEXT(20)", "c_long TEXT"] {
         ds.execute_sql(format!("ALTER TABLE feature_poly ADD COLUMN {c}"), None, Dialect::SQLITE).expect("alter");
     }
-    let long = "가".repeat(120);
     let update = format!(
         "UPDATE feature_poly SET c_int=42, c_i64=9000000000, c_real=1.25, c_date='2026-11-14', \
          c_dt='2026-11-14T08:30:15Z', c_bool=1, c_t20='짧은글', c_long='{long}'"
@@ -32,9 +31,9 @@ fn types_gpkg(dir: &Path) -> PathBuf {
     gpkg
 }
 
-fn types_differences(enc: SubmitEncoding, fixture: &str) -> Vec<String> {
+fn types_differences(enc: SubmitEncoding, fixture: &str, long: &str) -> Vec<String> {
     let dir = tempfile::tempdir().expect("temp dir");
-    let gpkg = types_gpkg(dir.path());
+    let gpkg = types_gpkg(dir.path(), long);
     let counts: Vec<_> = KEYS.iter().copied().zip(DEMO_COUNTS).collect();
     package_differences(dir.path(), &key_sources(&gpkg, &KEYS), enc, fixture, &counts, &DEMO_NOTES)
 }
@@ -43,14 +42,24 @@ fn types_differences(enc: SubmitEncoding, fixture: &str) -> Vec<String> {
 #[test]
 fn field_types_equal_the_cpp_package_utf8() {
     let _gdal = gdal_lock();
-    let diffs = types_differences(SubmitEncoding::Utf8, "cpp_submit_types_utf8");
+    let diffs = types_differences(SubmitEncoding::Utf8, "cpp_submit_types_utf8", &"가".repeat(120));
     assert!(diffs.is_empty(), "differs from the cpp package:\n{}", diffs.join("\n"));
 }
 
 #[test]
 fn field_types_equal_the_cpp_package_euc_kr() {
     let _gdal = gdal_lock();
-    let diffs = types_differences(SubmitEncoding::EucKr, "cpp_submit_types_euckr");
+    let diffs = types_differences(SubmitEncoding::EucKr, "cpp_submit_types_euckr", &"가".repeat(120));
+    assert!(diffs.is_empty(), "differs from the cpp package:\n{}", diffs.join("\n"));
+}
+
+/// cpp-submit-package-long-EUC-KR-5187: c_long = 'a' + '가' x130 (261 CP949 bytes) in C(254) is cut at the
+/// byte width, the last 2-byte character in half: 61 + (b0a1 x126) + b0.
+#[test]
+fn long_euc_kr_text_is_cut_at_the_byte_width() {
+    let _gdal = gdal_lock();
+    let long = format!("a{}", "가".repeat(130));
+    let diffs = types_differences(SubmitEncoding::EucKr, "cpp_submit_long_euckr", &long);
     assert!(diffs.is_empty(), "differs from the cpp package:\n{}", diffs.join("\n"));
 }
 

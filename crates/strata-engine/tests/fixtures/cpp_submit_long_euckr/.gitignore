@@ -1,0 +1,6 @@
+# cpp submit package of a tempdir copy of samples/demo_survey with the typed feature_poly columns and a long c_long (not user data): kept despite the root SHP rules.
+!*.shp
+!*.shx
+!*.dbf
+!*.prj
+!*.cpg
