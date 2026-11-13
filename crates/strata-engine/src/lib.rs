@@ -7,9 +7,7 @@
 //!
 //! 다른 크레이트는 proj·geos 를 직접 쓰지 않고 이 크레이트의 함수만 부른다. 판 고정도 여기에 있다.
 
-// unsafe: only the one FFI call of feature `gdal` (submit_shp::set_gdal_proj_search_paths).
-#![cfg_attr(not(feature = "gdal"), forbid(unsafe_code))]
-#![cfg_attr(feature = "gdal", deny(unsafe_code))]
+#![forbid(unsafe_code)]
 
 mod crs;
 mod geom;

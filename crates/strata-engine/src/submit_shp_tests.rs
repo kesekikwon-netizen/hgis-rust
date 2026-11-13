@@ -7,6 +7,7 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use gdal::spatial_ref::SpatialRef;
 use gdal::vector::{Geometry, LayerAccess, LayerOptions, OGRwkbGeometryType};
@@ -48,21 +49,35 @@ fn small_gpkg(path: &Path, epsg: Option<u32>, features: usize) -> SubmitSource {
     SubmitSource { gpkg: path.to_path_buf(), table: "t".to_owned() }
 }
 
-#[test]
-fn demo_shapefiles_equal_the_cpp_package() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let gpkg = demo_copy(dir.path());
-    let out = dir.path().join("out");
+/// The PROJ folder is a process-wide GDAL setting: tests that use GDAL run one at a time.
+static GDAL: Mutex<()> = Mutex::new(());
+
+fn gdal_lock() -> MutexGuard<'static, ()> {
+    GDAL.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Writes the demo copy into `dir/out` and lists every difference from the cpp package: README layer
+/// lines and field notes, then each differing file with its length and first differing byte
+/// (text files also show both texts).
+fn demo_differences(dir: &Path) -> Vec<String> {
+    let gpkg = demo_copy(dir);
+    let out = dir.join("out");
     std::fs::create_dir(&out).expect("out dir");
-    let (reports, notes) = write_submit_shapefiles(&demo_sources(&gpkg), &out, SubmitEncoding::Utf8).expect("write");
+    let (reports, notes) = match write_submit_shapefiles(&demo_sources(&gpkg), &out, SubmitEncoding::Utf8) {
+        Ok(written) => written,
+        Err(e) => return vec![format!("write: {e}")],
+    };
+    let mut diffs = Vec::new();
     // README_submit.txt of the cpp package: shp_layers and shp_field_names.
     let counts = [1, 2, 1, 2, 1, 1, 1];
     let want: Vec<ShpLayerReport> = KEYS.iter().zip(counts).map(|(k, n)| ShpLayerReport { key: k, features: n }).collect();
-    assert_eq!(reports, want);
-    assert_eq!(notes, ["survey_area survey_name=surv_name", "artifact_point artifact_no=artif_no"]);
+    if reports != want {
+        diffs.push(format!("reports {reports:?}"));
+    }
+    if notes != ["survey_area survey_name=surv_name", "artifact_point artifact_no=artif_no"] {
+        diffs.push(format!("notes {notes:?}"));
+    }
     let fixture = manifest("tests/fixtures/cpp_submit_demo");
-    // Every differing file with its length and first differing byte; text files also show both texts.
-    let mut diffs = Vec::new();
     for key in KEYS {
         for ext in ["shp", "shx", "dbf", "prj", "cpg"] {
             let file = format!("{key}.{ext}");
@@ -83,16 +98,26 @@ fn demo_shapefiles_equal_the_cpp_package() {
             }
         }
     }
+    let written = std::fs::read_dir(&out).expect("list").count();
+    if written != 35 {
+        diffs.push(format!("{written} files written, cpp has 35"));
+    }
+    diffs
+}
+
+#[test]
+fn demo_shapefiles_equal_the_cpp_package() {
+    let _gdal = gdal_lock();
+    let dir = tempfile::tempdir().expect("temp dir");
+    let diffs = demo_differences(dir.path());
     assert!(diffs.is_empty(), "differs from the cpp package:\n{}", diffs.join("\n"));
-    let mut written: Vec<_> = std::fs::read_dir(&out).expect("list").map(|e| e.expect("entry").file_name()).collect();
-    written.sort();
-    assert_eq!(written.len(), 35, "{written:?}");
 }
 
 /// ExportService.cpp:147-153 — a key whose layers have no feature writes no file and no README line;
 /// an empty layer without CRS is skipped before the CRS check.
 #[test]
 fn key_without_features_writes_nothing() {
+    let _gdal = gdal_lock();
     let dir = tempfile::tempdir().expect("temp dir");
     let gpkg = demo_copy(dir.path());
     let empty = small_gpkg(&dir.path().join("empty.gpkg"), Some(5187), 0);
@@ -111,6 +136,7 @@ fn key_without_features_writes_nothing() {
 /// test_submit_package.cpp:78-94 — a layer without CRS stops the package with the cpp text.
 #[test]
 fn layer_without_crs_stops_with_cpp_text() {
+    let _gdal = gdal_lock();
     let dir = tempfile::tempdir().expect("temp dir");
     let src = small_gpkg(&dir.path().join("no_crs.gpkg"), None, 1);
     let ds = gdal::Dataset::open(&src.gpkg).expect("open");
@@ -129,6 +155,7 @@ fn layer_without_crs_stops_with_cpp_text() {
 /// Several non-empty layers per key and EUC-KR wait for R2-1b.
 #[test]
 fn merge_and_euc_kr_wait_for_r2_1b() {
+    let _gdal = gdal_lock();
     let dir = tempfile::tempdir().expect("temp dir");
     let a = small_gpkg(&dir.path().join("a.gpkg"), Some(5187), 1);
     let b = small_gpkg(&dir.path().join("b.gpkg"), Some(5187), 1);
@@ -141,6 +168,7 @@ fn merge_and_euc_kr_wait_for_r2_1b() {
 /// test_submit_package.cpp:271-286 verifyWrittenCatchesAWrongCount.
 #[test]
 fn verify_written_catches_a_wrong_count() {
+    let _gdal = gdal_lock();
     let fixture = manifest("tests/fixtures/cpp_submit_demo/survey_area.shp");
     verify_written(&fixture, 1).expect("cpp file is EPSG:5179 with one feature");
     let err = verify_written(&fixture, 2).expect_err("wrong count");
@@ -182,24 +210,41 @@ fn schema_fields_are_shapefile_safe() {
     assert_eq!(layers, 7);
 }
 
-/// The PROJ folder reaches GDAL through OSRSetPROJSearchPaths (no environment variable): re-setting the
-/// folders GDAL already uses keeps EPSG:5179 resolvable.
+/// GDAL's PROJ folder goes through the GDAL config option (no environment variable, no unsafe): an empty
+/// folder hides EPSG:5179; a copy of the installed proj.db under a folder with Korean letters resolves it
+/// and the demo package still equals the cpp one (incl. the 7 .prj).
 #[test]
-#[allow(unsafe_code)] // reads GDAL's current PROJ folders to hand them back unchanged
-fn proj_search_paths_go_through_the_gdal_api() {
-    let mut current: Vec<PathBuf> = Vec::new();
-    // SAFETY: OSRGetPROJSearchPaths returns a NULL-terminated string list we own and free with CSLDestroy.
-    unsafe {
-        let list = gdal_sys::OSRGetPROJSearchPaths();
-        let mut i = 0;
-        while !list.is_null() && !(*list.add(i)).is_null() {
-            current.push(PathBuf::from(std::ffi::CStr::from_ptr(*list.add(i)).to_string_lossy().into_owned()));
-            i += 1;
-        }
-        gdal_sys::CSLDestroy(list);
-    }
-    let with_db: Vec<&Path> = current.iter().map(PathBuf::as_path).filter(|p| p.join("proj.db").is_file()).collect();
-    assert!(!with_db.is_empty(), "GDAL PROJ folders: {current:?}");
-    super::set_gdal_proj_search_paths(&with_db).expect("set");
-    SpatialRef::from_epsg(5179).expect("EPSG:5179 after re-setting the PROJ folders");
+fn proj_folder_goes_through_the_gdal_config() {
+    let _gdal = gdal_lock();
+    let dir = tempfile::tempdir().expect("temp dir");
+    let empty = dir.path().join("empty");
+    std::fs::create_dir(&empty).expect("empty dir");
+    let korean = dir.path().join("조사 자료").join("proj");
+    std::fs::create_dir_all(&korean).expect("korean dir");
+    std::fs::copy(installed_proj_db(), korean.join("proj.db")).expect("copy proj.db");
+    let work = dir.path().join("work");
+    std::fs::create_dir(&work).expect("work dir");
+    // Each step on a fresh thread: GDAL keeps one PROJ context per thread.
+    super::set_gdal_proj_search_paths(&[&empty]).expect("set empty");
+    let unknown = std::thread::spawn(|| SpatialRef::from_epsg(5179).is_err()).join();
+    super::set_gdal_proj_search_paths(&[&korean]).expect("set korean");
+    let known = std::thread::spawn(|| SpatialRef::from_epsg(5179).is_ok()).join();
+    let diffs = std::thread::spawn(move || demo_differences(&work)).join();
+    // Back to GDAL's own PROJ folder before any assert, so a failure here does not break later tests.
+    gdal::config::clear_config_option("PROJ_DATA").expect("clear PROJ_DATA");
+    assert!(unknown.expect("thread"), "an empty PROJ folder must hide EPSG:5179");
+    assert!(known.expect("thread"), "proj.db under {} must resolve EPSG:5179", korean.display());
+    let diffs = diffs.expect("thread");
+    assert!(diffs.is_empty(), "differs from the cpp package:\n{}", diffs.join("\n"));
+}
+
+/// proj.db of the GDAL this crate was built against: OSGeo4W `<root>/share/proj` beside `apps/gdal-dev`,
+/// CI `GDAL_HOME/share/proj`.
+fn installed_proj_db() -> PathBuf {
+    let home = PathBuf::from(std::env::var_os("GDAL_HOME").expect("GDAL_HOME (the GDAL this crate builds against)"));
+    [home.join("share").join("proj"), home.join("..").join("..").join("share").join("proj")]
+        .into_iter()
+        .map(|d| d.join("proj.db"))
+        .find(|p| p.is_file())
+        .expect("proj.db next to the GDAL used for the build")
 }

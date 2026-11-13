@@ -4,7 +4,6 @@
 //! `ENCODING=UTF-8`, features by fid, traditional GIS axis order.
 
 use std::collections::HashSet;
-use std::ffi::{c_char, CString};
 use std::path::{Path, PathBuf};
 
 use gdal::spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef};
@@ -231,26 +230,19 @@ pub(crate) fn verify_written(shp: &Path, expected: u64) -> Result<(), EngineErro
     }
 }
 
-/// Points the PROJ that GDAL uses at `dirs` (each holding proj.db) through `OSRSetPROJSearchPaths`,
-/// never through process environment variables. The caller passes the folder it ships.
+/// Points the PROJ that GDAL uses at `dirs` (each holding proj.db) through the GDAL configuration
+/// option `PROJ_DATA` (a GDAL setting, not a process environment variable).
+/// The caller passes the folder it ships.
 ///
 /// # Errors
-/// A folder whose path is not valid UTF-8 or holds a NUL.
-#[allow(unsafe_code)] // the gdal crate has no safe wrapper for OSRSetPROJSearchPaths
+/// A folder whose path is not valid UTF-8, or GDAL refusing the option.
 pub fn set_gdal_proj_search_paths(dirs: &[&Path]) -> Result<(), EngineError> {
-    let owned = dirs
+    let joined = dirs
         .iter()
-        .map(|d| {
-            d.to_str()
-                .and_then(|s| CString::new(s).ok())
-                .ok_or_else(|| EngineError(format!("{}: not a UTF-8 path", d.display())))
-        })
-        .collect::<Result<Vec<CString>, EngineError>>()?;
-    let mut ptrs: Vec<*const c_char> = owned.iter().map(|s| s.as_ptr()).collect();
-    ptrs.push(std::ptr::null());
-    // SAFETY: `ptrs` is a NULL-terminated array of NUL-terminated UTF-8 strings owned by `owned`,
-    // both alive for the whole call; GDAL copies the list before returning.
-    unsafe { gdal_sys::OSRSetPROJSearchPaths(ptrs.as_ptr()) };
+        .map(|d| d.to_str().ok_or_else(|| EngineError(format!("{}: not a UTF-8 path", d.display()))))
+        .collect::<Result<Vec<&str>, EngineError>>()?
+        .join(";");
+    gdal::config::set_config_option("PROJ_DATA", &joined)?;
     Ok(())
 }
 

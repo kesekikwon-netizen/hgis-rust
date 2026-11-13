@@ -9,15 +9,8 @@ authors.workspace = true
 # 다른 크레이트는 proj·geos 를 직접 쓰지 않고 이 크레이트의 함수만 부른다.
 # 빌드에는 cmake 와 sqlite3 명령줄 도구가 PATH 에 있어야 한다(PROJ 소스 빌드가 proj.db 를 만든다). CI 는 ci.yml 에서 받는다.
 
-# Workspace lints, except unsafe_code = "deny" (the workspace forbids it, which `allow` cannot lift): the one
-# FFI call of feature `gdal` (OSRSetPROJSearchPaths) needs it; lib.rs still forbids unsafe without the feature.
-[lints.rust]
-unsafe_code = "deny"
-missing_debug_implementations = "warn"
-
-[lints.clippy]
-all = { level = "warn", priority = -1 }
-unwrap_used = "warn"
+[lints]
+workspace = true
 
 [dependencies]
 proj = { version = "=0.31.0", default-features = false, features = ["bundled_proj"] }
@@ -29,10 +22,9 @@ libsqlite3-sys = { version = "0.30", features = ["bundled"] }
 # R2-3 stages them. Build: GDAL_HOME = an OSGeo4W `apps/gdal-dev` (lib/gdal_i.lib, include/) and
 # GDAL_VERSION = 3.12.0 (prebuilt bindings; bindgen breaks gdal 0.19 on 3.14 headers). See README dev section.
 gdal = { version = "=0.19.0", optional = true }
-gdal-sys = { version = "=0.12.0", optional = true }
 
 [features]
-gdal = ["dep:gdal", "dep:gdal-sys"]
+gdal = ["dep:gdal"]
 
 [dev-dependencies]
 tempfile = { workspace = true }
