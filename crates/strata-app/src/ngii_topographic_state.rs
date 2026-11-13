@@ -48,7 +48,8 @@ fn start_lookup(app: &StrataAppState) {
     if state.running {
         return;
     }
-    let work = app.home_map.real_survey.survey_center;
+    // KaTopographicScopePanel.cpp:507 — 지도 화면 가운데.
+    let work = app.home_map.viewport.center_xy;
     let Some(portal) = portal_center(work, app.work_crs) else {
         state.status = "현재 위치를 국토지리정보원 검색 좌표로 변환하지 못했습니다.".to_owned();
         return;

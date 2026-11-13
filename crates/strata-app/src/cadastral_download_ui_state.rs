@@ -28,7 +28,7 @@ pub(crate) struct CadastralState {
 }
 
 impl CadastralState {
-    fn idle() -> Self {
+    pub(crate) fn idle() -> Self {
         Self {
             running: false,
             progress: 0.0,
@@ -40,6 +40,9 @@ impl CadastralState {
         }
     }
 }
+
+/// MainWindowCadastral.cpp:114 — 조사구역이 없을 때.
+pub(crate) const NO_SURVEY_AREA_MESSAGE: &str = "조사구역을 먼저 그려 주세요. 경계에서 주변 5km의 지적도를 받습니다.";
 
 pub(crate) fn cadastral_state() -> &'static Mutex<CadastralState> {
     static STATE: OnceLock<Mutex<CadastralState>> = OnceLock::new();
@@ -59,7 +62,12 @@ pub(crate) fn start_download(app: &StrataAppState, state: &mut CadastralState) {
         state.status = VworldClient::NO_SURVEY_MESSAGE.to_owned();
         return;
     };
-    let center = app.home_map.real_survey.survey_center;
+    // MainWindowCadastral.cpp:93-114 — 범위는 조사구역 도형들(작업 좌표계), 없으면 받지 않는다.
+    // C++ 은 도형들을 합쳐 5km 둘레를 만든 뒤 그 바깥 상자로 시·군·구를 찾는다(둘레의 바깥 상자 = 이 상자 ± 5km).
+    let Some(area) = crate::survey_area_setup::survey_area_extent(app) else {
+        state.status = NO_SURVEY_AREA_MESSAGE.to_owned();
+        return;
+    };
     let cancel = Arc::new(AtomicBool::new(false));
     let progress = Arc::new(Mutex::new(0.0_f32));
     let (sender, receiver) = mpsc::channel();
@@ -70,7 +78,7 @@ pub(crate) fn start_download(app: &StrataAppState, state: &mut CadastralState) {
     let thread_progress = Arc::clone(&progress);
     let work_crs = app.work_crs;
     std::thread::spawn(move || {
-        let outcome = run_download(dir, center, work_crs, thread_cancel, thread_progress);
+        let outcome = run_download(dir, area, work_crs, thread_cancel, thread_progress);
         let _ = sender.send(outcome);
     });
     state.cancel = cancel;

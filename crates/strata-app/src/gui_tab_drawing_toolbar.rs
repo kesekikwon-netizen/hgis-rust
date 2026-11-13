@@ -87,8 +87,7 @@ impl StrataAppState {
             });
         }
                                 1 => {
-                                    self.home_map.fit_to_survey();
-                                    self.home_map.draw_guide_message = Some("조사구역 레이어를 도면 칸 한가운데로 맞췄습니다.".to_owned());
+                                    self.center_layer_in_sheet();
                                 }
                                 2 => {
             // KaDrawingStudio.cpp:822-838 m_adjustBar — 지도 조정 모드
@@ -100,6 +99,8 @@ impl StrataAppState {
             });
         }
                                 3 => {
+                                    // 지도 화면과 같은 범위로 — 「레이어를 가운데」로 옮긴 가운데를 푼다(C++ centerOnMapCanvas).
+                                    self.drawing.sheet_center = None;
                                     self.drawing.sheet.replace_sheet_chrome();
                                     self.drawing.sheet.recover_orphaned_items();
                                     self.home_map.draw_guide_message = Some("용지 화면 맞춤 및 하단 장식 띠(축척자·좌표계·방위) 정렬을 완료했습니다.".to_owned());

@@ -216,23 +216,7 @@ pub(crate) fn render_control_point(app: &mut StrataAppState, ctx: &egui::Context
             ui.add_space(8.0);
             // 하단 버튼 행 (KaControlPointDialog.cpp:106-119)
             ui.horizontal(|ui| {
-                if ui.button("CSV 불러오기").clicked() {
-                    let [cx, cy] = app.home_map.real_survey.survey_center;
-                    app.modals.control_points_world.push((
-                        "GCP-01".to_owned(),
-                        [cx - 80.0, cy + 60.0],
-                        Some(48.5),
-                    ));
-                    app.modals.control_points_world.push((
-                        "GCP-02".to_owned(),
-                        [cx + 95.0, cy - 55.0],
-                        Some(46.2),
-                    ));
-                    app.home_map.draw_guide_message = Some(
-                        "CSV에서 GPS 기준점 2점(GCP-01, GCP-02)을 불러와 지도에 표시했습니다."
-                            .to_owned(),
-                    );
-                }
+                // F1: C++ 기준점 창에는 「CSV 불러오기」가 없다 — 지어낸 기준점 두 개를 넣던 단추를 없앴다.
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("취소").clicked() {
                         app.modals.active = None;
@@ -244,28 +228,23 @@ pub(crate) fn render_control_point(app: &mut StrataAppState, ctx: &egui::Context
                     )
                     .fill(Color32::from_rgb(33, 33, 31));
                     if ui.add(add_btn).clicked() {
-                        let raw_x = app
-                            .modals
-                            .cp_x
-                            .trim()
-                            .parse::<f64>()
-                            .unwrap_or(app.home_map.real_survey.survey_center[0]);
-                        let raw_y = app
-                            .modals
-                            .cp_y
-                            .trim()
-                            .parse::<f64>()
-                            .unwrap_or(app.home_map.real_survey.survey_center[1]);
+                        // MainWindowEditing.cpp:1398-1411 — 점ID·X·Y 가 없거나 숫자가 아니면 넣지 않는다(지어낸 값으로 채우지 않음).
+                        let raw_x = app.modals.cp_x.trim().parse::<f64>().ok();
+                        let raw_y = app.modals.cp_y.trim().parse::<f64>().ok();
+                        let z_text = app.modals.cp_z.trim();
+                        let z_opt = if z_text.is_empty() { Some(None) } else { z_text.parse::<f64>().ok().map(Some) };
+                        let id = app.modals.cp_id.trim().to_owned();
+                        let (Some(raw_x), Some(raw_y), Some(z_opt), false) = (raw_x, raw_y, z_opt, id.is_empty()) else {
+                            app.home_map.draw_guide_message = Some(
+                                "기준점을 넣지 않았습니다. 점ID와 X·Y는 꼭 적어야 하고, X·Y·Z는 숫자여야 합니다. 점ID와 좌표를 숫자로(소수점은 .) 적은 뒤 다시 넣으세요."
+                                    .to_owned(),
+                            );
+                            return;
+                        };
                         let (east_x, north_y) = if app.modals.cp_swap_axes {
                             (raw_y, raw_x)
                         } else {
                             (raw_x, raw_y)
-                        };
-                        let z_opt = app.modals.cp_z.trim().parse::<f64>().ok();
-                        let id = if app.modals.cp_id.trim().is_empty() {
-                            format!("GCP-{:02}", app.modals.control_points_world.len() + 1)
-                        } else {
-                            app.modals.cp_id.trim().to_owned()
                         };
                         app.modals
                             .control_points_world

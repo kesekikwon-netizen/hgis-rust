@@ -17,7 +17,7 @@ pub fn paint_projected_grid(
     rect: Rect,
     vp: &ViewportTransform,
     cfg: &ShellGridConfig,
-    survey_center: [f64; 2],
+    origin: [f64; 2],
     is_geo: bool,
     labels: bool,
 ) {
@@ -43,7 +43,7 @@ pub fn paint_projected_grid(
     let draw_step = step * stride as f64;
     let start_x = (min_wx / draw_step).floor() * draw_step;
     let start_y = (min_wy / draw_step).floor() * draw_step;
-    let [origin_x, origin_y] = survey_center;
+    let [origin_x, origin_y] = origin;
 
     let mut gx = start_x;
     while gx <= max_wx + draw_step * 0.5 {

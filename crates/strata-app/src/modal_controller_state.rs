@@ -96,7 +96,6 @@ pub struct ModalDialogController {
     // T8 KaHeritageBrowser ("주변유적 받기") 상태
     pub heritage_sido: String,
     pub heritage_city: String,
-    pub heritage_scope_idx: usize,
     pub heritage_dataset_checks: [bool; 7],
     pub heritage_reuse_recent: bool,
     pub heritage_stage_idx: usize,
@@ -104,7 +103,6 @@ pub struct ModalDialogController {
     pub heritage_status_detail: String,
     pub heritage_show_details: bool,
     pub heritage_request_log: Vec<String>,
-    pub heritage_selected_row: Option<usize>,
     // T9 KaTopographicImportDialog ("수치지형도 — 좌표계 확인과 지도 추가") 상태
     /// C++ `MainWindowTopographic.cpp:131-148` `showTopographicFiles(folder)` 의 그 폴더.
     /// 비어 있으면 아직 고르지 않았다.
@@ -215,30 +213,16 @@ impl Default for ModalDialogController {
             dem_applied_relief_enabled: true,
             dem_applied_exaggeration: 1.0,
             dem_applied_relief_strength_pct: 30,
-            heritage_sido: "경상북도".to_owned(),
-            heritage_city: "경주시".to_owned(),
-            heritage_scope_idx: 2,
+            // KaHeritageBrowser 처음 모습(KaHeritageBrowser.cpp:214-229): 단계 「대기」, 설명·진행 없음, 시·군은 고른 뒤에.
+            heritage_sido: String::new(),
+            heritage_city: String::new(),
             heritage_dataset_checks: [true; 7],
             heritage_reuse_recent: false,
-            heritage_stage_idx: 10,
-            heritage_progress_pct: 1.0,
-            heritage_status_detail: "경상북도 경주시 — 검색결과 4,569건. 내려받기 완료 (서약서 자동 동의 및 영수증 주변유적/receipts 기록됨).".to_owned(),
+            heritage_stage_idx: 0,
+            heritage_progress_pct: 0.0,
+            heritage_status_detail: String::new(),
             heritage_show_details: false,
-            heritage_request_log: vec![
-                strata_net::heritage_intranet::HeritageIntranetFlow::redact_request_line(
-                    "POST",
-                    strata_net::heritage_intranet::HeritageIntranetFlow::LOGIN_URL,
-                ),
-                strata_net::heritage_intranet::HeritageIntranetFlow::redact_request_line(
-                    "GET",
-                    "https://intranet.gis-heritage.go.kr/intranet/codedeta/selectCodeDetaList.do?sido=47&sigungu=47130",
-                ),
-                strata_net::heritage_intranet::HeritageIntranetFlow::redact_request_line(
-                    "POST",
-                    "https://intranet.gis-heritage.go.kr/intranet/codedeta/downloadFilesAll.do",
-                ),
-            ],
-            heritage_selected_row: Some(0),
+            heritage_request_log: Vec::new(),
             topo_folder: String::new(),
             topo_scanned: false,
             topo_records: Vec::new(),

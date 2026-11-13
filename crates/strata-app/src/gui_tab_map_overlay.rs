@@ -70,7 +70,7 @@ impl StrataAppState {
                 match i {
                     0 => self.home_map.viewport.zoom_at(0.8, center_px),
                     1 => self.home_map.viewport.zoom_at(1.25, center_px),
-                    _ => self.home_map.fit_to_survey(),
+                    _ => self.fit_to_survey_area(),
                 }
             }
         }

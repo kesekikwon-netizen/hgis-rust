@@ -43,7 +43,6 @@ pub struct RealSurveyData {
     pub site_name: String,
     pub survey_rings: Vec<Vec<[f64; 2]>>,
     pub survey_area_m2: f64,
-    pub survey_center: [f64; 2],
     pub trenches: Vec<RealTrenchPoly>,
     /// 주변 거리 경계(C++ user:buffer_ring_<m>·user:buffer_label_<m> 레이어) — 거리(m)마다 경계선과 거리 글자 자리(작업 좌표계).
     pub distance_rings: BTreeMap<u32, DistanceRing>,

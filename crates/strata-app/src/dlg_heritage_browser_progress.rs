@@ -74,12 +74,11 @@ egui::Frame::NONE
         p.text(
             bar_r.center(),
             egui::Align2::CENTER_CENTER,
-            format!(
-                "{:.0}% · {} {}",
-                app.modals.heritage_progress_pct * 100.0,
-                app.modals.heritage_sido,
-                app.modals.heritage_city
-            ),
+            {
+                let region = format!("{} {}", app.modals.heritage_sido, app.modals.heritage_city);
+                let pct = format!("{:.0}%", app.modals.heritage_progress_pct * 100.0);
+                if region.trim().is_empty() { pct } else { format!("{pct} · {}", region.trim()) }
+            },
             egui::FontId::proportional(11.5),
             Color32::WHITE,
         );

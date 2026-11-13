@@ -44,7 +44,7 @@ fn action_row(ui: &mut egui::Ui, a: &MapMenuAction, picked: &mut Option<&'static
 
 impl StrataAppState {
     /// 범례의 현재 레이어(`m_layerTree->currentLayer()`).
-    fn current_legend_layer(&self) -> Option<&crate::left_layer_panel::LayerTreeEntry> {
+    pub(crate) fn current_legend_layer(&self) -> Option<&crate::left_layer_panel::LayerTreeEntry> {
         let name = self.right_inspector.selected_layer_key.as_deref()?;
         self.left_layers.entries.iter().find(|e| e.label_ko == name)
     }
@@ -59,6 +59,19 @@ impl StrataAppState {
             .find(|t| t.table == entry.layer_key)
             .and_then(|t| crate::survey_paint_layers::table_extent_in(t, self.work_crs));
         self.home_map.zoom_to_layer_max(ext, is_raster, self.work_crs);
+    }
+
+    /// 지도 오른쪽 「조사구역 맞춤」 — C++ setFitHandler(MainWindow.cpp:966-972): 도형이 있는 조사구역 레이어로
+    /// zoomToLayerMax, 없으면 범례에서 고른 레이어로.
+    pub(crate) fn fit_to_survey_area(&mut self) {
+        let work = self.work_crs;
+        for t in self.survey_tables.iter().filter(|t| crate::survey_area_setup::is_survey_area_key(&t.table) && !t.layer.features.is_empty()) {
+            let ext = crate::survey_paint_layers::table_extent_in(t, work);
+            if self.home_map.zoom_to_layer_max(ext, false, work) {
+                return;
+            }
+        }
+        self.zoom_to_current_legend_layer();
     }
 
     fn run_map_menu_action(&mut self, ctx: &egui::Context, id: &str, coords: &str) {

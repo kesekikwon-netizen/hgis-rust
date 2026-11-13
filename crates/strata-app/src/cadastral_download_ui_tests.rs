@@ -83,3 +83,32 @@ use crate::cadastral_download_ui::{
         assert!(with_page(&url, 3).contains("&page=3&"));
         assert!(!with_page(&url, 3).contains("&page=1&"));
     }
+
+/// F1 — 지적도 받기 범위는 열어 둔 조사구역 도형들의 바깥 상자(MainWindowCadastral.cpp:93-115, 5km 는 그 둘레),
+/// 경주 기본점은 없다. 조사구역이 없으면 C++ 처럼 받지 않고 그 까닭을 보인다.
+#[test]
+fn cadastral_scope_is_the_survey_area() {
+    use crate::cadastral_download_ui::cadastral_download_ui_state::{start_download, CadastralState, NO_SURVEY_AREA_MESSAGE};
+    use crate::survey_area_setup::survey_area_extent;
+    let mut app = crate::app_state::StrataAppState::new_startup();
+    assert_eq!(survey_area_extent(&app), None, "no survey open");
+    let dir = tempfile::tempdir().expect("temp dir");
+    let gpkg = dir.path().join("demo.gpkg");
+    std::fs::copy(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples/demo_survey/demo.gpkg"), &gpkg).expect("copy");
+    app.open_survey_gpkg(&gpkg);
+    let areas: Vec<[f64; 4]> = app
+        .survey_tables
+        .iter()
+        .filter(|t| crate::survey_area_setup::is_survey_area_key(&t.table))
+        .filter_map(|t| crate::survey_paint_layers::table_extent_in(t, app.work_crs))
+        .collect();
+    assert!(!areas.is_empty(), "the demo has a survey area");
+    let want = areas.iter().fold([f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY], |b, e| [b[0].min(e[0]), b[1].min(e[1]), b[2].max(e[2]), b[3].max(e[3])]);
+    assert_eq!(survey_area_extent(&app), Some(want));
+    for t in app.survey_tables.iter_mut().filter(|t| crate::survey_area_setup::is_survey_area_key(&t.table)) {
+        t.layer.features.clear();
+    }
+    let mut state = CadastralState::idle();
+    start_download(&app, &mut state);
+    assert_eq!((state.status.as_str(), state.running), (NO_SURVEY_AREA_MESSAGE, false));
+}

@@ -19,9 +19,6 @@ pub(crate) struct HeritageOverlayCtx<'a> {
     pub(crate) p: &'a egui::Painter,
     pub(crate) rect: Rect,
     pub(crate) vp: &'a ViewportTransform,
-    pub(crate) rs: &'a crate::real_survey::RealSurveyData,
-    pub(crate) center: [f64; 2],
-    pub(crate) layer_color: &'a dyn Fn(&str, Color32) -> Color32,
 }
 
 impl StrataAppState {
@@ -32,9 +29,6 @@ impl StrataAppState {
             p,
             rect,
             vp,
-            rs,
-            center: [cx, cy],
-            layer_color,
         } = g;
         // KaCanvasGridOverlay.cpp:101-194 — 좌표격자가 켜져 있으면 지도 위에 격자와 도곽 좌표 띠를 그린다
         if self.home_map.grid_enabled {
@@ -43,22 +37,12 @@ impl StrataAppState {
                     .unwrap_or_default()
             });
             let labels = cfg.show_labels;
-            paint_projected_grid(p, rect, vp, &cfg, rs.survey_center, cfg.is_geo, labels);
+            // 격자 원점은 C++ 기본 좌표계 원점(0, 0)(KaGridOriginButton.cpp:36) — 「원점」 단추는 아직 없다.
+            paint_projected_grid(p, rect, vp, &cfg, [0.0, 0.0], cfg.is_geo, labels);
         }
 
-        // T9 KaTopographicImportDialog에서 지도에 추가한 수치지형도 레이어 렌더링 (styleTopographic: 회색 0.2mm 선)
-        if self.modals.topo_maps_enabled && self.modals.topo_imported_count > 0 {
-            let topo_col = layer_color(
-                "수치지형도 1:5,000 (합침)",
-                Color32::from_rgba_unmultiplied(115, 115, 115, 190),
-            );
-            for idx in 0..self.modals.topo_imported_count.min(6) {
-                let offset = (idx as f64 - 2.5) * 140.0;
-                let p1 = w2s(rect, vp, [cx - 880.0, cy + offset - 90.0]);
-                let p2 = w2s(rect, vp, [cx + 880.0, cy + offset + 90.0]);
-                p.line_segment([p1, p2], Stroke::new(1.0, topo_col));
-            }
-        }
+        // F1: 「수치지형도 (합침)」을 넣으면 경주 기본점 둘레에 지어낸 회색 선 여섯 줄을 긋던 것을 없앴다 —
+        // 받은 도엽을 제자리에 그리는 일은 따로(C++ styleTopographic 은 실제 레이어).
 
         // T6 (1) KaControlPointDialog에서 추가한 GPS 기준점 심볼·라벨 렌더링
         for (cp_id, cp_xy, cp_z) in &self.modals.control_points_world {

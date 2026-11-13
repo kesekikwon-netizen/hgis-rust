@@ -17,7 +17,6 @@ impl StrataAppState {
     ) {
         let vp = &self.home_map.viewport;
         let rs = &self.home_map.real_survey;
-        let [cx, cy] = rs.survey_center;
         let sel_layer = self.right_inspector.selected_layer_key.as_deref();
 
         let layer_color = |name: &str, base: Color32| -> Color32 {
@@ -39,75 +38,8 @@ impl StrataAppState {
         // 사각형이 떴다(사용자 지적 2026-11-09). C++ `LayerOps::addElevationHillshadeMap`
         // 은 실제 QgsRasterLayer(GeoTIFF)만 쓰고, 없으면 아무 것도 그리지 않는다.
         // 여기서도 같게 한다 — 자료를 받기 전에는 지형 음영이 없다.
-        let has_real_dem = self.home_map.dem_grid.is_some();
-        if has_real_dem
-            && (rs.is_layer_visible("지형 음영")
-                || rs.is_layer_visible("지표모델(DSM) 30m · Coperni..."))
-        {
-            let tl = w2s(rect, vp, [cx - 1050.0, cy + 720.0]);
-            let br = w2s(rect, vp, [cx + 1050.0, cy - 720.0]);
-            let dsm_r = Rect::from_min_max(tl, br);
-            match self.modals.dem_applied_mode_idx {
-                0 => {
-                    // 등고 모드: 연한 지형 배경 + 등고선 밴드
-                    let base = layer_color("지형 음영", Color32::from_rgb(228, 224, 208));
-                    p.rect_filled(dsm_r, 0.0, base);
-                    let contour_col = layer_color("지형 음영", Color32::from_rgb(138, 102, 62));
-                    for idx in 1..=7 {
-                        let ratio = (idx as f32) / 8.0;
-                        let r_x = dsm_r.width() * 0.46 * ratio;
-                        let r_y = dsm_r.height() * 0.44 * ratio;
-                        let mut ring = Vec::with_capacity(25);
-                        for step in 0..=24 {
-                            let ang = (step as f32) / 24.0 * std::f32::consts::TAU;
-                            ring.push(Pos2::new(
-                                dsm_r.center().x + ang.cos() * r_x,
-                                dsm_r.center().y + ang.sin() * r_y,
-                            ));
-                        }
-                        p.add(egui::Shape::line(
-                            ring,
-                            Stroke::new(if idx % 2 == 0 { 1.4 } else { 0.8 }, contour_col),
-                        ));
-                    }
-                }
-                2 => {
-                    // 고도 모드: 선택된 색 표현 프리셋(0: 전국 표준, 1: 저지대 강조, 2: 현재 화면 맞춤)에 따른 단계별 색 띠
-                    let bands = 10usize;
-                    let bh = dsm_r.height() / (bands as f32);
-                    for bi in 0..bands {
-                        let t = (bi as f32) / ((bands - 1) as f32);
-                        let raw_col = match self.modals.dem_applied_preset_idx {
-                            0 => Color32::from_rgb(
-                                (90.0 + t * 110.0) as u8,
-                                (175.0 - t * 35.0) as u8,
-                                (95.0 + t * 60.0) as u8,
-                            ),
-                            1 => Color32::from_rgb(
-                                (58.0 + t * 145.0) as u8,
-                                (152.0 - t * 48.0) as u8,
-                                (118.0 - t * 55.0) as u8,
-                            ),
-                            _ => Color32::from_rgb(
-                                (68.0 + t * 165.0) as u8,
-                                (168.0 - (t - 0.4).abs() * 120.0).clamp(65.0, 210.0) as u8,
-                                (74.0 - t * 32.0) as u8,
-                            ),
-                        };
-                        let seg_r = Rect::from_min_size(
-                            Pos2::new(dsm_r.left(), dsm_r.top() + (bi as f32) * bh),
-                            Vec2::new(dsm_r.width(), bh + 1.0),
-                        );
-                        p.rect_filled(seg_r, 0.0, layer_color("지형 음영", raw_col));
-                    }
-                }
-                _ => {
-                    // 기본 음영 모드
-                    let dsm_col = layer_color("지형 음영", Color32::from_rgb(154, 198, 120));
-                    p.rect_filled(dsm_r, 0.0, dsm_col);
-                }
-            }
-        }
+        // F1: DEM 이 있어도 그 표고를 그리지 않고 경주 기본점 둘레 2100×1440 m 에 합성 등고선·색 띠를 칠하던
+        // 것을 없앴다 — 받은 DEM 을 제자리에 그리는 일은 따로(C++ LayerOps::addElevationHillshadeMap = 실제 래스터).
 
         if rs.is_layer_visible("지적도 · 조사 주변 5km") {
             let base_cad = if cadastral_detail {
@@ -215,9 +147,6 @@ impl StrataAppState {
             p,
             rect,
             vp,
-            rs,
-            center: [cx, cy],
-            layer_color: &layer_color,
         });
         // 「조사 데이터」 묶음은 범례에서 참조 지도·지적 위에 있다 — 그 위에 그린다.
         self.paint_survey_tables(ctx, p, rect);

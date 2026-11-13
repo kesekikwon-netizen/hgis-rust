@@ -2,7 +2,7 @@
 //!
 //! `dlg_heritage_browser.rs` 가 300줄 규칙에 맞춰 나눈 파일이다.
 //! 원래 창 안의 상세 로그·하단 단추 줄을 **그대로** 옮겼고, 순서·문구·동작은
-//! 하나도 바꾸지 않았다. 걸러진 행 수는 결과 표가 돌려준 값을 그대로 받는다.
+//! 하나도 바꾸지 않았다. 견본 결과 표의 「검색 결과 N건」 글은 F1 에서 표와 함께 없앴다.
 
 use eframe::egui::{self, Color32, Stroke, Vec2};
 
@@ -11,11 +11,10 @@ use crate::dialogs_download_print::heritage_start_fetch;
 use crate::dialogs_modal::ActiveModalDialog;
 use strata_net::heritage_intranet::HeritageStage;
 
-/// 상세 로그(켜져 있을 때)와 하단 단추 줄. `row_count` 는 결과 표의 걸러진 행 수다.
+/// 상세 로그(켜져 있을 때)와 하단 단추 줄.
 pub(crate) fn render_heritage_footer(
     app: &mut StrataAppState,
     ui: &mut egui::Ui,
-    row_count: usize,
 ) {
 if app.modals.heritage_show_details {
     ui.add_space(4.0);
@@ -53,15 +52,6 @@ ui.horizontal(|ui| {
     if ui.button("설정").clicked() {
         app.modals.active = Some(ActiveModalDialog::AccountSettings);
     }
-    ui.label(
-        egui::RichText::new(format!(
-            "검색 결과 {}건 표시 중 (지도 전체 {}건)",
-            row_count,
-            app.home_map.real_survey.heritage_polys.len()
-        ))
-        .size(11.5)
-        .color(Color32::from_rgb(80, 79, 74)),
-    );
 
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         let cancel_btn = egui::Button::new("취소")

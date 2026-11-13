@@ -108,7 +108,8 @@ impl StrataAppState {
                                         true,
                                         0.0,
                                         20.0,
-                                        self.home_map.real_survey.survey_center,
+                                        // 지도 좌표격자의 원점 — C++ 기본은 좌표계 원점(0, 0)(KaGridOriginButton.cpp:36).
+                                        [0.0, 0.0],
                                     );
                                     self.home_map.draw_guide_message = Some(
                                         "도면 격자를 지도 좌표격자와 같게 설정했습니다 (20 m)."

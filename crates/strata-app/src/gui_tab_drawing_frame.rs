@@ -69,6 +69,45 @@ pub(crate) struct ChromeRects {
     pub label: Rect,
 }
 
+/// 지도 칸 가운데 `mc` 가 지상 `center` 이고 1 m 가 `ppm` 화면 점일 때, 지상 점의 용지 위 자리(북쪽이 위).
+pub(crate) fn world_to_sheet_px(mc: Pos2, center: [f64; 2], ppm: f64, pt: [f64; 2]) -> Pos2 {
+    Pos2::new(mc.x + ((pt[0] - center[0]) * ppm) as f32, mc.y - ((pt[1] - center[1]) * ppm) as f32)
+}
+
+/// `world_to_sheet_px` 의 역.
+pub(crate) fn sheet_px_to_world(mc: Pos2, center: [f64; 2], ppm: f64, pos: Pos2) -> [f64; 2] {
+    let ppm = ppm.max(1e-9);
+    [center[0] + f64::from(pos.x - mc.x) / ppm, center[1] - f64::from(pos.y - mc.y) / ppm]
+}
+
+impl crate::app_state::StrataAppState {
+    /// 도면 지도의 가운데 — C++ `studioMapExtent`(KaDrawingStudio.cpp:188-195)는 지도 화면 범위를 쓰고,
+    /// 「레이어를 가운데」로 옮긴 뒤에는 그 자리.
+    pub(crate) fn sheet_map_center(&self) -> [f64; 2] {
+        self.drawing.sheet_center.unwrap_or(self.home_map.viewport.center_xy)
+    }
+
+    /// 「레이어를 가운데」 — C++ `centerSurveyInMap`(KaDrawingStudio.cpp:3708-3755): 고른 레이어의 범위 가운데,
+    /// 없으면 조사구역 범위 가운데로 축척은 두고 옮긴다. 둘 다 없으면 고르라고 알린다.
+    pub(crate) fn center_layer_in_sheet(&mut self) {
+        let finite = |b: &[f64; 4]| b.iter().all(|v| v.is_finite()) && b[2] - b[0] > 0.0;
+        let layer = self.current_legend_layer().map(|e| e.layer_key.clone());
+        let layer_ext = layer
+            .and_then(|k| self.survey_tables.iter().find(|t| t.table == k))
+            .and_then(|t| crate::survey_paint_layers::table_extent_in(t, self.work_crs))
+            .filter(|b| finite(b) && b[2] - b[0] < 2_000_000.0);
+        let Some(b) = layer_ext.or_else(|| crate::survey_area_setup::survey_area_extent(self).filter(finite)) else {
+            self.home_map.draw_guide_message = Some("가운데로 둘 레이어를 왼쪽에서 고르세요.".to_owned());
+            return;
+        };
+        self.drawing.sheet_center = Some([(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5]);
+        self.home_map.draw_guide_message = Some(format!(
+            "축척 1 : {} 을 유지한 채 용지 가운데로 옮겼습니다.",
+            self.drawing.sheet.scale_denominator.max(10)
+        ));
+    }
+}
+
 impl SheetFrame {
     /// mm 좌표 → 화면 사각형(자유함수에 위임). 호출부는 이 메서드를 쓴다.
     pub(crate) fn mm_to_rect(&self, r: SheetRectMm) -> Rect {
@@ -77,14 +116,12 @@ impl SheetFrame {
 
     /// 월드 좌표 → 용지 위 화면 좌표.
     pub(crate) fn w2m(&self, pt: [f64; 2]) -> Pos2 {
-        let mc = self.mc;
-        let scx = self.scx;
-        let scy = self.scy;
-        let px_per_meter = self.px_per_meter;
-        Pos2::new(
-            mc.x + ((pt[0] - scx) * px_per_meter) as f32,
-            mc.y - ((pt[1] - scy) * px_per_meter) as f32,
-        )
+        world_to_sheet_px(self.mc, [self.scx, self.scy], self.px_per_meter, pt)
+    }
+
+    /// 용지 위 화면 좌표 → 월드 좌표(`w2m` 의 역 — 좌표점 콜아웃).
+    pub(crate) fn m2w(&self, pos: Pos2) -> [f64; 2] {
+        sheet_px_to_world(self.mc, [self.scx, self.scy], self.px_per_meter, pos)
     }
     /// 이 점이 지도 칸(±250m 여유) 안인가.
     pub(crate) fn in_view_bbox(&self, pt: [f64; 2]) -> bool {
@@ -95,3 +132,7 @@ impl SheetFrame {
         (pt[0] - scx).abs() <= half_w_m && (pt[1] - scy).abs() <= half_h_m
     }
 }
+
+#[cfg(test)]
+#[path = "gui_tab_drawing_frame_tests.rs"]
+mod tests;

@@ -1,8 +1,8 @@
 //! `dialogs_download_print` 에서 옮긴 「HeritageBrowser」 대화상자.
 //!
 //! 분할 전에는 `render_download_and_print_dialogs` 의 match arm 이었다.
-//! 300줄 규칙에 맞춰 진행 카드(`dlg_heritage_browser_progress`), 결과 표
-//! (`dlg_heritage_browser_results`), 상세 로그·하단 단추(`dlg_heritage_browser_footer`)로 나눴다.
+//! 300줄 규칙에 맞춰 진행 카드(`dlg_heritage_browser_progress`)와
+//! 상세 로그·하단 단추(`dlg_heritage_browser_footer`)로 나눴다. 견본 유적 결과 표는 F1 에서 없앴다(C++ 에 없음).
 //! `crate::dlg_heritage_browser::render_heritage_browser` 경로와 위젯 순서는 그대로다.
 
 use eframe::egui::{self, Color32, Pos2, Stroke};
@@ -16,12 +16,9 @@ use crate::dialogs_modal::ActiveModalDialog;
 mod dlg_heritage_browser_footer;
 #[path = "dlg_heritage_browser_progress.rs"]
 mod dlg_heritage_browser_progress;
-#[path = "dlg_heritage_browser_results.rs"]
-mod dlg_heritage_browser_results;
 
 use dlg_heritage_browser_footer::render_heritage_footer;
 use dlg_heritage_browser_progress::render_heritage_progress;
-use dlg_heritage_browser_results::render_heritage_results;
 
 pub(crate) fn render_heritage_browser(
     app: &mut StrataAppState,
@@ -119,25 +116,6 @@ pub(crate) fn render_heritage_browser(
                                 }
                             });
                         ui.separator();
-                        ui.label(egui::RichText::new("범위 선택:").size(12.0).strong());
-                        for (si, s_lbl) in [
-                            "반경 1 km",
-                            "반경 3 km",
-                            "반경 5 km",
-                            "반경 10 km",
-                            "현재 지도 화면 기준",
-                        ]
-                        .into_iter()
-                        .enumerate()
-                        {
-                            if ui
-                                .selectable_label(app.modals.heritage_scope_idx == si, s_lbl)
-                                .clicked()
-                            {
-                                app.modals.heritage_scope_idx = si;
-                            }
-                        }
-                        ui.separator();
                         ui.checkbox(
                             &mut app.modals.heritage_reuse_recent,
                             egui::RichText::new("최근 받은 자료 다시 쓰기").size(11.5),
@@ -169,8 +147,12 @@ pub(crate) fn render_heritage_browser(
             render_heritage_progress(app, ui, modal_w);
 
 
-            let row_count = render_heritage_results(app, ui, modal_w);
+            // F1: C++ 창에는 유적 결과 표가 없다(받은 자료는 지도에 올라간다) — 견본 유적 표를 없앴다.
 
-            render_heritage_footer(app, ui, row_count);
+            render_heritage_footer(app, ui);
         });
 }
+
+#[cfg(test)]
+#[path = "dlg_heritage_browser_tests.rs"]
+mod tests;

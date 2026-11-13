@@ -19,7 +19,6 @@ impl RealSurveyData {
             site_name: String::new(),
             survey_rings: Vec::new(),
             survey_area_m2: 0.0,
-            survey_center: [219_745.6, 360_930.5],
             trenches: Vec::new(),
             distance_rings: BTreeMap::new(),
             layer_styles: BTreeMap::new(),

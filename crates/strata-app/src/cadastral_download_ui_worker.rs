@@ -17,7 +17,7 @@ use super::cadastral_download_ui_paths::{
 /// 내려받기 작업자 — 키 확인 → 시·군·구 → 자료 목록 → ZIP
 pub(crate) fn run_download(
     survey_dir: std::path::PathBuf,
-    center_work: [f64; 2],
+    area_work: [f64; 4],
     work_crs: WorkCrs,
     cancel: Arc<AtomicBool>,
     progress: Arc<Mutex<f32>>,
@@ -42,7 +42,7 @@ pub(crate) fn run_download(
     }
 
     // C++ `:222-228` — 조사구역 + 5km 를 WGS84 사각 범위로
-    let Some(work_box) = cadastral_work_box(center_work, work_crs) else {
+    let Some(work_box) = cadastral_work_box(area_work, work_crs) else {
         outcome.error = "조사 주변 5km 범위를 만들지 못했습니다.".to_owned();
         return outcome;
     };
@@ -158,18 +158,14 @@ pub(crate) fn run_download(
     outcome
 }
 
-/// C++ `CadastralPortal.cpp:222-227` — 중심 ± 5km 를 WGS84 사각 범위로.
-/// 정확한 값은 조사구역 경계가 있어야 나오므로, 중심 기준 반경으로 잡는다.
-fn cadastral_work_box(center: [f64; 2], work_crs: WorkCrs) -> Option<[f64; 4]> {
+/// C++ `CadastralPortal.cpp:222-227` — 조사구역 + 5km 둘레의 바깥 상자(= 조사구역 바깥 상자 ± 5km)를 WGS84 사각 범위로.
+fn cadastral_work_box(area: [f64; 4], work_crs: WorkCrs) -> Option<[f64; 4]> {
     let src = match work_crs {
         WorkCrs::Epsg5186 => CrsCode::Epsg5186,
         WorkCrs::Epsg5187 => CrsCode::Epsg5187,
     };
     let r = strata_net::ngii_topographic::NgiiTopographicClient::SCOPE_RADIUS_M;
-    let box_work = vworld_client::cadastral_search_box(
-        [center[0] - r, center[1] - r, center[0] + r, center[1] + r],
-        0.0,
-    )?;
+    let box_work = vworld_client::cadastral_search_box(area, r)?;
     let to_wgs = strata_geo::crs_transform::CrsTransformer::new(src, CrsCode::Epsg4326);
     let corners = [
         to_wgs.transform_xy(box_work[0], box_work[1]),

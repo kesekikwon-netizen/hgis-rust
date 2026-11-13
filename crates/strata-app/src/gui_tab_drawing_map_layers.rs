@@ -186,8 +186,13 @@ impl StrataAppState {
                 }
                 map_p.add(egui::Shape::line(pts, stroke));
             }
-            if rs.is_label_visible("조사구역") {
-                let sp = f.w2m(rs.survey_center);
+            // F1: 면적 글은 그린 조사구역의 바깥 상자 가운데에만(예전엔 조사구역이 없어도 경주 기본점에 「0 m²」).
+            let pts = rs.survey_rings.iter().flatten();
+            let bbox = pts.fold(None::<[f64; 4]>, |b, p| {
+                Some(b.map_or([p[0], p[1], p[0], p[1]], |b| [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])]))
+            });
+            if let (true, Some(b)) = (rs.is_label_visible("조사구역"), bbox) {
+                let sp = f.w2m([(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5]);
                 let lbl_r = Rect::from_center_size(sp, Vec2::new(64.0, 15.0));
                 map_p.rect_filled(
                     lbl_r,

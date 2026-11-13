@@ -57,7 +57,7 @@ pub(crate) fn render_export_submit_package(app: &mut StrataAppState, ctx: &egui:
                     message_ko: r.message_ko.clone(),
                     severity: sev,
                     passed: r.passed,
-                    target_world_xy: Some(app.home_map.real_survey.survey_center),
+                    target_world_xy: None,
                 }
             })
             .collect();

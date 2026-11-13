@@ -68,6 +68,16 @@ pub(crate) fn is_survey_area_key(key: &str) -> bool {
     key == "survey_area" || key.starts_with("survey_area_")
 }
 
+/// 열어 둔 조사구역 표들(survey_area·survey_area_N, 편집 버퍼 포함)의 작업 좌표계 바깥 상자 — 도형이 없으면 None.
+/// (지적도 받기·「레이어를 가운데」가 C++ 처럼 조사구역 도형들을 쓴다 — 경주 기본점은 없다.)
+pub(crate) fn survey_area_extent(app: &StrataAppState) -> Option<[f64; 4]> {
+    app.survey_tables
+        .iter()
+        .filter(|t| is_survey_area_key(&t.table))
+        .filter_map(|t| crate::survey_paint_layers::table_extent_in(t, app.work_crs))
+        .reduce(|b, e| [b[0].min(e[0]), b[1].min(e[1]), b[2].max(e[2]), b[3].max(e[3])])
+}
+
 impl StrataAppState {
     /// `layerToContinue` — 이 조사 파일의 조사구역 레이어 가운데 범례에서 고른 것, 아니면 처음 보이는 것.
     pub(crate) fn survey_area_layer_to_continue(&self) -> Option<(String, String)> {

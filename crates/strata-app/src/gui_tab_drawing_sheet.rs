@@ -109,7 +109,7 @@ impl StrataAppState {
             } else {
                 Color32::from_rgb(252, 251, 248)
             };
-            (map_bg, rs.survey_center)
+            (map_bg, self.sheet_map_center())
         };
         sheet_p.rect_filled(map_rect, 0.0, map_bg);
         // 2. 실제 조사 레이어(조사구역·시굴격자·지적도·국가유산·500m 버퍼·작도 유구)를 축척(scale_denominator)에 맞춰 렌더링

@@ -79,10 +79,8 @@ impl StrataAppState {
                 let tag =
                     ((b'A' + (self.drawing.coord_callouts.len() % 26) as u8) as char)
                         .to_string();
-                let n = f64::from(pos[1] - sheet_rect.top()) * 0.5
-                    + self.home_map.real_survey.survey_center[1];
-                let e = f64::from(pos[0] - sheet_rect.left()) * 0.5
-                    + self.home_map.real_survey.survey_center[0];
+                // 그 점의 실제 지상 좌표 — 지도 칸 변환의 역(F1: 예전엔 경주 기본점에 용지 점 × 0.5 를 더했다).
+                let [e, n] = f.m2w(Pos2::new(pos[0], pos[1]));
                 self.drawing
                     .coord_callouts
                     .push(crate::tab_drawing::CoordCallout {

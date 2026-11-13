@@ -179,6 +179,7 @@ mod app_state_feature_record;
 mod dlg_feature_record;
 mod dlg_feature_record_figure;
 mod feature_card;
+mod app_state_check_targets;
 mod app_state_feature_card;
 mod ri_attr_card_rows;
 mod layer_menu_label;

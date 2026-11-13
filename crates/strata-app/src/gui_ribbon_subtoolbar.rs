@@ -34,11 +34,11 @@ impl StrataAppState {
                                 if draw_buffer_pill(ui, "버퍼", true, "1000m", 84.0) {
                                     self.run_site_buffer(1000);
                                 }
-                                if draw_buffer_pill(ui, "수치지형", false, "엑셀 내보내기", 118.0) {
-                                    if let Some(out) = self.home_map.real_survey.export_nearby_heritage_csv() {
-                                        self.home_map.draw_guide_message = Some(format!("주변유적 목록을 내보냈습니다: {}", out.display()));
-                                    }
-                                }
+                                // MainWindowRibbon.cpp:802-807 exportNearbyHeritageExcel(버퍼 안 유적·조사구역 기준 방향·거리 .xlsx) —
+                                // F1: 경주 기본점으로 거리를 재던 CSV 를 없애고, 옮길 때까지 흐리게 둔다.
+                                ui.add_enabled_ui(false, |ui| draw_buffer_pill(ui, "수치지형", false, "엑셀 내보내기", 118.0))
+                                    .response
+                                    .on_disabled_hover_text("아직 Rust 판에서 연결하지 않았습니다 (지시 W-H1)");
                                 if draw_buffer_pill(ui, "", false, "닫기", 48.0) { self.ribbon.sub_toolbar_visible = false; }
                             }
                             SubToolsMode::Align => {

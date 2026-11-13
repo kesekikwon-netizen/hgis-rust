@@ -69,14 +69,8 @@ pub(crate) fn paint_export_submit_table(
                             ui.horizontal(|ui| {
                                 let (has_targets, tool_label) = row_buttons(r);
                                 if has_targets && ui.small_button("위치 보기").clicked() {
-                                    app.home_map.viewport.center_xy =
-                                        app.home_map.real_survey.survey_center;
-                                    app.home_map.viewport.meters_per_pixel = 1.8;
-                                    app.active_tab = MainTab::Map;
-                                    app.home_map.draw_guide_message = Some(format!(
-                                        "「{}」 위치로 이동했습니다: {}",
-                                        r.id, r.message_ko
-                                    ));
+                                    // KaSubmitFlow.cpp:191-240 goToCheckTargets — 그 항목의 대상 도형으로.
+                                    app.go_to_check_targets(r);
                                     app.modals.active = None;
                                 }
                                 // KaSubmitDialog.cpp:180-200 — 실패 항목의 바로가기 버튼

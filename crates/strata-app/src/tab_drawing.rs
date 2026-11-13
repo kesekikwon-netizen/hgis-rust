@@ -16,6 +16,8 @@ pub struct DrawingTabState {
     /// KaDrawingCoordCallout.cpp — 용지 위 좌표점 콜아웃
     pub coord_callout_mode: bool,
     pub coord_callouts: Vec<CoordCallout>,
+    /// 도면 지도 칸의 가운데(작업 좌표계) — 없으면 지도 화면 가운데(C++ studioMapExtent), 「레이어를 가운데」가 정한다.
+    pub sheet_center: Option<[f64; 2]>,
     /// KaDrawingSheetSet.cpp — 보관한 도면 목록
     pub stored_sheets: Vec<StoredSheet>,
     /// KaDrawingSheetSet.cpp:135 팝업 열림 상태
@@ -58,6 +60,7 @@ impl Default for DrawingTabState {
             map_adjust_active: false,
             coord_callout_mode: false,
             coord_callouts: Vec::new(),
+            sheet_center: None,
             stored_sheets: Vec::new(),
             sheet_set_menu_open: false,
             terrain3d_layout_active: false,
