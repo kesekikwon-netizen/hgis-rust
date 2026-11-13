@@ -213,7 +213,7 @@ impl StrataAppState {
                 }
                 "edit_start" => {
                     self.active_tab = crate::app_state::MainTab::Map;
-                    self.active_tool = strata_canvas2d::map_tools::MapToolKind::DrawPolygon;
+                    self.start_edit_from_legend(&key);
                 }
                 "vertex_edit" => {
                     self.active_tab = crate::app_state::MainTab::Map;

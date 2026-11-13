@@ -209,3 +209,59 @@ fn unsaved_chip_counts_edited_features() {
     app.undo_map_action();
     assert_eq!(app.unsaved_chip_text().as_deref(), Some("저장 안 됨"), "'*' stays after undo");
 }
+
+/// 새 조사(임시 폴더, 작업 좌표계 = 표 좌표계): 유구 면을 그려 저장하면 좌표가 그대로 쓰이고 uid·created_at·
+/// updated_at 칸이 채워진다. 다시 열면 그 도형이 있다.
+#[test]
+fn new_survey_drawing_is_saved_with_stamps() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("새조사.gpkg");
+    let crs = strata_types::crs::WorkCrs::Epsg5187;
+    strata_storage::gpkg::GpkgRepository::create_new_survey(&path, crs).expect("create");
+    let mut app = StrataAppState::new_startup();
+    app.start_new_survey_project_with_path("새조사", &path, crs);
+    app.active_tab = MainTab::Map;
+    app.home_map.viewport.meters_per_pixel = 0.05;
+    app.start_edit_feature_poly();
+    let pts = [[21_100.0, 451_800.0], [21_130.0, 451_800.0], [21_130.0, 451_840.0]];
+    for p in pts {
+        app.sketch_press(p);
+    }
+    app.sketch_finish();
+    assert_eq!(poly_features(&app).len(), 1, "{:?}", app.home_map.draw_guide_message);
+    assert!(app.save_survey_project());
+
+    let conn = rusqlite::Connection::open(&path).expect("open");
+    let (uid, created, updated): (String, String, String) = conn
+        .query_row("SELECT uid, created_at, updated_at FROM feature_poly", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .expect("stamps");
+    assert_eq!(uid.len(), 36);
+    assert!(!created.is_empty() && created == updated);
+    drop(conn);
+    let mut again = StrataAppState::new_startup();
+    again.open_survey_gpkg(&path);
+    let parts = wkt_to_parts(&poly_features(&again)[0].wkt_geom).expect("wkt");
+    let WkbGeometry::Polygon(rings) = &parts[0] else { panic!("polygon") };
+    for (g, w) in rings[0].iter().zip(pts) {
+        assert!((g[0] - w[0]).abs() < 1e-6 && (g[1] - w[1]).abs() < 1e-6, "{g:?} vs {w:?}");
+    }
+}
+
+/// 조사구역 그리기(기존 조사구역 레이어에 이어 그리기) — demo 사본의 survey_area 에 들어간다.
+#[test]
+fn survey_area_drawing_goes_into_survey_area() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (mut app, path) = opened_demo(dir.path());
+    app.start_edit_survey_area();
+    assert_eq!(app.edit_layer_key.as_deref(), Some("survey_area"));
+    for p in work_points(&app) {
+        app.sketch_press(p);
+    }
+    app.sketch_finish();
+    let area = app.survey_tables.iter().find(|t| t.table == "survey_area").unwrap();
+    assert_eq!(area.layer.features.len(), 2);
+    assert!(app.save_survey_project());
+    let conn = rusqlite::Connection::open(&path).expect("open");
+    let n: i64 = conn.query_row("SELECT count(*) FROM survey_area", [], |r| r.get(0)).expect("count");
+    assert_eq!(n, 2);
+}

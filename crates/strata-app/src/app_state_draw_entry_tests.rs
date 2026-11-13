@@ -90,3 +90,26 @@ fn opening_another_survey_clears_the_target() {
     assert!(app.open_survey_gpkg(&other));
     assert_eq!(app.edit_layer_key, None);
 }
+
+/// 범례 우클릭 「그리기·편집 시작」(MainWindowContextMenus.cpp:261-262 beginEdit(layer)) — 그 레이어가 그릴 대상이 된다.
+/// 앞서 고른 유구 면에 그리지 않는다.
+#[test]
+fn legend_draw_start_targets_that_layer() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut app = opened_demo(dir.path());
+    app.start_edit_feature_poly();
+    let area = app.left_layers.entries.iter().find(|e| e.layer_key == "survey_area").expect("area").label_ko.clone();
+    app.start_edit_from_legend(&area);
+    assert_eq!(app.edit_layer_key.as_deref(), Some("survey_area"));
+    assert_eq!(app.active_tool, MapToolKind::DrawPolygon);
+}
+
+/// 홈 「다음 할 일」의 그리기처럼 대상 없이 그리기 도구만 켜면 예전 대상(유구 면)에 넣지 않는다.
+#[test]
+fn a_draw_tool_without_a_target_never_writes_to_the_previous_target() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut app = opened_demo(dir.path());
+    app.start_edit_feature_poly();
+    app.trigger_map_ribbon_tool(MapToolKind::DrawPolygon);
+    assert!(!app.polygon_capture_active());
+}

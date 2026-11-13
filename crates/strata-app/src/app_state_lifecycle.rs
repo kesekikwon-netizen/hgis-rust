@@ -132,6 +132,11 @@ impl StrataAppState {
         }
         self.active_tool = tool;
         self.home_map.update_guide_for_tool(tool);
+        // 그릴 대상을 고르지 않고 켠 그리기 도구는 앞서 고른 레이어에 넣지 않는다(대상은 그리기 줄에서 고른다).
+        if matches!(tool, MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint) {
+            self.edit_layer_key = None;
+            self.draw_sketch = crate::draw_sketch::DrawSketch::default();
+        }
         if matches!(
             tool,
             MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint

@@ -48,6 +48,19 @@ impl StrataAppState {
         self.begin_edit_layer("section_line", "단면선");
     }
 
+    /// 범례 우클릭 「그리기·편집 시작」 — `beginEdit(layer)`(MainWindowContextMenus.cpp:261-262). 조사 표가 아닌
+    /// 레이어면 그릴 대상을 비우고 그리기 도구를 켜지 않는다.
+    pub(crate) fn start_edit_from_legend(&mut self, label: &str) {
+        let key = self.left_layers.entries.iter().find(|e| e.label_ko == label).map(|e| e.layer_key.clone());
+        match key.filter(|k| self.survey_tables.iter().any(|t| &t.table == k)) {
+            Some(k) => self.begin_edit_layer(&k, label),
+            None => {
+                self.edit_layer_key = None;
+                self.stop_capture_tool();
+            }
+        }
+    }
+
     /// `ensureDomainLayerForEdit` + `beginEdit`.
     fn begin_edit_layer(&mut self, key: &str, title_ko: &str) {
         if self.survey_path.is_none() {

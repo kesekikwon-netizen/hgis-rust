@@ -126,16 +126,8 @@ impl StrataAppState {
         .on_hover_text("마지막 그리기·정점·삭제를 되돌립니다 (Ctrl+Z)")
         .clicked()
     {
-        if !self.home_map.scene.active_rubberband.is_empty() {
-            self.home_map.cad.on_backspace(&mut self.home_map.scene);
-        } else if self.home_map.real_survey.survey_rings.len() > 1 {
-            if let Some(popped) = self.home_map.real_survey.survey_rings.pop() {
-                ui.ctx()
-                    .data_mut(|d| d.insert_temp(egui::Id::new("ka_redo_ring"), popped));
-            }
-        }
-        self.home_map.draw_guide_message =
-            Some("마지막 편집을 되돌렸습니다 (Ctrl+Z).".to_owned());
+        // KaDrawGuideBand::setActions(m_actUndo, m_actRedo) — Ctrl+Z 와 같은 undoMapAction.
+        self.undo_map_action();
     }
     if ui
         .interact(
@@ -146,14 +138,7 @@ impl StrataAppState {
         .on_hover_text("다시 실행 (Ctrl+Y) — 되돌린 편집을 다시 적용합니다")
         .clicked()
     {
-        let restored = ui
-            .ctx()
-            .data_mut(|d| d.remove_temp::<Vec<[f64; 2]>>(egui::Id::new("ka_redo_ring")));
-        if let Some(ring) = restored {
-            self.home_map.real_survey.survey_rings.push(ring);
-        }
-        self.home_map.draw_guide_message =
-            Some("되돌린 편집을 다시 적용했습니다 (Ctrl+Y).".to_owned());
+        self.redo_map_action();
     }
 }
 }
