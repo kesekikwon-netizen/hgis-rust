@@ -1,7 +1,7 @@
 //! 그린 면을 편집 레이어(메모리)에 넣기 — C++ `KaCaptureMapTool::finish`(KaCaptureMapTool.cpp:393-456,
 //! 작업 좌표계 → 레이어 좌표계)와 `MainWindow::onGeometryCaptured`(MainWindowEditing.cpp:782-920).
 //! 좌표계 옮기기와 면 고치기는 C++ 과 같은 PROJ·GEOS(strata-engine). 파일에는 「저장」(2C)이 쓴다.
-//! 이름·번호 창(3-3b)·겹친 곳 지우기 제안(지시 4)·고친 면 알림 창은 아직 없다.
+//! 그린 뒤 이름·번호 창은 app_state_feature_form.rs. 겹친 곳 지우기 제안(지시 4)·고친 면 알림 창은 아직 없다.
 
 use std::collections::BTreeMap;
 
@@ -15,15 +15,7 @@ use crate::draw_sketch::FinishShort;
 /// MainWindowEditing.cpp:996 — captureCanceled.
 pub(crate) const TOO_FEW_TEXT: &str = "아직 넣지 않았습니다 — 면은 점 3개, 선은 2개 이상 필요합니다. 우클릭·Enter로 완료.";
 
-/// C++ `FeatureRecord::nowText` — 지역 시각 ISO(초까지, 시간대 붙임).
-fn now_text() -> String {
-    let now = chrono::Local::now();
-    if now.offset().local_minus_utc() == 0 {
-        now.format("%Y-%m-%dT%H:%M:%SZ").to_string()
-    } else {
-        now.format("%Y-%m-%dT%H:%M:%S%:z").to_string()
-    }
-}
+use crate::feature_form::now_text;
 
 /// QgsFields::lookupField — 이름이 같거나(대소문자 무시) 같은 칸.
 fn column<'a>(columns: &'a [(String, String)], name: &str) -> Option<&'a str> {
@@ -56,7 +48,12 @@ fn polygon_wkt(rings: &PolygonRings) -> String {
 impl StrataAppState {
     /// 지도 탭에서 면 그리기 도구가 그릴 레이어를 갖고 켜져 있는가(C++ mapTool() == m_captureTool, 면 모드).
     pub(crate) fn polygon_capture_active(&self) -> bool {
-        self.active_tab == MainTab::Map && self.active_tool == MapToolKind::DrawPolygon && self.edit_layer_key.is_some()
+        // 창(조사구역 설정·이름·번호)이 열려 있으면 지도 입력을 받지 않는다(C++ 창은 모달).
+        self.active_tab == MainTab::Map
+            && self.active_tool == MapToolKind::DrawPolygon
+            && self.edit_layer_key.is_some()
+            && self.home_map.feature_form.is_none()
+            && self.home_map.survey_area_setup.is_none()
     }
 
     /// 왼쪽 누름 — 점 더하기.
@@ -138,17 +135,26 @@ impl StrataAppState {
         self.undo_tables.push(key.clone());
         self.is_dirty = true;
         self.after_layer_edit(&key);
+        // 이름·번호 창(연속 그리기 꺼짐)과 그 뒤 상태 글 — app_state_feature_form.rs.
+        self.after_capture(&key, fid, crate::edit_geometry_repair::notice(&closed));
+    }
+
+    /// onGeometryCaptured 끝의 상태 글(MainWindowEditing.cpp:905-916) — 이름·번호를 받은 뒤에 센다.
+    pub(crate) fn captured_status(&self, key: &str, continuous_suffix: bool, notice: Option<&str>) -> String {
         let name = self.left_layers.entries.iter().find(|e| e.layer_key == key).map(|e| e.label_ko.clone()).unwrap_or_default();
-        let n = self.survey_tables[idx].layer.features.len();
+        let n = self.survey_tables.iter().find(|t| t.table == key).map_or(0, |t| t.layer.features.len());
         let mut text = format!("도형을 넣었습니다 ({name}, {n}개). Ctrl+Z로 되돌리기 · 「저장」(Ctrl+S)으로 파일에 씁니다");
+        if continuous_suffix {
+            text.push_str(" · 이름·번호는 나중에 속성에서");
+        }
         if key == "feature_poly" {
             text.push_str(&self.missing_attribute_counter_text());
         }
         // C++ 은 고친 면을 알림 창(「면을 고쳐 넣었습니다」)으로 따로 알린다 — 알림 창이 생기기 전까지 이어 쓴다.
-        if let Some(notice) = crate::edit_geometry_repair::notice(&closed) {
+        if let Some(notice) = notice {
             text.push_str(&format!(" · 면을 고쳐 넣었습니다: {notice}"));
         }
-        self.show_status_message(text);
+        text
     }
 
     /// Ctrl+Z — 그리던 점이 있으면 마지막 점, 없으면 가장 최근에 바꾼 레이어의 편집 하나

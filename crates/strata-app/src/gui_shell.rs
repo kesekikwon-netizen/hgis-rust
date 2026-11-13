@@ -27,7 +27,7 @@ impl StrataAppState {
         ctx.input(|i| {
             if capture && i.key_pressed(egui::Key::Escape) {
                 self.sketch_cancel();
-            } else if i.key_pressed(egui::Key::Escape) && self.home_map.survey_area_setup.is_none() {
+            } else if i.key_pressed(egui::Key::Escape) && self.home_map.survey_area_setup.is_none() && self.home_map.feature_form.is_none() {
                 self.home_map.cad.on_escape(&mut self.home_map.scene);
                 self.modals.active = None;
                 self.ribbon.sub_toolbar_visible = false;

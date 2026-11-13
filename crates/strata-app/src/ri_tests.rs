@@ -57,7 +57,7 @@ fn test_d9_feature_card_period_band_next_number_and_style_drag() {
             "통일신라",
             "고려",
             "조선",
-            "미상"
+            "미정"
         ]
     );
     assert_eq!(KA_BUILTIN_PERIODS[0].1, Some((0x53, 0x29, 0x1B)));

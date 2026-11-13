@@ -43,17 +43,8 @@ pub enum AttributeSaveResult {
     InvalidNumericElevation,
 }
 
-/// C++ `FeaturePresets.cpp:19-44` — 기본 유구 종류 8종
-pub const KA_BUILTIN_KINDS: [&str; 8] = [
-    "주거지",
-    "수혈",
-    "구",
-    "분묘",
-    "주초",
-    "가마",
-    "수전",
-    "기타",
-];
+/// C++ `FeaturePresets.cpp:19-28`(= data/styles/feature_presets.json) — 기본 유구 종류 8종.
+pub const KA_BUILTIN_KINDS: [&str; 8] = ["주거지", "수혈", "구", "도랑", "분묘", "가마", "유물", "기타"];
 
 /// C++ `FeaturePresets.cpp:19-44` — 기본 시대 10종과 시대 띠 색
 /// 시대 띠 색 (r,g,b). None 이면 색 없음(미상).
@@ -69,7 +60,7 @@ pub const KA_BUILTIN_PERIODS: [(&str, KaPeriodInk); 10] = [
     ("통일신라", Some((0xBA, 0xC0, 0x8A))),
     ("고려", Some((0xC7, 0xDC, 0xA6))),
     ("조선", Some((0xD3, 0xF8, 0xC4))),
-    ("미상", None),
+    ("미정", None),
 ];
 
 /// C++ `KaFeatureCardEditors.cpp:157-170` — "다음 번호" 제안.

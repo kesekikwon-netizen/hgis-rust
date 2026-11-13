@@ -144,6 +144,16 @@ impl StrataAppState {
             // 그리기 줄의 「유구 그리기」, 지도 가운데에서 dx;dy m 떨어진 자리 누름, Enter.
             "@draw_poly" => self.start_edit_feature_poly(),
             "@draw_area" => self.start_edit_survey_area(),
+            // 열린 「이름·번호」 창에 종류(이름);시대를 적고(번호는 다음 번호로), 「저장」.
+            _ if action.starts_with("@form=") => {
+                let mut parts = action["@form=".len()..].splitn(2, ';');
+                if let Some(form) = self.home_map.feature_form.as_mut() {
+                    form.name = parts.next().unwrap_or_default().to_owned();
+                    form.period = parts.next().unwrap_or_default().to_owned();
+                    form.update_number_hint();
+                }
+            }
+            "@form_save" => self.save_feature_form(),
             "@sketch_finish" => self.sketch_finish(),
             _ if action.starts_with("@sketch=") => {
                 let v: Vec<f64> = action["@sketch=".len()..].split(';').filter_map(|s| s.trim().parse().ok()).collect();

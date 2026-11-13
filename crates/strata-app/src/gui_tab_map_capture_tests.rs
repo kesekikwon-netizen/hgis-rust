@@ -151,3 +151,30 @@ fn left_drag_while_drawing_does_not_pan() {
     assert_eq!(h.app.home_map.viewport.center_xy, center);
     assert_eq!(h.app.draw_sketch.points.len(), 1, "only the press adds a vertex");
 }
+
+/// Enter 로 마친 그 누름이 「이름·번호」 창의 「저장」까지 누르지 않는다 — 창은 열려 있고, 다음 Enter 가 저장한다.
+#[test]
+fn enter_that_finishes_does_not_also_save_the_form() {
+    let mut h = Harness::new();
+    h.three_points();
+    h.key(Key::Enter);
+    assert!(h.app.home_map.feature_form.is_some(), "the form stays open after the finishing Enter");
+    h.frame(vec![]);
+    h.key(Key::Enter);
+    assert!(h.app.home_map.feature_form.is_none());
+    let t = h.app.survey_tables.iter().find(|t| t.table == "feature_poly").unwrap();
+    assert_eq!(t.layer.features.last().unwrap().attributes.get("feature_no").map(String::as_str), Some("1호"));
+}
+
+/// 창의 Esc 는 「건너뛰기」 — 그린 도형은 남고 그리기 도구도 그대로다.
+#[test]
+fn escape_skips_the_form_and_keeps_the_tool() {
+    let mut h = Harness::new();
+    h.three_points();
+    h.key(Key::Enter);
+    h.frame(vec![]);
+    h.key(Key::Escape);
+    assert!(h.app.home_map.feature_form.is_none());
+    assert_eq!(h.last_ring_len(), (3, 4));
+    assert_eq!(h.app.active_tool, MapToolKind::DrawPolygon);
+}

@@ -64,6 +64,8 @@ fn finished_polygon_goes_into_the_edit_layer_in_the_table_crs() {
     let entry = app.left_layers.entries.iter().find(|e| e.layer_key == "feature_poly").unwrap();
     assert_eq!(entry.feature_count, 3);
     let name = entry.label_ko.clone();
+    assert_eq!(app.status_left_message(), "도형은 넣었습니다. 이름·번호를 적거나 Esc로 건너뛰세요.");
+    app.skip_feature_form(); // C++ 은 「이름·번호」 창을 닫은 뒤 이 글을 띄운다
     let msg = app.home_map.draw_guide_message.clone().unwrap();
     assert!(
         msg.starts_with(&format!("도형을 넣었습니다 ({name}, 3개). Ctrl+Z로 되돌리기 · 「저장」(Ctrl+S)으로 파일에 씁니다")),

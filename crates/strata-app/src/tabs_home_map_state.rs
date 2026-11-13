@@ -39,6 +39,8 @@ pub struct HomeMapTabState {
     pub pick_cycle: Option<PickCycle>,
     /// 열려 있는 「조사구역 그리기 설정」 창의 값(없으면 창이 닫혀 있다).
     pub(crate) survey_area_setup: Option<crate::survey_area_setup::SurveyAreaSetup>,
+    /// 열려 있는 「이름·번호」 창(그린 도형 하나의 값).
+    pub(crate) feature_form: Option<crate::feature_form_state::FeatureForm>,
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
     /// 마우스가 지도 칸 위에 한 번이라도 왔는가 — 그 전에는 상태줄 좌표가 「X —    Y —」(KaStatusBar.cpp:173-175).
@@ -86,6 +88,7 @@ impl Default for HomeMapTabState {
             last_drawn_shape: None,
             pick_cycle: None,
             survey_area_setup: None,
+            feature_form: None,
             grid_enabled: false,
             cursor_world_xy: center,
             cursor_seen: false,
