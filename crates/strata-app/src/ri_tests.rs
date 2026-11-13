@@ -72,10 +72,7 @@ fn test_d9_feature_card_period_band_next_number_and_style_drag() {
     assert_eq!(KA_BUILTIN_KINDS.len(), 8);
     assert_eq!(KA_BUILTIN_KINDS[0], "주거지");
     assert_eq!(KA_BUILTIN_KINDS[7], "기타");
-    assert_eq!(next_feature_number("1호 주거지"), "2호 주거지");
-    assert_eq!(next_feature_number("12호 수혈"), "13호 수혈");
-    assert_eq!(next_feature_number(""), "2");
-    assert_eq!(next_feature_number("3"), "4");
+    // 「다음 번호」는 C++ FeatureNumbering::suggestNext(feature_card_tests·feature_form_tests 가 본다).
     let d = RightInspectorState::new_default();
     assert!((0.2..=12.0).contains(&d.stroke_width_mm));
 }

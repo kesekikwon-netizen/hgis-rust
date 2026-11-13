@@ -10,9 +10,8 @@ use crate::app_state::StrataAppState;
 
 
 pub use crate::ri_types::{KA_STYLE_PALETTE, HGIS_DEFAULT_ELEVATION_VAL, HGIS_MIN_ELEVATION_M,
-    HGIS_MAX_ELEVATION_M, HGIS_STANDARD_PERIOD_CODES, KA_BUILTIN_KINDS, KA_BUILTIN_PERIODS,
-    KaPeriodInk, AttributeSaveResult, BatchUpdateResult, InspectorCardTab, RightInspectorState,
-    next_feature_number};
+    HGIS_MAX_ELEVATION_M, KA_BUILTIN_KINDS, KA_BUILTIN_PERIODS,
+    KaPeriodInk, AttributeSaveResult, BatchUpdateResult, InspectorCardTab, RightInspectorState};
 
 impl RightInspectorState {
     #[must_use]
@@ -21,11 +20,8 @@ impl RightInspectorState {
             active_card: InspectorCardTab::FeatureAttributeCard,
             selected_layer_key: None,
             selected_feature_id: Some(1),
-            survey_name: "경주 월성북편 시굴조사".to_owned(),
             feature_no: "1호 주거지".to_owned(),
             feature_type: "주거지".to_owned(),
-            feature_period: "삼국".to_owned(),
-            feature_memo: "경주 인왕동 76번지 일원 지표·시굴조사 구역 및 유구 기록".to_owned(),
             style_color_index: 1,
             no_fill: false,
             no_stroke: false,

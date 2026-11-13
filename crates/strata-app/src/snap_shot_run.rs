@@ -175,6 +175,18 @@ impl StrataAppState {
                 }
             }
             "@record_save" => self.save_feature_record(),
+            // 도형선택으로 표;fid 를 고른 것처럼(카드가 따라간다), 카드 칸=글 고치기.
+            _ if action.starts_with("@select=") => {
+                if let Some((table, fid)) = action["@select=".len()..].split_once(';') {
+                    self.home_map.selected_shape = Some((table.to_owned(), fid.parse().unwrap_or(0)));
+                    self.sync_card_with_selection();
+                }
+            }
+            _ if action.starts_with("@card_set=") => {
+                if let Some((field, text)) = action["@card_set=".len()..].split_once('=') {
+                    self.card_set_value(field, text);
+                }
+            }
             "@sketch_finish" => self.sketch_finish(),
             _ if action.starts_with("@sketch=") => {
                 let v: Vec<f64> = action["@sketch=".len()..].split(';').filter_map(|s| s.trim().parse().ok()).collect();

@@ -66,6 +66,21 @@ impl StrataAppState {
         self.home_map.card_drafts.insert(field.to_owned(), text);
     }
 
+    /// 한 칸의 적던 글을 쓴다(Enter·칸을 떠남 — editingFinished, 메모는 FocusOut).
+    pub(crate) fn commit_card_field(&mut self, field: &str) {
+        if let Some(text) = self.home_map.card_drafts.remove(field) {
+            self.card_set_value(field, &text);
+        }
+    }
+
+    /// mapToolSet — 도구가 바뀌면 고른 것을 다시 읽는다(MainWindowFeatureCard.cpp:34-39). 매 프레임 부른다.
+    pub(crate) fn resync_card_on_tool_change(&mut self) {
+        if self.home_map.card_tool != Some(self.active_tool) {
+            self.home_map.card_tool = Some(self.active_tool);
+            self.sync_card_with_selection();
+        }
+    }
+
     /// commitTyping — 적던 글을 모두 지금 도형에 쓴다.
     pub(crate) fn commit_card_typing(&mut self) {
         let drafts: BTreeMap<String, String> = std::mem::take(&mut self.home_map.card_drafts);

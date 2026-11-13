@@ -1,296 +1,121 @@
-//! 속성 카드(attribute card) 본문.
-//!
-//! `right_inspector.rs` 가 300줄을 넘어 옮겼다.
-use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+//! 오른쪽 「속성」 카드 — C++ `KaFeatureCard` 새 모양(KaFeatureCard.cpp:70-125 틀, KaFeatureCardPlate.cpp:22-110 머리판)과
+//! 패널 문장(KaInspectorPanel.cpp:164-173). 값·고침은 feature_card.rs·app_state_feature_card.rs, 줄은 ri_attr_card_rows.rs.
+//! 창(모달)이 열려 있으면 카드는 흐려 누를 수 없다(C++ 창 뒤의 카드).
+
+use eframe::egui::{self, Color32, RichText, Stroke, Vec2};
+
 use crate::app_state::StrataAppState;
-use crate::right_inspector::{next_feature_number, KA_BUILTIN_PERIODS};
+use crate::feature_card::{CardState, CardView};
+use crate::ri_attr_card_rows::{control_rows, ledger, period_band, INK, MUTED};
+
+/// 「저장 안 됨」 점 #D97757, 못 바꿈 빨강.
+const CLAY: Color32 = Color32::from_rgb(0xD9, 0x77, 0x57);
+const DANGER: Color32 = Color32::from_rgb(0xB4, 0x23, 0x18);
+const ACCENT: Color32 = Color32::from_rgb(181, 87, 58);
+
+fn sentence(ui: &mut egui::Ui, text: &str) {
+    ui.add_space(16.0);
+    ui.add(egui::Label::new(RichText::new(text).size(12.0).color(MUTED)).wrap());
+    ui.add_space(16.0);
+}
 
 impl StrataAppState {
     pub(crate) fn render_ri_attribute_card(&mut self, ui: &mut egui::Ui) {
-// C++ `KaFeatureCard.cpp:202-278` (`d7afcc8`) — 시추공을 고르면 주상도 층서 카드를
-// 유구 카드 위에 먼저 보여 준다. `hole_code` 가 없으면 예전처럼 유구 카드만 그린다.
-if self.right_inspector.borehole.has_borehole_fields() {
-    crate::borehole_card::render_borehole_card(
-        ui,
-        &self.right_inspector.borehole,
-    );
-    ui.add_space(6.0);
-}
-let active_ring = self
-    .home_map
-    .selected_feature_idx
-    .and_then(|idx| self.home_map.real_survey.survey_rings.get(idx));
-if let Some(ring) = active_ring {
-    let area_m2 = crate::real_survey::ring_area_m2(ring);
-    let pyeong = area_m2 / 3.305_785;
-    let perim_m = crate::real_survey::ring_perimeter_m(ring);
-    egui::Frame::NONE
-        .fill(Color32::from_rgb(245, 243, 236))
-        .stroke(Stroke::new(1.0, Color32::from_rgb(212, 209, 200)))
-        .corner_radius(5.0)
-        .inner_margin(egui::Margin::symmetric(8, 6))
-        .show(ui, |ui| {
-            ui.label(
-                egui::RichText::new(format!(
-                    "면적: {area_m2:.2} m² ({pyeong:.1} 평)"
-                ))
-                .size(12.0)
-                .strong()
-                .color(Color32::from_rgb(30, 30, 28)),
-            );
-            ui.label(
-                egui::RichText::new(format!(
-                    "둘레: {perim_m:.2} m · {}",
-                    self.work_crs.auth_id()
-                ))
-                .size(11.5)
-                .color(Color32::from_rgb(80, 79, 74)),
-            );
+        // C++ `KaFeatureCard.cpp:202-278` (`d7afcc8`) — 시추공을 고르면 주상도 층서 카드를 유구 카드 위에 먼저 보여 준다.
+        if self.right_inspector.borehole.has_borehole_fields() {
+            crate::borehole_card::render_borehole_card(ui, &self.right_inspector.borehole);
+            ui.add_space(6.0);
+        }
+        self.drop_card_if_gone();
+        let drawing = self.active_tool == strata_canvas2d::map_tools::MapToolKind::DrawPolygon;
+        let Some(view) = self.card_view_now() else {
+            sentence(ui, if drawing { "도형을 다 그리면 그 기록이 여기에 나옵니다." } else { "지도에서 도형 하나를 고르면 기록이 여기에 나옵니다." });
+            return;
+        };
+        if drawing {
+            sentence(ui, "그리는 중에도 여기서 바로 고칠 수 있습니다. 지도를 누르면 이어서 그립니다.");
+        }
+        let enabled = !self.modal_window_open();
+        ui.add_enabled_ui(enabled, |ui| self.render_card_body(ui, &view));
+    }
+
+    fn render_card_body(&mut self, ui: &mut egui::Ui, v: &CardView) {
+        ui.spacing_mut().item_spacing.y = 8.0;
+        // 머리판 — 도형 모양 견본 28×20(1 px 먹 테두리), 이름 20 px, 아랫줄 12 px.
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 10.0;
+            let (r, _) = ui.allocate_exact_size(Vec2::new(28.0, 20.0), egui::Sense::hover());
+            let style = self.card_swatch_style();
+            let rgba = |c: [u8; 4]| Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]);
+            ui.painter().rect_filled(r.shrink(3.0), 0.0, rgba(style.fill));
+            ui.painter().rect_stroke(r.shrink(3.0), 0.0, Stroke::new(1.5, rgba(style.stroke)), egui::StrokeKind::Middle);
+            ui.painter().rect_stroke(r, 0.0, Stroke::new(1.0, INK), egui::StrokeKind::Inside);
+            ui.add(egui::Label::new(RichText::new(&v.header).size(20.0).color(INK)).truncate());
         });
-    ui.add_space(6.0);
-    egui::Grid::new("ka_feature_card_grid")
-        .num_columns(2)
-        .spacing([6.0, 5.0])
-        .show(ui, |ui| {
-            ui.label(egui::RichText::new("조사명").size(11.5));
-            if ui
-                .add(
-                    egui::TextEdit::singleline(
-                        &mut self.right_inspector.survey_name,
-                    )
-                    .desired_width(155.0),
-                )
-                .changed()
-            {
-                self.is_dirty = true;
+        if !v.sub_line.is_empty() {
+            ui.label(RichText::new(&v.sub_line).size(12.0).color(MUTED));
+        }
+        if let Some(c) = &v.control {
+            control_rows(ui, c);
+        }
+        ledger(ui, v);
+        self.card_number_row(ui, v);
+        for (field, word, value) in &v.name_rows {
+            self.card_text_row(ui, field, word, value, "");
+        }
+        if v.has_kind || v.has_period {
+            let table = self.home_map.card.as_ref().map(|c| c.table.clone()).unwrap_or_default();
+            let items = |field: &str| self.survey_tables.iter().find(|t| t.table == table).map(|t| crate::feature_form::choices(t, field)).unwrap_or_default();
+            let (kinds, periods) = (items("kind"), items("period"));
+            if v.has_kind {
+                self.card_choice_row(ui, "kind", "종류", &v.kind, &kinds);
             }
-            ui.end_row();
-            ui.label(egui::RichText::new("유구번호").size(11.5));
-            ui.horizontal(|ui| {
-                if ui
-                    .add(
-                        egui::TextEdit::singleline(
-                            &mut self.right_inspector.feature_no,
-                        )
-                        .desired_width(96.0),
-                    )
-                    .changed()
-                {
-                    self.is_dirty = true;
-                }
-                // KaFeatureCardEditors.cpp:157-170
-                if ui
-                    .add(
-                        egui::Button::new(
-                            egui::RichText::new("다음 번호").size(11.0),
-                        )
-                        .min_size(Vec2::new(50.0, 20.0)),
-                    )
-                    .on_hover_text("지금까지 쓴 번호 다음 값을 넣습니다.")
-                    .clicked()
-                {
-                    let next =
-                        next_feature_number(&self.right_inspector.feature_no);
-                    self.right_inspector.feature_no = next;
-                    self.is_dirty = true;
-                }
-            });
-            ui.end_row();
-            ui.label(egui::RichText::new("종류").size(11.5));
-            egui::ComboBox::from_id_salt("ka_feat_type_combo")
-                .selected_text(&self.right_inspector.feature_type)
-                .width(155.0)
-                .show_ui(ui, |ui| {
-                    for ft in [
-                        "조사구역",
-                        "주거지",
-                        "수혈",
-                        "분묘",
-                        "구",
-                        "주초",
-                        "유물포함층",
-                    ] {
-                        if ui
-                            .selectable_value(
-                                &mut self.right_inspector.feature_type,
-                                ft.to_owned(),
-                                ft,
-                            )
-                            .changed()
-                        {
-                            self.is_dirty = true;
-                        }
-                    }
-                });
-            ui.end_row();
-            ui.label(egui::RichText::new("시대").size(11.5));
-            egui::ComboBox::from_id_salt("ka_feat_period_combo")
-                .selected_text(&self.right_inspector.feature_period)
-                .width(155.0)
-                .show_ui(ui, |ui| {
-                    for pd in [
-                        "미상",
-                        "구석기",
-                        "신석기",
-                        "청동기",
-                        "원삼국",
-                        "삼국",
-                        "통일신라",
-                        "고려",
-                        "조선",
-                    ] {
-                        if ui
-                            .selectable_value(
-                                &mut self.right_inspector.feature_period,
-                                pd.to_owned(),
-                                pd,
-                            )
-                            .changed()
-                        {
-                            self.is_dirty = true;
-                        }
-                    }
-                });
-            ui.end_row();
-        });
-        // KaFeatureCardEditors.cpp:38-75 — 10칸 시대 띠 (168x13)
-        {
-            let (band_r, _) = ui.allocate_exact_size(
-                Vec2::new(168.0, 13.0),
-                egui::Sense::hover(),
-            );
-            let bp = ui.painter_at(band_r);
-            bp.rect_stroke(
-                band_r,
-                2.0,
-                Stroke::new(1.0, Color32::from_rgb(31, 35, 40)),
-                egui::StrokeKind::Middle,
-            );
-            let cell_w = 168.0 / KA_BUILTIN_PERIODS.len() as f32;
-            let sel_idx = KA_BUILTIN_PERIODS
-                .iter()
-                .position(|(n, _)| *n == self.right_inspector.feature_period);
-            for (i, (nm, rgb)) in KA_BUILTIN_PERIODS.iter().enumerate() {
-                let x0 = band_r.left() + cell_w * (i as f32);
-                let cell = Rect::from_min_size(
-                    Pos2::new(x0 + 1.0, band_r.top() + 2.0),
-                    Vec2::new(cell_w - 2.0, 8.0),
-                );
-                let col = match rgb {
-                    Some((r, g, b)) => Color32::from_rgb(*r, *g, *b),
-                    None => Color32::from_rgb(230, 228, 220),
-                };
-                let cell_resp = ui.interact(
-                    cell,
-                    egui::Id::new(("ka_period_band", i)),
-                    egui::Sense::click(),
-                );
-                bp.rect_filled(cell, 1.0, col);
-                if sel_idx == Some(i) {
-                    bp.line_segment(
-                        [
-                            Pos2::new(x0 + 2.0, band_r.bottom() - 3.0),
-                            Pos2::new(x0 + cell_w - 2.0, band_r.bottom() - 3.0),
-                        ],
-                        Stroke::new(2.0, Color32::from_rgb(31, 35, 40)),
-                    );
-                }
-                if cell_resp.on_hover_text(*nm).clicked() {
-                    self.right_inspector.feature_period = (*nm).to_owned();
-                    self.is_dirty = true;
-                }
+            if v.has_period {
+                self.card_choice_row(ui, "period", "시대", &v.period, &periods);
+                period_band(ui, &v.period);
             }
         }
-    ui.add_space(4.0);
-    let (pit_depth, pit_caption) =
-        strata_terrain3d::trench_profile3d::compute_pit_elevation_depth_and_caption(
-            Some(48.50),
-            Some(47.20),
-            None,
-        );
-    egui::Frame::NONE
-        .fill(Color32::from_rgb(245, 240, 232))
-        .stroke(Stroke::new(1.0, Color32::from_rgb(212, 204, 191)))
-        .corner_radius(5.0)
-        .inner_margin(egui::Margin::symmetric(8, 5))
-        .show(ui, |ui| {
-            ui.label(
-                egui::RichText::new("단면 표고 (KaElevationFigure)")
-                    .size(11.0)
-                    .strong()
-                    .color(Color32::from_rgb(107, 78, 61)),
-            );
-            ui.label(
-                egui::RichText::new(format!(
-                    "상면 EL. 48.50 · 바닥 EL. 47.20 · 깊이 {:.2} m",
-                    pit_depth.unwrap_or(0.0)
-                ))
-                .size(11.0)
-                .color(Color32::from_rgb(47, 42, 38)),
-            )
-            .on_hover_text(pit_caption);
+        for (field, word, value) in &v.work_rows {
+            let hint = if *field == "surv_date" { "예: 2026-10-03" } else { "" };
+            self.card_text_row(ui, field, word, value, hint);
+        }
+        if v.has_note {
+            self.card_memo(ui, &v.note);
+        }
+        // 상태 칩 — 저장됨은 흐린 글만, 저장 안 됨은 진흙색 점 + 먹 글, 못 바꿈은 ⊗ + 빨강.
+        let (dot, words, color) = match &v.state {
+            CardState::Saved => (None, v.state.text(), MUTED),
+            CardState::Changed => (Some(CLAY), v.state.text(), INK),
+            CardState::Failed(_) => (Some(DANGER), v.state.text(), DANGER),
+        };
+        let chip = ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            if let Some(c) = dot {
+                let (r, _) = ui.allocate_exact_size(Vec2::new(6.0, 22.0), egui::Sense::hover());
+                ui.painter().circle_filled(r.center(), 3.0, c);
+            }
+            ui.label(RichText::new(words).size(12.0).color(color));
         });
-    ui.add_space(2.0);
-    ui.label(egui::RichText::new("메모").size(11.5));
-    if ui
-        .add(
-            egui::TextEdit::multiline(&mut self.right_inspector.feature_memo)
-                .desired_rows(2)
-                .desired_width(f32::INFINITY),
-        )
-        .changed()
-    {
-        self.is_dirty = true;
-    }
-    ui.add_space(4.0);
-    // KaFeatureCard.cpp:240-244,298 — 저장 상태 칩
-    if self.is_dirty {
-        ui.label(
-            egui::RichText::new("● 변경됨 · 아직 저장 안 됨")
-                .size(11.0)
-                .color(Color32::from_rgb(181, 87, 58)),
-        )
-        .on_hover_text("저장(Ctrl+S)으로 파일에 씁니다.");
-    } else {
-        ui.label(
-            egui::RichText::new("● 저장된 값입니다")
-                .size(11.0)
-                .color(Color32::from_rgb(105, 103, 96)),
-        );
-    }
-    let card_btn = egui::Button::new(
-        egui::RichText::new("조사카드 열기")
-            .size(12.0)
-            .strong()
-            .color(Color32::WHITE),
-    )
-    .fill(Color32::from_rgb(181, 87, 58))
-    .corner_radius(5.0)
-    .min_size(Vec2::new(ui.available_width(), 28.0));
-    if ui
-        .add(card_btn)
-        .on_hover_text("이 유구의 전체 조사카드(모든 칸)를 창으로 엽니다.")
-        .clicked()
-    {
-        // MainWindowFeatureCard.cpp:66 formRequested → 「도형 속성」 창. 카드가 고른 도형을 읽는 일은 CM1b 3/3.
-        if let Some((table, fid)) = self.home_map.selected_shape.clone() {
-            self.open_feature_record(&table, fid);
+        if v.state != CardState::Saved {
+            chip.response.on_hover_text("「저장」 Ctrl+S로 파일에 씁니다.");
+        }
+        let open = egui::Button::new(RichText::new("조사카드 열기").size(12.0).strong().color(Color32::WHITE)).fill(ACCENT).corner_radius(5.0).min_size(Vec2::new(ui.available_width(), 36.0));
+        if ui.add(open).on_hover_text("이 도형의 전체 조사카드(모든 칸)를 창으로 엽니다.").clicked() {
+            // MainWindowFeatureCard.cpp:65-67 formRequested → 「도형 속성」.
+            if let Some(c) = self.home_map.card.clone() {
+                self.open_feature_record(&c.table, c.fid);
+            }
         }
     }
-} else {
-    let is_drawing = self.ribbon.sub_toolbar_visible
-        && self.ribbon.sub_mode == crate::ribbon::SubToolsMode::Draw;
-    let empty_msg = if is_drawing {
-        "도형을 다 그리면 그 기록이 여기에\n나옵니다."
-    } else {
-        "지도에서 도형 하나를 고르면 기록이\n여기에 나옵니다."
-    };
-    ui.add_space(4.0);
-    ui.label(
-        egui::RichText::new(empty_msg)
-            .size(12.0)
-            .color(Color32::from_rgb(95, 94, 88)),
-    );
-}
+
+    /// 견본 모양 — 그 레이어에 정한 모양(조사구역 그리기 설정), 없으면 레이어 키의 기본 모양.
+    fn card_swatch_style(&self) -> crate::survey_style::DomainStyle {
+        let table = self.home_map.card.as_ref().map(|c| c.table.as_str()).unwrap_or_default();
+        let key = if crate::survey_area_setup::is_survey_area_key(table) { "survey_area" } else { table };
+        self.home_map.real_survey.layer_styles.get(table).cloned().unwrap_or_else(|| crate::survey_style::domain_style_for_key(key))
     }
 }
+
+#[cfg(test)]
+#[path = "ri_attr_card_tests.rs"]
+mod tests;

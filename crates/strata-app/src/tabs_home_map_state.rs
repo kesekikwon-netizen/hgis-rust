@@ -47,6 +47,8 @@ pub struct HomeMapTabState {
     pub(crate) card: Option<crate::app_state_feature_card::CardTarget>,
     pub(crate) card_drafts: std::collections::BTreeMap<String, String>,
     pub(crate) card_failure: Option<String>,
+    /// 카드가 마지막으로 본 지도 도구(바뀌면 고른 것을 다시 읽는다).
+    pub(crate) card_tool: Option<strata_canvas2d::map_tools::MapToolKind>,
     /// 열려 있는 「도형 속성」 창.
     pub(crate) feature_record: Option<crate::feature_record::FeatureRecordForm>,
     pub grid_enabled: bool,
@@ -102,6 +104,7 @@ impl Default for HomeMapTabState {
             card: None,
             card_drafts: std::collections::BTreeMap::new(),
             card_failure: None,
+            card_tool: None,
             grid_enabled: false,
             cursor_world_xy: center,
             cursor_seen: false,

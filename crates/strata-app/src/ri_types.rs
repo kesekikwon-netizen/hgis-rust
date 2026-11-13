@@ -22,20 +22,6 @@ pub const HGIS_DEFAULT_ELEVATION_VAL: f64 = 0.0;
 pub const HGIS_MIN_ELEVATION_M: f64 = -500.0;
 pub const HGIS_MAX_ELEVATION_M: f64 = 9000.0;
 
-pub const HGIS_STANDARD_PERIOD_CODES: [&str; 11] = [
-    "구석기",
-    "신석기",
-    "청동기",
-    "초기철기",
-    "원삼국",
-    "삼국",
-    "통일신라",
-    "고려",
-    "조선",
-    "근현대",
-    "미상",
-];
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttributeSaveResult {
     Success,
@@ -63,15 +49,6 @@ pub const KA_BUILTIN_PERIODS: [(&str, KaPeriodInk); 10] = [
     ("미정", None),
 ];
 
-/// C++ `KaFeatureCardEditors.cpp:157-170` — "다음 번호" 제안.
-#[must_use]
-pub fn next_feature_number(current: &str) -> String {
-    let digits: String = current.chars().take_while(|c| c.is_ascii_digit()).collect();
-    let rest = &current[digits.len()..];
-    let n = digits.parse::<u32>().unwrap_or(1);
-    format!("{}{}", n + 1, rest)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BatchUpdateResult {
     pub updated_count: usize,
@@ -92,11 +69,8 @@ pub struct RightInspectorState {
     pub active_card: InspectorCardTab,
     pub selected_layer_key: Option<String>,
     pub selected_feature_id: Option<i64>,
-    pub survey_name: String,
     pub feature_no: String,
     pub feature_type: String,
-    pub feature_period: String,
-    pub feature_memo: String,
     pub style_color_index: usize,
     pub no_fill: bool,
     pub no_stroke: bool,

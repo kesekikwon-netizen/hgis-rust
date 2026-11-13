@@ -9,8 +9,14 @@ use crate::right_inspector::{InspectorCardTab};
 impl StrataAppState {
     pub(crate) fn render_ri_body(&mut self, ui: &mut egui::Ui) {
         ui.add_space(2.0);
+        // KaInspectorPanel.cpp:152-173 — 제목은 카드의 것(비면 「선택한 유구」), 고른 수 칩 「%1개 선택」.
+        let title = self.card_view_now().map_or("선택한 유구", |v| v.title);
+        let selected = usize::from(self.home_map.selected_shape.is_some());
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("선택한 유구").size(13.5).strong());
+            ui.label(egui::RichText::new(title).size(13.5).strong());
+            if selected > 0 {
+                ui.label(egui::RichText::new(format!("{selected}개 선택")).size(11.5).color(Color32::from_rgb(105, 103, 96)));
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let b = egui::Button::new("›")
                     .fill(Color32::WHITE)
