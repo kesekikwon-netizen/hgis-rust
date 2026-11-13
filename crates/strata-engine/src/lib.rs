@@ -23,7 +23,9 @@ pub use geom::{make_valid_polygon_parts, normalized_wkt, polygon_area, polygon_i
 pub use geom_wkt::{union_area, wkt_area, wkt_is_valid, wkt_length, wkt_point_relation, SurveyArea};
 pub use rings::{distance_rings, ring_label_points};
 #[cfg(feature = "gdal")]
-pub use submit_shp::{set_gdal_proj_search_paths, write_submit_shapefiles, ShpLayerReport, SubmitEncoding, SubmitSource};
+pub use submit_shp::{
+    set_gdal_proj_search_paths, write_submit_shapefiles, ShpLayerReport, SubmitEncoding, SubmitSource, SUBMIT_KEYS,
+};
 
 /// 엔진 오류(PROJ·GEOS 가 돌려준 글).
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -16,3 +16,7 @@ pub mod submit_package;
 pub mod submit_audit;
 pub mod submit_export;
 pub mod submit_manifest;
+#[cfg(feature = "gdal")]
+pub mod submit_builder;
+#[cfg(feature = "gdal")]
+mod submit_readme;

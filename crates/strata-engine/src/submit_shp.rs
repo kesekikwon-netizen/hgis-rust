@@ -49,8 +49,8 @@ impl From<gdal::errors::GdalError> for EngineError {
     }
 }
 
-/// `ExportService.cpp:121-123` — key order of the package.
-const SUBMIT_KEYS: [&str; 7] = [
+/// `ExportService.cpp:121-123` — key order of the package (the package builder steps through it too).
+pub const SUBMIT_KEYS: [&str; 7] = [
     "survey_area",
     "feature_poly",
     "feature_line",
