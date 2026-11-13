@@ -39,6 +39,7 @@ rstar = "0.12"
 spade = "2.12"
 rusqlite = { version = "0.32", features = ["bundled", "functions"] }
 sha2 = "0.10"
+sha1 = "0.10"
 base64 = "0.22"
 encoding_rs = "0.8"
 zip = { version = "2.2", default-features = false, features = ["deflate"] }

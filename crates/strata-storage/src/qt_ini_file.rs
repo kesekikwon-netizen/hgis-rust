@@ -24,6 +24,8 @@ struct Line {
 #[derive(Debug, Default)]
 struct Found {
     value: Option<(usize, usize)>,
+    /// 그 키 줄 전체(지울 때).
+    line: Option<(usize, usize)>,
     section_last: Option<Line>,
 }
 
@@ -106,6 +108,7 @@ impl IniFile {
                 if content[..eq].trim().eq_ignore_ascii_case(key) {
                     let value_start = line.end - (content.len() - eq - 1);
                     found.value = Some((value_start, line.end));
+                    found.line = Some((line.start, line.next));
                 }
             }
         }
@@ -141,6 +144,13 @@ impl IniFile {
             }
         }
         self.text.push_str(&format!("[{section}]{nl}{key}={escaped}{nl}"));
+    }
+
+    /// 「절/키」 줄을 지운다(QSettings::remove) — 없으면 아무것도.
+    pub fn remove(&mut self, section: &str, key: &str) {
+        if let Some((a, b)) = self.find(section, key).line {
+            self.text.replace_range(a..b, "");
+        }
     }
 
     /// 같은 폴더의 임시 파일에 쓰고 바꿔 단다(Qt `QSaveFile` 과 같은 방식). 폴더가 없으면 만든다.

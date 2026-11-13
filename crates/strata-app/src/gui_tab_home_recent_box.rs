@@ -2,7 +2,7 @@
 //!
 //! `gui_tab_home.rs` 가 300줄 규칙에 맞춰 나눈 파일이다. 행은 C++ `KaHomeRecentCard::setItems`
 //! (`KaHomeRecentCard.cpp:117-170`)처럼 저장된 최근 조사 목록 그대로다. 조사구역·유구·검수 칸은
-//! C++ 이 기록(SurveyFacts)이 없을 때 보이는 「—」·「검수 전」이다 — 기록 읽기는 아직 없다.
+//! 그 조사의 기록(SurveyFacts, app_state_home_facts.rs)에서 — 없으면 C++ 처럼 「—」·「검수 전」.
 
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use strata_storage::recent_surveys::RecentSurvey;
@@ -14,12 +14,12 @@ struct RowText {
     name: String,
     folder: String,
     state: &'static str,
-    cells: [&'static str; 3],
+    cells: [String; 3],
     opened: String,
     tip: String,
 }
 
-fn row_text(it: &RecentSurvey) -> RowText {
+fn row_text(it: &RecentSurvey, facts: &strata_storage::survey_facts::Facts) -> RowText {
     let (path, name) = (&it.path, it.name.clone());
     let folder = crate::home_text::folder_end(&crate::home_text::folder(path));
     if it.available {
@@ -27,7 +27,12 @@ fn row_text(it: &RecentSurvey) -> RowText {
             name,
             folder,
             state: "저장됨",
-            cells: ["—", "—", "검수 전"],
+            // KaHomeRecentCard::plateCells(:176-191) — 센 개수(모르면 「—」), 검수 전·통과·오류 n · 주의 m.
+            cells: if facts.has_counts() {
+                [facts.areas.to_string(), facts.features.to_string(), strata_storage::survey_facts::check_text(facts)]
+            } else {
+                ["—".to_owned(), "—".to_owned(), strata_storage::survey_facts::check_text(facts)]
+            },
             opened: crate::home_text::when(it.last_opened_ms),
             tip: format!("누르면 이 조사를 엽니다.\n{path}"),
         }
@@ -36,7 +41,7 @@ fn row_text(it: &RecentSurvey) -> RowText {
             name,
             folder,
             state: "원본 없음",
-            cells: ["—", "—", "—"],
+            cells: ["—".to_owned(), "—".to_owned(), "—".to_owned()],
             opened: "찾을 수 없음".to_owned(),
             tip: format!("지금 찾을 수 없습니다. USB·네트워크 드라이브를 연결하면 다시 열 수 있습니다.\n{path}"),
         }
@@ -65,7 +70,7 @@ impl StrataAppState {
             .recent_surveys
             .iter()
             .filter_map(|it| {
-                let t = row_text(it);
+                let t = row_text(it, &self.facts_of(&it.path));
                 matches_filter(it, t.state, &needle).then(|| (it.path.clone(), t))
             })
             .collect();
@@ -122,7 +127,7 @@ impl StrataAppState {
             let missing = t.state == "원본 없음";
             let state = if missing { "⊗ 원본 없음" } else { t.state };
             let st_col = if missing { Color32::from_rgb(181, 87, 58) } else { Color32::from_rgb(65, 64, 60) };
-            let [area, feat, chk] = t.cells;
+            let [area, feat, chk] = [t.cells[0].as_str(), t.cells[1].as_str(), t.cells[2].as_str()];
             for (ci, val) in [(1, state), (2, area), (3, feat), (4, chk), (5, t.opened.as_str())] {
                 let c = if ci == 1 { st_col } else { Color32::from_rgb(65, 64, 60) };
                 p.text(

@@ -195,19 +195,14 @@ impl StrataAppState {
             self.open_recent_survey(&target.path);
         }
 
-        // KaHomeTitleBlock.cpp:133-137 crsText — 작업 좌표계는 실제 작업 CRS 에서 만든다.
-        let crs_txt = match self.work_crs {
-            strata_types::crs::WorkCrs::Epsg5186 => "5186 중부원점",
-            strata_types::crs::WorkCrs::Epsg5187 => "5187 동부원점",
-        }
-        .to_owned();
-        // KaHomeTitleBlock.cpp:148-152 — 조사구역·유구는 실제 개수, 없으면 「—」.
-        let ring_cnt = self.home_map.real_survey.survey_rings.len();
-        let area_cnt = if ring_cnt > 0 {
-            format!("{ring_cnt} 곳")
-        } else {
-            "—".to_owned()
-        };
+        // KaHomeTitleBlock.cpp:139-158 setSurvey — 작업 좌표계·구역·유구·검수는 그 조사의 기록(SurveyFacts)에서:
+        // 저장이 남긴 좌표계(없으면 「—」), 센 개수(모르면 「—」), 검수 전·통과·오류 n · 주의 m.
+        let facts = self.facts_of(&target.path);
+        let crs_txt = strata_storage::survey_facts::crs_text(if facts.known { &facts.work_crs } else { "" });
+        let counted = facts.has_counts();
+        let area_cnt = if counted { format!("{} 곳", facts.areas) } else { "—".to_owned() };
+        let feature_cnt = if counted { format!("{} 기", facts.features) } else { "—".to_owned() };
+        let check_txt = strata_storage::survey_facts::check_text(&facts);
         // :145-149 — 폴더는 끝 두 마디와 조사 이름, 마지막 열림은 「어제 22:26」 꼴.
         let folder = crate::home_text::folder_tail(&crate::home_text::folder(&target.path), &target.name);
         let when = crate::home_text::when(target.last_opened_ms);
@@ -216,8 +211,8 @@ impl StrataAppState {
             ("마지막 열림", when.as_str()),
             ("작업 좌표계", crs_txt.as_str()),
             ("조사구역", area_cnt.as_str()),
-            ("유구", "—"),
-            ("검수", "검수 전"),
+            ("유구", feature_cnt.as_str()),
+            ("검수", check_txt.as_str()),
         ];
         let cw = rect.width() / 6.0;
         for (i, (k, v)) in cells.iter().enumerate() {

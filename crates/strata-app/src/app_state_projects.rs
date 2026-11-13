@@ -244,6 +244,8 @@ impl StrataAppState {
         // C++ :963-964 rememberSurvey(파일 이름) · rememberSurveyDir.
         self.remember_survey(&written, &strata_storage::recent_surveys::complete_base_name(&written.to_string_lossy()));
         self.remember_survey_dir(&written);
+        // recordSurveyFacts(MainWindowSession.cpp:961) — 홈 「이어서 작업」·「최근 조사」의 구역·유구 수와 작업 좌표계.
+        self.record_survey_facts(&written);
         self.survey_path = Some(written);
         self.is_dirty = false;
         self.home_map.draw_guide_message = Some(format!("조사 데이터와 작업 구성을 저장했습니다: {name}"));

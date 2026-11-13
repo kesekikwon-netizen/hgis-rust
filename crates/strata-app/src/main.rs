@@ -179,6 +179,7 @@ mod menu_popup;
 mod app_state_layer_menu;
 mod dlg_rename_layer;
 mod app_state_layer_remove;
+mod app_state_home_facts;
 mod user_settings;
 mod basemap_cadastral_jobs;
 mod basemap_fetch;

@@ -70,6 +70,7 @@ impl StrataAppState {
     /// `KaStartPage::reload` — 없는 조사(USB 를 뺀 경우)도 회색으로 남긴다.
     pub(crate) fn reload_recent_surveys(&mut self) {
         self.recent_surveys = self.settings_ini.as_deref().map(recent_surveys::load_all).unwrap_or_default();
+        self.refresh_home_facts();
     }
 
     /// 「이어서 작업」 — 지금 열 수 있는 첫 조사.
