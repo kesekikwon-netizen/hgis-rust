@@ -23,16 +23,34 @@ fn api_key_follows_the_cpp_order() {
     };
     let env = |name: &str| if name == "VWORLD_API_KEY" { "FAKE-ENV".to_owned() } else { String::new() };
     std::fs::write(&ini, "[VWorld]\nApiKey=FAKE-INI\n").unwrap();
-    let stores = KeyStores { ini: ini.clone(), registry: &registry, env: &env, repo_secrets: vec![secrets.clone()] };
+    let stores = KeyStores { ini: ini.clone(), registry: &registry, env: &env, repo_secrets: vec![secrets.clone()], bare_ini: None };
     assert_eq!(stores.api_key(), "FAKE-INI");
     assert_eq!(asked.get(), 0, "the registry is not opened when the ini has the key");
     std::fs::write(&ini, "[General]\napiKey=FAKE-PLAIN\n").unwrap();
     assert_eq!(stores.api_key(), "FAKE-REG", "a bare apiKey in the user ini is not the cpp key");
-    let stores = KeyStores { ini: ini.clone(), registry: &none, env: &env, repo_secrets: vec![secrets.clone()] };
+    let stores = KeyStores { ini: ini.clone(), registry: &none, env: &env, repo_secrets: vec![secrets.clone()], bare_ini: None };
     assert_eq!(stores.api_key(), "FAKE-ENV");
     std::fs::write(&secrets, "apiKey=FAKE-SECRETS\n").unwrap();
-    let stores = KeyStores { ini, registry: &none, env: &none, repo_secrets: vec![dir.path().join("없음.ini"), secrets] };
+    let stores = KeyStores { ini, registry: &none, env: &none, repo_secrets: vec![dir.path().join("없음.ini"), secrets], bare_ini: None };
     assert_eq!(stores.api_key(), "FAKE-SECRETS");
+}
+
+/// VworldSettings.cpp:153-158 — 환경 변수 다음, 저장소 secrets.ini 앞에 앱 기본 설정 파일의 옛 키 vworld/apiKey.
+#[test]
+fn bare_user_ini_comes_after_env_and_before_repo_secrets() {
+    let dir = tempfile::tempdir().unwrap();
+    let bare = dir.path().join("ka-hgis.ini");
+    let secrets = dir.path().join("secrets.ini");
+    std::fs::write(&bare, "[RecentSurveys]\nlist=@Invalid()\n\n[vworld]\napiKey=FAKE-BARE\n").unwrap();
+    std::fs::write(&secrets, "apiKey=FAKE-SECRETS\n").unwrap();
+    let env = |name: &str| if name == "VWORLD_API_KEY" { "FAKE-ENV".to_owned() } else { String::new() };
+    let ini = dir.path().join("없음.ini");
+    let stores = KeyStores { ini: ini.clone(), registry: &none, env: &env, repo_secrets: vec![secrets.clone()], bare_ini: Some(bare.clone()) };
+    assert_eq!(stores.api_key(), "FAKE-ENV");
+    let stores = KeyStores { ini: ini.clone(), registry: &none, env: &none, repo_secrets: vec![secrets.clone()], bare_ini: Some(bare) };
+    assert_eq!(stores.api_key(), "FAKE-BARE");
+    let isolated = KeyStores { ini, registry: &none, env: &none, repo_secrets: vec![secrets], bare_ini: None };
+    assert_eq!(isolated.api_key(), "FAKE-SECRETS", "an isolated run does not read the bare store");
 }
 
 /// Windows 의 QSettings ini 는 키 대소문자를 가리지 않는다 — 옛 키 vworld/apiKey 도 같은 키.
@@ -41,7 +59,7 @@ fn ini_key_case_does_not_matter() {
     let dir = tempfile::tempdir().unwrap();
     let ini = dir.path().join("ka-hgis-vworld.ini");
     std::fs::write(&ini, "[vworld]\napiKey= FAKE-OLD \n").unwrap();
-    let stores = KeyStores { ini, registry: &none, env: &none, repo_secrets: Vec::new() };
+    let stores = KeyStores { ini, registry: &none, env: &none, repo_secrets: Vec::new(), bare_ini: None };
     assert_eq!(stores.api_key(), "FAKE-OLD");
 }
 
@@ -54,13 +72,13 @@ fn history_key_follows_the_cpp_order() {
     std::fs::write(&secrets, "[HistoryGis]\nApiKey=FAKE-SECRETS\n").unwrap();
     let registry = |sub: &str| if sub == "HistoryGis" { "FAKE-REG".to_owned() } else { String::new() };
     let env = |name: &str| if name == "HISTORY_GIS_API_KEY" { "FAKE-ENV".to_owned() } else { String::new() };
-    let stores = KeyStores { ini: ini.clone(), registry: &registry, env: &env, repo_secrets: vec![secrets.clone()] };
+    let stores = KeyStores { ini: ini.clone(), registry: &registry, env: &env, repo_secrets: vec![secrets.clone()], bare_ini: None };
     assert_eq!(stores.history_key(), "FAKE-REG");
     std::fs::write(&ini, "[HistoryGis]\nApiKey=FAKE-INI\n").unwrap();
     assert_eq!(stores.history_key(), "FAKE-INI");
-    let stores = KeyStores { ini: dir.path().join("없음.ini"), registry: &none, env: &env, repo_secrets: vec![secrets.clone()] };
+    let stores = KeyStores { ini: dir.path().join("없음.ini"), registry: &none, env: &env, repo_secrets: vec![secrets.clone()], bare_ini: None };
     assert_eq!(stores.history_key(), "FAKE-ENV");
-    let stores = KeyStores { ini: dir.path().join("없음.ini"), registry: &none, env: &none, repo_secrets: vec![secrets] };
+    let stores = KeyStores { ini: dir.path().join("없음.ini"), registry: &none, env: &none, repo_secrets: vec![secrets], bare_ini: None };
     assert_eq!(stores.history_key(), "");
 }
 

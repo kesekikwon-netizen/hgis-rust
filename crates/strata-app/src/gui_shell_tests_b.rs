@@ -71,6 +71,10 @@ fn test_d14_region_locator_and_canvas_grid_band() {
         .expect("경북 타일")
         .center_5187;
     app.ribbon.app_bar.region_popup_open = true;
+    // 지시 3-2b: 시·도·시·군·구·동은 기본값이 없다(KaRegionLocator) — 사용자가 고른 것처럼 넣는다.
+    app.ribbon.app_bar.selected_sido = "경북".to_owned();
+    app.ribbon.app_bar.city_input = "경주시".to_owned();
+    app.ribbon.app_bar.dong_input = "인왕동".to_owned();
     app.ribbon.app_bar.lot_input = "없는번지 12345".to_owned();
     app.search_region_locator_address();
     assert!(!app.ribbon.app_bar.region_popup_open);

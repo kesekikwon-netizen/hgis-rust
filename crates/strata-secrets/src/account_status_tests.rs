@@ -26,7 +26,7 @@ fn lists_every_source_in_menu_order() {
 
 fn stores<'a>(dir: &std::path::Path, app: &std::path::Path, registry: &'a dyn Fn(&str) -> String) -> Stores<'a> {
     Stores {
-        keys: KeyStores { ini: dir.join("ka-hgis-vworld.ini"), registry, env: &none, repo_secrets: Vec::new() },
+        keys: KeyStores { ini: dir.join("ka-hgis-vworld.ini"), registry, env: &none, repo_secrets: Vec::new(), bare_ini: None },
         config_dir: dir.to_path_buf(),
         app_dir: app.to_path_buf(),
     }

@@ -46,3 +46,14 @@ fn test_build_pnu_gyeongju_4713010300_76_0_yields_exact_19_digits_and_50m_margin
     let zoomed = KaAppBarSearch::zoom_to_parcel_extent([1000.0, 2000.0, 1050.0, 2040.0]);
     assert_eq!(zoomed, [950.0, 1950.0, 1100.0, 2090.0]);
 }
+
+/// KaRegionLocator — 시·도를 고르기 전에는 시·도·시·군·구·동·번지 모두 비어 있다(m_sido 기본값,
+/// openAddressPopup KaRegionLocator.cpp:205-211 가 칸을 비운다). 경주시 같은 기본값은 없다.
+#[test]
+fn region_search_starts_empty() {
+    let bar = KaAppBarSearch::default();
+    assert_eq!(
+        (bar.selected_sido.as_str(), bar.city_input.as_str(), bar.dong_input.as_str(), bar.lot_input.as_str()),
+        ("", "", "", "")
+    );
+}

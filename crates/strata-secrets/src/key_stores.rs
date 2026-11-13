@@ -9,7 +9,6 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::accounts::AccountSettings;
 use crate::secret_store::parse_qt_ini_file;
-use crate::vworld::VworldSettings;
 
 /// 키 저장소들 — 시험은 가짜 레지스트리·환경 변수를 넣는다.
 pub struct KeyStores<'a> {
@@ -20,6 +19,8 @@ pub struct KeyStores<'a> {
     pub env: &'a dyn Fn(&str) -> String,
     /// C++ readRepoSecretsIni 후보들.
     pub repo_secrets: Vec<PathBuf>,
+    /// 앱 기본 설정 파일(C++ `QSettings bare` = QGIS 프로필 ini, 최근 조사와 같은 파일) — 격리 실행이면 None.
+    pub bare_ini: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for KeyStores<'_> {
@@ -50,20 +51,36 @@ impl KeyStores<'static> {
                 app.join("config/secrets.ini"),
                 cwd.join("config/secrets.ini"),
             ],
+            bare_ini: bare_user_ini(),
         }
     }
 }
 
+/// `%APPDATA%\ka-hgis\ka-hgis\profiles\default\ka-hgis\ka-hgis.ini`(strata-app `user_settings_ini` 와 같은 곳).
+/// `KA_HGIS_SETTINGS_DIR` 로 격리한 실행(C++ isolateUserState)이면 C++ 처럼 읽지 않는다.
+fn bare_user_ini() -> Option<PathBuf> {
+    if std::env::var("KA_HGIS_SETTINGS_DIR").is_ok_and(|s| !s.trim().is_empty()) {
+        return None;
+    }
+    let root = PathBuf::from(std::env::var_os("APPDATA")?).join("ka-hgis").join("ka-hgis");
+    Some(["profiles", "default", "ka-hgis", "ka-hgis.ini"].iter().fold(root, |p, s| p.join(s)))
+}
+
 impl KeyStores<'_> {
-    /// loadApiKey — ini → 레지스트리 → 환경 변수 VWORLD_API_KEY → 저장소 secrets.ini(키 셋 중 하나).
-    /// (ini 의 옛 키 vworld/apiKey 는 Windows 에서 대소문자를 가리지 않아 첫 칸과 같은 키다.)
+    /// loadApiKey — ini → 레지스트리 → 환경 변수 VWORLD_API_KEY → 앱 기본 설정 파일의 옛 키 →
+    /// 저장소 secrets.ini(readKeyFromIni: VWorld/ApiKey·vworld/apiKey·apiKey).
+    /// (ini 의 옛 키 vworld/apiKey 는 Windows 에서 대소문자를 가리지 않아 VWorld/ApiKey 와 같은 키다.)
     #[must_use]
     pub fn api_key(&self) -> String {
-        let steps: [&dyn Fn() -> String; 4] = [
+        let steps: [&dyn Fn() -> String; 5] = [
             &|| ini_value(&self.ini, "VWorld/ApiKey"),
             &|| (self.registry)("VWorld"),
             &|| (self.env)("VWORLD_API_KEY"),
-            &|| self.repo_secrets.iter().map(|p| VworldSettings::load_from_ini(p).unwrap_or_default()).find(|k| !k.is_empty()).unwrap_or_default(),
+            &|| self.bare_ini.as_deref().map(|p| ini_value(p, "vworld/apiKey")).unwrap_or_default(),
+            &|| {
+                let read = |p: &PathBuf| [ini_value(p, "VWorld/ApiKey"), ini_value(p, "apiKey")].into_iter().find(|k| !k.trim().is_empty());
+                self.repo_secrets.iter().find_map(read).unwrap_or_default()
+            },
         ];
         first_key(&steps)
     }

@@ -15,7 +15,6 @@ impl RealSurveyData {
     pub fn new_empty_survey(dir: &Path) -> Self {
         Self {
             survey_dir: dir.to_path_buf(),
-            gpkg_path: dir.join("경주시.gpkg"),
             survey_name: String::new(),
             site_name: String::new(),
             survey_rings: Vec::new(),

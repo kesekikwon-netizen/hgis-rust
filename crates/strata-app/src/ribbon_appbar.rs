@@ -3,7 +3,9 @@
 //! C++ `KaAddressSearchService::buildPnuCode` / `zoomToParcelExtent` 1:1.
 //! `ribbon.rs` 가 300줄 규칙에 맞춰 나눈 파일이다. 옮긴 항목은 그대로다.
 
-#[derive(Debug, Clone)]
+/// 기본값은 모두 빈칸 — C++ KaRegionLocator 는 시·도를 누르기 전에 시·도·시·군·구·동·번지가 비어 있다
+/// (m_sido 기본값, openAddressPopup KaRegionLocator.cpp:205-211).
+#[derive(Debug, Clone, Default)]
 pub struct KaAppBarSearch {
     pub query: String,
     pub selected_sido: String,
@@ -16,24 +18,6 @@ pub struct KaAppBarSearch {
     pub search_results_modal: Vec<strata_net::address_search::LocationHit>,
     pub selected_hit_idx: usize,
     pub search_error_modal: Option<String>,
-}
-
-impl Default for KaAppBarSearch {
-    fn default() -> Self {
-        Self {
-            query: String::new(),
-            selected_sido: "경북".to_owned(),
-            region_popup_open: false,
-            address_popup_open: false,
-            region_button_rect: None,
-            city_input: "경주시".to_owned(),
-            dong_input: "인왕동".to_owned(),
-            lot_input: "76".to_owned(),
-            search_results_modal: Vec::new(),
-            selected_hit_idx: 0,
-            search_error_modal: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
