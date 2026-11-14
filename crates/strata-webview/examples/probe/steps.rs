@@ -10,7 +10,6 @@ use eframe::egui;
 use strata_webview::dialogs::DialogKind;
 use strata_webview::downloads::DownloadRefusal;
 use strata_webview::policy::{Navigation, NavigationPolicy};
-use strata_webview::profile::remove_session_folder;
 use strata_webview::{BrowserError, BrowserEvent, BrowserOptions, DownloadPlace, HiddenBrowser, ScriptCall, ViewId};
 
 use crate::site::{Site, FILE_BYTES};
@@ -18,25 +17,29 @@ use crate::site::{Site, FILE_BYTES};
 const STEP_LIMIT: Duration = Duration::from_secs(15);
 
 pub struct Probe {
-    site: Site,
-    work: PathBuf,
-    browser: Option<HiddenBrowser>,
-    seen: Vec<BrowserEvent>,
+    pub(crate) site: Site,
+    pub(crate) other: Site,
+    pub(crate) work: PathBuf,
+    pub(crate) browser: Option<HiddenBrowser>,
+    pub(crate) seen: Vec<BrowserEvent>,
     step: u32,
     entered: bool,
-    step_started: Instant,
-    call: Option<ScriptCall>,
-    popup: Option<ViewId>,
-    released: Option<PathBuf>,
-    accept: Rc<Cell<bool>>,
+    pub(crate) step_started: Instant,
+    pub(crate) call: Option<ScriptCall>,
+    pub(crate) popup: Option<ViewId>,
+    /// How far a step with several parts has come.
+    pub(crate) part: u8,
+    pub(crate) released: Option<PathBuf>,
+    pub(crate) accept: Rc<Cell<bool>>,
     offered: Rc<RefCell<Vec<String>>>,
     pub outcome: Rc<RefCell<(u32, u32)>>,
 }
 
 impl Probe {
-    pub fn new(site: Site, work: PathBuf) -> Self {
+    pub fn new(site: Site, other: Site, work: PathBuf) -> Self {
         Self {
             site,
+            other,
             work,
             browser: None,
             seen: Vec::new(),
@@ -45,6 +48,7 @@ impl Probe {
             step_started: Instant::now(),
             call: None,
             popup: None,
+            part: 0,
             released: None,
             accept: Rc::new(Cell::new(true)),
             offered: Rc::default(),
@@ -68,13 +72,18 @@ impl Probe {
         self.step_started = Instant::now();
         self.seen.clear();
         self.call = None;
+        self.part = 0;
     }
 
-    fn run(&mut self, view: ViewId, script: &str) {
+    pub(crate) fn step_number(&self) -> u32 {
+        self.step
+    }
+
+    pub(crate) fn run(&mut self, view: ViewId, script: &str) {
         self.call = self.browser.as_mut().and_then(|b| b.run_script(view, script).ok());
     }
 
-    fn answer(&self) -> Option<&str> {
+    pub(crate) fn answer(&self) -> Option<&str> {
         let call = self.call?;
         self.seen.iter().find_map(|e| match e {
             BrowserEvent::Script { call: c, json, .. } if *c == call => Some(json.as_str()),
@@ -82,7 +91,7 @@ impl Probe {
         })
     }
 
-    fn files(&self) -> Vec<String> {
+    pub(crate) fn files(&self) -> Vec<String> {
         let mut names: Vec<String> = std::fs::read_dir(self.work.join("files"))
             .map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
             .unwrap_or_default();
@@ -90,7 +99,7 @@ impl Probe {
         names
     }
 
-    fn start(&mut self, frame: &eframe::Frame) -> Result<(), BrowserError> {
+    pub(crate) fn start(&mut self, frame: &eframe::Frame) -> Result<(), BrowserError> {
         let options = BrowserOptions {
             data_parent: self.work.join("profile"),
             // The network switch is off for the whole probe: only the local site can be reached.
@@ -124,7 +133,14 @@ impl Probe {
                         return;
                     }
                 }
-                self.seen.iter().any(|e| matches!(e, BrowserEvent::PageLoaded { url, .. } if url.ends_with("/main"))).then_some(true)
+                let at = |want_start: bool| {
+                    self.seen.iter().position(|e| match e {
+                        BrowserEvent::PageLoadStarted { url, .. } => want_start && url.ends_with("/main"),
+                        BrowserEvent::PageLoaded { url, .. } => !want_start && url.ends_with("/main"),
+                        _ => false,
+                    })
+                };
+                at(false).map(|loaded| at(true).is_some_and(|started| started < loaded))
             }
             1 => {
                 if enter {
@@ -218,30 +234,16 @@ impl Probe {
                 if loaded && self.call.is_none() {
                     self.run(main, "document.title");
                 }
-                self.answer().map(|json| json == "\"onload saw ready-script\"")
+                self.answer().map(|json| json == "\"onload saw ready-script/ready-script/undefined\"")
             }
-            10 => {
-                if enter {
-                    self.accept.set(true);
-                    self.run(main, "location.href = '/slow.zip'; 1");
-                }
-                let started = self.seen.iter().any(|e| matches!(e, BrowserEvent::DownloadStarted { file_name, .. } if file_name == "slow.zip"));
-                (started && self.step_started.elapsed() > Duration::from_millis(700)).then(|| {
-                    self.released = self.browser.take().map(HiddenBrowser::shut_down);
-                    self.released.is_some()
-                })
-            }
-            11 => {
-                // The engine's processes let go of their files a moment after the views are closed.
-                let folder_gone = self.released.as_deref().is_some_and(remove_session_folder);
-                (folder_gone && self.files() == vec!["_evil name_.zip".to_owned()]).then_some(true)
-            }
+            10..=15 => crate::steps_more::advance(self, enter),
+            16..=18 => crate::steps_end::advance(self, enter, frame),
             _ => {
                 self.step = 99;
                 return;
             }
         };
-        const NAMES: [&str; 12] = [
+        const NAMES: [&str; 19] = [
             "the local site loads in a hidden view with the network switch off",
             "a script's value comes back as JSON",
             "a popup becomes a second hidden view with its opener",
@@ -251,9 +253,16 @@ impl Probe {
             "a refused file leaves nothing behind",
             "a non-web address is refused and reported",
             "a page cannot leave for a web address while the switch is off",
-            "the ready script runs before the page's onload",
-            "an unfinished transfer is started and the session is shut down",
+            "the ready script runs when the document is parsed, in the main frame only",
+            "a hidden view lays its page out at desktop size",
+            "a popup that closes itself is reported and its view is gone",
+            "a new popup opens afterwards and its opener can close it",
+            "no request reaches another address while the switch is off",
+            "the first empty page of a popup has quiet dialogs too",
+            "a javascript: link runs in its page and is no navigation",
+            "a refused second offer leaves the running transfer alone, then the session is shut down",
             "shut down leaves no part file and the data folder can be removed",
+            "a session that is simply dropped lets go of its folder too",
         ];
         let name = NAMES[self.step as usize];
         match done {

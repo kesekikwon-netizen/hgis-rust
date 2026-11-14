@@ -5,6 +5,7 @@
 
 use std::fs;
 use std::io;
+use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use crate::names::safe_file_name;
@@ -16,11 +17,17 @@ pub enum DownloadRefusal {
     Declined,
     /// The name is empty or is not what `safe_file_name` makes of it.
     UnsafeName,
-    /// The folder is missing.
+    /// The folder is missing or is not given as a full path.
     NoFolder,
+    /// Folder and name together are longer than the engine can write to.
+    PathTooLong,
     /// A file of that name (or its part file) is already there.
     Exists,
 }
+
+/// Longest part-file path handed to the engine, in UTF-16 units: the 260 of Windows less the room the
+/// engine needs for a temporary name beside it.
+const LONGEST_PATH: usize = 240;
 
 /// The two paths of one transfer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,11 +41,16 @@ pub fn plan_download(directory: &Path, file_name: &str, serial: u64) -> Result<P
     if file_name.is_empty() || safe_file_name(file_name) != file_name {
         return Err(DownloadRefusal::UnsafeName);
     }
-    if !directory.is_dir() {
+    // Given a folder it cannot use as it stands, the engine writes into the user's own Downloads folder
+    // instead (review of 2026-11-15, S3): only a full path of a folder that exists is passed on.
+    if !directory.is_absolute() || !directory.is_dir() {
         return Err(DownloadRefusal::NoFolder);
     }
     let final_path = directory.join(file_name);
     let part_path = directory.join(format!("{file_name}.{serial}.part"));
+    if part_path.as_os_str().encode_wide().count() > LONGEST_PATH {
+        return Err(DownloadRefusal::PathTooLong);
+    }
     if final_path.exists() || part_path.exists() {
         return Err(DownloadRefusal::Exists);
     }
@@ -69,7 +81,13 @@ pub fn finish_download(plan: &PlannedFile) -> io::Result<u64> {
     if plan.final_path.exists() {
         return Err(io::Error::new(io::ErrorKind::AlreadyExists, "a file of that name is already there"));
     }
-    fs::rename(&plan.part_path, &plan.final_path)?;
+    // A second name for the part file fails when the real name was taken in this very instant, where a
+    // rename would replace the file. Drives without such links (FAT) get the rename.
+    match fs::hard_link(&plan.part_path, &plan.final_path) {
+        Ok(()) => fs::remove_file(&plan.part_path)?,
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => return Err(e),
+        Err(_) => fs::rename(&plan.part_path, &plan.final_path)?,
+    }
     Ok(bytes)
 }
 
@@ -107,6 +125,23 @@ mod tests {
         fs::write(dir.path().join("b.zip.2.part"), b"other").unwrap();
         assert_eq!(plan_download(dir.path(), "b.zip", 2), Err(DownloadRefusal::Exists));
         assert_eq!(fs::read(dir.path().join("a.zip")).unwrap(), b"mine");
+    }
+
+    /// Review of 2026-11-15 (S3): with a folder the engine cannot use as given, it falls back to the user's
+    /// own Downloads folder. Such a folder is refused before the engine hears of it.
+    #[test]
+    fn a_relative_folder_and_a_path_that_is_too_long_are_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(plan_download(Path::new("."), "a.zip", 1), Err(DownloadRefusal::NoFolder));
+        assert_eq!(plan_download(Path::new("relative-folder"), "a.zip", 1), Err(DownloadRefusal::NoFolder));
+        let long = "가".repeat(170) + ".zip";
+        let mut deep = dir.path().to_path_buf();
+        for _ in 0..3 {
+            deep.push("폴더".repeat(12));
+        }
+        fs::create_dir_all(&deep).unwrap();
+        assert_eq!(plan_download(&deep, &long, 1), Err(DownloadRefusal::PathTooLong));
+        assert!(plan_download(&deep, "a.zip", 1).is_ok());
     }
 
     #[test]

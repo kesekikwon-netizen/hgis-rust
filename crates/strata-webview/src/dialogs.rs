@@ -17,9 +17,20 @@ pub const QUIET_DIALOGS_SCRIPT: &str = r#"(function () {
       window.ipc.postMessage(JSON.stringify({ strata: 'dialog', kind: kind, text: String(text === undefined ? '' : text).slice(0, 500) }));
     } catch (e) {}
   };
-  window.alert = function (text) { tell('alert', text); };
-  window.confirm = function (text) { tell('confirm', text); return false; };
-  window.prompt = function (text) { tell('prompt', text); return null; };
+  var quiet = function (target) {
+    target.alert = function (text) { tell('alert', text); };
+    target.confirm = function (text) { tell('confirm', text); return false; };
+    target.prompt = function (text) { tell('prompt', text); return null; };
+  };
+  quiet(window);
+  // A window a page opens starts with an empty document this script has not run in, and the page can call
+  // a dialog of it at once (review of 2026-11-15, S1). The page that opened it makes it quiet.
+  var open = window.open;
+  window.open = function () {
+    var opened = open.apply(window, arguments);
+    try { if (opened) { quiet(opened); } } catch (e) {}
+    return opened;
+  };
 })();"#;
 
 /// Kind of dialog the page asked for.
@@ -93,9 +104,11 @@ mod tests {
     #[test]
     fn the_script_replaces_all_three_dialogs_with_the_cpp_answers() {
         let s = QUIET_DIALOGS_SCRIPT;
-        assert!(s.contains("window.alert = function (text) { tell('alert', text); };"));
-        assert!(s.contains("window.confirm = function (text) { tell('confirm', text); return false; };"));
-        assert!(s.contains("window.prompt = function (text) { tell('prompt', text); return null; };"));
+        assert!(s.contains("target.alert = function (text) { tell('alert', text); };"));
+        assert!(s.contains("target.confirm = function (text) { tell('confirm', text); return false; };"));
+        assert!(s.contains("target.prompt = function (text) { tell('prompt', text); return null; };"));
+        assert!(s.contains("quiet(window);"), "the page's own window");
+        assert!(s.contains("if (opened) { quiet(opened); }"), "and a window it opens (the real engine is asked in the probe)");
         assert!(s.contains(".slice(0, 500)"));
     }
 }

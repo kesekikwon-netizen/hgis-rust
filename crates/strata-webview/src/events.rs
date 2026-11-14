@@ -49,8 +49,12 @@ pub type DownloadDecider = Box<dyn FnMut(&DownloadOffer) -> Option<DownloadPlace
 /// Something that happened in the session since the last `pump`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserEvent {
+    /// A view began to load a page (the C++ browser's loadStarted, KaTopographicBrowser.cpp:542-550).
+    PageLoadStarted { view: ViewId, url: String },
     /// A page finished loading in a view.
     PageLoaded { view: ViewId, url: String },
+    /// A page closed its own window (or its opener did): the view is gone (windowCloseRequested, :597).
+    ViewClosed { view: ViewId },
     /// A page opened a window; it lives on as a hidden view.
     PopupOpened { opener: ViewId, view: ViewId, url: String },
     /// A page tried to open a window and no spare view was ready: the window was not opened.

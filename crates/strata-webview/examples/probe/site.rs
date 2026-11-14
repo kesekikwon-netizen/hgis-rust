@@ -4,7 +4,7 @@
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -20,11 +20,17 @@ function ask() { var yes = confirm('sure?'); alert('answer ' + yes); var typed =
 const POP: &str = r#"<html><head><title>pop</title></head><body>
 <script>document.title = 'pop:' + window.name + ':' + (window.opener ? window.opener.__n : 'none');</script></body></html>"#;
 
-const READY: &str = r#"<html><head><title>ready</title></head><body>
-<script>window.onload = function () { document.title = 'onload saw ' + window.__early; };</script></body></html>"#;
+// What the page sees of the host's ready script: at its own DOMContentLoaded listener (added after the
+// host's), at onload, and inside a sub frame (where the script must not have run).
+const READY: &str = r#"<html><head><title>ready</title></head><body><iframe src="/frame"></iframe>
+<script>document.addEventListener('DOMContentLoaded', function () { window.__atReady = window.__early; });
+window.onload = function () { document.title = 'onload saw ' + window.__early + '/' + window.__atReady + '/' + typeof window.frames[0].__early; };</script></body></html>"#;
+
+const FRAME: &str = "<html><body>frame</body></html>";
 
 pub struct Site {
     addr: SocketAddr,
+    hits: Arc<Mutex<Vec<String>>>,
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
@@ -36,12 +42,14 @@ impl Site {
         let addr = listener.local_addr()?;
         let stop = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&stop);
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let log = Arc::clone(&hits);
         let worker = std::thread::spawn(move || {
             let mut held: Vec<TcpStream> = Vec::new();
             while !flag.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((stream, _)) => {
-                        if let Some(keep) = answer(stream) {
+                        if let Some(keep) = answer(stream, &log) {
                             held.push(keep);
                         }
                     }
@@ -49,11 +57,16 @@ impl Site {
                 }
             }
         });
-        Ok(Self { addr, stop, worker: Some(worker) })
+        Ok(Self { addr, hits, stop, worker: Some(worker) })
     }
 
     pub fn origin(&self) -> String {
         format!("http://127.0.0.1:{}", self.addr.port())
+    }
+
+    /// The paths of all requests that reached this site.
+    pub fn hits(&self) -> Vec<String> {
+        self.hits.lock().map(|h| h.clone()).unwrap_or_default()
     }
 
     pub fn url(&self, path: &str) -> String {
@@ -75,7 +88,7 @@ fn page(stream: &mut TcpStream, html: &str) {
 }
 
 /// Answers one request. Returns the connection when it must stay open (the transfer that never ends).
-fn answer(mut stream: TcpStream) -> Option<TcpStream> {
+fn answer(mut stream: TcpStream, log: &Mutex<Vec<String>>) -> Option<TcpStream> {
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let mut request = Vec::new();
@@ -88,10 +101,14 @@ fn answer(mut stream: TcpStream) -> Option<TcpStream> {
     }
     let head = String::from_utf8_lossy(&request);
     let path = head.split_whitespace().nth(1).unwrap_or("/");
+    if let Ok(mut hits) = log.lock() {
+        hits.push(path.to_owned());
+    }
     match path {
         "/main" => page(&mut stream, MAIN),
         "/pop" => page(&mut stream, POP),
         "/ready" => page(&mut stream, READY),
+        "/frame" => page(&mut stream, FRAME),
         "/file.zip" | "/file.zip?again" => {
             // The offered name tries to leave the folder and holds characters Windows does not take.
             let _ = write!(

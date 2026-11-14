@@ -12,18 +12,24 @@ fn main() {}
 mod site;
 #[cfg(windows)]
 mod steps;
+#[cfg(windows)]
+mod steps_end;
+#[cfg(windows)]
+mod steps_more;
 
 #[cfg(windows)]
 fn main() {
     use eframe::egui;
     let site = site::Site::start().expect("local site");
+    // A second site on this PC that the session is NOT allowed to reach: whatever arrives there leaked.
+    let other = site::Site::start().expect("second local site");
     let work = std::env::temp_dir().join(format!("strata-webview-probe-{}", std::process::id()));
     std::fs::create_dir_all(work.join("files")).expect("work folder");
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([420.0, 260.0]).with_title("strata-webview probe"),
         ..Default::default()
     };
-    let probe = steps::Probe::new(site, work.clone());
+    let probe = steps::Probe::new(site, other, work.clone());
     let outcome = std::rc::Rc::clone(&probe.outcome);
     let _ = eframe::run_native("strata-webview probe", options, Box::new(|_cc| Ok(Box::new(probe))));
     let (passed, failed) = *outcome.borrow();

@@ -17,3 +17,6 @@ strata-secrets.workspace = true
 strata-geo.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -34,12 +34,20 @@ fn hold_lock(path: &Path, create: bool) -> io::Result<File> {
 }
 
 impl SessionFolder {
-    /// Makes `<parent>/s-<process id>-<serial>` with its lock file. `parent` is created when missing.
+    /// Makes `<parent>/s-<process id>-<serial>` with its lock file. `parent` is created when missing. A name
+    /// that is taken (a dead program had the same process id) is passed over.
     pub fn create(parent: &Path) -> io::Result<Self> {
         fs::create_dir_all(parent)?;
-        let name = format!("{FOLDER_PREFIX}{}-{}", std::process::id(), SERIAL.fetch_add(1, Ordering::Relaxed));
-        let path = parent.join(name);
-        fs::create_dir(&path)?;
+        let mut tries = 0;
+        let path = loop {
+            let name = format!("{FOLDER_PREFIX}{}-{}", std::process::id(), SERIAL.fetch_add(1, Ordering::Relaxed));
+            let path = parent.join(name);
+            match fs::create_dir(&path) {
+                Ok(()) => break path,
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists && tries < 1000 => tries += 1,
+                Err(e) => return Err(e),
+            }
+        };
         let lock = hold_lock(&path.join(LOCK_FILE), true)?;
         Ok(Self { path, lock })
     }
@@ -112,6 +120,22 @@ mod tests {
         let a = SessionFolder::create(parent.path()).unwrap();
         let b = SessionFolder::create(parent.path()).unwrap();
         assert_ne!(a.path(), b.path());
+    }
+
+    /// Review of 2026-11-15 (N6): a dead program's folder can carry the name a new session would take (the
+    /// system hands process ids out again). The new session takes the next free name.
+    #[test]
+    fn a_name_that_is_taken_does_not_stop_a_new_session() {
+        let parent = tempfile::tempdir().unwrap();
+        let first = SessionFolder::create(parent.path()).unwrap();
+        let name = first.path().file_name().unwrap().to_str().unwrap().to_owned();
+        let serial: u64 = name.rsplit('-').next().unwrap().parse().unwrap();
+        for taken in serial + 1..serial + 40 {
+            fs::create_dir(parent.path().join(format!("s-{}-{taken}", std::process::id()))).unwrap();
+        }
+        let next = SessionFolder::create(parent.path()).unwrap();
+        assert!(next.path().join(LOCK_FILE).is_file());
+        assert_ne!(next.path(), first.path());
     }
 
     /// The sweep takes the folder of a dead session and nothing else: not a live session's, not a folder

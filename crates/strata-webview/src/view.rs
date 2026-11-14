@@ -23,6 +23,7 @@ use crate::policy::{Navigation, NavigationPolicy};
 /// What a callback reports. Everything in it can cross threads (the script answer arrives on a `Send` callback).
 #[derive(Debug)]
 pub(crate) enum Signal {
+    LoadStarted { view: ViewId, url: String },
     Loaded { view: ViewId, url: String },
     Script { view: ViewId, call: ScriptCall, json: String },
     PageMessage { view: ViewId, body: String },
@@ -45,7 +46,13 @@ pub(crate) struct Shared {
     pub(crate) next_download: Cell<u64>,
     /// Run in the main frame of every page once its document is parsed.
     pub(crate) ready_script: Option<String>,
+    /// Page messages taken since the last `pump`: a page cannot make the host hoard more than a few.
+    pub(crate) messages: Cell<u32>,
 }
+
+/// Page messages taken between two `pump` calls, and the longest one taken (a dialog notice is far shorter).
+const MAX_PAGE_MESSAGES: u32 = 200;
+const MAX_PAGE_MESSAGE_BYTES: usize = 8192;
 
 impl std::fmt::Debug for Shared {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -61,7 +68,8 @@ fn hidden_bounds() -> Rect {
 
 /// Where the first view of a session gets its engine from, and where a later one does.
 pub(crate) enum Engine<'a> {
-    Fresh(&'a mut WebContext),
+    /// `arguments` are the engine arguments of a session that starts offline (see `policy`).
+    Fresh { context: &'a mut WebContext, arguments: Option<String> },
     SameAs(&'a WebView),
 }
 
@@ -73,13 +81,19 @@ pub(crate) fn build_hidden_view<W: HasWindowHandle>(
     tx: &Sender<Signal>,
 ) -> Result<WebView, BrowserError> {
     let mut builder = match engine {
-        Engine::Fresh(context) => WebViewBuilder::new_with_web_context(context),
+        Engine::Fresh { context, arguments } => {
+            let builder = WebViewBuilder::new_with_web_context(context);
+            match arguments {
+                Some(arguments) => builder.with_additional_browser_args(arguments),
+                None => builder,
+            }
+        }
         // A popup must use the engine and the private profile of its opener, or the page gets no window back.
         Engine::SameAs(view) => WebViewBuilder::new().with_environment(view.environment()),
     };
     let (policy_nav, policy_pop) = (shared.policy.clone(), shared.policy.clone());
     let (tx_nav, tx_load, tx_msg, tx_pop, tx_start, tx_end) = (tx.clone(), tx.clone(), tx.clone(), tx.clone(), tx.clone(), tx.clone());
-    let (shared_pop, shared_dl) = (Rc::clone(shared), Rc::clone(shared));
+    let (shared_pop, shared_dl, shared_msg) = (Rc::clone(shared), Rc::clone(shared), Rc::clone(shared));
     builder = builder
         .with_bounds(hidden_bounds())
         .with_visible(false)
@@ -107,12 +121,17 @@ pub(crate) fn build_hidden_view<W: HasWindowHandle>(
             }
         })
         .with_on_page_load_handler(move |event, url| {
-            if matches!(event, PageLoadEvent::Finished) {
-                let _ = tx_load.send(Signal::Loaded { view: id, url });
-            }
+            let _ = tx_load.send(match event {
+                PageLoadEvent::Started => Signal::LoadStarted { view: id, url },
+                PageLoadEvent::Finished => Signal::Loaded { view: id, url },
+            });
         })
         .with_ipc_handler(move |request| {
-            let _ = tx_msg.send(Signal::PageMessage { view: id, body: request.body().clone() });
+            let taken = shared_msg.messages.get();
+            if taken < MAX_PAGE_MESSAGES && request.body().len() <= MAX_PAGE_MESSAGE_BYTES {
+                shared_msg.messages.set(taken + 1);
+                let _ = tx_msg.send(Signal::PageMessage { view: id, body: request.body().clone() });
+            }
         })
         .with_new_window_req_handler(move |url, _features| {
             let why = policy_pop.judge(&url);
@@ -133,7 +152,8 @@ pub(crate) fn build_hidden_view<W: HasWindowHandle>(
         .with_download_started_handler(move |url, path| {
             let offered = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             let offer = DownloadOffer { view: id, url: url.clone(), suggested_name: safe_file_name(&offered) };
-            let place = shared_dl.decider.borrow_mut().as_mut().and_then(|decide| decide(&offer));
+            // A decider that is itself busy deciding (it let the window handle messages) refuses this one.
+            let place = shared_dl.decider.try_borrow_mut().ok().and_then(|mut decider| decider.as_mut().and_then(|decide| decide(&offer)));
             let Some(place) = place else {
                 let _ = tx_start.send(Signal::DownloadRefused { view: id, url, why: DownloadRefusal::Declined });
                 return false;
@@ -156,10 +176,12 @@ pub(crate) fn build_hidden_view<W: HasWindowHandle>(
             let _ = tx_end.send(Signal::DownloadEnded { part_path: path, url, success });
         });
     if let Some(script) = &shared.ready_script {
-        // The C++ browser injects its page script at DocumentReady in the page's own world
-        // (KaTopographicBrowser.cpp:527-535): the document is parsed, the page's onload has not run yet.
+        // The C++ browser injects its page script at DocumentReady in the page's own world, in the main
+        // frame only (KaTopographicBrowser.cpp:527-535): the document is parsed, the page's onload has not
+        // run yet. The engine runs such a script in sub frames as well, hence the test; the line break keeps
+        // a script that ends in a comment from swallowing the closing brace.
         let at_ready = format!(
-            "document.addEventListener('DOMContentLoaded', function () {{ try {{ {script} }} catch (e) {{}} }});"
+            "if (window === window.top) {{ document.addEventListener('DOMContentLoaded', function () {{ try {{ {script}\n }} catch (e) {{}} }}); }}"
         );
         builder = builder.with_initialization_script_for_main_only(at_ready, true);
     }
