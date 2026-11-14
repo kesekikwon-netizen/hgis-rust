@@ -29,9 +29,18 @@ not apply here. Where this file and `CLAUDE.md` differ, this file wins. Plan: `d
 
 ## Skills
 
-- The superpowers skill pack is installed for Antigravity and for Claude Code on this PC (owner's instruction, 2026-11-14).
-- An `ORDER.yaml` is the approved design and the approved plan. For an order, do not run brainstorming, writing-plans, using-git-worktrees, finishing-a-development-branch, subagent-driven-development or dispatching-parallel-agents, and never wait for a human reply: nobody is watching the pane.
-- Do use test-driven-development, systematic-debugging and verification-before-completion while you work. Their results go into the report: `tests_added` (failed before, passes now) and `verify`.
+Rule set by the owner on 2026-11-14: every order names, in YAML, the superpowers skills it is worked with.
+
+- The superpowers skill pack (7.0.2) is installed for Antigravity and for Claude Code on this PC. Skill files:
+  `%USERPROFILE%.geminiconfigpluginssuperpowersskills<name>SKILL.md`; in Claude Code the names are `superpowers:<name>`.
+- Every `ORDER.yaml` has a `skills` block: `use` (each skill with the step at which it is invoked), `do_not_use`, `rule`, `report`.
+  Invoke each skill under `use` by its name at that step. If your conversation does not list the skill, read its `SKILL.md` and follow it.
+- An order is the approved design and the approved plan. The skills under `do_not_use` (brainstorming, writing-plans, executing-plans,
+  using-git-worktrees, finishing-a-development-branch, subagent-driven-development, dispatching-parallel-agents, requesting-code-review)
+  are not run for it, and no skill makes you wait for a human reply: where a skill says to ask or to get approval, the order's text is the answer.
+- An order without a `skills` block is worked with test-driven-development, systematic-debugging and verification-before-completion;
+  say in the report that the block was missing.
+- The report lists what you invoked: `skills_used [{skill, at, effect}]`.
 - Code review is the director's: an independent reviewer reads your commit. Do not request or run a review of your own.
 
 ## Code
@@ -94,4 +103,4 @@ The finished app must be distributable without infringing anyone's copyright and
 ## Report
 
 `head {cwd, branch, HEAD}`, `order`, `status: DONE | BLOCKED`, `tests_added [{name, failed_before, now}]`, `ported_from`,
-`changed_tests`, `verify`, `files`, `commit`, `decisions`, `unsure`, `not_done`, `evolve`.
+`changed_tests`, `verify`, `skills_used [{skill, at, effect}]`, `files`, `commit`, `decisions`, `unsure`, `not_done`, `evolve`.
