@@ -63,8 +63,9 @@ pub(crate) struct RefTileLayer {
 pub(crate) enum ViewOnAdd {
     /// The whole circle in view, the survey area in the middle (a small-scale map such as 대동여지도).
     FrameCircle,
-    /// The view stays (`MainWindowOverlay.cpp:239-263` changes no extent); only a view centred outside the
-    /// circle, which would show nothing of the new map, is moved onto the survey area at its scale.
+    /// The view stays, except that a view centred outside the circle (it would show nothing of the map) is
+    /// moved onto the survey area at its scale. Not the C++ rule: addXyzBasemap zooms to 1:10,000 around the
+    /// view centre when the view is smaller-scale than 1:80,000 (`BasemapOps.cpp:961-972`).
     Keep,
 }
 
@@ -101,9 +102,10 @@ pub(crate) fn ref_tile_layer(key: &str) -> Option<&'static RefTileLayer> {
     REF_TILE_LAYERS.iter().copied().find(|l| l.key == key)
 }
 
-/// Adds the row unless it is there. Live tiles sink below the other layers in their own order and the
-/// satellite stays lowest (`BasemapOps.cpp:362-401` ensureSatelliteAtBottom): the row goes directly above the
-/// older tile rows and the background rows.
+/// Adds the row unless it is there: above the older tile rows and the background rows, so that the map just
+/// asked for is not hidden under an older one (the director's choice, docs/EVOLUTION.md E-13). C++ puts a new
+/// tile layer BELOW the older ones: addXyzBasemap appends its node (`BasemapOps.cpp:922`) and
+/// ensureSatelliteAtBottom (`:362-401`) keeps the tile layers in that order above the satellite.
 fn ensure_row(panel: &mut LeftLayerPanel, layer: &RefTileLayer) {
     if panel.entries.iter().any(|e| e.layer_key == layer.key) {
         return;
@@ -141,20 +143,25 @@ impl StrataAppState {
         if let Some(name) = self.left_layers.entries.iter().find(|e| e.layer_key == layer.key).map(|e| e.label_ko.clone()) {
             self.home_map.real_survey.layer_visible.insert(name, true);
         }
-        let view = self.home_map.viewport.center_xy;
         match layer.on_add {
             ViewOnAdd::FrameCircle => {
                 let r = layer.radius_m * 1.1;
                 self.home_map.set_view_extent([centre[0] - r, centre[1] - r, centre[0] + r, centre[1] + r]);
             }
-            ViewOnAdd::Keep if (view[0] - centre[0]).hypot(view[1] - centre[1]) > layer.radius_m => {
-                self.home_map.viewport.center_xy = centre;
-                self.home_map.note_view();
-            }
-            ViewOnAdd::Keep => {}
+            ViewOnAdd::Keep => self.bring_view_into_circle(layer, centre),
         }
         self.show_status_message(layer.added_text);
         true
+    }
+
+    /// A view centred outside the circle would show nothing of the layer: it goes onto the survey area at
+    /// its scale (one step of the view history).
+    fn bring_view_into_circle(&mut self, layer: &RefTileLayer, centre: [f64; 2]) {
+        let view = self.home_map.viewport.center_xy;
+        if (view[0] - centre[0]).hypot(view[1] - centre[1]) > layer.radius_m {
+            self.home_map.viewport.center_xy = centre;
+            self.home_map.note_view();
+        }
     }
 
     /// Whether the layer has a legend row and that row is checked (the ribbon button shows it as pressed:
@@ -175,6 +182,9 @@ impl StrataAppState {
         };
         let shown = self.home_map.real_survey.is_layer_visible(&name);
         self.home_map.real_survey.layer_visible.insert(name, !shown);
+        if let (false, Some(centre)) = (shown, self.reference_circle_centre()) {
+            self.bring_view_into_circle(layer, centre);
+        }
         self.show_status_message(if shown { format!("{}를 껐습니다.", layer.title) } else { format!("{}를 다시 켰습니다.", layer.title) });
     }
 
