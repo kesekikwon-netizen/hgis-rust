@@ -1,21 +1,6 @@
-task_id: "D20_D25_autonomous_completion"
-status: "DONE"
+# No standing task. The D1-D25 board (2026-11-08) is closed and is not a source of work.
+# Rules: AGENTS.md. Orders: ORDER.yaml at the root of your own git worktree, written by the director session.
+task_id: "NONE"
+status: "IDLE"
 assigned_to: "NONE"
-summary_ko: "D20~D25 연속 완주 및 GitHub Actions(Rust 1.99 Clippy) 호환성 수정 완료"
-cpp_source:
-  file: "target/cpp-ref/src/app/"
-  lines: "all"
-rust_target:
-  file: "crates/strata-app/src/"
-  symbol: "StrataAppState"
-invariants: |
-  - Latest kyi/main (target/cpp-ref/src/) is the only reference.
-  - Same position, design, size, font size, tooltip and real behaviour — no shell-only stubs.
-  - Responsive: every dialog clamps to ctx.screen_rect() - 32; side panels use width_range like the C++ minimumWidth/maximumWidth so FHD, 21:9/32:9 and 4K HiDPI never clip.
-  - No unsafe blocks; relative forward-slash paths; LF only.
-directive: |
-  All tasks D20 through D25 verified and marked DONE.
-worker_report: |
-  Status: ALL DONE (D20-D25).
-  Commits 9080aa2 (D20), 8bfe304 (D21), 26f9b59 (D22), f6bcb60 (D23), 48248e3 (D24), b89ec5d (D25) verified.
-  GitHub Actions Rust 1.99 clippy lints (drain_collect, chunks_exact_to_as_chunks) resolved cleanly.
+directive: "Change nothing in this checkout. Wait for ORDER.yaml in your own worktree (see AGENTS.md)."
