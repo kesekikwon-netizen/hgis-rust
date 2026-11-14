@@ -24,7 +24,8 @@ fn expected_curl_bin() -> &'static str {
 
 #[test]
 fn cargo_config_sets_strata_offline_in_test_process() {
-    assert_eq!(std::env::var(OFFLINE_ENV).as_deref(), Ok("1"));
+    assert_eq!(std::env::var(OFFLINE_ENV).as_deref(), Ok("1"),
+        "STRATA_OFFLINE must be \"1\" in tests (.cargo/config.toml); unset STRATA_OFFLINE in your shell or set STRATA_OFFLINE=1");
     assert!(offline_from_env(Some("1")));
     assert!(!offline_from_env(None));
     assert!(!offline_from_env(Some("0")));

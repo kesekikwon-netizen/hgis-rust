@@ -5,7 +5,7 @@
 //! requests off while permitting verified PC-local targets via [`run_curl_url_with_stdin`] and
 //! [`allow_launch_urls`].
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, feature = "test-probe"))]
 use std::cell::RefCell;
 use std::io::{self, Write};
 use std::process::{Child, Command, Output, Stdio};
@@ -17,8 +17,8 @@ pub const OFFLINE_ENV: &str = "STRATA_OFFLINE";
 static DISABLED: AtomicBool = AtomicBool::new(false);
 static ALLOWED_LAUNCHES: AtomicUsize = AtomicUsize::new(0);
 
-/// Command captured by [`probe_dry_run`] without starting an OS process (non-release only).
-#[cfg(any(test, debug_assertions))]
+/// Command captured by [`probe_dry_run`] without starting an OS process (tests only).
+#[cfg(any(test, feature = "test-probe"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordedCommand {
     pub program: String,
@@ -26,7 +26,7 @@ pub struct RecordedCommand {
     pub stdin: Vec<u8>,
 }
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, feature = "test-probe"))]
 #[derive(Debug, Default)]
 struct ProbeState {
     allow: bool,
@@ -34,13 +34,13 @@ struct ProbeState {
     commands: Vec<RecordedCommand>,
 }
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, feature = "test-probe"))]
 thread_local! { static PROBE: RefCell<Option<ProbeState>> = const { RefCell::new(None) }; }
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, feature = "test-probe"))]
 struct ProbeGuard;
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, feature = "test-probe"))]
 impl Drop for ProbeGuard {
     fn drop(&mut self) { PROBE.with(|slot| *slot.borrow_mut() = None); }
 }
@@ -71,7 +71,7 @@ fn disable() { DISABLED.store(true, Ordering::SeqCst); }
 /// Whether external site requests are currently allowed.
 #[must_use]
 pub fn is_allowed() -> bool {
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(any(test, feature = "test-probe"))]
     if let Some(allow) = PROBE.with(|slot| slot.borrow().as_ref().map(|p| p.allow)) {
         return allow;
     }
@@ -136,6 +136,10 @@ pub fn is_local_target(url: &str) -> bool {
 
 /// Checks whether a launch for `urls` is allowed (all local when offline, or switch on) and
 /// increments [`allowed_launches`] when allowed (`NET0c2`).
+///
+/// When [`is_allowed`] is `false` and this returns `true` (an offline local-only launch), the
+/// caller must wrap its `curl` command with [`local_curl_guard_args`] (`first` before every other
+/// argument and `last` at the end) and pass no redirect flags (`NET0c3`).
 pub fn allow_launch_urls<I, S>(urls: I) -> bool
 where
     I: IntoIterator<Item = S>,
@@ -156,7 +160,7 @@ where
         return false;
     }
     ALLOWED_LAUNCHES.fetch_add(1, Ordering::SeqCst);
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(any(test, feature = "test-probe"))]
     PROBE.with(|slot| {
         if let Some(probe) = slot.borrow_mut().as_mut() {
             probe.launches += 1;
@@ -165,8 +169,8 @@ where
     true
 }
 
-/// Runs `f` on the current thread with a dry-run probe that never starts `curl` (non-release only).
-#[cfg(any(test, debug_assertions))]
+/// Runs `f` on the current thread with a dry-run probe that never starts `curl` (tests only).
+#[cfg(any(test, feature = "test-probe"))]
 pub fn probe_dry_run<F: FnOnce()>(allow: bool, f: F) -> (usize, Vec<RecordedCommand>) {
     PROBE.with(|slot| *slot.borrow_mut() = Some(ProbeState { allow, launches: 0, commands: Vec::new() }));
     let _guard = ProbeGuard;
@@ -174,7 +178,7 @@ pub fn probe_dry_run<F: FnOnce()>(allow: bool, f: F) -> (usize, Vec<RecordedComm
     PROBE.with(|slot| slot.borrow_mut().take().map_or((0, Vec::new()), |s| (s.launches, s.commands)))
 }
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, feature = "test-probe"))]
 fn record_cmd(cmd: &Command, stdin: &[u8]) -> RecordedCommand {
     RecordedCommand {
         program: cmd.get_program().to_string_lossy().into_owned(),
@@ -186,7 +190,7 @@ fn record_cmd(cmd: &Command, stdin: &[u8]) -> RecordedCommand {
 fn record_allowed_launch(cmd: &Command, stdin: &[u8]) -> bool {
     let _ = (cmd, stdin);
     ALLOWED_LAUNCHES.fetch_add(1, Ordering::SeqCst);
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(any(test, feature = "test-probe"))]
     {
         PROBE.with(|slot| {
             slot.borrow_mut().as_mut().is_some_and(|probe| {
@@ -196,7 +200,7 @@ fn record_allowed_launch(cmd: &Command, stdin: &[u8]) -> bool {
             })
         })
     }
-    #[cfg(not(any(test, debug_assertions)))]
+    #[cfg(not(any(test, feature = "test-probe")))]
     {
         false
     }
@@ -211,36 +215,6 @@ fn check_and_record(cmd: &Command, stdin: &[u8]) -> Result<bool, io::Error> {
 
 fn dry_run_err() -> io::Error {
     io::Error::new(io::ErrorKind::ConnectionRefused, "dry-run probe")
-}
-
-fn has_redirect_flag(cmd: &Command) -> bool {
-    let mut skip_next = false;
-    for raw in cmd.get_args() {
-        if skip_next {
-            skip_next = false;
-            continue;
-        }
-        let arg = raw.to_string_lossy();
-        if matches!(
-            arg.as_ref(),
-            "-o" | "-H" | "-A" | "-w" | "-X" | "-b" | "-c" | "-d" | "-u" | "-e" | "-K"
-                | "--output" | "--header" | "--user-agent" | "--write-out" | "--request"
-                | "--cookie" | "--cookie-jar" | "--data" | "--data-binary" | "--max-time"
-                | "--connect-timeout" | "--speed-time" | "--speed-limit" | "--config" | "--noproxy" | "--proxy"
-        ) {
-            skip_next = true;
-            continue;
-        }
-        if matches!(arg.as_ref(), "-L" | "--location" | "--location-trusted") {
-            return true;
-        }
-        if arg.starts_with('-') && !arg.starts_with("--") && arg.len() > 2
-            && arg[1..].bytes().all(|b| b.is_ascii_alphabetic()) && arg.contains('L')
-        {
-            return true;
-        }
-    }
-    false
 }
 
 /// Runs `cmd.output()` when allowed.
@@ -269,16 +243,10 @@ pub fn run_output_with_stdin(cmd: Command, stdin_bytes: &[u8]) -> io::Result<Out
     spawn_with_stdin(cmd, stdin_bytes)
 }
 
-/// Runs `cmd` with `stdin_bytes` for `url`, allowing verified local targets when offline (`NET0c2`).
+/// Runs `cmd` with `stdin_bytes` for `url`, allowing verified local targets when offline (`NET0c2`, `NET0c3`).
 pub fn run_curl_url_with_stdin(mut cmd: Command, url: &str, stdin_bytes: &[u8]) -> io::Result<Output> {
     if !is_allowed() {
-        if !is_local_target(url) {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "network disabled"));
-        }
-        if has_redirect_flag(&cmd) {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "redirects refused"));
-        }
-        cmd.args(["--noproxy", "*"]);
+        cmd = network_local::prepare_offline_local_curl(cmd, url)?;
     }
     if record_allowed_launch(&cmd, stdin_bytes) { return Err(dry_run_err()); }
     spawn_with_stdin(cmd, stdin_bytes)
@@ -287,3 +255,7 @@ pub fn run_curl_url_with_stdin(mut cmd: Command, url: &str, stdin_bytes: &[u8]) 
 #[cfg(test)]
 #[path = "network_tests.rs"]
 mod network_tests;
+
+#[path = "network_local.rs"]
+mod network_local;
+pub use network_local::local_curl_guard_args;
