@@ -1,14 +1,14 @@
 //! Rotated straight-trench grid fill and boundary trimming (`target/cpp-ref/src/core/TrenchGridGenerator.cpp:232-390`).
 
-use geo::algorithm::bool_ops::BooleanOps;
-use geo::{
-    BoundingRect, Contains, Coord, CoordsIter, Geometry, HasDimensions, Intersects, LineString,
-    Polygon,
-};
+#[path = "trench_plan_trim.rs"]
+mod trench_plan_trim;
+
+use geo::{BoundingRect, Contains, Coord, Geometry, Intersects, LineString, MultiPolygon, Polygon};
 
 use crate::trench_plan::{valid_cell, valid_spec, Cell, Spec, MAX_CELLS};
 use crate::trench_plan_area::{area_problem, as_multipolygon, AREA_NOT_POLYGON, AREA_UNREADABLE};
 use crate::trench_plan_ratio::number_from_high_side;
+use trench_plan_trim::trench_overlap_v_bounds;
 
 /// Minimum length kept when trimming at the boundary (`target/cpp-ref/src/core/TrenchGridGenerator.cpp:116`).
 const MIN_TRIM_LEN: f64 = 4.0;
@@ -50,13 +50,25 @@ pub fn build_in_area(spec: &Spec, area: Option<&Geometry<f64>>) -> Result<Vec<Ce
     let Some(area_mp) = as_multipolygon(geom) else {
         return Err(AREA_NOT_POLYGON.to_owned());
     };
+    build_in_valid_area(spec, &area_mp)
+}
+
+/// Fills an already-validated `MultiPolygon` without repeating `area_problem` (`target/cpp-ref/src/core/TrenchGridGenerator.cpp:251-390`).
+pub(crate) fn build_in_valid_area(
+    spec: &Spec,
+    area_mp: &MultiPolygon<f64>,
+) -> Result<Vec<Cell>, String> {
+    if !valid_spec(spec) {
+        return Err(BAD_SPEC.to_owned());
+    }
     let Some(env) = area_mp.bounding_rect() else {
         return Err(AREA_UNREADABLE.to_owned());
     };
 
     let ax = (env.min().x + env.max().x) * 0.5;
     let ay = (env.min().y + env.max().y) * 0.5;
-    let a = spec.azimuth_deg.to_radians();
+    // Match C++ `spec.azimuthDeg * M_PI / 180.0` (`target/cpp-ref/src/core/TrenchGridGenerator.cpp:256`).
+    let a = spec.azimuth_deg * std::f64::consts::PI / 180.0;
     let (c, s) = (a.cos(), a.sin());
     let world = |lx: f64, ly: f64| -> [f64; 2] { [lx * c + ly * s + ax, -lx * s + ly * c + ay] };
     let to_local = |wx: f64, wy: f64| -> (f64, f64) {
@@ -104,31 +116,24 @@ pub fn build_in_area(spec: &Spec, area: Option<&Geometry<f64>>) -> Result<Vec<Ce
         let v0 = v_min + (j as f64) * step_v;
         for i in 0..nu {
             let u0 = u_min + (i as f64) * step_u;
-            let poly = rect_polygon(
+            let corners = [
                 world(u0, v0),
                 world(u0 + w, v0),
                 world(u0 + w, v0 + len),
                 world(u0, v0 + len),
-            );
+            ];
+            let poly = rect_polygon(corners[0], corners[1], corners[2], corners[3]);
             let mut keep_v0 = v0;
             let mut keep_len = len;
             if !area_mp.contains(&poly) {
                 if !area_mp.intersects(&poly) {
                     continue;
                 }
-                let inter = area_mp.intersection(&poly);
-                if inter.is_empty() {
+                let Some((mut lo_v, hi_v)) =
+                    trench_overlap_v_bounds(area_mp, corners, [u0, v0, w, len], &world, &to_local)
+                else {
                     continue;
-                }
-                let mut lo_v = 1e300_f64;
-                let mut hi_v = -1e300_f64;
-                for coord in inter.coords_iter() {
-                    let lv = to_local(coord.x, coord.y).1;
-                    lo_v = lo_v.min(lv);
-                    hi_v = hi_v.max(lv);
-                }
-                lo_v = lo_v.max(v0);
-                hi_v = hi_v.min(v0 + len);
+                };
                 let mut cut = hi_v - lo_v;
                 if !cut.is_finite() || cut < MIN_TRIM_LEN || cut > len {
                     continue;

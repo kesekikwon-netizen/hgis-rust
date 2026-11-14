@@ -6,7 +6,8 @@ use crate::trench_plan::{
     total_area, valid_cell, valid_dimensions, Cell, ElevSample, RatioFill, SlopeAspect, Spec,
     MAX_LENGTH,
 };
-use crate::trench_plan_area::{area_problem, build_in_area};
+use crate::trench_plan_area::{area_problem, as_multipolygon, AREA_NOT_POLYGON};
+use crate::trench_plan_fill::build_in_valid_area;
 
 /// Default minimum slope percentage (`target/cpp-ref/src/core/TrenchGridGenerator.h:104`).
 pub const DEFAULT_MIN_SLOPE_PCT: f64 = 0.5;
@@ -100,7 +101,8 @@ pub fn upslope_aspect(samples: &[ElevSample], min_slope_pct: f64) -> SlopeAspect
         return out;
     }
 
-    let mut az = a.atan2(b).to_degrees();
+    // Match C++ `std::atan2(a, b) * 180.0 / M_PI` (`target/cpp-ref/src/core/TrenchGridGenerator.cpp:435`).
+    let mut az = a.atan2(b) * 180.0 / std::f64::consts::PI;
     if az < 0.0 {
         az += 360.0;
     }
@@ -178,6 +180,10 @@ pub fn build_for_target_ratio(
         best.error = problem;
         return best;
     }
+    let Some(area_mp) = as_multipolygon(geom) else {
+        best.error = AREA_NOT_POLYGON.to_owned();
+        return best;
+    };
 
     let area_m2 = geom.unsigned_area();
     let target_area = area_m2 * (target_pct / 100.0);
@@ -205,7 +211,7 @@ pub fn build_for_target_ratio(
         for step in 1..=60 {
             let balk = f64::from(step * 2);
             s.balk_width = balk;
-            let Ok(cells) = build_in_area(&s, Some(geom)) else {
+            let Ok(cells) = build_in_valid_area(&s, &area_mp) else {
                 continue;
             };
             let candidate_area = total_area(&cells);

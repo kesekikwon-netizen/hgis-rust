@@ -173,7 +173,8 @@ pub fn build(spec: &Spec) -> Vec<Cell> {
     let w = spec.trench_width;
     let len = spec.trench_length;
     let balk = spec.balk_width;
-    let a = spec.azimuth_deg.to_radians();
+    // Match C++ `spec.azimuthDeg * M_PI / 180.0` (`target/cpp-ref/src/core/TrenchGridGenerator.cpp:85`).
+    let a = spec.azimuth_deg * std::f64::consts::PI / 180.0;
     let (c, s) = (a.cos(), a.sin());
     let world = |lx: f64, ly: f64| -> [f64; 2] {
         [lx * c + ly * s + spec.origin_x, -lx * s + ly * c + spec.origin_y]
