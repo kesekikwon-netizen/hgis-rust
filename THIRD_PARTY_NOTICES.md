@@ -89,3 +89,18 @@ VWorld, 국토정보플랫폼, 국가유산 공간정보, 흙토람, KIGAM 등�
 - **번들 DLL 목록:** `licenses/BUNDLED-COMPONENTS.txt`. 폴더에 넣은 DLL 마다 어느 OSGeo4W 패키지(이름-판)에서 왔는지 적는다(OSGeo4W `etc/setup` 의 설치 목록으로 만든다). 목록에 없는 VC++ 런타임은 Windows System32 의 재배포 파일이다.
 - **대응 소스:** `source/ka-hgis-source.zip` 에 그 EXE 를 만든 ka-hgis 소스(src·tests·data·cmake·scripts·CMake 파일·라이선스)를 함께 넣는다. 저장소 공개 여부와 상관없이 받은 사람이 소스를 갖는다. 판 식별은 `PORTABLE-MANIFEST.json` 의 `gitDescribe`·`executableSha256`.
 - QGIS·Qt·GDAL 등 번들 라이브러리의 소스: `BUNDLED-COMPONENTS.txt` 의 패키지 이름-판으로 OSGeo4W 배포처(https://download.osgeo.org/osgeo4w/v2/)의 소스 묶음(`-src`)을 찾거나 각 프로젝트 공식 저장소의 같은 판을 받는다.
+
+## Rust 앱(hgis-rust) 숨은 웹 엔진 — `crates/strata-webview`
+
+로그인 세션이 필요한 자료 제공 사이트(국토지리정보원 등)와 통신하려고 Windows 구성 요소인 Microsoft Edge WebView2 런타임을 화면에 보이지 않는 자식 창으로 부른다(런타임 판 측정 2026-11-14, 크레이트 판은 2026-11-15 에 `Cargo.lock` 과 다시 대조, 지시 F4-a). `[target.'cfg(windows)'.dependencies]` 로 Windows 에서만 연결되고 다른 운영체제에서는 빈 크레이트로 컴파일된다. 아직 `strata-app` 에는 연결하지 않았다(F4-e 에서 연결). `webview2-com` 과 `windows-core` 는 `wry` 가 끌어오는 전이 의존이다.
+
+| 구성 | 판 | 라이선스 | 공식 근거 |
+| --- | --- | --- | --- |
+| Microsoft Edge WebView2 Runtime (`msedgewebview2.exe`, `EmbeddedBrowserWebView.dll`) | Windows 구성 요소 (`157.0.4341.60` 측정, 런타임 동적 호출, 우리가 배포하지 않음) | Microsoft Edge WebView2 런타임 약관 (OS 내장 구성 요소) | https://developer.microsoft.com/en-us/microsoft-edge/webview2/ |
+| Microsoft Edge WebView2 SDK 정적 로더 (`WebView2LoaderStatic.lib`, `webview2-com-sys` 가 MSVC 타깃에서 정적 링크) | `webview2-com-sys` 0.39.1 내장 | BSD-3-Clause (Microsoft Corporation, WebView2 SDK 재배포 로더) | https://www.nuget.org/packages/Microsoft.Web.WebView2 · https://github.com/tauri-apps/webview2-rs |
+| Rust 크레이트 `wry` (`default-features = false`) | `=0.57.1` (2026-10-23) | Apache-2.0 또는 MIT | https://github.com/tauri-apps/wry |
+| Rust 크레이트 `webview2-com` 0.39.1 · `webview2-com-sys` 0.39.1 · `webview2-com-macros` 0.8.1 | 0.39.1 / 0.8.1 | MIT | https://github.com/tauri-apps/webview2-rs |
+| Rust 크레이트 `windows` 0.62.2 · `windows-core` 0.62.2 · `windows-implement` 0.60.2 · `windows-interface` 0.59.3 · `windows-result` 0.4.1 · `windows-strings` 0.5.1 · `windows-numerics` 0.3.1 · `windows-collections` 0.3.2 · `windows-future` 0.3.2 · `windows-threading` 0.2.1 · `windows-version` 0.1.7 · `windows-sys` 0.45.0 · `windows-targets` 0.42.2 · `windows_*` 0.42.2 | — | MIT 또는 Apache-2.0 | https://github.com/microsoft/windows-rs |
+| Rust 크레이트 `http` 1.5.0 · `cookie` 0.18.2 · `time` 0.3.55(`time-core` 0.1.9 · `time-macros` 0.2.32 · `deranged` 0.5.9 · `num-conv` 0.2.2 · `powerfmt` 0.2.1) · `base64` 0.23.1 · `crossbeam-channel` 0.5.17 · `dirs` 7.0.0 · `dtoa` 1.0.11 · `siphasher` 1.0.4 · `tao-macros` 0.1.4 | — | MIT 또는 Apache-2.0 | https://crates.io/crates/wry |
+| Rust 크레이트 `dunce` 1.0.5 | 1.0.5 | CC0-1.0 또는 MIT-0 또는 Apache-2.0 | https://gitlab.com/kornelski/dunce |
+| 비 Windows 타깃 전용 전이 의존(`Cargo.lock` 기록용, Windows 빌드에서는 컴파일하지 않음): `dom_query` 0.28.0 · `derive_more` 2.1.1 · `derive_more-impl` 2.1.1 · `phf` / `phf_*` 0.13.1 · `new_debug_unreachable` 1.0.6 · `precomputed-hash` 0.1.1 (`MIT`), `html5ever` 0.39.0 · `markup5ever` 0.39.0 · `servo_arc` 0.4.3 · `string_cache` 0.9.0 · `string_cache_codegen` 0.6.1 · `tendril` 0.5.1 · `web_atoms` 0.2.6 · `cesu8` 1.1.0 · `jni` 0.21.1 (`MIT 또는 Apache-2.0`), `objc2-exception-helper` 0.1.1 · `objc2-ui-kit` 0.3.2 · `objc2-web-kit` 0.3.2 (`Zlib 또는 Apache-2.0 또는 MIT`), `cssparser` 0.37.0 · `cssparser-macros` 0.7.1 · `dtoa-short` 0.3.5 · `selectors` 0.38.0 (`MPL-2.0`, 무수정) | — | 위 표기 참조 (GPL/AGPL/LGPL 없음) | https://crates.io/crates/wry |

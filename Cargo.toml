@@ -13,6 +13,7 @@ members = [
     "crates/strata-check-export",
     "crates/strata-app",
     "crates/strata-engine",
+    "crates/strata-webview",
 ]
 
 [workspace.package]
