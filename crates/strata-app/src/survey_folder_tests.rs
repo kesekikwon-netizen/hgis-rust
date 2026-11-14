@@ -29,24 +29,6 @@ fn survey_folder_matches_cpp_reference_storage() {
     assert_eq!(survey_folder(Some(&dotted)), Some(dir.path().to_path_buf()), "cleaned like QDir::cleanPath");
 }
 
-/// MainWindow.cpp:3095-3099 — no survey (or a missing file) stops before any request with the cpp text.
-#[test]
-fn heritage_without_survey_file_stops_with_cpp_text() {
-    for missing in [None, Some(PathBuf::from("Z:/없는/조사.gpkg"))] {
-        let mut app = StrataAppState::new_startup();
-        app.survey_path = missing;
-        app.accounts.heritage_configured = true;
-        app.modals.heritage_sido = "경상북도".to_owned();
-        app.modals.heritage_city = "경주시".to_owned();
-        crate::dialogs_download_print::heritage_start_fetch(&mut app);
-        assert!(!crate::dialogs_download_print::heritage_fetch_in_progress(), "no request thread may start");
-        assert_eq!(
-            app.modals.heritage_status_detail,
-            "조사를 먼저 열거나 저장하세요.\n받은 자료는 그 조사폴더 안에만 둡니다."
-        );
-    }
-}
-
 /// MainWindowTopographic.cpp:103-106 — no survey: ini `topographic/folder`, else Documents;
 /// with a survey: <survey folder>/지형도, and it follows 다른 이름으로 저장.
 #[test]

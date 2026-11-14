@@ -7,9 +7,10 @@
 use eframe::egui::{self, Color32, Stroke, Vec2};
 
 use crate::app_state::StrataAppState;
-use crate::dialogs_download_print::heritage_start_fetch;
 use crate::dialogs_modal::ActiveModalDialog;
-use strata_net::heritage_intranet::HeritageStage;
+
+/// Deferred until WB1 embeds the browser view (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:571-629`).
+const DEFERRED_WB1: &str = "아직 Rust 판에서 연결하지 않았습니다 (지시 WB1)";
 
 /// 상세 로그(켜져 있을 때)와 하단 단추 줄.
 pub(crate) fn render_heritage_footer(
@@ -71,39 +72,10 @@ ui.horizontal(|ui| {
         .fill(Color32::from_rgb(33, 33, 31))
         .corner_radius(6.0)
         .min_size(Vec2::new(96.0, 32.0));
-        if ui.add(fetch_btn).clicked() {
-            // KaHeritageBrowser.cpp:571-629 — 막는 조건은 요청 전에 문구로 끝낸다.
-            if !app.accounts.heritage_configured {
-                app.modals.heritage_stage_idx =
-                    HeritageStage::Failed.ui_index();
-                app.modals.heritage_progress_pct = 0.0;
-                app.modals.heritage_status_detail =
-                    strata_net::heritage_intranet::messages::NO_ACCOUNT
-                        .to_owned();
-            } else {
-                // 체크된 자료 종류를 지도 레이어 가시성에 반영한다.
-                for (di, lname) in [
-                    "국가등록문화유산",
-                    "국가지정유산",
-                    "국가지정유산보호구역",
-                    "시도지정유산",
-                    "시도지정유산보호구역",
-                ]
-                .into_iter()
-                .enumerate()
-                {
-                    app.home_map.real_survey.layer_visible.insert(
-                        lname.to_owned(),
-                        app.modals.heritage_dataset_checks[di],
-                    );
-                }
-                // No pledge receipt here: cpp writes one only after the intranet answers
-                // status=agreed with the terms text (target/cpp-ref/src/app/MainWindow.cpp:3227-3244,
-                // KaHeritageBrowser.cpp:988-993). The Rust HTTP flow has no agree step, so nothing is written.
-                // 실제 인트라넷 작업: 화면 → 목록 → 폼 → 시·군 검색 → ZIP
-                heritage_start_fetch(app);
-            }
-        }
+        // C++ runs this flow inside an embedded QWebEngineView with the user's login session
+        // (target/cpp-ref/src/app/KaHeritageBrowser.cpp:571-629); disabled until WB1 connects WB0.
+        ui.add_enabled(false, fetch_btn)
+            .on_disabled_hover_text(DEFERRED_WB1);
     });
 });
 }
