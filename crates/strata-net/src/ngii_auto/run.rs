@@ -125,6 +125,7 @@ impl NgiiAutomation {
         self.manifest.clear();
         self.sheet_directories.clear();
         self.receiving.clear();
+        self.reloading.clear();
         (self.transfer_page, self.order_page, self.order_download_page) = (None, None, None);
         self.stage = Stage::Select;
         self.last_message.clear();

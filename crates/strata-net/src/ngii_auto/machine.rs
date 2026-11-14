@@ -77,6 +77,8 @@ pub struct NgiiAutomation {
     pub(super) order_popups: HashMap<PageId, (u64, String)>,
     /// Pages whose run was stopped while they were handing over files (`:648`).
     pub(super) stopped_transfers: Vec<PageId>,
+    /// Map pages that began to load anew while an order was being prepared and have not finished.
+    pub(super) reloading: Vec<PageId>,
     pub(super) login_attempt: u64,
     pub(super) attention: String,
     pub(super) last_message: String,
@@ -84,6 +86,9 @@ pub struct NgiiAutomation {
     pub(super) order_sheets_text: String,
     pub(super) status: String,
     pub(super) events: Vec<AutoEvent>,
+    pub(super) last_diagnostic: String,
+    /// Page, command and answered state, each change once (for the log of a run; no page content).
+    pub(super) trace: Vec<String>,
 }
 
 impl NgiiAutomation {
@@ -126,6 +131,7 @@ impl NgiiAutomation {
             transfer_page: None,
             order_popups: HashMap::new(),
             stopped_transfers: Vec::new(),
+            reloading: Vec::new(),
             // The C++ counts the account being set as the first attempt (`:269`).
             login_attempt: 1,
             attention: String::new(),
@@ -134,6 +140,8 @@ impl NgiiAutomation {
             order_sheets_text: String::new(),
             status: String::new(),
             events: Vec::new(),
+            last_diagnostic: String::new(),
+            trace: Vec::new(),
         }
     }
 
@@ -192,6 +200,18 @@ impl NgiiAutomation {
     #[must_use]
     pub fn files_done(&self) -> (usize, i64) {
         (self.received_file_count, self.sheet_file_count)
+    }
+
+    /// The last note of the page script about where it stopped (`:804-809`); empty when there is none.
+    #[must_use]
+    pub fn last_diagnostic(&self) -> &str {
+        &self.last_diagnostic
+    }
+
+    /// The course of the run: `p<page> <command>><state>`, consecutive repeats left out, the last 200.
+    #[must_use]
+    pub fn answer_trace(&self) -> &[String] {
+        &self.trace
     }
 
     /// What happened since the last call.

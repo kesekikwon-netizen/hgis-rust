@@ -58,6 +58,9 @@ pub struct NgiiRun {
     transfers: HashMap<DownloadId, PathBuf>,
     /// The data folder of a closed session that the engine has not let go of yet.
     leftover: Option<PathBuf>,
+    /// What the browser reported, for the log of a run: kind, view, host and path (never a query, a
+    /// fragment or page content). The last 300.
+    reported: Vec<String>,
 }
 
 impl std::fmt::Debug for NgiiRun {
@@ -101,7 +104,7 @@ impl NgiiRun {
             accepted.push_back(target.directory.join(&target.file_name));
             Some(DownloadPlace { directory: target.directory, file_name: target.file_name })
         }));
-        Ok(Self { browser: Some(browser), core, answers: HashMap::new(), transfers: HashMap::new(), leftover: None })
+        Ok(Self { browser: Some(browser), core, answers: HashMap::new(), transfers: HashMap::new(), leftover: None, reported: Vec::new() })
     }
 
     /// Asks for the sheets of a circle (see `NgiiAutomation::prepare_sheets`).
@@ -140,6 +143,20 @@ impl NgiiRun {
         places.join(" · ")
     }
 
+    /// The browser's reports in order (see the field).
+    #[must_use]
+    pub fn reported(&self) -> &[String] {
+        &self.reported
+    }
+
+    fn note(log: &mut Vec<String>, kind: &str, view: ViewId, url: &str) {
+        let place = UrlParts::parse(url).map_or_else(|| url.split(['?', '#']).next().unwrap_or_default().chars().take(40).collect::<String>(), |u| format!("{}{}", u.host, u.path));
+        if log.len() >= 300 {
+            log.remove(0);
+        }
+        log.push(format!("{kind} p{} {place}", view.0));
+    }
+
     /// Whether the run is over and nothing of its session is left.
     #[must_use]
     pub fn finished(&self) -> bool {
@@ -163,10 +180,24 @@ impl NgiiRun {
         };
         // The decider may run inside `pump`; the state is not borrowed across it.
         let reported = browser.pump(parent);
+        let notes: Vec<(&'static str, ViewId, String)> = reported
+            .iter()
+            .filter_map(|e| match e {
+                BrowserEvent::PageLoadStarted { view, url } => Some(("start", *view, url.clone())),
+                BrowserEvent::PageLoaded { view, url } => Some(("loaded", *view, url.clone())),
+                BrowserEvent::PopupOpened { view, url, .. } => Some(("popup", *view, url.clone())),
+                BrowserEvent::PopupRefused { opener, url } => Some(("popup-refused", *opener, url.clone())),
+                BrowserEvent::ViewClosed { view } => Some(("closed", *view, String::new())),
+                BrowserEvent::NavigationRefused { view, url, .. } => Some(("refused", *view, url.clone())),
+                BrowserEvent::Dialog { view, .. } => Some(("dialog", *view, String::new())),
+                _ => None,
+            })
+            .collect();
         let mut core = self.core.borrow_mut();
         let now = core.now();
         let Core { machine, host, accepted, .. } = &mut *core;
         host.pages = Self::pages(browser);
+        let stage_before = machine.stage();
         for event in reported {
             match event {
                 BrowserEvent::PageLoadStarted { view, .. } | BrowserEvent::PopupOpened { view, .. } => machine.page_load_started(host, PageId(view.0)),
@@ -215,10 +246,17 @@ impl NgiiRun {
             }
         }
         machine.tick(host, now);
+        let stage_note = (machine.stage() != stage_before).then(|| format!("stage {:?}>{:?}", stage_before, machine.stage()));
         let wanted = std::mem::take(&mut host.wanted);
         let over = matches!(machine.stage(), Stage::Stopped | Stage::Complete);
         let events = machine.take_events();
         drop(core);
+        for (kind, view, url) in notes {
+            Self::note(&mut self.reported, kind, view, &url);
+        }
+        if let Some(note) = stage_note {
+            self.reported.push(note);
+        }
         if over {
             // Closing the session ends every transfer and leaves no unfinished file.
             if let Some(browser) = self.browser.take() {

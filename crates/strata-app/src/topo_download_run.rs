@@ -85,7 +85,7 @@ impl StrataAppState {
         }
         let first = DownloadJobState::Running { fraction: None, stage: Some("[1/6] 도엽 확인".to_owned()) };
         let (_, job) = self.download_jobs.add_job(TOPO_JOB_TITLE, first.clone(), now);
-        let config = AutoConfig { portal_url: PORTAL_HOME.to_owned(), script: PAGE_SCRIPT.to_owned(), download_directory: request.downloads, account: request.account, test_mode: false };
+        let config = AutoConfig { portal_url: PORTAL_HOME.to_owned(), script: PAGE_SCRIPT.to_owned(), download_directory: request.downloads, account: request.account, test_mode: false, diagnostics: self.snap.is_some() };
         let options = RunOptions { data_parent: browser_data_parent(), config, network_allowed: Arc::new(strata_net::network::is_allowed) };
         match NgiiRun::start(frame, options) {
             Ok(mut run) => {
@@ -129,7 +129,7 @@ impl StrataAppState {
             // A scripted run has nobody watching the gauge: its lines go to the log (phases and the
             // site's own words only; where the pages stand is named without query or form values).
             if self.snap.is_some() {
-                eprintln!("[SNAP] 수치지형 {state:?} | {}", run.page_outline());
+                eprintln!("[SNAP] 수치지형 {state:?} | {} | {}", run.page_outline(), run.with_state(|m| m.last_diagnostic().to_owned()));
             }
             self.topo.shown = Some(state);
         }
@@ -138,6 +138,8 @@ impl StrataAppState {
             if self.snap.is_some() {
                 let files: Vec<_> = self.topo.received.iter().map(|(path, _)| path.display().to_string()).collect();
                 eprintln!("[SNAP] 수치지형 끝: 받은 도엽 자료 {} — {files:?}", files.len());
+                eprintln!("[SNAP] 수치지형 경과: {}", run.with_state(|m| m.answer_trace().join(" | ")));
+                eprintln!("[SNAP] 수치지형 브라우저: {}", run.reported().join(" | "));
             }
             self.topo.run = None;
             self.topo.job = None;

@@ -48,7 +48,7 @@ impl Runner {
             birth_date: "1990/01/01".into(),
             purpose: "회귀 테스트용 가상 신청".into(),
         };
-        let config = AutoConfig { portal_url: site.url("/ms/map/NlipMap.do?tabGb=total"), script: PAGE_SCRIPT.to_owned(), download_directory: downloads.clone(), account, test_mode: true };
+        let config = AutoConfig { portal_url: site.url("/ms/map/NlipMap.do?tabGb=total"), script: PAGE_SCRIPT.to_owned(), download_directory: downloads.clone(), account, test_mode: true, diagnostics: false };
         let options = RunOptions { data_parent: self.work.join("profile"), config, network_allowed: Arc::new(|| false) };
         let mut run = NgiiRun::start(frame, options).map_err(|e| e.to_string())?;
         let list = |numbers: &[&str]| numbers.iter().map(|n| (*n).to_owned()).collect();

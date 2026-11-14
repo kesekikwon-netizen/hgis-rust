@@ -103,6 +103,30 @@ fn the_selection_answer_decides_between_nothing_everything_kept_and_an_order() {
     );
 }
 
+/// `:780, 804-809` — with diagnostics on, the page script says at which of its checks it stopped (a stage
+/// and a step name, never page content); the run keeps the last such note for the log.
+#[test]
+fn the_page_scripts_diagnostic_note_is_asked_for_and_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut machine, mut host) = started(dir.path());
+    let mut now = 0;
+    let (_, input) = round(&mut machine, &mut host, &mut now, SELECTED);
+    assert_eq!(input["diagnostics"], json!(false), "off unless the run was set up with it");
+    assert_eq!(machine.last_diagnostic(), "");
+
+    let mut host = super::tests_support::FakeHost::with_portal();
+    let mut machine = super::NgiiAutomation::new(super::AutoConfig { diagnostics: true, ..super::tests_support::config(dir.path()) });
+    machine.prepare_sheets(&mut host, super::tests_support::scope(), 0);
+    let mut now = 0;
+    let (_, input) = round(&mut machine, &mut host, &mut now, SELECTED);
+    assert_eq!(input["diagnostics"], json!(true));
+    round(&mut machine, &mut host, &mut now, r#"{"state":"blocked","message":"공식 로그인 또는 신청 화면을 확인하지 못했습니다.","diagnostics":{"stage":"openForm","step":"authentication"}}"#);
+    assert_eq!(machine.stage(), Stage::Stopped);
+    assert_eq!(machine.last_diagnostic(), r#"{"stage":"openForm","step":"authentication"}"#);
+    // The course of the run for the log: which page was asked what and what it answered, each change once.
+    assert_eq!(machine.answer_trace(), ["p1 select>selected", "p1 openForm>blocked"]);
+}
+
 /// `:829-838, 881-884`
 #[test]
 fn the_order_moves_on_by_the_answers_of_its_own_stage() {
@@ -155,6 +179,40 @@ fn a_reloaded_map_page_starts_the_selection_again() {
     let before = machine.generation();
     machine.page_loaded(&mut host, PageId(1), 9000);
     assert_eq!((machine.stage(), machine.generation()), (Stage::Files, before));
+}
+
+/// Seen on the real site on 2026-11-15: after the login the map page loads anew and takes seconds to do
+/// so. Its address is the map's from the first moment, and a page script asked then finds the member
+/// logged in and no sheet list, and stops the run ("checkboxes"). The page is left alone while it loads;
+/// when it has loaded, the selection starts again (`:591-596`).
+#[test]
+fn a_map_page_that_is_still_loading_anew_is_not_asked_to_open_the_form() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut machine, mut host) = started(dir.path());
+    let mut now = 0;
+    round(&mut machine, &mut host, &mut now, SELECTED);
+    round(&mut machine, &mut host, &mut now, r#"{"state":"waitingLogin"}"#);
+    // The login moved the first page away and brings it back: the load of the map page starts.
+    machine.page_load_started(&host, PageId(1));
+    let asked = host.calls().len();
+    for _ in 0..80 {
+        now += STEP;
+        machine.tick(&mut host, now);
+    }
+    assert_eq!(host.calls().len(), asked, "nothing is asked of the page while it loads");
+    assert_eq!(machine.stage(), Stage::OpenForm, "and waiting for it is not counted as a missing page");
+    let before = machine.generation();
+    machine.page_loaded(&mut host, PageId(1), now);
+    assert_eq!((machine.stage(), machine.generation()), (Stage::Select, before + 1));
+    let (_, input) = round(&mut machine, &mut host, &mut now, r#"{"state":"querying"}"#);
+    assert_eq!(input["command"], json!("select"));
+
+    // The first load of the map page is asked at once, as before: the selection waits for the map itself.
+    let (mut machine, mut host) = started(dir.path());
+    machine.page_load_started(&host, PageId(1));
+    let mut now = 0;
+    let (_, input) = round(&mut machine, &mut host, &mut now, r#"{"state":"waitingLayout"}"#);
+    assert_eq!(input["command"], json!("select"));
 }
 
 /// `:224-236`

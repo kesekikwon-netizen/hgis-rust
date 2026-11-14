@@ -139,6 +139,9 @@ pub struct AutoConfig {
     pub account: Account,
     /// Lets a portal on 127.0.0.1 stand in for the real one (`QStandardPaths::isTestModeEnabled()`).
     pub test_mode: bool,
+    /// Asks the page script to say at which of its checks it stopped (`KA_HGIS_NGII_DIAGNOSTICS=1` in the
+    /// C++, `:780`). The note names a stage and a step, never page content.
+    pub diagnostics: bool,
 }
 
 /// What the stage logic tells its caller.

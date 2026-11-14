@@ -35,7 +35,7 @@ impl NgiiAutomation {
             input.insert("cachedNumbers".into(), json!(scope.cached_numbers));
         }
         input.insert("command".into(), json!(command));
-        input.insert("diagnostics".into(), json!(false));
+        input.insert("diagnostics".into(), json!(self.config.diagnostics));
         input.insert("generation".into(), json!(self.generation.to_string()));
         if let Some(number) = self.current_record.get("num") {
             input.insert("number".into(), number.clone());
@@ -62,7 +62,12 @@ impl NgiiAutomation {
             return;
         }
         let download = matches!(self.stage, Stage::Files | Stage::Download);
-        let Some((page, login)) = self.page_to_ask(host) else {
+        let asked = self.page_to_ask(host);
+        // A map page that is loading anew is left alone; this is waiting, not a missing page.
+        if asked.is_some_and(|(page, login)| !login && self.reloading.contains(&page)) {
+            return;
+        }
+        let Some((page, login)) = asked else {
             self.wait_ticks += 1;
             if self.wait_ticks == 75 {
                 let words = if download {

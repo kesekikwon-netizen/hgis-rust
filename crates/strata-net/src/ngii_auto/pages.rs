@@ -9,9 +9,18 @@ impl NgiiAutomation {
     /// A page was opened or began to load (`:536-550`). Named transfer windows can be reused: only a fresh
     /// load from the page that is submitting may supply the current order's file list.
     pub fn page_load_started(&mut self, host: &dyn PageHost, page: PageId) {
-        let opener = host.pages().iter().find(|p| p.id == page).and_then(|p| p.opener);
+        let loading = host.pages().into_iter().find(|p| p.id == page);
+        let opener = loading.as_ref().and_then(|p| p.opener);
         if opener.is_some() && opener == self.order_page && matches!(self.stage, Stage::Order | Stage::Files) {
             self.order_popups.insert(page, (self.generation, self.current_number()));
+        }
+        // After a login the map page loads anew, and its address is the map's long before its content is
+        // there (seconds on the real site). Asked to open the form then, the page script finds the member
+        // logged in and no sheet list, and stops the run. The page is not asked until it has loaded; then
+        // the selection starts again (`page_loaded`).
+        let map_again = self.portal.as_ref().zip(loading).is_some_and(|(portal, p)| UrlParts::parse(&p.url).is_some_and(|url| portal_map(portal, &url)));
+        if map_again && matches!(self.stage, Stage::OpenForm | Stage::Form | Stage::Submit) && !self.reloading.contains(&page) {
+            self.reloading.push(page);
         }
     }
 
@@ -20,6 +29,7 @@ impl NgiiAutomation {
         let Some(portal) = self.portal.clone() else {
             return;
         };
+        self.reloading.retain(|p| *p != page);
         let Some(loaded) = host.pages().into_iter().find(|p| p.id == page) else {
             return;
         };

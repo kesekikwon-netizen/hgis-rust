@@ -56,6 +56,16 @@ impl NgiiAutomation {
     fn answered(&mut self, host: &mut dyn PageHost, command: &str, page: PageId, result: &Map<String, Value>, now: u64) {
         let state = text(result, "state");
         let message = text(result, "message");
+        if let Some(note) = result.get("diagnostics").filter(|d| d.as_object().is_some_and(|o| !o.is_empty())) {
+            self.last_diagnostic = note.to_string();
+        }
+        let step = format!("p{} {command}>{state}", page.0);
+        if self.trace.last() != Some(&step) {
+            if self.trace.len() >= 200 {
+                self.trace.remove(0);
+            }
+            self.trace.push(step);
+        }
         if state.is_empty() {
             self.wait_ticks += 1;
             if self.wait_ticks == 75 {
