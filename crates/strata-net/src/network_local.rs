@@ -87,10 +87,8 @@ fn validate_offline_local_args(args: &[&OsStr]) -> io::Result<()> {
             return Err(denied("non-utf8 curl option"));
         };
         if arg == "--" {
-            if i + 1 < args.len() {
-                return Err(denied("positional url refused"));
-            }
-            break;
+            // Also as the last argument: the guards appended after it would be read as URLs (`NET0c5`).
+            return Err(denied("positional url refused"));
         }
         if arg.starts_with("--") {
             let (raw_opt, inline_val) = match arg.split_once('=') {

@@ -8,8 +8,8 @@ use std::net::TcpListener;
 use std::process::Command;
 
 use super::local_curl_guard_args;
-use crate::curl_stdin::output_with_url_on_stdin;
-use crate::network::{allow_launch_urls, is_local_target, probe_dry_run};
+use crate::curl_stdin::{curl_url_config, output_with_url_on_stdin};
+use crate::network::{allow_launch_urls, is_local_target, probe_dry_run, run_curl_url_with_stdin};
 
 #[test]
 fn only_a_plain_drive_letter_file_url_is_local_and_nothing_else_launches_offline() {
@@ -72,4 +72,26 @@ fn offline_local_launch_switches_curl_globbing_off() {
     assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
     assert_eq!(out.stdout, b"ok");
     assert_eq!(server.join().expect("server thread"), "GET /{a,b} HTTP/1.1");
+}
+
+#[test]
+fn a_double_dash_among_the_arguments_is_refused_because_the_guards_after_it_would_be_read_as_urls() {
+    let url = "http://127.0.0.1:18080/tile.png";
+    // Through the public entry `--config -` follows the caller's arguments, so a `--` is never last there.
+    for args in [&["-sS", "--"][..], &["--"][..], &["-sS", "--", "http://127.0.0.1:18080/other"][..]] {
+        let (launches, recorded) = probe_dry_run(false, || {
+            let mut cmd = Command::new("curl");
+            cmd.args(args);
+            assert!(output_with_url_on_stdin(cmd, url).is_err(), "expected a refusal for {args:?}");
+        });
+        assert_eq!((launches, recorded.len()), (0, 0), "must not launch: {args:?}");
+    }
+    // Inside the crate a `--` can come last; the guards appended after it would become URLs (review of NET0c5).
+    let (launches, recorded) = probe_dry_run(false, || {
+        let mut cmd = Command::new("curl");
+        cmd.args(["-sS", "--config", "-", "--"]);
+        let err = run_curl_url_with_stdin(cmd, url, curl_url_config(url).as_bytes()).expect_err("a trailing -- must fail");
+        assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+    });
+    assert_eq!((launches, recorded.len()), (0, 0));
 }
