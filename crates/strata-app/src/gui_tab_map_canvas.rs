@@ -100,6 +100,7 @@ impl StrataAppState {
                 ui,
                 rect,
                 response.hover_pos(),
+                self.map_wheel_block_reason(),
                 &mut self.home_map.viewport,
             );
         }

@@ -27,6 +27,85 @@
 use eframe::egui::{self, Event, MouseWheelUnit, Pos2, Rect};
 use strata_canvas2d::viewport::ViewportTransform;
 
+use crate::app_state::StrataAppState;
+use crate::dialogs_modal::ActiveModalDialog;
+
+/// Why background map wheel zoom is ignored on this frame (`d3`: app state only, no `any_popup_open`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WheelBlockReason {
+    /// Dialog that calls `QDialog::exec()` in C++ Strata.
+    ModalDialog,
+    /// Open popup menu (ribbon dropdowns, map/layer context menus, province/snap/theme/scale menus).
+    PopupMenu,
+    /// Region address popup (`#regionAddressPopup`, Qt popup grabs the wheel in `KaRegionLocator.cpp:176-286`).
+    RegionAddressPopup,
+}
+
+impl StrataAppState {
+    /// Returns why the map canvas must ignore wheel zoom while covered by C++-equivalent modals or popups.
+    ///
+    /// Ignores the wheel ONLY for C++ `exec()` modals, popup menus, and `ka_region_address_popup`.
+    /// Leaves the wheel active alongside the 9 non-modal C++ windows (`KaTopographicBrowser.cpp:121`,
+    /// `KaHeritageBrowser.cpp:205`, `KaDownloadUi.cpp:40`, `KaDemClassDialog.cpp`, `KaReferenceStatusDialog.cpp`,
+    /// `KaTrenchDialog.cpp`, `KaTopographicImportDialog.cpp`, `KaCadImportNotice.cpp`),
+    /// `ka_download_gauge_popup`, and egui-memory-only ComboBox/popup widgets.
+    #[must_use]
+    pub(crate) fn map_wheel_block_reason(&self) -> Option<WheelBlockReason> {
+        let modal_dialog = self.modals.active.is_some_and(|kind| match kind {
+            ActiveModalDialog::NewSurvey
+            | ActiveModalDialog::SurveyContour
+            | ActiveModalDialog::AccountSettings
+            | ActiveModalDialog::ExportSubmitPackage
+            | ActiveModalDialog::PaperSetup
+            | ActiveModalDialog::HeritageRegionSelect
+            | ActiveModalDialog::PaleoSourceDownload
+            | ActiveModalDialog::PdfPreparing
+            | ActiveModalDialog::DrawingPrint
+            | ActiveModalDialog::ControlPoint
+            | ActiveModalDialog::SurveyArea
+            | ActiveModalDialog::LineColor => true,
+            ActiveModalDialog::NgiiTopoDownload
+            | ActiveModalDialog::HeritageBrowser
+            | ActiveModalDialog::CadastralDownload
+            | ActiveModalDialog::DemDownload
+            | ActiveModalDialog::DemClass
+            | ActiveModalDialog::ReferenceStatus
+            | ActiveModalDialog::TrenchGenerator
+            | ActiveModalDialog::TopographicImport
+            | ActiveModalDialog::CadImportNotice => false,
+        });
+        if modal_dialog
+            || self.modal_window_open()
+            || self.close_prompt_open
+            || !self.ribbon.app_bar.search_results_modal.is_empty()
+            || self.ribbon.app_bar.search_error_modal.is_some()
+        {
+            return Some(WheelBlockReason::ModalDialog);
+        }
+        let menu_open = self.ribbon.paleo_menu_open
+            || self.ribbon.geology_menu_open
+            || self.ribbon.dem_menu_open
+            || self.ribbon.soil_menu_open
+            || self.ribbon.cadastral_menu_open
+            || self.ribbon.topo_menu_open
+            || self.ribbon.old_map_menu_open
+            || self.ribbon.more_menu_open
+            || self.map_context_menu_open
+            || self.layer_context_menu_open
+            || self.ribbon.app_bar.region_popup_open
+            || (self.ribbon.snap_assist_menu_open && self.draw_row_open())
+            || self.theme_menu_open
+            || self.scale_menu_open;
+        if menu_open {
+            return Some(WheelBlockReason::PopupMenu);
+        }
+        self.ribbon
+            .app_bar
+            .address_popup_open
+            .then_some(WheelBlockReason::RegionAddressPopup)
+    }
+}
+
 /// Scale factor per wheel notch and per `+` / `−` click (`target/cpp-ref/src/core/LayerOps.h:44`).
 pub(crate) const WHEEL_ZOOM_FACTOR: f64 = 1.2;
 
@@ -56,25 +135,16 @@ pub(crate) fn wheel_zoom_mpp_factor(notches: f64, ctrl: bool) -> f64 {
 
 /// Applies all `Event::MouseWheel` events of this frame around the rectangle-local cursor position in `rect`.
 ///
-/// Modal dialogs in `strata-app` use centered `egui::Window` layers (`Order::Middle`, `egui-0.31.1/src/containers/area.rs:212`,
-/// `src/layers.rs:10-27`) without a full-screen backdrop, leaving the `CentralPanel` (`Order::Background`,
-/// `src/containers/panel.rs:384-390`) hovered beside the dialog. Ignore background wheel zoom whenever any modal,
-/// popup, or `Middle`/`Foreground` area is open (`src/memory/mod.rs:972-974, 1077-1079, 1229-1235, 1306-1318`).
+/// Wheel input is ignored only when `blocked` identifies an open C++ modal dialog, popup menu, or
+/// region address popup (never using `egui::Memory::any_popup_open()` or overlay layer checks).
 pub(crate) fn apply_map_wheel_zoom(
     ui: &egui::Ui,
     rect: Rect,
     hover_pos: Option<Pos2>,
+    blocked: Option<WheelBlockReason>,
     vp: &mut ViewportTransform,
 ) {
-    if ui.layer_id().order == egui::Order::Background
-        && ui.ctx().memory(|m| {
-            m.top_modal_layer().is_some()
-                || m.any_popup_open()
-                || m.areas().visible_layer_ids().iter().any(|l| {
-                    matches!(l.order, egui::Order::Middle | egui::Order::Foreground)
-                })
-        })
-    {
+    if blocked.is_some() {
         return;
     }
     let line_speed = f64::from(ui.ctx().options(|o| o.line_scroll_speed));
@@ -116,3 +186,9 @@ mod tests;
 #[cfg(test)]
 #[path = "map_wheel_zoom_tests_b.rs"]
 mod tests_b;
+#[cfg(test)]
+#[path = "map_wheel_zoom_tests_c.rs"]
+mod tests_c;
+#[cfg(test)]
+#[path = "map_wheel_zoom_tests_d.rs"]
+mod tests_d;

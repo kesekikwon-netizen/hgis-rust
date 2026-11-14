@@ -187,7 +187,8 @@ impl StrataAppState {
         .corner_radius(4.0)
         .min_size(Vec2::new(82.0, 22.0));
         let scale_btn = ui.add(scale_btn_widget);
-        if scale_btn.clicked() {
+        let toggled = scale_btn.clicked();
+        if toggled {
             self.scale_menu_open = !self.scale_menu_open;
             if self.scale_menu_open {
                 self.scale_input_buf = format!("1:{live_scale}");
@@ -195,7 +196,7 @@ impl StrataAppState {
         }
         if self.scale_menu_open {
             let popup_pos = egui::Pos2::new(scale_btn.rect.left(), (scale_btn.rect.top() - 165.0).max(40.0));
-            egui::Area::new(ui.id().with("ka_status_scale_popup"))
+            let area_resp = egui::Area::new(ui.id().with("ka_status_scale_popup"))
                 .fixed_pos(popup_pos)
                 .order(egui::Order::Foreground)
                 .show(ctx, |ui| {
@@ -224,6 +225,19 @@ impl StrataAppState {
                             }
                         });
                 });
+            // KaStatusBar.cpp:65-120 — editable QComboBox popup closes on Escape or outside click.
+            if !toggled && self.scale_menu_open {
+                let close = ctx.input(|i| {
+                    i.key_pressed(egui::Key::Escape)
+                        || ((i.pointer.any_pressed() || i.pointer.any_click())
+                            && i.pointer.interact_pos().is_some_and(|p| {
+                                !area_resp.response.rect.contains(p) && !scale_btn.rect.contains(p)
+                            }))
+                });
+                if close {
+                    self.scale_menu_open = false;
+                }
+            }
         }
         ui.label(egui::RichText::new("축척").size(11.5).color(Color32::from_rgb(94, 93, 89)));
         if self.active_tab == MainTab::Map {

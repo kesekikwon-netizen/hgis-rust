@@ -12,7 +12,7 @@ impl StrataAppState {
             return;
         }
         let popup_pos = Pos2::new(assist_rect.left(), assist_rect.bottom() + 4.0);
-        egui::Area::new(ui.id().with("ka_snap_assist_menu"))
+        let area_resp = egui::Area::new(ui.id().with("ka_snap_assist_menu"))
             .fixed_pos(popup_pos)
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
@@ -76,5 +76,17 @@ impl StrataAppState {
                         }
                     });
             });
+        // KaDrawSketchTools.cpp:42-90 — assistMenu is a QMenu: Escape or click outside closes it.
+        if self.ribbon.snap_assist_menu_open
+            && ctx.input(|i| {
+                i.key_pressed(egui::Key::Escape)
+                    || ((i.pointer.any_pressed() || i.pointer.any_click())
+                        && i.pointer.interact_pos().is_some_and(|p| {
+                            !area_resp.response.rect.contains(p) && !assist_rect.contains(p)
+                        }))
+            })
+        {
+            self.ribbon.snap_assist_menu_open = false;
+        }
     }
 }

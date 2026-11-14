@@ -132,12 +132,13 @@ impl StrataAppState {
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
+                let mut theme_popup_rect: Option<egui::Rect> = None;
                 if self.theme_menu_open {
                     let popup_pos = Pos2::new(
                         (tabbar_rect.right() - 220.0).max(16.0),
                         tabbar_rect.bottom() + 4.0,
                     );
-                    egui::Area::new(ui.id().with("ka_theme_menu_popup"))
+                    let area_resp = egui::Area::new(ui.id().with("ka_theme_menu_popup"))
                         .fixed_pos(popup_pos)
                         .order(egui::Order::Foreground)
                         .show(ctx, |ui| {
@@ -230,6 +231,7 @@ impl StrataAppState {
                                     }
                                 });
                         });
+                    theme_popup_rect = Some(area_resp.response.rect);
                 }
                 // MainWindowChrome.cpp:144-155 — 탭 줄 오른쪽 끝: 「테마 ▾」(언제나)와 그 왼쪽의 조사 배지.
                 let theme_btn = egui::Button::new(
@@ -241,12 +243,26 @@ impl StrataAppState {
                 .stroke(Stroke::new(1.0, Color32::from_rgb(195, 192, 182)))
                 .corner_radius(5.0)
                 .min_size(Vec2::new(56.0, 24.0));
-                if ui
+                let theme_resp = ui
                     .add(theme_btn)
-                    .on_hover_text("화면 테마·모양·글자 크기 설정")
-                    .clicked()
-                {
+                    .on_hover_text("화면 테마·모양·글자 크기 설정");
+                let theme_toggled = theme_resp.clicked();
+                if theme_toggled {
                     self.theme_menu_open = !self.theme_menu_open;
+                }
+                // KaThemeOptions.cpp — QMenu closes on Escape or outside click.
+                if !theme_toggled && self.theme_menu_open {
+                    let close = ctx.input(|i| {
+                        i.key_pressed(egui::Key::Escape)
+                            || ((i.pointer.any_pressed() || i.pointer.any_click())
+                                && i.pointer.interact_pos().is_some_and(|p| {
+                                    !theme_resp.rect.contains(p)
+                                        && theme_popup_rect.is_some_and(|r| !r.contains(p))
+                                }))
+                    });
+                    if close {
+                        self.theme_menu_open = false;
+                    }
                 }
                 // KaSurveyBadge.cpp:32-62 — 조사 파일이 열려 있을 때만 「<파일 이름> 저장됨」(새 모양).
                 let survey_name = self

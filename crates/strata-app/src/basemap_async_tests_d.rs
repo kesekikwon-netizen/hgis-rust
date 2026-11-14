@@ -259,12 +259,17 @@ fn test_map1d_held_button_without_movement_past_click_duration_does_not_block_re
 
     // 1.0 s > 0.8 s (`max_click_duration`) held at p0 without moving: `could_any_button_be_click()` is false, yet not dragging.
     *now_cell.lock().unwrap() = t0 + Duration::from_secs(1);
+    let (hold_tx, hold_rx) = std::sync::mpsc::channel::<()>();
+    let hold_rx = std::sync::Arc::new(std::sync::Mutex::new(hold_rx));
     run_frame_events_at(&ctx, rect, Some(1.0), vec![], |ctx, p| {
-        app.paint_basemap_layer_with(ctx, p, rect, |_k, _key, _z, _x, _y| move || Some(one_px()));
+        app.paint_basemap_layer_with(ctx, p, rect, |_k, _key, _z, _x, _y| {
+            let rx = std::sync::Arc::clone(&hold_rx);
+            move || { let _ = rx.lock().unwrap().recv(); Some(one_px()) }
+        });
     });
+    assert_eq!(app.basemap_fetch.requests_started(), MAX_IN_FLIGHT, "stationary button hold > 0.8 s must not block tile requests");
+    drop(hold_tx);
     app.basemap_fetch.wait_for_idle();
-    // At least the ceiling: a worker that ends while this frame is still asking frees its slot for one more request.
-    assert!(app.basemap_fetch.requests_started() >= MAX_IN_FLIGHT, "stationary button hold > 0.8 s must not block tile requests");
 
     // Release, pan to fresh view, press at p0, drag 40 pt (> 6.0 pt) and back onto p0 while still held:
     run_frame_events_at(&ctx, rect, Some(1.1), vec![btn(p0, false)], |ctx, p| {

@@ -160,12 +160,16 @@ impl StrataAppState {
         for id in dismiss_ids {
             let _ = self.download_jobs.dismiss(id);
         }
-        if !toggled && ctx.input(|i| i.pointer.primary_clicked()) {
-            if let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) {
-                if !area_resp.response.rect.contains(pos) && !gauge_rect.contains(pos) {
-                    self.download_jobs.popup_open = false;
-                }
-            }
+        if !toggled
+            && ctx.input(|i| {
+                i.key_pressed(egui::Key::Escape)
+                    || ((i.pointer.any_pressed() || i.pointer.any_click())
+                        && i.pointer.interact_pos().is_some_and(|pos| {
+                            !area_resp.response.rect.contains(pos) && !gauge_rect.contains(pos)
+                        }))
+            })
+        {
+            self.download_jobs.popup_open = false;
         }
     }
 }

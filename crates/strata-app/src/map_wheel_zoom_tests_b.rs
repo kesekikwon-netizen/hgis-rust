@@ -64,7 +64,7 @@ where
             let (r, response) = ui.allocate_exact_size(rect.size(), Sense::click_and_drag());
             app.home_map.viewport.screen_size_px = [f64::from(r.width()), f64::from(r.height())];
             if response.hovered() {
-                apply_map_wheel_zoom(ui, r, response.hover_pos(), &mut app.home_map.viewport);
+                apply_map_wheel_zoom(ui, r, response.hover_pos(), app.map_wheel_block_reason(), &mut app.home_map.viewport);
             }
             if let Some(mj) = make_job.take() {
                 app.paint_basemap_layer_with(ctx, &ui.painter_at(r), r, mj);
@@ -197,25 +197,27 @@ fn ten_wheel_notches_with_one_pause_starts_six_uncancelled_intermediate_requests
     }
     assert_eq!(app.basemap_fetch.requests_started(), 0);
 
-    // Pause 150 ms (>= 120 ms) at t = 310 ms: 6 jobs start at z = 16; hold 2 in flight, let 4 finish.
+    // Pause 150 ms (>= 120 ms) at t = 310 ms: hold all 6 z=16 workers before asserting exact count,
+    // then release 4 while keeping 2 in flight so remaining z=17 work shares the 6-job ceiling cleanly.
     let (mid_tx, mid_rx) = mpsc::channel::<TexKey>();
-    let (hold_tx, hold_rx) = mpsc::channel::<()>();
-    let (hold_rx, hold_cnt) = (Arc::new(Mutex::new(hold_rx)), Arc::new(Mutex::new(0_usize)));
+    let ((hold_tx, hold_rx), (rel4_tx, rel4_rx)) = (mpsc::channel::<()>(), mpsc::channel::<()>());
+    let (hold_rx, rel4_rx, hold_cnt) = (Arc::new(Mutex::new(hold_rx)), Arc::new(Mutex::new(rel4_rx)), Arc::new(Mutex::new(0_usize)));
     *now_cell.lock().unwrap() = t0 + Duration::from_millis(310);
     let zs = Arc::clone(&started_zs);
     run_burst_frame(&mut app, &ctx, rect, vec![Event::PointerMoved(hover)], move |kind, _key, z, tx, ty| {
-        let (zs, mid_tx, hold_rx, cnt) = (Arc::clone(&zs), mid_tx.clone(), Arc::clone(&hold_rx), Arc::clone(&hold_cnt));
+        let (zs, mid_tx, hold_rx, rel4_rx, cnt) = (Arc::clone(&zs), mid_tx.clone(), Arc::clone(&hold_rx), Arc::clone(&rel4_rx), Arc::clone(&hold_cnt));
         move || {
             zs.lock().unwrap().push(z);
             let idx = { let mut g = cnt.lock().unwrap(); *g += 1; *g };
             let _ = mid_tx.send((kind, z, tx, ty));
-            if idx <= 2 { let _ = hold_rx.lock().unwrap().recv(); }
+            let _ = if idx <= 2 { hold_rx.lock().unwrap().recv() } else { rel4_rx.lock().unwrap().recv() };
             Some(one_px())
         }
     });
     assert_eq!(app.basemap_fetch.requests_started(), MAX_IN_FLIGHT);
     let mid_keys: Vec<TexKey> = (0..MAX_IN_FLIGHT).map(|_| mid_rx.recv().unwrap()).collect();
     assert!(mid_keys.iter().all(|&(_, z, _, _)| z == 16), "pause after notch 5 must request z=16");
+    drop(rel4_tx);
     while app.basemap_fetch.in_flight_count() > 2 {
         std::thread::yield_now();
     }
@@ -228,17 +230,27 @@ fn ten_wheel_notches_with_one_pause_starts_six_uncancelled_intermediate_requests
         assert_eq!(app.basemap_fetch.in_flight_count(), 2, "in-flight z=16 jobs must not be cancelled");
     }
 
-    // Rest at t = 630 ms (510 + 120 ms < 1.0 s): 2 z=16 jobs still running -> ceiling 6 starts 4 z=17 jobs.
+    // Rest at t = 630 ms (510 + 120 ms < 1.0 s): hold all 4 z=17 workers so none frees a slot early.
+    let ((fin_tx, fin_rx), (fin_hold_tx, fin_hold_rx)) = (mpsc::channel::<u8>(), mpsc::channel::<()>());
+    let fin_hold_rx = Arc::new(Mutex::new(fin_hold_rx));
     *now_cell.lock().unwrap() = t0 + Duration::from_millis(510) + VIEW_REST_TIME;
     let zs = Arc::clone(&started_zs);
     run_burst_frame(&mut app, &ctx, rect, vec![Event::PointerMoved(hover)], move |_k, _key, z, _x, _y| {
-        let zs = Arc::clone(&zs);
-        move || { zs.lock().unwrap().push(z); Some(one_px()) }
+        let (zs, fin_tx, fin_hold_rx) = (Arc::clone(&zs), fin_tx.clone(), Arc::clone(&fin_hold_rx));
+        move || { zs.lock().unwrap().push(z); let _ = fin_tx.send(z); let _ = fin_hold_rx.lock().unwrap().recv(); Some(one_px()) }
     });
     assert_eq!(app.basemap_fetch.requests_started(), MAX_IN_FLIGHT + 4);
+    for _ in 0..4 {
+        assert_eq!(fin_rx.recv().unwrap(), 17);
+    }
     drop(hold_tx);
+    drop(fin_hold_tx);
     app.basemap_fetch.wait_for_idle();
-    run_burst_frame(&mut app, &ctx, rect, vec![Event::PointerMoved(hover)], |_k, _key, _z, _x, _y| move || None);
+    // `MAX_UPLOADS_PER_FRAME` (8) caps each frame while 10 tiles (6 z=16 + 4 z=17) finished, so drain two frames.
+    for _ in 0..2 {
+        run_burst_frame(&mut app, &ctx, rect, vec![Event::PointerMoved(hover)], |_k, _key, _z, _x, _y| move || None);
+        app.basemap_fetch.wait_for_idle();
+    }
     assert!(app.basemap_textures.get(&mid_keys[0]).is_some(), "completed z=16 job uploads for stand-in use");
     let log = started_zs.lock().unwrap().clone();
     assert_eq!((&log[..6], &log[6..]), (&[16; 6][..], &[17; 4][..]));
