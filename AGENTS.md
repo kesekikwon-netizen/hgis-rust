@@ -44,6 +44,9 @@ not apply here. Where this file and `CLAUDE.md` differ, this file wins. Plan: `d
 - Work CRS is EPSG:5187 (default) or EPSG:5186. EPSG:5179 is for the submit package only.
 - Startup shows the home screen. No autosave and no auto-restore.
 - Shown data must be real: no invented records, coordinates, counts, file metadata or "done" messages without the work.
+- The app differs from the C++ app on purpose only where an order names an owner decision (docs/RUST_PLAN.md sections 1 and 2.8:
+  the download gauge, polite site access, a more refined look). Everything else follows the C++ app.
+- Tests and tools never contact an external site and never use the user's keys or accounts: fake values and recorded answers only.
 
 ## C++ reference
 
