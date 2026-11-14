@@ -124,7 +124,8 @@ impl ChecklistEngine {
                     message_ko: r.message_ko,
                     severity,
                     passed: r.passed,
-                    target_world_xy: Some([219_745.6, 360_930.5]),
+                    // C++ CheckResult has no map coordinate (target/cpp-ref/src/core/ChecklistEngine.h:16-26).
+                    target_world_xy: None,
                 }
             })
             .collect()
@@ -198,7 +199,8 @@ impl ChecklistEngine {
                     message_ko: r.message_ko.clone(),
                     severity,
                     passed,
-                    target_world_xy: protruding_xy.or(Some([219_745.6, 360_930.5])),
+                    // Carry a coordinate only when a feature protrudes (target/cpp-ref/src/core/ChecklistEngine.cpp:23,92,150).
+                    target_world_xy: protruding_xy,
                 }
             })
             .collect();
@@ -212,3 +214,7 @@ impl ChecklistEngine {
         Ok(findings)
     }
 }
+
+#[cfg(test)]
+#[path = "check_sheet_tests.rs"]
+mod check_sheet_tests;

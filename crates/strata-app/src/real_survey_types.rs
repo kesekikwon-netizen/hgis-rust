@@ -86,19 +86,6 @@ pub fn ring_perimeter_m(ring: &[[f64; 2]]) -> f64 {
     p
 }
 
-pub fn ring_centroid(ring: &[[f64; 2]]) -> [f64; 2] {
-    if ring.is_empty() {
-        return [219_745.6, 360_930.5];
-    }
-    let (mut sx, mut sy) = (0.0, 0.0);
-    for p in ring {
-        sx += p[0];
-        sy += p[1];
-    }
-    let n = ring.len() as f64;
-    [sx / n, sy / n]
-}
-
 /// 레이어 메뉴 「라벨·명칭 속성」이 바꾼 것(C++ 은 그 레이어의 라벨 설정·ka_hgis/label_font_size).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub(crate) struct LabelView {
