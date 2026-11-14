@@ -16,6 +16,8 @@ pub mod submit_package;
 pub mod submit_audit;
 pub mod submit_export;
 pub mod submit_manifest;
+pub mod user_sheet;
+pub use user_sheet::{survey_user_sheet, SheetCheck};
 #[cfg(feature = "gdal")]
 pub mod submit_builder;
 #[cfg(feature = "gdal")]

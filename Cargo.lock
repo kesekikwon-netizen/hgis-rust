@@ -3532,6 +3532,7 @@ dependencies = [
  "chrono",
  "iana-time-zone",
  "quick-xml 0.37.5",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
