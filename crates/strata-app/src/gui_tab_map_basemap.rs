@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use eframe::egui::{self, Color32, Rect};
 
 use crate::app_state::StrataAppState;
-use crate::basemap_cadastral_jobs::{CadKey, MAX_UPLOADS_PER_FRAME};
+use crate::basemap_cadastral_jobs::{CadKey, RestDecision, MAX_UPLOADS_PER_FRAME};
 use crate::basemap_mesh::{paint_tile_mesh, screen_center_lat, screen_tile_range, tile_mesh_points};
 use crate::basemap_paint::{paint_tile_stand_in, tm_params_for, TileView, FULL_UV};
 use crate::basemap_tiles::TileKind;
@@ -212,13 +212,22 @@ impl StrataAppState {
                 missing.push((dist_sq, tx, ty));
             }
         }
-        missing.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| (a.2, a.1).cmp(&(b.2, b.1))));
-        for &(_, tx, ty) in &missing {
-            let k = (z, tx, ty);
-            self.cadastral_fetch.request_with(k, Some(ctx), make_job(&key, z, tx, ty));
-        }
-        if let Some(delay) = self.cadastral_fetch.earliest_retry_delay(missing.iter().map(|&(_, tx, ty)| (z, tx, ty))) {
-            ctx.request_repaint_after(delay);
+        match self.cadastral_fetch.observe_view(ctx, &view, rect) {
+            RestDecision::AtRest => {
+                missing.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| (a.2, a.1).cmp(&(b.2, b.1))));
+                for &(_, tx, ty) in &missing {
+                    let k = (z, tx, ty);
+                    self.cadastral_fetch.request_with(k, Some(ctx), make_job(&key, z, tx, ty));
+                }
+                if let Some(delay) = self
+                    .cadastral_fetch
+                    .earliest_retry_delay(missing.iter().map(|&(_, tx, ty)| (z, tx, ty)))
+                {
+                    ctx.request_repaint_after(delay);
+                }
+            }
+            RestDecision::Waiting(delay) if !missing.is_empty() => ctx.request_repaint_after(delay),
+            RestDecision::Dragging | RestDecision::Waiting(_) => {}
         }
         if self.cadastral_cells.len() > CADASTRAL_TEXTURE_LIMIT {
             self.cadastral_cells.retain_keys(&used);

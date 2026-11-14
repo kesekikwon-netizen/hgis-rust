@@ -15,10 +15,12 @@ use strata_types::crs::WorkCrs;
 
 use crate::app_state::StrataAppState;
 use crate::basemap_cadastral_jobs::{
-    BasemapFetcher, CachedApiKey, TexKey, MAX_IN_FLIGHT, MAX_UPLOADS_PER_FRAME, RETRY_AFTER,
+    shared_tile_fetchers_with_clock, CachedApiKey, TexKey, MAX_IN_FLIGHT, MAX_UPLOADS_PER_FRAME,
+    RETRY_AFTER,
 };
 use crate::basemap_mesh::{screen_tile_range, tile_mesh_points};
 use crate::basemap_paint::{tm_params_for, TileView};
+use crate::basemap_tile_key::VIEW_REST_TIME;
 use crate::basemap_tiles::{basemap_zoom_for, TileKind};
 
 pub(super) const CHUNCHEON: (f64, f64) = (127.73, 37.88);
@@ -77,12 +79,30 @@ pub(super) fn run_frame(
     })
 }
 
+pub(super) fn settle_view_at(app: &mut StrataAppState, ctx: &egui::Context, rect: Rect, now: &Mutex<Instant>) {
+    run_frame(ctx, rect, |ctx, p| app.paint_basemap_layer_with(ctx, p, rect, |_k, _key, _z, _x, _y| move || None));
+    let next = *now.lock().unwrap() + VIEW_REST_TIME;
+    *now.lock().unwrap() = next;
+}
+
+pub(super) fn settle_initial_view(app: &mut StrataAppState, ctx: &egui::Context, rect: Rect) -> (Instant, Arc<Mutex<Instant>>) {
+    let t0 = Instant::now();
+    let now = Arc::new(Mutex::new(t0));
+    let r = Arc::clone(&now);
+    let (bg, cad) = shared_tile_fetchers_with_clock(Arc::new(move || *r.lock().unwrap()));
+    app.basemap_fetch = bg;
+    app.cadastral_fetch = cad;
+    settle_view_at(app, ctx, rect, &now);
+    (t0, now)
+}
+
 /// (1) Missing tiles run on background worker threads, never blocking the UI paint call, capped at 6 in flight.
 #[test]
 fn test_map1_1_paint_never_blocks_ui_thread_and_caps_in_flight_at_six() {
     let (mut app, rect) = map_app_at(CHUNCHEON.0, CHUNCHEON.1, 1.0, [1480.0, 625.0]);
     assert!(visible_tiles(&app, rect).len() > 12);
     let ctx = egui::Context::default();
+    settle_initial_view(&mut app, &ctx, rect);
     let caller = std::thread::current().id();
     let on_caller = Arc::new(AtomicUsize::new(0));
     let (started_tx, started_rx) = mpsc::channel::<(TexKey, std::thread::ThreadId)>();
@@ -91,15 +111,10 @@ fn test_map1_1_paint_never_blocks_ui_thread_and_caps_in_flight_at_six() {
 
     run_frame(&ctx, rect, |ctx, p| {
         app.paint_basemap_layer_with(ctx, p, rect, |kind, _key, z, tx, ty| {
-            let on_caller = Arc::clone(&on_caller);
-            let started_tx = started_tx.clone();
-            let release_rx = Arc::clone(&release_rx);
+            let (on_caller, started_tx, release_rx) = (Arc::clone(&on_caller), started_tx.clone(), Arc::clone(&release_rx));
             move || {
                 let tid = std::thread::current().id();
-                if tid == caller {
-                    on_caller.fetch_add(1, Ordering::SeqCst);
-                    return None;
-                }
+                if tid == caller { on_caller.fetch_add(1, Ordering::SeqCst); return None; }
                 let _ = started_tx.send(((kind, z, tx, ty), tid));
                 let _ = release_rx.lock().unwrap().recv();
                 Some(one_px())
@@ -109,15 +124,10 @@ fn test_map1_1_paint_never_blocks_ui_thread_and_caps_in_flight_at_six() {
 
     assert_eq!(on_caller.load(Ordering::SeqCst), 0, "tile jobs must not run on the UI thread");
     assert_eq!(app.basemap_tiles_painted, 0);
-    for _ in 0..MAX_IN_FLIGHT {
-        let (_, tid) = started_rx.recv().unwrap();
-        assert_ne!(tid, caller);
-    }
+    for _ in 0..MAX_IN_FLIGHT { assert_ne!(started_rx.recv().unwrap().1, caller); }
     assert_eq!(app.basemap_fetch.in_flight_count(), MAX_IN_FLIGHT);
     assert!(started_rx.try_recv().is_err(), "no 7th request may be in flight");
-    for _ in 0..MAX_IN_FLIGHT {
-        release_tx.send(()).unwrap();
-    }
+    for _ in 0..MAX_IN_FLIGHT { release_tx.send(()).unwrap(); }
     app.basemap_fetch.wait_for_idle();
 }
 
@@ -128,20 +138,16 @@ fn test_map1_2_uploads_at_most_eight_textures_per_frame_until_all_painted() {
     let vis: Vec<TexKey> = visible_tiles(&app, rect).into_iter().map(|(_, k)| k).collect();
     assert!(vis.len() >= 10 && vis.len() <= 24, "expected 10..=24 tiles, got {}", vis.len());
     let ctx = egui::Context::default();
+    settle_initial_view(&mut app, &ctx, rect);
 
     for chunk in vis[..10].chunks(MAX_IN_FLIGHT) {
         let (rel_tx, rel_rx) = mpsc::channel::<()>();
         let rel_rx = Arc::new(Mutex::new(rel_rx));
         for &k in chunk {
             let rx = Arc::clone(&rel_rx);
-            assert!(app.basemap_fetch.request_with(k, None, move || {
-                let _ = rx.lock().unwrap().recv();
-                Some(one_px())
-            }));
+            assert!(app.basemap_fetch.request_with(k, None, move || { let _ = rx.lock().unwrap().recv(); Some(one_px()) }));
         }
-        for _ in 0..chunk.len() {
-            rel_tx.send(()).unwrap();
-        }
+        for _ in 0..chunk.len() { rel_tx.send(()).unwrap(); }
         app.basemap_fetch.wait_for_idle();
     }
     assert_eq!(app.basemap_textures.len(), 0);
@@ -153,12 +159,7 @@ fn test_map1_2_uploads_at_most_eight_textures_per_frame_until_all_painted() {
     let out_a = run_frame(&ctx, rect, |ctx, p| {
         app.paint_basemap_layer_with(ctx, p, rect, |_kind, _key, _z, _tx, _ty| {
             let rx = Arc::clone(&rel_rx);
-            move || {
-                if std::thread::current().id() != caller {
-                    let _ = rx.lock().unwrap().recv();
-                }
-                Some(one_px())
-            }
+            move || { if std::thread::current().id() != caller { let _ = rx.lock().unwrap().recv(); } Some(one_px()) }
         });
     });
     assert_eq!(app.basemap_textures.len(), MAX_UPLOADS_PER_FRAME);
@@ -166,9 +167,7 @@ fn test_map1_2_uploads_at_most_eight_textures_per_frame_until_all_painted() {
     let delay = out_a.viewport_output[&egui::ViewportId::ROOT].repaint_delay;
     assert!(delay.is_zero(), "remaining finished images must request an immediate repaint");
 
-    for _ in 0..remaining.min(MAX_IN_FLIGHT) {
-        let _ = rel_tx.send(());
-    }
+    for _ in 0..remaining.min(MAX_IN_FLIGHT) { let _ = rel_tx.send(()); }
     app.basemap_fetch.wait_for_idle();
 
     for _ in 0..4 {
@@ -196,6 +195,7 @@ fn test_map1_3_requests_six_tiles_nearest_to_view_centre_first() {
         expected_all[MAX_IN_FLIGHT..].iter().copied().collect();
 
     let ctx = egui::Context::default();
+    let (_, now_cell) = settle_initial_view(&mut app, &ctx, rect);
     let caller = std::thread::current().id();
     let requested = Arc::new(Mutex::new(Vec::<TexKey>::new()));
     let (started_tx, started_rx) = mpsc::channel::<TexKey>();
@@ -231,10 +231,9 @@ fn test_map1_3_requests_six_tiles_nearest_to_view_centre_first() {
     assert_eq!(got, expected_first6, "first 6 in-flight tiles must be the 6 nearest to view centre");
 
     app.home_map.viewport.center_xy[0] += 50_000.0;
-    for _ in 0..MAX_IN_FLIGHT {
-        rel_tx.send(()).unwrap();
-    }
+    for _ in 0..MAX_IN_FLIGHT { rel_tx.send(()).unwrap(); }
     app.basemap_fetch.wait_for_idle();
+    settle_view_at(&mut app, &ctx, rect, &now_cell);
 
     let (started2_tx, started2_rx) = mpsc::channel::<TexKey>();
     let (rel2_tx, rel2_rx) = mpsc::channel::<()>();
@@ -268,14 +267,12 @@ fn test_map1_4_failed_tile_waits_for_retry_after_before_refetch() {
     let vis: Vec<TexKey> = visible_tiles(&app, rect).into_iter().map(|(_, k)| k).collect();
     assert!(!vis.is_empty() && vis.len() <= MAX_IN_FLIGHT);
     let target = vis[0];
-    let t0 = Instant::now();
-    let now_cell = Arc::new(Mutex::new(t0));
-    let clock_cell = Arc::clone(&now_cell);
-    app.basemap_fetch = BasemapFetcher::with_clock(Arc::new(move || *clock_cell.lock().unwrap()));
     let ctx = egui::Context::default();
+    let (_, now_cell) = settle_initial_view(&mut app, &ctx, rect);
+    let t_base = *now_cell.lock().unwrap();
     let target_calls = Arc::new(AtomicUsize::new(0));
     for (dt, fail) in [(Duration::ZERO, true), (Duration::from_secs(29), false), (RETRY_AFTER, false)] {
-        *now_cell.lock().unwrap() = t0 + dt;
+        *now_cell.lock().unwrap() = t_base + dt;
         run_frame(&ctx, rect, |ctx, p| {
             app.paint_basemap_layer_with(ctx, p, rect, |kind, _key, z, tx, ty| {
                 let calls = Arc::clone(&target_calls);

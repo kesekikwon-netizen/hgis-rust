@@ -12,7 +12,9 @@ use std::collections::{HashMap, HashSet};
 use eframe::egui::{self, Color32, Pos2, Rect};
 use strata_geo::crs_transform::TmParams;
 
-use crate::basemap_cadastral_jobs::{BasemapFetcher, CadKey, TexKey, MAX_UPLOADS_PER_FRAME};
+use crate::basemap_cadastral_jobs::{
+    BasemapFetcher, CadKey, RestDecision, TexKey, MAX_UPLOADS_PER_FRAME,
+};
 use crate::basemap_fetch::tile_filename_key;
 use crate::basemap_mesh::{paint_tile_mesh, screen_tile_range, tile_mesh_points};
 use crate::basemap_tiles::TileKind;
@@ -152,13 +154,21 @@ where
         }
     }
 
-    missing.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| (a.2, a.1).cmp(&(b.2, b.1))));
-    for &(_, tx, ty) in &missing {
-        let k = (kind, z, tx, ty);
-        fetcher.request_with(k, Some(ctx), make_job(kind, z, tx, ty));
-    }
-    if let Some(delay) = fetcher.earliest_retry_delay(missing.iter().map(|&(_, tx, ty)| (kind, z, tx, ty))) {
-        ctx.request_repaint_after(delay);
+    match fetcher.observe_view(ctx, view, rect) {
+        RestDecision::AtRest => {
+            missing.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| (a.2, a.1).cmp(&(b.2, b.1))));
+            for &(_, tx, ty) in &missing {
+                let k = (kind, z, tx, ty);
+                fetcher.request_with(k, Some(ctx), make_job(kind, z, tx, ty));
+            }
+            if let Some(delay) =
+                fetcher.earliest_retry_delay(missing.iter().map(|&(_, tx, ty)| (kind, z, tx, ty)))
+            {
+                ctx.request_repaint_after(delay);
+            }
+        }
+        RestDecision::Waiting(delay) if !missing.is_empty() => ctx.request_repaint_after(delay),
+        RestDecision::Dragging | RestDecision::Waiting(_) => {}
     }
 
     if textures.len() > BASEMAP_TEXTURE_LIMIT {
@@ -275,3 +285,9 @@ mod async_tests_b;
 #[cfg(test)]
 #[path = "basemap_async_tests_c.rs"]
 mod async_tests_c;
+#[cfg(test)]
+#[path = "basemap_async_tests_d.rs"]
+mod async_tests_d;
+#[cfg(test)]
+#[path = "basemap_async_tests_e.rs"]
+mod async_tests_e;

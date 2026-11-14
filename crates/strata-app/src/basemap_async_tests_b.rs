@@ -10,13 +10,17 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Rect, Shape};
 
-use crate::basemap_cadastral_jobs::{CachedApiKey, MAX_IN_FLIGHT};
-use crate::basemap_tile_key::KEY_REFRESH_INTERVAL;
+use crate::basemap_cadastral_jobs::{
+    shared_tile_fetchers_with_clock, CachedApiKey, MAX_IN_FLIGHT,
+};
+use crate::basemap_tile_key::{KEY_REFRESH_INTERVAL, VIEW_REST_TIME};
 use crate::basemap_mesh::tile_mesh_points;
 use crate::basemap_paint::{tm_params_for, TileView, BASEMAP_TEXTURE_LIMIT};
 use crate::basemap_tiles::TileKind;
 
-use super::async_tests_a::{map_app_at, one_px, run_frame, visible_tiles, CHUNCHEON};
+use super::async_tests_a::{
+    map_app_at, one_px, run_frame, settle_initial_view, settle_view_at, visible_tiles, CHUNCHEON,
+};
 
 pub(super) fn collect_meshes(shape: &Shape, out: &mut Vec<Arc<egui::Mesh>>) {
     match shape {
@@ -152,6 +156,7 @@ fn test_map1_7_cadastral_and_basemap_share_six_in_flight_ceiling() {
     // mpp = 0.5 => representative scale ~ 1:1,890, where both satellite and cadastral WMS are active.
     let (mut app, rect) = map_app_at(CHUNCHEON.0, CHUNCHEON.1, 0.5, [1480.0, 625.0]);
     let ctx = egui::Context::default();
+    let (_, now_cell) = settle_initial_view(&mut app, &ctx, rect);
 
     // Direction A: 6 cadastral jobs in flight -> background request refused.
     let cad_rel_tx = hold_six_cadastral(&mut app, &ctx, rect);
@@ -182,11 +187,10 @@ fn test_map1_7_cadastral_and_basemap_share_six_in_flight_ceiling() {
             move || { let _ = stx.send(()); let _ = rrx.lock().unwrap().recv(); None }
         });
     });
-    for _ in 0..MAX_IN_FLIGHT {
-        bg_started_rx.recv().unwrap();
-    }
+    for _ in 0..MAX_IN_FLIGHT { bg_started_rx.recv().unwrap(); }
 
     app.home_map.viewport.center_xy[0] += 8_000.0;
+    settle_view_at(&mut app, &ctx, rect, &now_cell);
     let cad_attempted = Arc::new(AtomicUsize::new(0));
     let cad_started = Arc::new(AtomicUsize::new(0));
     run_frame(&ctx, rect, |ctx, p| {
@@ -224,16 +228,14 @@ fn test_map1_8_api_key_store_is_not_read_on_every_frame() {
     let key_value = Arc::new(Mutex::new("FAKE-KEY-1".to_owned()));
     let reads = Arc::new(AtomicUsize::new(0));
 
-    let reads_r = Arc::clone(&reads);
-    let key_r = Arc::clone(&key_value);
-    let now_r = Arc::clone(&now_cell);
+    let (reads_r, key_r, now_r, now_f) = (Arc::clone(&reads), Arc::clone(&key_value), Arc::clone(&now_cell), Arc::clone(&now_cell));
     app.vworld_api_key = CachedApiKey::with_reader_and_clock(
-        Arc::new(move || {
-            reads_r.fetch_add(1, Ordering::SeqCst);
-            key_r.lock().unwrap().clone()
-        }),
+        Arc::new(move || { reads_r.fetch_add(1, Ordering::SeqCst); key_r.lock().unwrap().clone() }),
         Arc::new(move || *now_r.lock().unwrap()),
     );
+    let (bg, cad) = shared_tile_fetchers_with_clock(Arc::new(move || *now_f.lock().unwrap()));
+    app.basemap_fetch = bg;
+    app.cadastral_fetch = cad;
 
     let ctx = egui::Context::default();
     let seen_keys = Arc::new(Mutex::new(Vec::<String>::new()));
@@ -261,19 +263,18 @@ fn test_map1_8_api_key_store_is_not_read_on_every_frame() {
     *now_cell.lock().unwrap() = t0 + KEY_REFRESH_INTERVAL;
     app.home_map.viewport.center_xy[0] += 5_000.0;
     seen_keys.lock().unwrap().clear();
-    run_frame(&ctx, rect, |ctx, p| {
-        app.paint_basemap_layer_with(ctx, p, rect, |_k, api_key, _z, _x, _y| {
-            let seen = Arc::clone(&seen_keys);
-            let owned = api_key.to_owned();
-            move || {
-                seen.lock().unwrap().push(owned);
-                Some(one_px())
-            }
+    for dt in [Duration::ZERO, VIEW_REST_TIME] {
+        *now_cell.lock().unwrap() = t0 + KEY_REFRESH_INTERVAL + dt;
+        run_frame(&ctx, rect, |ctx, p| {
+            app.paint_basemap_layer_with(ctx, p, rect, |_k, api_key, _z, _x, _y| {
+                let (seen, owned) = (Arc::clone(&seen_keys), api_key.to_owned());
+                move || { seen.lock().unwrap().push(owned); Some(one_px()) }
+            });
         });
-    });
+    }
     app.basemap_fetch.wait_for_idle();
     assert_eq!(reads.load(Ordering::SeqCst), 2);
-    assert!(seen_keys.lock().unwrap().iter().all(|k| k == "FAKE-KEY-2"));
+    assert!(!seen_keys.lock().unwrap().is_empty() && seen_keys.lock().unwrap().iter().all(|k| k == "FAKE-KEY-2"));
 }
 
 /// (f4b) Textures used as stand-ins in this frame are kept when cache eviction trims off-screen entries.

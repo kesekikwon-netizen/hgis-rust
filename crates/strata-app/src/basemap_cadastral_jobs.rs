@@ -9,8 +9,11 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 
+use crate::basemap_paint::TileView;
+use crate::basemap_tile_key::{is_map_drag_in_progress, ViewRestState, ViewSignature};
 use crate::basemap_tiles::TileKind;
 
+pub(crate) use crate::basemap_tile_key::RestDecision;
 pub use crate::basemap_tile_key::{load_basemap_image, load_cadastral_image, CachedApiKey};
 
 /// Cadastral WMS tile key `(z, x, y)`.
@@ -84,45 +87,56 @@ impl<K: Copy + Eq + Hash> Drop for WorkerGuard<K> {
 pub struct TileFetcher<K> {
     inner: Arc<(Mutex<FetchState<K>>, Condvar)>,
     in_flight_total: Arc<AtomicUsize>,
+    requests_started: Arc<AtomicUsize>,
+    view_rest: Arc<Mutex<ViewRestState>>,
     clock: Arc<dyn Fn() -> Instant + Send + Sync>,
 }
 
 pub type CadastralFetcher = TileFetcher<CadKey>;
 pub type BasemapFetcher = TileFetcher<TexKey>;
 
-/// Creates paired background and cadastral fetchers sharing one `MAX_IN_FLIGHT` counter.
+/// Creates paired background and cadastral fetchers sharing `MAX_IN_FLIGHT` and view-rest state.
 #[must_use]
 pub fn shared_tile_fetchers() -> (BasemapFetcher, CadastralFetcher) {
     let total = Arc::new(AtomicUsize::new(0));
+    let rest = Arc::new(Mutex::new(ViewRestState::default()));
     let clock: Arc<dyn Fn() -> Instant + Send + Sync> = Arc::new(Instant::now);
-    (
-        TileFetcher::new(Arc::clone(&total), Arc::clone(&clock)),
-        TileFetcher::new(total, clock),
-    )
+    (TileFetcher::new(Arc::clone(&total), Arc::clone(&rest), Arc::clone(&clock)), TileFetcher::new(total, rest, clock))
+}
+
+#[cfg(test)]
+#[must_use]
+pub fn shared_tile_fetchers_with_clock(
+    clock: Arc<dyn Fn() -> Instant + Send + Sync>,
+) -> (BasemapFetcher, CadastralFetcher) {
+    let total = Arc::new(AtomicUsize::new(0));
+    let rest = Arc::new(Mutex::new(ViewRestState::default()));
+    (TileFetcher::new(Arc::clone(&total), Arc::clone(&rest), Arc::clone(&clock)), TileFetcher::new(total, rest, clock))
 }
 
 impl<K> Default for TileFetcher<K> {
     fn default() -> Self {
-        Self::new(Arc::new(AtomicUsize::new(0)), Arc::new(Instant::now))
+        Self::new(Arc::new(AtomicUsize::new(0)), Arc::new(Mutex::new(ViewRestState::default())), Arc::new(Instant::now))
     }
 }
 
 impl<K> std::fmt::Debug for TileFetcher<K> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TileFetcher")
-            .field("in_flight_total", &self.in_flight_total.load(Ordering::Relaxed))
-            .finish_non_exhaustive()
+        f.debug_struct("TileFetcher").field("in_flight_total", &self.in_flight_total.load(Ordering::Relaxed)).finish_non_exhaustive()
     }
 }
 
 impl<K> TileFetcher<K> {
     fn new(
         in_flight_total: Arc<AtomicUsize>,
+        view_rest: Arc<Mutex<ViewRestState>>,
         clock: Arc<dyn Fn() -> Instant + Send + Sync>,
     ) -> Self {
         Self {
             inner: Arc::new((Mutex::new(FetchState::default()), Condvar::new())),
             in_flight_total,
+            requests_started: Arc::new(AtomicUsize::new(0)),
+            view_rest,
             clock,
         }
     }
@@ -130,13 +144,26 @@ impl<K> TileFetcher<K> {
     #[cfg(test)]
     #[must_use]
     pub fn with_clock(clock: Arc<dyn Fn() -> Instant + Send + Sync>) -> Self {
-        Self::new(Arc::new(AtomicUsize::new(0)), clock)
+        Self::new(Arc::new(AtomicUsize::new(0)), Arc::new(Mutex::new(ViewRestState::default())), clock)
+    }
+
+    pub(crate) fn observe_view(&self, ctx: &egui::Context, view: &TileView, rect: egui::Rect) -> RestDecision {
+        let sig = ViewSignature::from_tile_view(view, rect);
+        let dragging = is_map_drag_in_progress(ctx, rect);
+        let mut st = self.view_rest.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        st.observe(ctx, sig, dragging, (self.clock)())
     }
 
     /// Total requests currently in flight across all fetchers sharing this counter.
     #[must_use]
     pub fn in_flight_count(&self) -> usize {
         self.in_flight_total.load(Ordering::Acquire)
+    }
+
+    /// Number of tile worker requests started on this fetcher in this run.
+    #[must_use]
+    pub fn requests_started(&self) -> usize {
+        self.requests_started.load(Ordering::Acquire)
     }
 
     #[cfg(test)]
@@ -200,7 +227,7 @@ where
             generation,
             outcome: None,
         };
-        std::thread::Builder::new()
+        let spawned = std::thread::Builder::new()
             .name("map-tile".to_owned())
             .spawn(move || {
                 // The guard's Drop does the bookkeeping for every way the worker ends. It is moved in and
@@ -209,7 +236,11 @@ where
                 guard.outcome = job();
                 drop(guard);
             })
-            .is_ok()
+            .is_ok();
+        if spawned {
+            self.requests_started.fetch_add(1, Ordering::AcqRel);
+        }
+        spawned
     }
 
     /// Clears all failed marks and increments `generation` so older in-flight jobs that fail later

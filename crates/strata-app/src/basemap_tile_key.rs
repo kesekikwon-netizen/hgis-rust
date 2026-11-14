@@ -6,10 +6,102 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 
+use crate::basemap_paint::TileView;
 use crate::basemap_tiles::TileKind;
 
 /// Minimum interval between re-reading the VWorld API key from key stores.
 pub const KEY_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
+
+/// How long the map view must remain unchanged (and not dragged) before missing tiles are requested.
+/// This 120 ms rest time is this Rust app's own number, not a C++ Strata constant
+/// (C++ delegates drag/render timing to the map canvas widget; target/cpp-ref/src/app/MainWindow.cpp:528).
+pub const VIEW_REST_TIME: Duration = Duration::from_millis(120);
+
+/// Snapshot of the map view geometry compared between frames to detect pan, zoom, or resize.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ViewSignature {
+    world_origin: [f64; 2],
+    meters_per_px: f64,
+    size_px: [f32; 2],
+}
+
+impl ViewSignature {
+    pub(crate) fn from_tile_view(view: &TileView, rect: egui::Rect) -> Self {
+        Self {
+            world_origin: view.world_origin,
+            meters_per_px: view.meters_per_px,
+            size_px: [rect.width(), rect.height()],
+        }
+    }
+}
+
+/// Whether the map view is still changing/settling or ready to start missing tile requests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RestDecision {
+    Dragging,
+    Waiting(Duration),
+    AtRest,
+}
+
+/// Tracks across frames whether the map view has been still and undragged for `VIEW_REST_TIME`.
+#[derive(Default)]
+pub(crate) struct ViewRestState {
+    last_ctx_pass: Option<(egui::Context, u64)>,
+    last_decision: Option<RestDecision>,
+    last_view: Option<ViewSignature>,
+    settled_since: Option<Instant>,
+}
+
+impl ViewRestState {
+    pub(crate) fn observe(
+        &mut self,
+        ctx: &egui::Context,
+        view: ViewSignature,
+        dragging: bool,
+        now: Instant,
+    ) -> RestDecision {
+        let pass_nr = ctx.cumulative_pass_nr();
+        if let Some((prev_ctx, prev_pass)) = &self.last_ctx_pass {
+            if prev_ctx == ctx
+                && *prev_pass == pass_nr
+                && self.last_view == Some(view)
+                && (self.last_decision == Some(RestDecision::Dragging)) == dragging
+            {
+                if let Some(decision) = self.last_decision {
+                    return decision;
+                }
+            }
+        }
+        let decision = if dragging {
+            self.last_view = Some(view);
+            self.settled_since = None;
+            RestDecision::Dragging
+        } else {
+            if self.last_view != Some(view) || self.settled_since.is_none() {
+                self.last_view = Some(view);
+                self.settled_since = Some(now);
+            }
+            let since = self.settled_since.unwrap_or(now);
+            let elapsed = now.saturating_duration_since(since);
+            if elapsed >= VIEW_REST_TIME {
+                RestDecision::AtRest
+            } else {
+                RestDecision::Waiting(VIEW_REST_TIME - elapsed)
+            }
+        };
+        self.last_ctx_pass = Some((ctx.clone(), pass_nr));
+        self.last_decision = Some(decision);
+        decision
+    }
+}
+
+pub(crate) fn is_map_drag_in_progress(ctx: &egui::Context, rect: egui::Rect) -> bool {
+    ctx.input(|i| {
+        i.pointer.any_down()
+            && !i.pointer.could_any_button_be_click()
+            && i.pointer.press_origin().is_some_and(|origin| rect.contains(origin))
+    })
+}
 
 /// Keeps the VWorld API key in app state and re-reads key stores at most every `KEY_REFRESH_INTERVAL`.
 #[derive(Clone)]

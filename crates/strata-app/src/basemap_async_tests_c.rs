@@ -9,17 +9,22 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, Event, Modifiers, PointerButton, Pos2, RawInput, Rect};
+use eframe::egui::{self, RawInput, Rect};
 
 use crate::app_state::StrataAppState;
-use crate::basemap_cadastral_jobs::{BasemapFetcher, CachedApiKey, MAX_IN_FLIGHT};
+use crate::basemap_cadastral_jobs::{
+    shared_tile_fetchers_with_clock, BasemapFetcher, CachedApiKey, MAX_IN_FLIGHT,
+};
 use crate::basemap_tile_key::KEY_REFRESH_INTERVAL;
 use crate::basemap_mesh::tile_mesh_points;
 use crate::basemap_paint::{tm_params_for, TileView, FULL_UV};
 use crate::basemap_tiles::TileKind;
 
-use super::async_tests_a::{map_app_at, one_px, run_frame, visible_tiles, CHUNCHEON};
+use super::async_tests_a::{
+    map_app_at, one_px, run_frame, settle_initial_view, settle_view_at, visible_tiles, CHUNCHEON,
+};
 use super::async_tests_b::{collect_meshes, uv_bounds};
+use super::async_tests_d::trigger_context_menu_refresh;
 
 struct ThreadExitSignal(Option<mpsc::Sender<()>>);
 impl Drop for ThreadExitSignal {
@@ -33,35 +38,19 @@ fn attach_fake_key_clock(app: &mut StrataAppState, initial: &str) -> (Instant, A
     let t0 = Instant::now();
     let now_cell = Arc::new(Mutex::new(t0));
     let key_cell = Arc::new(Mutex::new(initial.to_owned()));
-    let (kr, nr) = (Arc::clone(&key_cell), Arc::clone(&now_cell));
+    let (kr, nr, nf) = (Arc::clone(&key_cell), Arc::clone(&now_cell), Arc::clone(&now_cell));
     app.vworld_api_key = CachedApiKey::with_reader_and_clock(
         Arc::new(move || kr.lock().unwrap().clone()),
         Arc::new(move || *nr.lock().unwrap()),
     );
+    let (bg, cad) = shared_tile_fetchers_with_clock(Arc::new(move || *nf.lock().unwrap()));
+    app.basemap_fetch = bg;
+    app.cadastral_fetch = cad;
     (t0, now_cell, key_cell)
 }
 
-fn flush_ctx(ctx: &egui::Context, rect: Rect) {
+pub(super) fn flush_ctx(ctx: &egui::Context, rect: Rect) {
     let _ = ctx.run(RawInput { screen_rect: Some(rect), ..Default::default() }, |_| {});
-}
-
-fn trigger_context_menu_refresh(app: &mut StrataAppState, ctx: &egui::Context) {
-    let screen = Rect::from_min_size(Pos2::ZERO, egui::vec2(800.0, 600.0));
-    app.map_context_menu_open = true;
-    app.map_context_menu_pos = [40.0, 40.0];
-    // Row 4 (0=prev, 1=next, 2=layerZoom, 3=full, 4=map.refresh), each 22 px high inside popup margin.
-    let at = Pos2::new(80.0, 40.0 + 6.0 + 4.0 * 22.0 + 11.0);
-    for events in [
-        vec![],
-        vec![Event::PointerMoved(at)],
-        vec![Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE }],
-        vec![Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE }],
-    ] {
-        let _ = ctx.run(RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ctx| {
-            app.render_map_context_menu(ctx);
-        });
-    }
-    assert!(!app.map_context_menu_open);
 }
 
 /// (f1) After 6 panicking workers unwind, keys leave `in_flight`, slots return, failures are recorded,
@@ -71,6 +60,7 @@ fn test_map1b_f1_panicking_workers_release_in_flight_slots_mark_failed_and_repai
     let (mut app, rect) = map_app_at(CHUNCHEON.0, CHUNCHEON.1, 1.0, [1480.0, 625.0]);
     let vis: Vec<_> = visible_tiles(&app, rect).into_iter().map(|(_, k)| k).collect();
     let ctx = egui::Context::default();
+    settle_initial_view(&mut app, &ctx, rect);
     flush_ctx(&ctx, rect);
     let repaints = Arc::new(AtomicUsize::new(0));
     let repaints_cb = Arc::clone(&repaints);
@@ -112,6 +102,7 @@ fn test_map1b_f2_key_change_clears_failed_marks_and_requests_repaint() {
     assert!(visible_tiles(&app, rect).len() <= 2);
     let (t0, now_cell, key_cell) = attach_fake_key_clock(&mut app, "BAD-KEY");
     let ctx = egui::Context::default();
+    settle_view_at(&mut app, &ctx, rect, &now_cell);
     run_frame(&ctx, rect, |ctx, p| {
         app.paint_basemap_layer_with(ctx, p, rect, |_k, _key, _z, _x, _y| move || None);
         app.paint_cadastral_layer_with(ctx, p, rect, |_key, _z, _x, _y| move || None);
@@ -149,6 +140,7 @@ fn test_map1b_f2_stale_old_key_failure_does_not_reenter_thirty_second_wait() {
     let target = visible_tiles(&app, rect)[0].1;
     let (t0, now_cell, key_cell) = attach_fake_key_clock(&mut app, "BAD-KEY");
     let ctx = egui::Context::default();
+    settle_view_at(&mut app, &ctx, rect, &now_cell);
     let (started_tx, started_rx) = mpsc::channel::<()>();
     let (rel_tx, rel_rx) = mpsc::channel::<()>();
     let rel_rx = Arc::new(Mutex::new(rel_rx));
@@ -187,6 +179,7 @@ fn test_map1b_f2_stale_old_key_failure_does_not_reenter_thirty_second_wait() {
 fn test_map1b_f2_context_menu_refresh_clears_failed_marks_of_both_fetchers() {
     let (mut app, rect) = map_app_at(CHUNCHEON.0, CHUNCHEON.1, 0.5, [60.0, 60.0]);
     let ctx = egui::Context::default();
+    settle_initial_view(&mut app, &ctx, rect);
     run_frame(&ctx, rect, |ctx, p| {
         app.paint_basemap_layer_with(ctx, p, rect, |_k, _key, _z, _x, _y| move || None);
         app.paint_cadastral_layer_with(ctx, p, rect, |_key, _z, _x, _y| move || None);
@@ -233,6 +226,8 @@ fn test_map1b_f3_schedules_single_repaint_at_earliest_retry_end_only_for_view() 
     *now_cell.lock().unwrap() = t0 + Duration::from_secs(10);
     assert!(app.basemap_fetch.request_with(t_early, None, || None));
     app.basemap_fetch.wait_for_idle();
+    *now_cell.lock().unwrap() = t0 + Duration::from_secs(14);
+    run_frame(&ctx, rect, |ctx, p| app.paint_basemap_layer_with(ctx, p, rect, |_k, _key, _z, _x, _y| move || None));
     *now_cell.lock().unwrap() = t0 + Duration::from_secs(15);
     run_frame(&ctx, rect, |ctx, p| {
         app.paint_basemap_layer_with(ctx, p, rect, |k, _key, z, x, y| move || ((k, z, x, y) != t_late).then(one_px));
