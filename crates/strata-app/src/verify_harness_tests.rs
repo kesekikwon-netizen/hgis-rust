@@ -17,7 +17,7 @@ static HARNESS_LOCK: Mutex<()> = Mutex::new(());
     fn v1_to_v14_verification_harness_passes_all_fourteen_gates() {
         let _guard = HARNESS_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let gates = run_v1_to_v10_verification_harness();
-        assert_eq!(gates.len(), 14);
+        assert_eq!(gates.len(), 15);
         for g in &gates {
             assert!(g.passed, "Gate {} failed: {}", g.gate_id, g.detail);
         }
@@ -49,7 +49,7 @@ static HARNESS_LOCK: Mutex<()> = Mutex::new(());
         let _ = std::fs::remove_file(&crash_path);
     }
 
-    // Order F1f-1 — --verify-all runs gates V1..V14 only (no borehole gates V15..V17).
+    // Order F1f-1 + PERF1 — --verify-all runs gates V1..V14 and PERF1 (no borehole gates V15..V17).
     #[test]
     fn verify_harness_lists_gates_v1_to_v14_only() {
         let _guard = HARNESS_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -60,6 +60,7 @@ static HARNESS_LOCK: Mutex<()> = Mutex::new(());
             vec![
                 "V1", "V2", "V3", "V4", "V5", "V6", "V7",
                 "V8", "V9", "V10", "V11", "V12", "V13", "V14",
+                "PERF1",
             ]
         );
         assert!(gates.iter().all(|g| g.passed));

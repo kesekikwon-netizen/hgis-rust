@@ -284,3 +284,10 @@ mod basemap_mesh_tests;
 #[cfg(test)]
 #[path = "net0c_tests.rs"]
 mod net0c_tests;
+
+pub mod perf_bench;
+pub mod perf_recorder;
+pub mod perf_stats;
+#[cfg(test)]
+#[path = "perf_tests.rs"]
+mod perf_tests;

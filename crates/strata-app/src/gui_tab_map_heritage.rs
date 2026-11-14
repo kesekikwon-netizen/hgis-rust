@@ -15,6 +15,8 @@ impl StrataAppState {
         rect: Rect,
         cadastral_detail: bool,
     ) {
+        let perf_survey =
+            crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::SurveyLayers);
         let vp = &self.home_map.viewport;
         let rs = &self.home_map.real_survey;
         let sel_layer = self.right_inspector.selected_layer_key.as_deref();
@@ -148,6 +150,7 @@ impl StrataAppState {
             rect,
             vp,
         });
+        drop(perf_survey);
         // 「조사 데이터」 묶음은 범례에서 참조 지도·지적 위에 있다 — 그 위에 그린다.
         self.paint_survey_tables(ctx, p, rect);
     }

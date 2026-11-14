@@ -10,6 +10,7 @@ use crate::gui_shell::{UX_STATUS_BAR_HEIGHT, KA_STATUS_SCALE_PRESETS};
 impl StrataAppState {
     /// C++ `MainWindow.cpp` + `MainWindowChrome.cpp` + `KaStatusBar.cpp` 1:1 재현
     pub fn render_workspace_egui(&mut self, ctx: &egui::Context) -> egui::Rect {
+        let _perf_frame = crate::perf_recorder::begin_frame();
         self.poll_debug_remote_commands(ctx);
         self.handle_cpp_keyboard_shortcuts(ctx);
         self.drop_sketch_when_tool_changed();
@@ -24,6 +25,8 @@ impl StrataAppState {
                 .frame(egui::Frame::NONE)
                 .show_separator_line(false)
                 .show(ctx, |ui| {
+                    let _perf_rib =
+                        crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::Ribbon);
                     self.render_cpp_top_bars(ctx, ui);
                 });
         }
@@ -34,6 +37,8 @@ impl StrataAppState {
         egui::TopBottomPanel::bottom("ka_status_bar")
             .exact_height(UX_STATUS_BAR_HEIGHT)
             .show(ctx, |ui| {
+                let _perf_sb =
+                    crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::StatusBar);
                 if self.active_tab == MainTab::Home {
                     ui.horizontal_centered(|ui| {
                         ui.label(

@@ -221,42 +221,57 @@ impl StrataAppState {
         if self.survey_tables.is_empty() {
             return;
         }
+        let perf_layers =
+            crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::SurveyLayers);
         let cached = cached_layers(ctx, &self.survey_tables, self.work_crs.into(), &self.home_map.real_survey.label_views);
         let layers = &cached.1;
         let rs = &self.home_map.real_survey;
         let vp = &self.home_map.viewport;
+        let order = paint_order(&self.left_layers.entries, layers);
+        drop(perf_layers);
+        let perf_lbl_init =
+            crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::Labels);
         let font = label_font(ctx);
+        drop(perf_lbl_init);
         let (mut reqs, mut draws) = (Vec::new(), Vec::new());
-        for i in paint_order(&self.left_layers.entries, layers) {
+        for i in order {
             let layer = &layers[i];
             // 범례 줄(그 표의 layer_key)의 이름으로 켜고 끈다 — 「조사구역 그리기 설정」에서 이름을 붙인 레이어는 표 이름과 다르다.
             let title = self.left_layers.entries.iter().find(|e| e.layer_key == layer.table).map_or(layer.title.as_str(), |e| e.label_ko.as_str());
             if !rs.is_layer_visible(title) {
                 continue;
             }
-            // 레이어마다 정한 모양(조사구역 그리기 설정의 선 색·채움·굵기)이 있으면 그것.
-            let mut style = *rs.layer_styles.get(&layer.table).unwrap_or(&layer.style);
-            // 레이어 투명도(applyLayerOpacity) — 도형만 흐리게(라벨은 라벨 엔진이 따로 그린다).
-            let opacity = self.left_layers.entries.iter().find(|e| e.layer_key == layer.table).map_or(1.0, |e| e.opacity.clamp(0.0, 1.0));
-            if opacity < 1.0 {
-                let fade = |c: [u8; 4]| [c[0], c[1], c[2], (f32::from(c[3]) * opacity).round() as u8];
-                style.fill = fade(style.fill);
-                style.stroke = fade(style.stroke);
-                style.casing = style.casing.map(|(c, w)| (fade(c), w));
-            }
-            for f in &layer.features {
-                paint_feature(p, rect, vp, &style, f);
+            {
+                let _perf_feat =
+                    crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::SurveyLayers);
+                // 레이어마다 정한 모양(조사구역 그리기 설정의 선 색·채움·굵기)이 있으면 그것.
+                let mut style = *rs.layer_styles.get(&layer.table).unwrap_or(&layer.style);
+                // 레이어 투명도(applyLayerOpacity) — 도형만 흐리게(라벨은 라벨 엔진이 따로 그린다).
+                let opacity = self.left_layers.entries.iter().find(|e| e.layer_key == layer.table).map_or(1.0, |e| e.opacity.clamp(0.0, 1.0));
+                if opacity < 1.0 {
+                    let fade = |c: [u8; 4]| [c[0], c[1], c[2], (f32::from(c[3]) * opacity).round() as u8];
+                    style.fill = fade(style.fill);
+                    style.stroke = fade(style.stroke);
+                    style.casing = style.casing.map(|(c, w)| (fade(c), w));
+                }
+                for f in &layer.features {
+                    paint_feature(p, rect, vp, &style, f);
+                }
             }
             // 레이어마다 고른 글자 크기(setLabelFontSize), 없으면 8 pt.
-            let size = rs.label_views.get(&layer.table).and_then(|v| v.size_tenths);
-            let font = size.map_or_else(|| font.clone(), |t| FontId::new(label_font_size_points(f32::from(t) / 10.0), font.family.clone()));
             if rs.is_label_visible(title) {
+                let _perf_lbl =
+                    crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::Labels);
+                let size = rs.label_views.get(&layer.table).and_then(|v| v.size_tenths);
+                let font = size.map_or_else(|| font.clone(), |t| FontId::new(label_font_size_points(f32::from(t) / 10.0), font.family.clone()));
                 for (req, draw) in layer.features.iter().filter_map(|f| label_for(ctx, &font, rect, vp, layer, f)) {
                     reqs.push(req);
                     draws.push(draw);
                 }
             }
         }
+        let _perf_lbl_end =
+            crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::Labels);
         let chosen = place_labels(&reqs);
         paint_placed_labels(p, &draws, &chosen, mm_to_points(LABEL_HALO_MM), rgba(LABEL_HALO_RGBA));
     }

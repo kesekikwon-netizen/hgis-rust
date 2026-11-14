@@ -172,6 +172,7 @@ impl StrataAppState {
 
 impl eframe::App for StrataAppState {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let perf_frame = crate::perf_recorder::begin_frame();
         // 첫 프레임에 창이 화면보다 크면 화면 안으로 줄인다.
         //
         // C++ `MainWindow.cpp:277` 은 `showMaximized()` 로 시작한다. 그런데 Windows
@@ -214,6 +215,7 @@ impl eframe::App for StrataAppState {
             self.theme_dirty = false;
         }
         let _ = self.render_workspace_egui(ctx);
+        drop(perf_frame);
         // --snap 검증 모드: 액션→캡처를 프레임마다 하나씩 처리한다.
         self.snap_tick(ctx);
     }

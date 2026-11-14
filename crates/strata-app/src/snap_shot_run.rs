@@ -81,6 +81,22 @@ impl StrataAppState {
             return;
         };
         if let Some(action) = step.action.clone() {
+            if action == "@perf_map" || action.starts_with("@perf_map=") {
+                if crate::perf_bench::tick_snap_perf_step(self, ctx, &action, &step.name) {
+                    if let Some(snap) = self.snap.as_mut() {
+                        snap.steps.remove(0);
+                        snap.settle = 8;
+                        if snap.steps.is_empty() {
+                            if let Some(ini) = &self.settings_ini {
+                                eprintln!("[SNAP] 설정 사본: {}", ini.display());
+                            }
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                    }
+                }
+                ctx.request_repaint();
+                return;
+            }
             if let Some(preset) = action.strip_prefix("@gauge=") {
                 let now = ctx.input(|i| i.time);
                 self.download_jobs.apply_snap_preset(preset, now);

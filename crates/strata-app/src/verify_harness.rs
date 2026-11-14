@@ -16,13 +16,14 @@ use strata_types::crs::WorkCrs;
 use verify_harness_gates_v1_v9::push_v1_to_v9_gates;
 use verify_harness_gates_v10_v14::push_v10_to_v14_gates;
 
-/// Runs verification gates V1..V14 in order.
+/// Runs verification gates V1..V14 and PERF1 in order.
 #[must_use]
 pub fn run_v1_to_v10_verification_harness() -> Vec<GateResult> {
-    let mut gates = Vec::with_capacity(14);
+    let mut gates = Vec::with_capacity(15);
 
     push_v1_to_v9_gates(&mut gates);
     push_v10_to_v14_gates(&mut gates);
+    gates.push(crate::perf_bench::run_perf1_gate());
 
     gates
 }
