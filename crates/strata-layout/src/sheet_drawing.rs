@@ -201,8 +201,10 @@ impl DrawingSheet {
         None
     }
 
-    /// `KaDrawingStudio::replaceSheetChrome` (`0001a93`) + `LayoutService::standardSheetChrome`
-    /// (`target/cpp-ref/src/core/LayoutService.cpp:940-963`) — place bottom-strip chrome inside `[0..=w]x[0..=h]`.
+    /// Places the bottom-strip chrome inside `[0..=w]x[0..=h]`. NOT a port: the numbers below (margin 12, band 22,
+    /// north arrow 16, bar 55, crs 65) differ from `LayoutService::standardSheetChrome`
+    /// (`target/cpp-ref/src/core/LayoutService.cpp:895-963`: gap 7, north 20, crs 58x7, bar width from the map
+    /// width), which `standard_chrome()` below follows. The PDF takes these rectangles, the screen the others: P-G1b.
     pub fn replace_sheet_chrome(&mut self) {
         let (w, h) = (self.width_mm, self.height_mm);
         let (margin, bottom_band_h) = (12.0, 22.0);
