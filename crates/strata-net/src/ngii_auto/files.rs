@@ -33,7 +33,7 @@ impl NgiiAutomation {
             self.message("중지한 자동 신청에서 늦게 시작된 다운로드를 취소했습니다. 다시 받으려면 공식 신청 내역을 새로 열어 주세요.");
             return None;
         }
-        if Some(page) != self.transfer_page || self.stage != Stage::Transfer || self.current_record.is_empty() || self.receiving.is_some() {
+        if Some(page) != self.transfer_page || self.stage != Stage::Transfer || self.current_record.is_empty() {
             return None;
         }
         let safe = safe_file_name(suggested);
@@ -80,43 +80,47 @@ impl NgiiAutomation {
         }
         self.current_file_name.clone_from(&name);
         (self.received_bytes, self.total_bytes, self.transfer_since) = (0, announced, Some(now));
-        self.receiving = Some(Receiving { generation: self.generation, directory: directory.clone(), record });
+        let path = directory.join(&name);
+        self.receiving.retain(|r| r.path != path);
+        self.receiving.push(Receiving { path, name: name.clone(), total: announced, generation: self.generation, directory: directory.clone(), record });
         Some(DownloadTarget { directory, file_name: name })
     }
 
-    fn receiving_now(&self) -> Option<Receiving> {
-        self.receiving.clone().filter(|r| r.generation == self.generation && self.stage == Stage::Transfer)
+    /// The transfer that writes `path`, when it belongs to the run as it stands.
+    fn receiving_at(&self, path: &Path) -> Option<Receiving> {
+        self.receiving.iter().find(|r| r.path == path && r.generation == self.generation && self.stage == Stage::Transfer).cloned()
     }
 
     /// So many bytes of the file are there (`:966-989`). Bytes arriving keep the transfer alive.
-    pub fn download_progress(&mut self, host: &mut dyn PageHost, bytes: u64, now: u64) {
-        if self.receiving_now().is_none() {
+    pub fn download_progress(&mut self, host: &mut dyn PageHost, path: &Path, bytes: u64, now: u64) {
+        let Some(file) = self.receiving_at(path) else {
             return;
-        }
+        };
         if bytes > LARGEST_FILE {
             // The C++ cancels the file, and a cancelled file of an order stops the order (`:1087-1091`).
             self.fail(host, "현재 파일 수신이 취소되어 다음 도엽 신청을 중지했습니다. 기존 지도와 완료한 파일은 유지됩니다.");
             return;
         }
-        if bytes != self.received_bytes {
-            self.received_bytes = bytes;
+        // `:977-979` — the window shows the file that moved last.
+        if file.name != self.current_file_name || bytes != self.received_bytes {
             self.transfer_since = Some(now);
         }
+        (self.current_file_name, self.received_bytes, self.total_bytes) = (file.name, bytes, file.total);
     }
 
     /// The transfer broke off (`:1096-1102`).
-    pub fn download_failed(&mut self, host: &mut dyn PageHost) {
-        if self.receiving_now().is_some() {
+    pub fn download_failed(&mut self, host: &mut dyn PageHost, path: &Path) {
+        if self.receiving_at(path).is_some() {
             self.fail(host, "내려받기가 중단됐습니다. 전송 연결 끊김\n인터넷 연결과 저장 공간을 확인한 뒤 다시 시도하세요.");
         }
     }
 
     /// The file is complete at `path` (`:1015-1085`).
     pub fn download_finished(&mut self, host: &mut dyn PageHost, path: &Path, now: u64) {
-        let Some(Receiving { directory, record, .. }) = self.receiving_now() else {
+        let Some(Receiving { directory, record, .. }) = self.receiving_at(path) else {
             return;
         };
-        self.receiving = None;
+        self.receiving.retain(|r| r.path != path);
         if !path.is_file() {
             self.fail(host, "받은 파일을 확인하지 못했습니다. 저장 공간과 폴더 권한을 확인한 뒤 다시 시도하세요.");
             return;

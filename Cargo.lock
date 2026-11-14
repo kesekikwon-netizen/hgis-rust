@@ -4100,6 +4100,20 @@ name = "strata-ngii-fixture"
 version = "2.0.0"
 
 [[package]]
+name = "strata-ngii-run"
+version = "2.0.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "raw-window-handle",
+ "serde_json",
+ "strata-net",
+ "strata-ngii-fixture",
+ "strata-webview",
+ "tempfile",
+]
+
+[[package]]
 name = "strata-paleo"
 version = "2.0.0"
 dependencies = [

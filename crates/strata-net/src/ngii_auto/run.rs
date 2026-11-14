@@ -55,7 +55,7 @@ impl NgiiAutomation {
         self.requested_numbers.clear();
         self.order_page = None;
         self.order_download_page = None;
-        self.receiving = None;
+        self.receiving.clear();
         self.clear_page_state(host);
         self.status = "자동 진행을 중지했습니다. 이미 신청한 자료는 공식 신청 내역에서 확인할 수 있습니다.".to_owned();
         self.order_sheets_text.clear();
@@ -124,7 +124,7 @@ impl NgiiAutomation {
         self.sheet_index = 0;
         self.manifest.clear();
         self.sheet_directories.clear();
-        self.receiving = None;
+        self.receiving.clear();
         (self.transfer_page, self.order_page, self.order_download_page) = (None, None, None);
         self.stage = Stage::Select;
         self.last_message.clear();

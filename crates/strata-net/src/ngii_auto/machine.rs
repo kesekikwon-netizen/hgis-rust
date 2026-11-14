@@ -25,9 +25,13 @@ pub(super) struct ManifestFile {
     pub(super) bytes: f64,
 }
 
-/// The file being received.
+/// A file being received. Several may arrive at once (the C++ keeps each in a request of its own).
 #[derive(Debug, Clone)]
 pub(super) struct Receiving {
+    /// Where the complete file will be.
+    pub(super) path: PathBuf,
+    pub(super) name: String,
+    pub(super) total: Option<u64>,
     pub(super) generation: u64,
     pub(super) directory: PathBuf,
     pub(super) record: Map<String, Value>,
@@ -62,7 +66,7 @@ pub struct NgiiAutomation {
     pub(super) sheet_directory: Option<PathBuf>,
     pub(super) sheet_directories: HashMap<String, PathBuf>,
     pub(super) completed_paths: Vec<PathBuf>,
-    pub(super) receiving: Option<Receiving>,
+    pub(super) receiving: Vec<Receiving>,
     pub(super) phase: &'static str,
     pub(super) phase_since: u64,
     pub(super) transfer_since: Option<u64>,
@@ -113,7 +117,7 @@ impl NgiiAutomation {
             sheet_directory: None,
             sheet_directories: HashMap::new(),
             completed_paths: Vec::new(),
-            receiving: None,
+            receiving: Vec::new(),
             phase: "도엽 확인",
             phase_since: 0,
             transfer_since: None,
@@ -170,6 +174,24 @@ impl NgiiAutomation {
     #[must_use]
     pub fn order_sheets_text(&self) -> &str {
         &self.order_sheets_text
+    }
+
+    /// The file being received: its name, the bytes that are there, and its size when the transfer page
+    /// listed one.
+    #[must_use]
+    pub fn current_file(&self) -> (&str, u64, Option<u64>) {
+        (&self.current_file_name, self.received_bytes, self.total_bytes)
+    }
+
+    #[must_use]
+    pub fn received_bytes(&self) -> u64 {
+        self.received_bytes
+    }
+
+    /// Files of the current order that are complete, and how many the order has.
+    #[must_use]
+    pub fn files_done(&self) -> (usize, i64) {
+        (self.received_file_count, self.sheet_file_count)
     }
 
     /// What happened since the last call.

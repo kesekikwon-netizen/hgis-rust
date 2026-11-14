@@ -87,6 +87,33 @@ fn without_a_file_list_each_sheet_is_applied_for_in_turn() {
     assert_eq!((page, &input["command"], &input["number"], &input["fileIndex"]), (PageId(1), &json!("openForm"), &json!("377052"), &json!(0)));
 }
 
+/// `:915-1105` keeps every arriving file in a request of its own: the page of the fake portal asks for a
+/// sheet's metadata file half a second after its data file, while the data file is still arriving
+/// (found by the run against the fake portal, 2026-11-15).
+#[test]
+fn two_files_of_a_sheet_may_arrive_at_the_same_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut machine, mut host) = started(dir.path());
+    let now = to_transfer(&mut machine, &mut host, r#"{"state":"ready","files":2,"manifest":[]}"#);
+    let zip = machine.download_offered(&mut host, POPUP, "terrain_377051.zip", now).expect("the data file");
+    let xml = machine.download_offered(&mut host, POPUP, "terrain_377051.xml", now + 500).expect("the metadata file, while the data file arrives");
+    assert_eq!(zip.directory, xml.directory);
+    let (zip, xml) = (zip.directory.join(&zip.file_name), xml.directory.join(&xml.file_name));
+    machine.download_progress(&mut host, &zip, 1_048_576, now + 600);
+    assert_eq!(machine.current_file(), ("terrain_377051.zip", 1_048_576, None));
+    std::fs::write(&xml, b"<xml/>").unwrap();
+    machine.download_finished(&mut host, &xml, now + 700);
+    assert_eq!(machine.stage(), Stage::Transfer, "the data file is still arriving");
+    assert!(sheets(&machine.take_events()).is_empty());
+    // A transfer that breaks off stops the run even while another one is fine: only its own end counts.
+    machine.download_failed(&mut host, &dir.path().join("not-a-transfer.zip"));
+    assert_eq!(machine.stage(), Stage::Transfer);
+    std::fs::write(&zip, b"PK").unwrap();
+    machine.download_finished(&mut host, &zip, now + 900);
+    assert_eq!(sheets(&machine.take_events()), vec![(zip.as_path(), "377051")]);
+    assert_eq!(machine.stage(), Stage::OpenForm, "the next sheet");
+}
+
 /// `:917-921, 923-924, 930-938` — only the file that was asked for, from the page that was asked, during a
 /// transfer. (The C++ window also saves files the user fetches by hand; a hidden run has no hand.)
 #[test]
@@ -121,9 +148,10 @@ fn names_are_made_safe_and_sizes_are_capped_at_one_gigabyte() {
     let now = to_transfer(&mut machine, &mut host, r#"{"state":"ready","files":1,"manifest":[]}"#);
     let target = machine.download_offered(&mut host, POPUP, "", now).unwrap();
     assert_eq!(target.file_name, "수치지형도.zip", "the C++ default name");
-    machine.download_progress(&mut host, 1_000_000_000, now);
+    let file = target.directory.join(&target.file_name);
+    machine.download_progress(&mut host, &file, 1_000_000_000, now);
     assert_eq!(machine.stage(), Stage::Transfer);
-    machine.download_progress(&mut host, 1_000_000_001, now);
+    machine.download_progress(&mut host, &file, 1_000_000_001, now);
     assert_eq!(machine.stage(), Stage::Stopped);
     assert_eq!(needs_input(&machine.take_events()), vec!["현재 파일 수신이 취소되어 다음 도엽 신청을 중지했습니다. 기존 지도와 완료한 파일은 유지됩니다."]);
 
@@ -171,9 +199,10 @@ fn a_silent_or_broken_transfer_stops_the_run() {
     let began = to_transfer(&mut machine, &mut host, MANIFEST);
     machine.tick(&mut host, began + 59_999);
     assert_eq!(machine.stage(), Stage::Transfer);
-    machine.download_offered(&mut host, POPUP, "377051.zip", began + 50_000).unwrap();
-    machine.download_progress(&mut host, 100, began + 100_000);
-    machine.download_progress(&mut host, 100, began + 150_000);
+    let target = machine.download_offered(&mut host, POPUP, "377051.zip", began + 50_000).unwrap();
+    let file = target.directory.join(&target.file_name);
+    machine.download_progress(&mut host, &file, 100, began + 100_000);
+    machine.download_progress(&mut host, &file, 100, began + 150_000);
     machine.tick(&mut host, began + 159_999);
     assert_eq!(machine.stage(), Stage::Transfer, "bytes arriving keep the transfer alive; the same count does not");
     machine.tick(&mut host, began + 160_000);
@@ -182,10 +211,11 @@ fn a_silent_or_broken_transfer_stops_the_run() {
 
     let (mut machine, mut host) = started(dir.path());
     let now = to_transfer(&mut machine, &mut host, MANIFEST);
-    machine.download_offered(&mut host, POPUP, "377051.zip", now).unwrap();
-    machine.download_failed(&mut host);
+    let target = machine.download_offered(&mut host, POPUP, "377051.zip", now).unwrap();
+    let file = target.directory.join(&target.file_name);
+    machine.download_failed(&mut host, &file);
     assert_eq!(needs_input(&machine.take_events()), vec!["내려받기가 중단됐습니다. 전송 연결 끊김\n인터넷 연결과 저장 공간을 확인한 뒤 다시 시도하세요."]);
-    machine.download_failed(&mut host);
+    machine.download_failed(&mut host, &file);
     assert!(machine.take_events().is_empty(), "a stopped run has no transfer to fail");
 
     let (mut machine, mut host) = started(dir.path());
