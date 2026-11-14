@@ -1,17 +1,19 @@
-//! Audio output backends: silent, recording (for tests), and lazy background rodio sink (SND1).
+//! Audio output backends: silent, recording (for tests), and lazy background rodio sink (SND1/SND1b).
 
+use std::collections::VecDeque;
 use std::fmt;
 use std::num::NonZero;
-use std::sync::mpsc::{self, SyncSender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use strata_types::theme_display::SoundLevel;
 
 use crate::sound_synth::{synthesize, SoundKind, SAMPLE_RATE_HZ};
 
-/// Maximum age of a pending sound request before it is dropped as late (`ORDER.yaml` SND1).
+/// Maximum age of a pending sound request before it is dropped as late (`ORDER.yaml` SND1/SND1b).
 const MAX_SOUND_LATENESS: Duration = Duration::from_millis(250);
+/// Small non-blocking handover cap for non-tick sounds while the device opens or mixes (`SND1b`).
+const MAX_PENDING_NON_TICK: usize = 4;
 
 pub trait SoundBackend: Send {
     fn play(&mut self, kind: SoundKind, level: SoundLevel);
@@ -95,14 +97,98 @@ pub fn open_rodio_sink() -> Result<Box<dyn AudioDeviceSink>, AudioOpenError> {
 
 type OpenerFn = Box<dyn FnOnce() -> Result<Box<dyn AudioDeviceSink>, AudioOpenError> + Send + 'static>;
 
+struct Mailbox {
+    queue: VecDeque<(Instant, SoundKind, SoundLevel)>,
+    closed: bool,
+}
+
+struct SharedMailbox {
+    state: Mutex<Mailbox>,
+    cvar: Condvar,
+}
+
+impl SharedMailbox {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            state: Mutex::new(Mailbox {
+                queue: VecDeque::with_capacity(MAX_PENDING_NON_TICK),
+                closed: false,
+            }),
+            cvar: Condvar::new(),
+        })
+    }
+
+    fn close(&self) {
+        if let Ok(mut g) = self.state.lock() {
+            g.closed = true;
+            self.cvar.notify_all();
+        }
+    }
+
+    fn recv(&self) -> Option<(Instant, SoundKind, SoundLevel)> {
+        let mut g = self.state.lock().ok()?;
+        loop {
+            if let Some(item) = g.queue.pop_front() {
+                return Some(item);
+            }
+            if g.closed {
+                return None;
+            }
+            g = self.cvar.wait(g).ok()?;
+        }
+    }
+}
+
+struct MailboxSender(Arc<SharedMailbox>);
+
+impl MailboxSender {
+    fn send(&self, kind: SoundKind, level: SoundLevel) -> bool {
+        let Ok(mut g) = self.0.state.lock() else {
+            return false;
+        };
+        if g.closed {
+            return false;
+        }
+        let now = Instant::now();
+        if kind == SoundKind::ButtonPress {
+            if g.queue.is_empty() {
+                g.queue.push_back((now, kind, level));
+                self.0.cvar.notify_one();
+            }
+        } else {
+            g.queue
+                .retain(|(at, k, _)| *k != SoundKind::ButtonPress && at.elapsed() <= MAX_SOUND_LATENESS);
+            if g.queue.len() < MAX_PENDING_NON_TICK {
+                g.queue.push_back((now, kind, level));
+                self.0.cvar.notify_one();
+            }
+        }
+        true
+    }
+}
+
+impl Drop for MailboxSender {
+    fn drop(&mut self) {
+        self.0.close();
+    }
+}
+
+struct WorkerCloseGuard(Arc<SharedMailbox>);
+
+impl Drop for WorkerCloseGuard {
+    fn drop(&mut self) {
+        self.0.close();
+    }
+}
+
 enum WorkerState {
     Unopened(OpenerFn),
-    Active(SyncSender<(Instant, SoundKind, SoundLevel)>),
+    Active(MailboxSender),
     Disabled,
 }
 
 /// Opens the audio device lazily on the first sound on its own background thread.
-/// Uses a bounded channel of size 1 (`try_send`) so sounds never queue up and never delay the UI.
+/// Ticks never queue; non-tick sounds evict any unplayed tick so a tick never drops a note.
 pub struct LazyAudioBackend {
     state: WorkerState,
 }
@@ -136,15 +222,17 @@ impl LazyAudioBackend {
         }
     }
 
-    fn ensure_worker(&mut self) -> Option<&SyncSender<(Instant, SoundKind, SoundLevel)>> {
+    fn ensure_worker(&mut self) -> Option<&MailboxSender> {
         if matches!(self.state, WorkerState::Unopened(_)) {
             let prev = std::mem::replace(&mut self.state, WorkerState::Disabled);
             if let WorkerState::Unopened(opener) = prev {
-                let (tx, rx) = mpsc::sync_channel::<(Instant, SoundKind, SoundLevel)>(1);
+                let shared = SharedMailbox::new();
+                let worker_shared = Arc::clone(&shared);
                 let spawned = std::thread::Builder::new()
                     .name("strata-sound".to_owned())
                     .spawn(move || {
-                        let Ok((first_at, first_kind, first_level)) = rx.recv() else {
+                        let _close_on_exit = WorkerCloseGuard(Arc::clone(&worker_shared));
+                        let Some((first_at, first_kind, first_level)) = worker_shared.recv() else {
                             return;
                         };
                         let Ok(mut sink) = opener() else {
@@ -153,14 +241,14 @@ impl LazyAudioBackend {
                         if first_at.elapsed() <= MAX_SOUND_LATENESS {
                             sink.play_mono(SAMPLE_RATE_HZ, synthesize(first_kind, first_level));
                         }
-                        while let Ok((sent_at, kind, level)) = rx.recv() {
+                        while let Some((sent_at, kind, level)) = worker_shared.recv() {
                             if sent_at.elapsed() <= MAX_SOUND_LATENESS {
                                 sink.play_mono(SAMPLE_RATE_HZ, synthesize(kind, level));
                             }
                         }
                     });
                 if spawned.is_ok() {
-                    self.state = WorkerState::Active(tx);
+                    self.state = WorkerState::Active(MailboxSender(shared));
                 }
             }
         }
@@ -176,15 +264,12 @@ impl SoundBackend for LazyAudioBackend {
         if level == SoundLevel::Off {
             return;
         }
-        let disconnected = if let Some(tx) = self.ensure_worker() {
-            matches!(
-                tx.try_send((Instant::now(), kind, level)),
-                Err(mpsc::TrySendError::Disconnected(_))
-            )
+        let alive = if let Some(tx) = self.ensure_worker() {
+            tx.send(kind, level)
         } else {
             false
         };
-        if disconnected {
+        if !alive {
             self.state = WorkerState::Disabled;
         }
     }

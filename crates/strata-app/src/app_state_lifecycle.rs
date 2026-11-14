@@ -89,6 +89,20 @@ impl StrataAppState {
         app
     }
 
+    /// Reads `strata-rust.ini` once at startup (skipped in `--snap` or when no settings folder is attached).
+    pub(crate) fn load_rust_startup_settings(&mut self) {
+        if self.snap.is_some() {
+            return;
+        }
+        if let Some(rust_ini) = self
+            .settings_ini
+            .as_deref()
+            .and_then(crate::user_settings::rust_settings_ini_from_shared)
+        {
+            self.display_options.sound_level = crate::rust_settings::load_sound_level(&rust_ini);
+        }
+    }
+
     /// `MainWindowExport.cpp:252` — 도면 화면을 처음 열 때 상태줄에 남기는 C++ 원문.
     pub const DRAWING_STUDIO_WELCOME: &'static str =
         "도면 화면입니다. 좌표점은 용지 아래 아이콘으로 찍습니다.";

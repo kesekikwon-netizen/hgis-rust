@@ -1,18 +1,22 @@
-//! App UI sound controller, stand-in download job hook, and central egui click hook (SND1).
+//! App UI sound controller and stand-in download job hook (SND1/SND1b).
 //!
 //! Download job connection note (`ORDER.yaml` SND1): once `DL1a..DL1c` merges into this branch,
 //! pass the live job list snapshots to [`SoundController::observe_jobs`] inside [`on_frame_end`].
 
+#[path = "sound_frame.rs"]
+mod sound_frame;
+#[cfg(test)]
+#[path = "sound_tests_b.rs"]
+mod sound_tests_b;
+
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use eframe::egui;
 use strata_types::theme_display::SoundLevel;
 
-use crate::app_state::StrataAppState;
+pub use self::sound_frame::{attach_controller_for_test, frame_had_button_click, on_frame_end};
 pub use crate::sound_output::{
     open_rodio_sink, AudioDeviceSink, AudioOpenError, LazyAudioBackend, RecordingBackend,
     SilentBackend, SoundBackend,
@@ -25,7 +29,7 @@ pub use crate::sound_synth::{
 const BUTTON_RATE_WINDOW: Duration = Duration::from_secs(1);
 const MAX_BUTTON_TICKS_PER_SEC: usize = 8;
 const PROGRESS_MIN_INTERVAL: Duration = Duration::from_secs(1);
-const SAVED_GUIDE_PREFIX_KO: &str = "조사 데이터와 작업 구성을 저장했습니다: ";
+const ENDING_MIN_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Stand-in phase of one download job from the job list (`orders DL1a..DL1c`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,13 +55,28 @@ struct JobTrack {
     prev_phase: Option<SoundJobPhase>,
 }
 
+fn info_priority(kind: SoundKind) -> u8 {
+    match kind {
+        SoundKind::ButtonPress => 0,
+        SoundKind::DownloadProgress => 1,
+        SoundKind::DownloadDone => 2,
+        SoundKind::DownloadStopped => 3,
+        SoundKind::SurveySaved => 4,
+    }
+}
+
 pub struct SoundController {
     backend: Box<dyn SoundBackend>,
-    clock_origin: Instant,
+    pub(super) clock_origin: Instant,
     button_times: VecDeque<Duration>,
     last_progress_at: Option<Duration>,
+    last_done_at: Option<Duration>,
+    last_stopped_at: Option<Duration>,
     jobs: HashMap<u64, JobTrack>,
-    prev_save_sig: Option<(PathBuf, usize)>,
+    pub(super) prev_save_sig: Option<(PathBuf, usize)>,
+    in_frame: bool,
+    frame_tick: Option<(Duration, SoundLevel)>,
+    frame_info: Option<(SoundKind, SoundLevel)>,
 }
 
 impl fmt::Debug for SoundController {
@@ -77,8 +96,13 @@ impl SoundController {
             clock_origin: Instant::now(),
             button_times: VecDeque::with_capacity(MAX_BUTTON_TICKS_PER_SEC),
             last_progress_at: None,
+            last_done_at: None,
+            last_stopped_at: None,
             jobs: HashMap::new(),
             prev_save_sig: None,
+            in_frame: false,
+            frame_tick: None,
+            frame_info: None,
         }
     }
 
@@ -97,10 +121,7 @@ impl SoundController {
         }
     }
 
-    pub fn on_button_click(&mut self, now: Duration, level: SoundLevel) {
-        if level == SoundLevel::Off {
-            return;
-        }
+    fn emit_tick_if_allowed(&mut self, now: Duration, level: SoundLevel) {
         while self
             .button_times
             .front()
@@ -114,9 +135,54 @@ impl SoundController {
         }
     }
 
+    fn stage_or_emit_info(&mut self, kind: SoundKind, level: SoundLevel) {
+        if level == SoundLevel::Off {
+            return;
+        }
+        if self.in_frame {
+            let replace = self
+                .frame_info
+                .is_none_or(|(cur, _)| info_priority(kind) >= info_priority(cur));
+            if replace {
+                self.frame_info = Some((kind, level));
+            }
+        } else {
+            self.emit(kind, level);
+        }
+    }
+
+    pub fn begin_frame(&mut self) {
+        self.in_frame = true;
+        self.frame_tick = None;
+        self.frame_info = None;
+    }
+
+    pub fn end_frame(&mut self) {
+        self.in_frame = false;
+        let tick = self.frame_tick.take();
+        if let Some((kind, level)) = self.frame_info.take() {
+            self.emit(kind, level);
+        } else if let Some((now, level)) = tick {
+            self.emit_tick_if_allowed(now, level);
+        }
+    }
+
+    pub fn on_button_click(&mut self, now: Duration, level: SoundLevel) {
+        if level == SoundLevel::Off {
+            return;
+        }
+        if self.in_frame {
+            self.frame_tick = Some((now, level));
+        } else {
+            self.emit_tick_if_allowed(now, level);
+        }
+    }
+
     pub fn observe_jobs(&mut self, jobs: &[SoundJobSnapshot], now: Duration, level: SoundLevel) {
         self.jobs.retain(|id, _| jobs.iter().any(|j| j.id == *id));
         let mut progress_crossed = false;
+        let mut done_crossed = false;
+        let mut stopped_crossed = false;
 
         for job in jobs {
             let mut track = self.jobs.get(&job.id).copied().unwrap_or_default();
@@ -142,15 +208,17 @@ impl SoundController {
                 SoundJobPhase::Recovering => {}
                 SoundJobPhase::Done => {
                     track.passed_mask = 0b111;
-                    if track.prev_phase != Some(SoundJobPhase::Done) {
-                        self.emit(SoundKind::DownloadDone, level);
+                    if matches!(track.prev_phase, Some(p) if p != SoundJobPhase::Done) {
+                        done_crossed = true;
                     }
                 }
                 SoundJobPhase::Stopped { needs_user } => {
-                    if !matches!(track.prev_phase, Some(SoundJobPhase::Stopped { .. }))
-                        && needs_user
+                    if matches!(
+                        track.prev_phase,
+                        Some(SoundJobPhase::Running | SoundJobPhase::Recovering)
+                    ) && needs_user
                     {
-                        self.emit(SoundKind::DownloadStopped, level);
+                        stopped_crossed = true;
                     }
                 }
             }
@@ -158,131 +226,37 @@ impl SoundController {
             self.jobs.insert(job.id, track);
         }
 
+        if stopped_crossed
+            && level != SoundLevel::Off
+            && self.last_stopped_at.is_none_or(|t| now.saturating_sub(t) >= ENDING_MIN_INTERVAL)
+        {
+            self.last_stopped_at = Some(now);
+            self.stage_or_emit_info(SoundKind::DownloadStopped, level);
+        }
+        if done_crossed
+            && level != SoundLevel::Off
+            && self.last_done_at.is_none_or(|t| now.saturating_sub(t) >= ENDING_MIN_INTERVAL)
+        {
+            self.last_done_at = Some(now);
+            self.stage_or_emit_info(SoundKind::DownloadDone, level);
+        }
         if progress_crossed
             && level != SoundLevel::Off
-            && self
-                .last_progress_at
-                .is_none_or(|last| now.saturating_sub(last) >= PROGRESS_MIN_INTERVAL)
+            && self.last_progress_at.is_none_or(|t| now.saturating_sub(t) >= PROGRESS_MIN_INTERVAL)
         {
             self.last_progress_at = Some(now);
-            self.emit(SoundKind::DownloadProgress, level);
+            self.stage_or_emit_info(SoundKind::DownloadProgress, level);
         }
     }
 
     pub fn on_survey_saved(&mut self, _now: Duration, level: SoundLevel) {
-        self.emit(SoundKind::SurveySaved, level);
-    }
-
-    fn observe_app_save(&mut self, app: &StrataAppState, now: Duration) {
-        let is_saved_banner = !app.is_dirty
-            && app
-                .home_map
-                .draw_guide_message
-                .as_deref()
-                .is_some_and(|m| m.starts_with(SAVED_GUIDE_PREFIX_KO));
-        let cur_sig = if is_saved_banner {
-            app.survey_path
-                .as_ref()
-                .map(|p| (p.clone(), app.survey_tables.as_ptr() as usize))
-        } else {
-            None
-        };
-        if cur_sig.is_some() && cur_sig != self.prev_save_sig {
-            self.on_survey_saved(now, app.display_options.sound_level);
-        }
-        self.prev_save_sig = cur_sig;
+        self.stage_or_emit_info(SoundKind::SurveySaved, level);
     }
 }
 
 #[must_use]
 pub fn is_silent_cli_args(args: &[String]) -> bool {
     args.iter().any(|a| {
-        matches!(
-            a.as_str(),
-            "--snap" | "--verify-all" | "--smoke-quit" | "--smoke"
-        )
+        matches!(a.as_str(), "--snap" | "--verify-all" | "--smoke-quit" | "--smoke")
     })
-}
-
-/// Central end-of-frame click check using `egui 0.31.1`:
-/// 1. `Context::output` (`egui-0.31.1/src/context.rs:981`) -> `PlatformOutput::events`
-///    (`egui-0.31.1/src/data/output.rs:132-133`) -> `OutputEvent::Clicked(WidgetInfo)`
-///    (`egui-0.31.1/src/data/output.rs:469-471`) for standard `egui` buttons, checkboxes,
-///    radio buttons, selectable labels, combo boxes, and collapsing headers.
-/// 2. `Context::interaction_snapshot` (`egui-0.31.1/src/context.rs:3743`,
-///    `InteractionSnapshot::clicked` at `egui-0.31.1/src/interaction.rs:14-15`) +
-///    `Context::read_response` (`egui-0.31.1/src/context.rs:1200`) for custom-painted studio
-///    tabs, ribbon chips, and popup menu items (`Sense::click()` without `senses_drag()`),
-///    excluding map/terrain canvases (`Sense::click_and_drag()`), text edits, sliders, and drags.
-#[must_use]
-pub fn frame_had_button_click(ctx: &egui::Context) -> bool {
-    use egui::output::OutputEvent;
-    use egui::WidgetType;
-
-    let std_event = ctx.output(|o| {
-        let mut any_clicked = false;
-        let mut button_like = false;
-        for ev in &o.events {
-            if let OutputEvent::Clicked(info) = ev {
-                any_clicked = true;
-                if info.enabled
-                    && matches!(
-                        info.typ,
-                        WidgetType::Button
-                            | WidgetType::Checkbox
-                            | WidgetType::RadioButton
-                            | WidgetType::RadioGroup
-                            | WidgetType::SelectableLabel
-                            | WidgetType::ComboBox
-                            | WidgetType::ColorButton
-                            | WidgetType::ImageButton
-                            | WidgetType::CollapsingHeader
-                            | WidgetType::Link
-                    )
-                {
-                    button_like = true;
-                }
-            }
-        }
-        any_clicked.then_some(button_like)
-    });
-    if let Some(matched) = std_event {
-        return matched;
-    }
-    let Some(id) = ctx.interaction_snapshot(|i| i.clicked) else {
-        return false;
-    };
-    ctx.read_response(id).is_some_and(|resp| {
-        resp.enabled() && resp.clicked() && resp.sense.senses_click() && !resp.sense.senses_drag()
-    })
-}
-
-fn controller_id() -> egui::Id {
-    egui::Id::new("ka_sound_controller")
-}
-
-pub fn attach_controller_for_test(ctx: &egui::Context, controller: SoundController) {
-    let arc = Arc::new(Mutex::new(controller));
-    ctx.data_mut(|d| d.insert_temp(controller_id(), arc));
-}
-
-pub fn on_frame_end(ctx: &egui::Context, app: &StrataAppState) {
-    if app.snap.is_some() {
-        return;
-    }
-    let handle = ctx.data_mut(|d| {
-        d.get_temp_mut_or_insert_with(controller_id(), || {
-            let args: Vec<String> = std::env::args().collect();
-            Arc::new(Mutex::new(SoundController::for_cli_args(&args)))
-        })
-        .clone()
-    });
-    let clicked = frame_had_button_click(ctx);
-    if let Ok(mut ctrl) = handle.lock() {
-        let now = ctrl.clock_origin.elapsed();
-        if clicked {
-            ctrl.on_button_click(now, app.display_options.sound_level);
-        }
-        ctrl.observe_app_save(app, now);
-    };
 }

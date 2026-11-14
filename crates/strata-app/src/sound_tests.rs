@@ -159,30 +159,24 @@ fn done_stopped_none1_and_saved_emit_expected_sounds_and_off_never_calls_backend
     let rec = RecordingBackend::new();
     let mut ctrl = SoundController::new(Box::new(rec.clone()));
 
-    ctrl.observe_jobs(
-        &[job(10, None, SoundJobPhase::Stopped { needs_user: false })],
-        Duration::from_secs(1),
-        SoundLevel::Quiet,
-    );
+    let mut live = [
+        job(10, Some(0.1), SoundJobPhase::Running),
+        job(11, Some(0.1), SoundJobPhase::Running),
+        job(12, Some(0.1), SoundJobPhase::Running),
+        job(99, Some(0.1), SoundJobPhase::Running),
+    ];
+    ctrl.observe_jobs(&live, Duration::from_millis(500), SoundLevel::Quiet);
+    live[0] = job(10, None, SoundJobPhase::Stopped { needs_user: false });
+    ctrl.observe_jobs(&live, Duration::from_secs(1), SoundLevel::Quiet);
     assert!(rec.events().is_empty());
 
-    ctrl.observe_jobs(
-        &[job(11, Some(0.4), SoundJobPhase::Stopped { needs_user: true })],
-        Duration::from_secs(2),
-        SoundLevel::Quiet,
-    );
-    ctrl.observe_jobs(
-        &[job(11, Some(0.4), SoundJobPhase::Stopped { needs_user: true })],
-        Duration::from_secs(3),
-        SoundLevel::Quiet,
-    );
+    live[1] = job(11, Some(0.4), SoundJobPhase::Stopped { needs_user: true });
+    ctrl.observe_jobs(&live, Duration::from_secs(2), SoundLevel::Quiet);
+    ctrl.observe_jobs(&live, Duration::from_secs(3), SoundLevel::Quiet);
     assert_eq!(rec.events(), vec![(SoundKind::DownloadStopped, SoundLevel::Quiet)]);
 
-    ctrl.observe_jobs(
-        &[job(12, Some(1.0), SoundJobPhase::Done)],
-        Duration::from_secs(4),
-        SoundLevel::Normal,
-    );
+    live[2] = job(12, Some(1.0), SoundJobPhase::Done);
+    ctrl.observe_jobs(&live, Duration::from_secs(4), SoundLevel::Normal);
     assert_eq!(rec.events().last().copied(), Some((SoundKind::DownloadDone, SoundLevel::Normal)));
 
     ctrl.on_survey_saved(Duration::from_secs(5), SoundLevel::Quiet);

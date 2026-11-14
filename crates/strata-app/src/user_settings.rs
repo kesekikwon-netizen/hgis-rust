@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 const PROFILE_TAIL: [&str; 4] = ["profiles", "default", "ka-hgis", "ka-hgis.ini"];
+pub(crate) const RUST_SETTINGS_FILE_NAME: &str = "strata-rust.ini";
 
 /// 설정 파일 경로 — 위치를 알 수 없으면 None(최근 조사를 읽지도 쓰지도 않는다).
 #[must_use]
@@ -22,6 +23,12 @@ pub(crate) fn user_settings_ini() -> Option<PathBuf> {
         PathBuf::from(qa).join("qgis-profile")
     };
     Some(PROFILE_TAIL.iter().fold(root, |p, s| p.join(s)))
+}
+
+/// Rust-only settings file (`strata-rust.ini`) in the same folder as `shared_ini` (`ka-hgis.ini`).
+#[must_use]
+pub(crate) fn rust_settings_ini_from_shared(shared_ini: &Path) -> Option<PathBuf> {
+    Some(shared_ini.parent()?.join(RUST_SETTINGS_FILE_NAME))
 }
 
 fn clean(p: &Path) -> PathBuf {

@@ -139,6 +139,7 @@ fn main() {
                 state.attach_user_settings_for_snap(ini, &snap_shot_run::snap_temp_dir());
             } else {
                 state.attach_user_settings(ini);
+                state.load_rust_startup_settings();
             }
             Ok(Box::new(state))
         }),
@@ -193,6 +194,7 @@ mod app_state_layer_menu;
 mod dlg_rename_layer;
 mod app_state_layer_remove;
 mod app_state_home_facts;
+mod rust_settings;
 mod user_settings;
 mod basemap_cadastral_jobs;
 mod basemap_tile_key;

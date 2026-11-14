@@ -208,11 +208,25 @@ impl StrataAppState {
                                     }
                                     ui.separator();
                                     for sl in strata_types::theme_display::SoundLevel::ALL {
-                                        ui.radio_value(
-                                            &mut self.display_options.sound_level,
-                                            sl,
-                                            sl.label_ko(),
-                                        );
+                                        let changed = ui
+                                            .radio_value(
+                                                &mut self.display_options.sound_level,
+                                                sl,
+                                                sl.label_ko(),
+                                            )
+                                            .changed();
+                                        if changed && self.snap.is_none() {
+                                            if let Some(rust_ini) = self
+                                                .settings_ini
+                                                .as_deref()
+                                                .and_then(crate::user_settings::rust_settings_ini_from_shared)
+                                            {
+                                                crate::rust_settings::save_sound_level(
+                                                    &rust_ini,
+                                                    self.display_options.sound_level,
+                                                );
+                                            }
+                                        }
                                     }
                                 });
                         });
