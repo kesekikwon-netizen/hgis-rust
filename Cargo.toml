@@ -16,6 +16,7 @@ members = [
     "crates/strata-webview",
     "crates/strata-ngii-fixture",
     "crates/strata-ngii-run",
+    "crates/strata-topo",
 ]
 
 [workspace.package]

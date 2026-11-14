@@ -4163,6 +4163,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "strata-topo"
+version = "2.0.0"
+dependencies = [
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "zip",
+]
+
+[[package]]
 name = "strata-types"
 version = "2.0.0"
 dependencies = [
