@@ -71,7 +71,7 @@ pub(super) fn add_old_map_and_look_at(app: &mut StrataAppState, centre: [f64; 2]
     app.home_map.viewport.meters_per_pixel = mpp;
 }
 
-fn install_clock(app: &mut StrataAppState) -> Arc<Mutex<Instant>> {
+pub(super) fn install_clock(app: &mut StrataAppState) -> Arc<Mutex<Instant>> {
     let now = Arc::new(Mutex::new(Instant::now()));
     let reader = Arc::clone(&now);
     let (bg, cad) = shared_tile_fetchers_with_clock(Arc::new(move || *reader.lock().unwrap()));
@@ -80,7 +80,7 @@ fn install_clock(app: &mut StrataAppState) -> Arc<Mutex<Instant>> {
     now
 }
 
-fn run_frame(ctx: &egui::Context, rect: Rect, f: impl FnOnce(&egui::Context, &egui::Painter)) -> egui::FullOutput {
+pub(super) fn run_frame(ctx: &egui::Context, rect: Rect, f: impl FnOnce(&egui::Context, &egui::Painter)) -> egui::FullOutput {
     let mut f = Some(f);
     ctx.run(RawInput { screen_rect: Some(rect), ..RawInput::default() }, |ctx| {
         egui::CentralPanel::default().show(ctx, |ui| {

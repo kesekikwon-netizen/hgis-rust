@@ -65,61 +65,61 @@ fn test_f1_old_map_tile_address_is_the_wms_getmap_of_the_tile_square() {
     );
     assert!(!url.contains("FAKE-TEST-KEY"), "this service takes no key");
     // Zoom 12, the tile over 경주: 4096 tiles across, each 9783.940 m wide.
-    let url = tile_url(TileKind::Daedongyeojido, "", 12, 3518, 1608);
-    assert!(url.contains("&BBOX=14382391.242,4295149.493,14392175.182,4304933.433&"), "{url}");
-    let cache = crate::basemap_fetch::tile_cache_path(TileKind::Daedongyeojido, 12, 3518, 1608);
-    assert!(cache.ends_with("daedongyeojido/12/3518/1608.png") || cache.ends_with(r"daedongyeojido\12\3518\1608.png"), "{}", cache.display());
+    let url = tile_url(TileKind::Daedongyeojido, "", 12, 3518, 1610);
+    assert!(url.contains("&BBOX=14382391.242,4275581.614,14392175.182,4285365.554&"), "{url}");
+    let cache = crate::basemap_fetch::tile_cache_path(TileKind::Daedongyeojido, 12, 3518, 1610);
+    assert!(cache.ends_with("daedongyeojido/12/3518/1610.png") || cache.ends_with(r"daedongyeojido\12\3518\1610.png"), "{}", cache.display());
 }
 
 #[test]
 fn test_f1_tile_cover_tells_inside_edge_and_outside() {
     let circle = ScreenCircle { center: Pos2::new(0.0, 0.0), radius: 100.0 };
     let tile = |x: f32, y: f32| Rect::from_min_size(Pos2::new(x, y), vec2(20.0, 20.0));
-    // A 20 px tile fades over its last 1.25 px (two of its 32 cells) before the rim.
+    // A 20 px tile (0.625 px cells) is clear from 0.88 px (a cell diagonal) inside the rim outwards and
+    // fades over the 1.25 px (two cells) before that: wholly inside means every corner 2.13 px inside.
     assert_eq!(tile_cover(tile(-10.0, -10.0), &circle), TileCover::Inside);
     assert_eq!(tile_cover(tile(40.0, 40.0), &circle), TileCover::Inside, "far corner at 84.9");
     assert_eq!(tile_cover(tile(50.36, 50.36), &circle), TileCover::Edge, "far corner at 99.5: inside the fade");
+    assert_eq!(tile_cover(tile(49.3, 49.3), &circle), TileCover::Edge, "far corner at 98.0: 2.0 px inside is not enough");
+    assert_eq!(tile_cover(tile(48.5, 48.5), &circle), TileCover::Inside, "far corner at 96.9");
     assert_eq!(tile_cover(tile(60.0, 60.0), &circle), TileCover::Edge, "near corner 84.9, far corner 113.1");
     assert_eq!(tile_cover(tile(90.0, -10.0), &circle), TileCover::Edge);
     assert_eq!(tile_cover(tile(101.0, -10.0), &circle), TileCover::Outside);
     assert_eq!(tile_cover(tile(75.0, 75.0), &circle), TileCover::Outside, "near corner at 106.1");
 }
 
-/// A tile on the rim is painted as a finer mesh: full strength well inside, clear on and beyond the rim, a
-/// ramp over the last two cells before it, and no cell wholly beyond it. The map ends on the circle, not on
-/// tile borders.
+/// A tile on the rim is painted as a finer mesh: full strength well inside, a ramp, and nothing at all from one
+/// cell diagonal inside the rim outwards — so no cell that is painted reaches beyond the circle. The map ends
+/// on the circle, not on tile borders.
 #[test]
-fn test_f1_edge_mesh_fades_out_at_the_circle_and_skips_cells_beyond_it() {
+fn test_f1_edge_mesh_fades_out_before_the_circle_and_paints_nothing_beyond_it() {
     let n = EDGE_MESH_STEPS;
-    // A 160 px tile (5 px cells, so a 10 px fade) whose west half is inside the circle (rim at x = 80).
+    // A 160 px tile: 5 px cells (diagonal 7.07 px), a 10 px fade. Rim at x = 80 on the middle row.
     let pts: Vec<Pos2> = (0..=n).flat_map(|j| (0..=n).map(move |i| Pos2::new(i as f32 * 5.0, j as f32 * 5.0))).collect();
-    let circle = ScreenCircle { center: Pos2::new(-10_000.0, 80.0), radius: 10_080.0 };
     let tint = Color32::WHITE.gamma_multiply(0.5);
+    let circle = ScreenCircle { center: Pos2::new(-10_000.0, 80.0), radius: 10_080.0 };
     let mesh = edge_mesh(egui::TextureId::default(), &pts, &circle, tint);
     assert_eq!(mesh.vertices.len(), (n + 1) * (n + 1));
-    for v in &mesh.vertices {
-        let inside_by = circle.radius - (v.pos - circle.center).length();
-        if inside_by <= 0.0 {
-            assert_eq!(v.color, Color32::TRANSPARENT, "at {:?}", v.pos);
-        } else if inside_by >= 10.0 {
-            assert_eq!(v.color, tint, "at {:?}", v.pos);
-        } else {
-            // Within a hair of the fade's inner end the 8-bit colour already rounds to the full tint.
-            assert!(v.color.a() <= tint.a(), "at {:?}: {:?}", v.pos, v.color);
-        }
-    }
-    // The ramp along the middle row (y = 80): full at x = 70, half at x = 75, clear at x = 80.
+    // Along the middle row (y = 80): full at x = 60 (20 px inside), part at x = 65 and x = 70, clear from x = 75.
     let mid = |i: usize| mesh.vertices[(n / 2) * (n + 1) + i].color;
-    assert_eq!(mid(14), tint);
-    assert_eq!(mid(15), tint.gamma_multiply(0.5));
+    assert_eq!(mid(12), tint);
+    assert!(mid(13).a() < tint.a() && mid(13).a() > mid(14).a() && mid(14).a() > 0, "{:?} {:?}", mid(13), mid(14));
+    assert_eq!(mid(15), Color32::TRANSPARENT);
     assert_eq!(mid(16), Color32::TRANSPARENT);
-    // Columns 0..=15 have a corner with some strength; nothing from x = 80 on is painted.
-    assert_eq!(mesh.indices.len() / 6, 16 * n);
-    let max_x = mesh.indices.iter().map(|&i| mesh.vertices[i as usize].pos.x).fold(f32::MIN, f32::max);
-    assert!(max_x <= 80.0, "{max_x}");
     // The texture is spread over the whole tile, whatever part is painted.
     assert_eq!(mesh.vertices[0].uv, Pos2::new(0.0, 0.0));
     assert_eq!(mesh.vertices[(n + 1) * (n + 1) - 1].uv, Pos2::new(1.0, 1.0));
+
+    // Wherever the rim falls between the grid lines, no painted cell has a corner beyond it.
+    for offset in [0.0_f32, 0.5, 1.0, 2.0, 2.5, 4.0, 4.9] {
+        let circle = ScreenCircle { center: Pos2::new(-10_000.0, 80.0), radius: 10_080.0 + offset };
+        let mesh = edge_mesh(egui::TextureId::default(), &pts, &circle, tint);
+        assert!(!mesh.indices.is_empty());
+        let reach = mesh.indices.iter().map(|&i| (mesh.vertices[i as usize].pos - circle.center).length()).fold(0.0_f32, f32::max);
+        assert!(reach <= circle.radius, "offset {offset}: a painted corner is {} px beyond the rim", reach - circle.radius);
+        // And the fade is not pulled in further than it has to be: something is painted within 13 px of the rim.
+        assert!(reach >= circle.radius - 13.0, "offset {offset}: {reach}");
+    }
 }
 
 /// The legend menu treats the row as a picture (no vertex, area or label rows of a vector layer).
@@ -148,7 +148,7 @@ fn test_f1_trimming_one_kind_keeps_the_textures_of_the_other_kinds() {
         }
     });
     let used: std::collections::HashSet<TexKey> = [(TileKind::Satellite, 10, 2, 0)].into_iter().collect();
-    cache.retain_kind(TileKind::Satellite, &used);
+    cache.retain_kinds(&[TileKind::Satellite, TileKind::Base], &used);
     assert!(cache.get(&(TileKind::Satellite, 10, 1, 0)).is_none());
     assert!(cache.get(&(TileKind::Satellite, 10, 2, 0)).is_some());
     assert!(cache.get(&(TileKind::Daedongyeojido, 10, 1, 0)).is_some());

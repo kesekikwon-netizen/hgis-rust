@@ -19,8 +19,8 @@ use crate::basemap_tiles::TileKind;
 /// Cells along one side of a tile on the rim.
 pub(crate) const EDGE_MESH_STEPS: usize = 32;
 
-/// The picture fades out over the last two cells before the rim (a sixteenth of the tile's width): a fade
-/// narrower than the cells that carry it would show the grid as steps.
+/// The picture fades out over two cells (a sixteenth of the tile's width): a fade narrower than the cells that
+/// carry it would show the grid as steps.
 const FADE_CELLS: f32 = 2.0;
 
 /// The circle in screen coordinates of this frame.
@@ -31,15 +31,26 @@ pub(crate) struct ScreenCircle {
 }
 
 impl ScreenCircle {
-    /// 1 inside, 0 on and beyond the rim, a straight ramp over the last `fade` pixels before it.
-    fn strength(&self, p: Pos2, fade: f32) -> f32 {
-        ((self.radius - (p - self.center).length()) / fade).clamp(0.0, 1.0)
+    /// 1 well inside, 0 from `fade.clear` pixels inside the rim outwards, a straight ramp over the
+    /// `fade.ramp` pixels before that.
+    fn strength(&self, p: Pos2, fade: Fade) -> f32 {
+        ((self.radius - fade.clear - (p - self.center).length()) / fade.ramp).clamp(0.0, 1.0)
     }
 }
 
-/// Width of the fade, in pixels, for a tile whose screen box is `bounds`.
-fn fade_for(bounds: Rect) -> f32 {
-    (bounds.width().max(bounds.height()) / EDGE_MESH_STEPS as f32 * FADE_CELLS).max(f32::MIN_POSITIVE)
+/// The fade of one tile, in screen pixels.
+#[derive(Debug, Clone, Copy)]
+struct Fade {
+    /// One cell diagonal. A cell with a corner of any strength then lies wholly inside the circle, so no
+    /// painted cell reaches beyond the rim.
+    clear: f32,
+    ramp: f32,
+}
+
+/// The fade for a tile whose screen box is `bounds`.
+fn fade_for(bounds: Rect) -> Fade {
+    let cell = (bounds.width().max(bounds.height()) / EDGE_MESH_STEPS as f32).max(f32::MIN_POSITIVE);
+    Fade { clear: cell * std::f32::consts::SQRT_2, ramp: cell * FADE_CELLS }
 }
 
 /// Where a tile's screen box lies against the circle.
@@ -65,7 +76,7 @@ pub(crate) fn tile_cover(bounds: Rect, circle: &ScreenCircle) -> TileCover {
 
 /// Mesh of a tile on the rim. `pts` is the tile's (EDGE_MESH_STEPS + 1)² grid, rows north to south. The colour
 /// of each corner carries the circle's strength there, so the picture fades out along the circle itself;
-/// cells with no corner inside are left out.
+/// cells without any strength are left out, and what is left lies inside the circle.
 pub(crate) fn edge_mesh(texture: egui::TextureId, pts: &[Pos2], circle: &ScreenCircle, tint: Color32) -> egui::Mesh {
     let n = EDGE_MESH_STEPS;
     let w = n + 1;
@@ -200,7 +211,7 @@ where
         RestDecision::Dragging | RestDecision::Waiting(_) => {}
     }
     if textures.len() > BASEMAP_TEXTURE_LIMIT {
-        textures.retain_kind(kind, &used);
+        textures.retain_kinds(&[kind], &used);
     }
     painted
 }

@@ -1,7 +1,7 @@
 //! Online reference tile layers of the legend: 대동여지도.
 //!
 //! C++ adds them to the project as live tile layers (`target/cpp-ref/src/core/BasemapOps.cpp:1565-1575`,
-//! addXyzBasemap `:860-940`): a legend row the user can uncheck, fade and remove. Owner's decision of
+//! addXyzBasemap `:860-977`): a legend row the user can uncheck, fade and remove. Owner's decision of
 //! 2026-11-15 (「모든 ui버튼은 조사구역을 그린것을 중심으로 생성되어야한다. 대동여지도 조사구역반경100km」):
 //! the command works from the drawn survey area and the map covers a circle around it.
 //! A layer is painted only while its row is in the legend. A title that merely counts as visible is not
@@ -19,6 +19,24 @@ use crate::left_layer_panel::{LayerTreeEntry, LeftLayerPanel};
 pub(crate) mod ref_tile_paint;
 
 use ref_tile_paint::{paint_circle_tiles_with, ScreenCircle};
+
+/// The centre of the circle, kept between frames. Working it out builds a coordinate transformer for each
+/// survey-area table (`survey_paint_layers.rs` table_extent_in: a new PROJ pipeline, milliseconds), so it is done
+/// again only when the survey-area shapes or the work CRS change.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct RefCircleCache {
+    key: Option<u64>,
+    centre: Option<[f64; 2]>,
+    worked_out: u32,
+}
+
+impl RefCircleCache {
+    /// How many times the centre was worked out.
+    #[cfg(test)]
+    pub(crate) fn times_worked_out(&self) -> u32 {
+        self.worked_out
+    }
+}
 
 /// One online reference tile layer.
 pub(crate) struct RefTileLayer {
@@ -58,7 +76,7 @@ pub(crate) fn ref_tile_layer(key: &str) -> Option<&'static RefTileLayer> {
 }
 
 /// Adds the row unless it is there. Live tiles sink below the other layers and the satellite stays lowest
-/// (`BasemapOps.cpp:362-392` ensureSatelliteAtBottom): the row goes directly above the background rows.
+/// (`BasemapOps.cpp:362-401` ensureSatelliteAtBottom): the row goes directly above the background rows.
 fn ensure_row(panel: &mut LeftLayerPanel, layer: &RefTileLayer) {
     if panel.entries.iter().any(|e| e.layer_key == layer.key) {
         return;
@@ -109,6 +127,26 @@ impl StrataAppState {
         crate::survey_area_setup::survey_area_extent(self).map(|b| [(b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0])
     }
 
+    /// The same centre for the paint pass: from the cache while the work CRS and the survey-area shapes are
+    /// what they were. Per frame this is one hash over the WKT of those shapes (a handful of short strings).
+    fn reference_circle_centre_for_paint(&mut self) -> Option<[f64; 2]> {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.work_crs.auth_id().hash(&mut hasher);
+        for t in self.survey_tables.iter().filter(|t| crate::survey_area_setup::is_survey_area_key(&t.table)) {
+            (&t.table, t.srs_id).hash(&mut hasher);
+            for f in &t.layer.features {
+                f.wkt_geom.hash(&mut hasher);
+            }
+        }
+        let key = hasher.finish();
+        if self.ref_circle.key != Some(key) {
+            self.ref_circle =
+                RefCircleCache { key: Some(key), centre: self.reference_circle_centre(), worked_out: self.ref_circle.worked_out + 1 };
+        }
+        self.ref_circle.centre
+    }
+
     /// Paints the checked reference tile rows over the background tiles.
     pub(crate) fn paint_reference_tile_layers(&mut self, ctx: &egui::Context, p: &egui::Painter, rect: egui::Rect) {
         self.paint_reference_tile_layers_with(ctx, p, rect, |kind, z, x, y| {
@@ -137,11 +175,16 @@ impl StrataAppState {
                 self.home_map.real_survey.is_layer_visible(&e.label_ko).then_some((layer, e.opacity.clamp(0.0, 1.0)))
             })
             .collect();
+        // The pictures of a layer that is not shown (row removed or unchecked) are not kept in memory.
+        for layer in REF_TILE_LAYERS {
+            if !rows.iter().any(|(shown, _)| shown.key == layer.key) {
+                self.basemap_textures.retain_kinds(&[layer.kind], &std::collections::HashSet::new());
+            }
+        }
         if rows.is_empty() {
             return;
         }
-        // Per frame, only while such a row is checked: one WKT parse per survey-area shape (a handful).
-        let Some(centre) = self.reference_circle_centre() else {
+        let Some(centre) = self.reference_circle_centre_for_paint() else {
             return;
         };
         let mpp = self.home_map.viewport.meters_per_pixel.max(1e-6);
@@ -172,3 +215,6 @@ mod tests;
 #[cfg(test)]
 #[path = "ref_tile_layers_tests_b.rs"]
 mod tests_b;
+#[cfg(test)]
+#[path = "ref_tile_layers_tests_d.rs"]
+mod tests_d;

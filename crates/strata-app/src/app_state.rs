@@ -107,6 +107,8 @@ pub struct StrataAppState {
     pub snap: Option<crate::snap_shot::SnapRequest>,
     /// 배경지도 타일 텍스처 캐시(종류·줌·x·y).
     pub basemap_textures: crate::basemap_paint::TileTextureCache,
+    /// Centre of the circle of the reference tile layers, kept between frames (`ref_tile_layers.rs`).
+    pub(crate) ref_circle: crate::ref_tile_layers::RefCircleCache,
     /// 마지막 프레임에 칠한 타일 수(진단·시험용).
     pub basemap_tiles_painted: usize,
     /// 연속지적도 z/x/y 타일별 텍스처(위성 타일과 같은 격자).

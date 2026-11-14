@@ -60,6 +60,12 @@ impl StrataAppState {
     /// 되돌리기 — 뺀 자리에 다시 넣고 마지막 레이어를 현재로.
     pub(crate) fn restore_removed_layers(&mut self, removed: Vec<RemovedLayer>) {
         for r in removed {
+            // A reference tile map that was asked for again in the meantime already has its row: one row a map.
+            if crate::ref_tile_layers::ref_tile_layer(&r.entry.layer_key).is_some()
+                && self.left_layers.entries.iter().any(|e| e.layer_key == r.entry.layer_key)
+            {
+                continue;
+            }
             let at = r.index.min(self.left_layers.entries.len());
             self.right_inspector.selected_layer_key = Some(r.entry.label_ko.clone());
             self.left_layers.entries.insert(at, r.entry);

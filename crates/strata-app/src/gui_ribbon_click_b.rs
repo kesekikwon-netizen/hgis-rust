@@ -83,18 +83,10 @@ impl StrataAppState {
                         "수계도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
                 }
             }
+            // The chip opens this menu itself (gui_ribbon_top.rs); a click that arrives by the label does the same.
             "옛 지도" => {
                 self.active_tab = MainTab::Map;
-                let spec = strata_net::tile_fetcher::build_historical_tms_layer_spec(
-                    strata_net::tile_fetcher::HistoricalMapType::Chosun1919_1to50000,
-                    0.8,
-                );
-                self.home_map.draw_guide_message = Some(format!(
-                    "{} ({}) 배경을 적용했습니다 (투명도 {:.0}%).",
-                    spec.layer_title_ko,
-                    self.work_crs.auth_id(),
-                    spec.opacity * 100.0
-                ));
+                self.ribbon.old_map_menu_open = true;
             }
             "고지형" => self.open_studio_tab(MainTab::Paleo),
             // C++ MainWindowRibbon.cpp:522-523 — 「정합」 단추는 setCheckable 없이

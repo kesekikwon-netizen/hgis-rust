@@ -24,7 +24,7 @@ const DEFERRED: [&str; 1] = ["GeoTIFF"];
 /// 리본 단추 중 **파일 대화상자를 여는 것 말고는** 눌렀을 때 뭔가 바뀌어야 한다.
 ///
 /// 확인하는 상태 필드(하나라도 바뀌면 "동작함"):
-/// 탭 · 모달 · 안내문 · 레이어 수 · 서브툴바 · 사용 도구 · 상태줄 힌트 · 레이어 표시.
+/// 탭 · 모달 · 안내문 · 레이어 수 · 서브툴바 · 사용 도구 · 상태줄 힌트 · 레이어 표시 · 옛 지도 메뉴.
 #[test]
 fn test_ribbon_buttons_change_state() {
     use crate::gui_ribbon_bar::UX_RIBBON_GROUPS;
@@ -50,6 +50,7 @@ fn test_ribbon_buttons_change_state() {
                 app.active_tool,
                 app.status_bar_hint.clone(),
                 app.home_map.real_survey.layer_visible.len(),
+                app.ribbon.old_map_menu_open,
             );
 
             app.handle_ribbon_click(label);
@@ -63,6 +64,7 @@ fn test_ribbon_buttons_change_state() {
                 app.active_tool,
                 app.status_bar_hint.clone(),
                 app.home_map.real_survey.layer_visible.len(),
+                app.ribbon.old_map_menu_open,
             );
             if before == after {
                 silent.push(label);
