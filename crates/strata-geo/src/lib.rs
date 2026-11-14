@@ -24,6 +24,10 @@ pub mod trench_edit;
 pub mod trench_generate;
 pub mod trench_grid;
 pub mod trench_lshape;
+pub mod trench_plan;
+pub mod trench_plan_area;
+pub mod trench_plan_fill;
+pub mod trench_plan_ratio;
 pub mod trench_stats;
 pub mod trench_types;
 
@@ -38,3 +42,11 @@ mod georef_tests;
 #[cfg(test)]
 #[path = "trench_grid_tests.rs"]
 mod trench_grid_tests;
+
+#[cfg(test)]
+#[path = "trench_plan_a_tests.rs"]
+mod trench_plan_a_tests;
+
+#[cfg(test)]
+#[path = "trench_plan_b_tests.rs"]
+mod trench_plan_b_tests;
