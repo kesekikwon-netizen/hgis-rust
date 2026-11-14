@@ -1,0 +1,6 @@
+<html><head><title>delayed official form</title>PAUSE</head><body>
+      <form id="formLogin" action="process.do" method="post" target="hidden_iframe" onsubmit="return fnFormValidation()">
+      <input id="mem_id" name="mem_id"><input id="mem_pw" name="mem_pw" type="password"><input type="submit"></form>
+      <script>var formLogin=null;window.fnFormValidation=function(){formLogin.find('input');};
+      window.finishReady=function(){formLogin={find:()=>true};let target=document.createElement('iframe');target.name='hidden_iframe';document.body.appendChild(target);};READY</script>
+      </body></html>

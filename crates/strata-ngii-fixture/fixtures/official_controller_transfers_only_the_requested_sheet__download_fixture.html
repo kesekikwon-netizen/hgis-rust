@@ -1,0 +1,5 @@
+<html><body><div id='fileControl'></div><script>
+      const records=[{id:'FILE_ID',printFileName:'terrain_NUMBER.zip',fileSize:19,downloadUrl:location.origin+'/nlippd/pd/innorix/innorixDownLoad2.do?fileName=terrain_NUMBER.zip&directory=fixture'}];
+      if(!records[0].id)delete records[0].id;
+      window.control={getOption:()=>({agent:false}),getDownloadFiles:()=>records,download(id){window.downloadCalls=(window.downloadCalls||0)+1;if(id!=='fixture-data')return false;location.href=records[0].downloadUrl;}};
+    </script></body></html>

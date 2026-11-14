@@ -1,0 +1,2 @@
+fixtures/** text eol=lf
+tools/*.py text eol=lf

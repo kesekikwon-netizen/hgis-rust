@@ -1,0 +1,5 @@
+<html><body><table>
+      <tr><td><input type="checkbox"></td><td id="zipName"></td><td>0.01 MB</td></tr>
+      <tr><td><input type="checkbox"></td><td id="xmlName"></td><td>0.01 MB</td></tr></table>
+      <button onclick="if(document.querySelectorAll('input:checked').length===2){location.href='/fixture-'+number+'.zip';setTimeout(()=>location.href='/fixture-'+number+'.xml',500);}">선택 다운로드</button>
+      <script>window.number=opener.orderItems[0].mapNo;document.getElementById('zipName').textContent='terrain_'+number+'.zip';document.getElementById('xmlName').textContent='terrain_'+number+'.xml';</script></body></html>

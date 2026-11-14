@@ -1,0 +1,10 @@
+<html><body><div id="fileControl"></div><script>
+    const records=opener.orderItems.flatMap(r=>['dxf','xml'].map(ext=>({id:r.mapNo+'-'+ext,
+      printFileName:'terrain_'+r.mapNo+'.'+ext,fileSize:ext==='dxf'?4194304:16,
+      downloadUrl:location.origin+'/nlippd/pd/innorix/innorixDownLoad2.do?fileName=terrain_'+r.mapNo+'.'+ext+'&directory=fixture'})));
+    window.control={getOption:()=>({agent:false}),getDownloadFiles:()=>records,download(id){
+      window.downloadIds=(window.downloadIds||[]).concat(id===undefined?'ALL':id);
+      const selected=id===undefined?records:records.filter(f=>f.id===id);if(!selected.length)return false;
+      selected.forEach((f,i)=>setTimeout(()=>{const a=document.createElement('a');a.href=f.downloadUrl;a.target='_self';document.body.appendChild(a);a.click();a.remove();},i*200));
+    }};
+  </script></body></html>
