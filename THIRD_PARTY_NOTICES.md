@@ -47,6 +47,17 @@ Rust 래퍼·빌드 크레이트(`crates/strata-engine/Cargo.toml`):
 
 C++ 앱(OSGeo4W)은 PROJ 9.8.1(EPSG v12.029)·GEOS 3.15.0 이다. 한반도 기준점 변환은 1 mm 안, makeValid 결과는 정규화 비교로 같다(`crates/strata-engine/src/*_tests.rs`).
 
+Rust 앱 효과음 출력 크레이트(`crates/strata-app/Cargo.toml`, 지시 SND1 — 오디오 파일 디코더 기능은 모두 끄고 `playback` 만 사용하며, 효과음 파형은 제3자 음원 없이 앱 코드 `crates/strata-app/src/sound_synth.rs` 에서 직접 합성):
+
+| 크레이트 | 판 | 라이선스 | 공식 근거 |
+| --- | --- | --- | --- |
+| `rodio` (`default-features = false`, `features = ["playback"]`) | 0.23.0 | MIT 또는 Apache-2.0 | https://github.com/RustAudio/rodio |
+| `cpal` | 0.18.2 | Apache-2.0 (Windows 에서는 OS 기본 WASAPI 시스템 DLL 만 호출하며 동봉 네이티브 C/C++ 코드 없음) | https://github.com/RustAudio/cpal |
+| `dasp_sample` | 0.11.0 | MIT 또는 Apache-2.0 | https://github.com/RustAudio/sample |
+| `num-rational` · `num-bigint` · `num-integer` | 0.4.2 · 0.4.8 · 0.1.47 | MIT 또는 Apache-2.0 | https://github.com/rust-num/num-rational |
+| `windows` · `windows-core` 및 하위 `windows-*` (`windows-collections` 0.3.2, `windows-future` 0.3.2, `windows-implement` 0.60.2, `windows-interface` 0.59.3, `windows-numerics` 0.3.1, `windows-result` 0.4.1, `windows-strings` 0.5.1, `windows-threading` 0.2.1) | 0.62.2 등 | MIT 또는 Apache-2.0 | https://github.com/microsoft/windows-rs |
+| 비-Windows 대상 전용 잠금 항목(`Cargo.lock` 에만 기록, Windows 실행 파일에는 컴파일·링크되지 않음): `alsa` 0.11.0 (`Apache-2.0 OR MIT`)·`alsa-sys` 0.4.0 (`MIT`, Linux 에서만 시스템 공유 DLL `libasound.so.2` 동적 링크), `coreaudio-rs` 0.14.2 (`MIT OR Apache-2.0`), `mach2` 0.6.0 (`BSD-2-Clause OR MIT OR Apache-2.0`), `objc2-audio-toolbox`·`objc2-avf-audio`·`objc2-core-audio`·`objc2-core-audio-types` 0.3.2 (`Zlib OR Apache-2.0 OR MIT`), `num-derive` 0.4.2 (`MIT OR Apache-2.0`) | 각 판 | 허용 라이선스 (Windows 동봉물에 GPL·LGPL·MPL 구성 요소 없음) | 각 크레이트 저장소 (`Cargo.lock`) |
+
 ## 함께 두는 별도 프로그램
 
 | 구성 | 라이선스 | 받은 파일·소스 주소·sha256 |

@@ -206,6 +206,14 @@ impl StrataAppState {
                                             1.0
                                         });
                                     }
+                                    ui.separator();
+                                    for sl in strata_types::theme_display::SoundLevel::ALL {
+                                        ui.radio_value(
+                                            &mut self.display_options.sound_level,
+                                            sl,
+                                            sl.label_ko(),
+                                        );
+                                    }
                                 });
                         });
                 }

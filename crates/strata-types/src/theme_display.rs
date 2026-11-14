@@ -6,6 +6,28 @@ use serde::{Deserialize, Serialize};
 
 use crate::theme_tokens_base::ColorTheme;
 
+/// App UI sound volume setting (`docs/EVOLUTION.md` E-12, order SND1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SoundLevel {
+    Normal,
+    #[default]
+    Quiet,
+    Off,
+}
+
+impl SoundLevel {
+    pub const ALL: [Self; 3] = [Self::Normal, Self::Quiet, Self::Off];
+
+    #[must_use]
+    pub const fn label_ko(self) -> &'static str {
+        match self {
+            Self::Normal => "소리 보통",
+            Self::Quiet => "소리 작게",
+            Self::Off => "소리 끔",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct DisplayOptions {
     pub high_contrast: bool,
@@ -13,6 +35,8 @@ pub struct DisplayOptions {
     pub bundled_fonts: bool,
     pub paper_look: bool,
     pub color_theme: ColorTheme,
+    #[serde(default)]
+    pub sound_level: SoundLevel,
 }
 
 pub const HGIS_FONT_BASE_PT: u32 = 12;

@@ -32,6 +32,9 @@ pub mod ribbon_icon_svg_part1;
 pub mod ribbon_icon_svg_part2;
 pub mod ribbon_icons;
 pub mod right_inspector;
+pub mod sound;
+mod sound_output;
+mod sound_synth;
 pub mod svg_curve_flatten;
 pub mod svg_path_paint;
 pub mod svg_path_tokenize;
@@ -291,3 +294,9 @@ pub mod perf_stats;
 #[cfg(test)]
 #[path = "perf_tests.rs"]
 mod perf_tests;
+#[cfg(test)]
+#[path = "sound_tests.rs"]
+mod sound_tests;
+#[cfg(test)]
+#[path = "sound_tests_ui.rs"]
+mod sound_tests_ui;

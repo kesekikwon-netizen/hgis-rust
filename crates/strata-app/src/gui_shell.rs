@@ -215,6 +215,7 @@ impl eframe::App for StrataAppState {
             self.theme_dirty = false;
         }
         let _ = self.render_workspace_egui(ctx);
+        crate::sound::on_frame_end(ctx, self);
         drop(perf_frame);
         // --snap 검증 모드: 액션→캡처를 프레임마다 하나씩 처리한다.
         self.snap_tick(ctx);

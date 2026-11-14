@@ -32,6 +32,7 @@ dirs = { workspace = true }
 chrono = { workspace = true }
 # 그린 도형의 uid(C++ QUuid::createUuid) — v4.
 uuid = { version = "=1.29.0", features = ["v4"] }
+rodio = { version = "=0.23.0", default-features = false, features = ["playback"] }
 
 [dev-dependencies]
 strata-net = { workspace = true, features = ["test-probe"] }
