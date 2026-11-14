@@ -1,4 +1,4 @@
-//! Background tile fetchers and cached API key for VWorld basemap and cadastral layers
+//! Background tile fetchers for VWorld basemap and cadastral layers
 //! (target/cpp-ref/src/app/MainWindow.cpp:514,526 — canvas caching and background preview jobs keep UI responsive).
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -10,6 +10,8 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 
 use crate::basemap_tiles::TileKind;
+
+pub use crate::basemap_tile_key::{load_basemap_image, load_cadastral_image, CachedApiKey};
 
 /// Cadastral WMS tile key `(z, x, y)`.
 pub type CadKey = (u8, u32, u32);
@@ -26,13 +28,11 @@ pub const RETRY_AFTER: Duration = Duration::from_secs(30);
 /// Maximum finished tile images converted into GPU textures per UI frame.
 pub const MAX_UPLOADS_PER_FRAME: usize = 8;
 
-/// Minimum interval between re-reading the VWorld API key from key stores.
-pub const KEY_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
-
 struct FetchState<K> {
     in_flight: HashSet<K>,
     failed: HashMap<K, Instant>,
     done: VecDeque<(K, egui::ColorImage)>,
+    generation: u64,
 }
 
 impl<K> Default for FetchState<K> {
@@ -41,11 +41,45 @@ impl<K> Default for FetchState<K> {
             in_flight: HashSet::new(),
             failed: HashMap::new(),
             done: VecDeque::new(),
+            generation: 0,
         }
     }
 }
 
-/// Background worker queue generic over tile key `K`, sharing an optional `AtomicUsize` ceiling.
+/// Completes worker bookkeeping in one place whether the closure returns an image, returns `None`,
+/// panics during execution, or fails to spawn.
+struct WorkerGuard<K: Copy + Eq + Hash> {
+    inner: Arc<(Mutex<FetchState<K>>, Condvar)>,
+    total: Arc<AtomicUsize>,
+    clock: Arc<dyn Fn() -> Instant + Send + Sync>,
+    ctx: Option<egui::Context>,
+    key: K,
+    generation: u64,
+    outcome: Option<egui::ColorImage>,
+}
+
+impl<K: Copy + Eq + Hash> Drop for WorkerGuard<K> {
+    fn drop(&mut self) {
+        let (lock, cvar) = &*self.inner;
+        let mut st = lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        st.in_flight.remove(&self.key);
+        match self.outcome.take() {
+            Some(img) => st.done.push_back((self.key, img)),
+            None if self.generation == st.generation => {
+                st.failed.insert(self.key, (self.clock)());
+            }
+            None => {}
+        }
+        self.total.fetch_sub(1, Ordering::AcqRel);
+        cvar.notify_all();
+        drop(st);
+        if let Some(ctx) = &self.ctx {
+            ctx.request_repaint();
+        }
+    }
+}
+
+/// Background worker queue generic over tile key `K`, sharing an `AtomicUsize` ceiling.
 #[derive(Clone)]
 pub struct TileFetcher<K> {
     inner: Arc<(Mutex<FetchState<K>>, Condvar)>,
@@ -124,7 +158,7 @@ where
     where
         F: FnOnce() -> Option<egui::ColorImage> + Send + 'static,
     {
-        let (lock, cvar) = &*self.inner;
+        let (lock, _) = &*self.inner;
         let Ok(mut st) = lock.lock() else {
             return false;
         };
@@ -152,42 +186,54 @@ where
         if !reserved {
             return false;
         }
+        let generation = st.generation;
         st.failed.remove(&key);
         st.in_flight.insert(key);
         drop(st);
 
-        let inner = Arc::clone(&self.inner);
-        let total = Arc::clone(&self.in_flight_total);
-        let clock = Arc::clone(&self.clock);
-        let ctx = ctx.cloned();
-        let spawned = std::thread::Builder::new()
+        let mut guard = WorkerGuard {
+            inner: Arc::clone(&self.inner),
+            total: Arc::clone(&self.in_flight_total),
+            clock: Arc::clone(&self.clock),
+            ctx: ctx.cloned(),
+            key,
+            generation,
+            outcome: None,
+        };
+        std::thread::Builder::new()
             .name("map-tile".to_owned())
             .spawn(move || {
-                let result = job();
-                let (lock, cvar) = &*inner;
-                let mut st = lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                st.in_flight.remove(&key);
-                match result {
-                    Some(img) => st.done.push_back((key, img)),
-                    None => {
-                        st.failed.insert(key, (clock)());
-                    }
-                }
-                total.fetch_sub(1, Ordering::AcqRel);
-                cvar.notify_all();
-                drop(st);
-                if let Some(ctx) = ctx {
-                    ctx.request_repaint();
-                }
-            });
-        if spawned.is_err() {
-            let mut st = lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-            st.in_flight.remove(&key);
-            self.in_flight_total.fetch_sub(1, Ordering::AcqRel);
-            cvar.notify_all();
-            return false;
+                guard.outcome = job();
+            })
+            .is_ok()
+    }
+
+    /// Clears all failed marks and increments `generation` so older in-flight jobs that fail later
+    /// do not put their tile back into `RETRY_AFTER`.
+    pub fn clear_failed(&self) {
+        let (lock, _) = &*self.inner;
+        if let Ok(mut st) = lock.lock() {
+            st.failed.clear();
+            st.generation = st.generation.wrapping_add(1);
         }
-        true
+    }
+
+    /// If any of `keys` is waiting out `RETRY_AFTER`, returns the shortest remaining wait (`> 0`).
+    #[must_use]
+    pub fn earliest_retry_delay(&self, keys: impl IntoIterator<Item = K>) -> Option<Duration> {
+        let (lock, _) = &*self.inner;
+        let st = lock.lock().ok()?;
+        if st.failed.is_empty() {
+            return None;
+        }
+        let now = (self.clock)();
+        keys.into_iter()
+            .filter_map(|k| {
+                let &failed_at = st.failed.get(&k)?;
+                let elapsed = now.saturating_duration_since(failed_at);
+                (elapsed < RETRY_AFTER).then(|| RETRY_AFTER - elapsed)
+            })
+            .min()
     }
 
     /// Drains all finished images.
@@ -217,81 +263,4 @@ where
         let (lock, _) = &*self.inner;
         lock.lock().is_ok_and(|st| st.in_flight.contains(&key))
     }
-}
-
-/// Keeps the VWorld API key in app state and re-reads key stores at most every `KEY_REFRESH_INTERVAL`.
-#[derive(Clone)]
-pub struct CachedApiKey {
-    cached: Option<(String, Instant)>,
-    reader: Arc<dyn Fn() -> String + Send + Sync>,
-    clock: Arc<dyn Fn() -> Instant + Send + Sync>,
-}
-
-impl Default for CachedApiKey {
-    fn default() -> Self {
-        Self {
-            cached: None,
-            reader: Arc::new(crate::basemap_fetch::current_key),
-            clock: Arc::new(Instant::now),
-        }
-    }
-}
-
-impl std::fmt::Debug for CachedApiKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CachedApiKey")
-            .field("has_cached", &self.cached.is_some())
-            .finish_non_exhaustive()
-    }
-}
-
-impl CachedApiKey {
-    pub fn get(&mut self) -> &str {
-        let now = (self.clock)();
-        let stale = match &self.cached {
-            None => true,
-            Some((_, read_at)) => now.saturating_duration_since(*read_at) >= KEY_REFRESH_INTERVAL,
-        };
-        if stale {
-            self.cached = Some(((self.reader)(), now));
-        }
-        self.cached.as_ref().map_or("", |(k, _)| k.as_str())
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub fn with_reader_and_clock(
-        reader: Arc<dyn Fn() -> String + Send + Sync>,
-        clock: Arc<dyn Fn() -> Instant + Send + Sync>,
-    ) -> Self {
-        Self { cached: None, reader, clock }
-    }
-}
-
-/// Fetches and decodes one cadastral WMS tile on a worker thread.
-#[must_use]
-pub fn load_cadastral_image(key: &str, z: u8, x: u32, y: u32) -> Option<egui::ColorImage> {
-    let path = crate::basemap_cadastral::fetch_cadastral_tile(key, z, x, y)?;
-    decode_cached_tile_image(&path)
-}
-
-/// Fetches and decodes one satellite/base XYZ tile on a worker thread.
-#[must_use]
-pub fn load_basemap_image(kind: TileKind, key: &str, z: u8, x: u32, y: u32) -> Option<egui::ColorImage> {
-    let path = crate::basemap_fetch::fetch_tile(kind, key, z, x, y)?;
-    decode_cached_tile_image(&path)
-}
-
-fn decode_cached_tile_image(path: &std::path::Path) -> Option<egui::ColorImage> {
-    let decoded = image::open(path).ok().map(|img| img.to_rgba8());
-    let Some(rgba) = decoded else {
-        let _ = std::fs::remove_file(path);
-        return None;
-    };
-    let (w, h) = (rgba.width() as usize, rgba.height() as usize);
-    if w == 0 || h == 0 {
-        let _ = std::fs::remove_file(path);
-        return None;
-    }
-    Some(egui::ColorImage::from_rgba_unmultiplied([w, h], rgba.as_raw()))
 }

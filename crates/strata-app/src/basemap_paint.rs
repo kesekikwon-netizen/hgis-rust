@@ -153,9 +153,12 @@ where
     }
 
     missing.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| (a.2, a.1).cmp(&(b.2, b.1))));
-    for (_, tx, ty) in missing {
+    for &(_, tx, ty) in &missing {
         let k = (kind, z, tx, ty);
         fetcher.request_with(k, Some(ctx), make_job(kind, z, tx, ty));
+    }
+    if let Some(delay) = fetcher.earliest_retry_delay(missing.iter().map(|&(_, tx, ty)| (kind, z, tx, ty))) {
+        ctx.request_repaint_after(delay);
     }
 
     if textures.len() > BASEMAP_TEXTURE_LIMIT {
@@ -269,3 +272,6 @@ mod async_tests_a;
 #[cfg(test)]
 #[path = "basemap_async_tests_b.rs"]
 mod async_tests_b;
+#[cfg(test)]
+#[path = "basemap_async_tests_c.rs"]
+mod async_tests_c;

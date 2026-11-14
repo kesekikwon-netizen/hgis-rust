@@ -102,9 +102,11 @@ impl StrataAppState {
                 self.home_map.draw_guide_message = Some("한국 전체 범위".to_owned());
             }
             "map.refresh" => {
-                // m_canvas->refresh() — 다시 그린다. 화면 타일은 디스크 캐시에서 다시 읽는다(새로 받지 않음).
+                // target/cpp-ref/src/app/MainWindowContextMenus.cpp:153 — m_canvas->refresh().
                 self.basemap_textures = Default::default();
                 self.cadastral_cells = Default::default();
+                self.basemap_fetch.clear_failed();
+                self.cadastral_fetch.clear_failed();
                 ctx.request_repaint();
             }
             "map.copyCoordinates" => ctx.copy_text(coords.to_owned()),

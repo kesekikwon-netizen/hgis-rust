@@ -50,6 +50,19 @@ impl StrataAppState {
         self.left_layers.entries.iter().any(|e| e.layer_key == "vworld_cadastral_wms")
     }
 
+    /// Returns the cached VWorld API key; if it changed since the previous handout, clears failed
+    /// marks of both fetchers and asks egui for a repaint so the view retries immediately.
+    fn current_vworld_api_key(&mut self, ctx: &egui::Context) -> String {
+        let (key, changed) = self.vworld_api_key.get_with_change();
+        let out = key.to_owned();
+        if changed {
+            self.basemap_fetch.clear_failed();
+            self.cadastral_fetch.clear_failed();
+            ctx.request_repaint();
+        }
+        out
+    }
+
     /// 배경지도 타일을 칠한다(위성·일반도). 지적 WMS 는 별도 경로다.
     pub(crate) fn paint_basemap_layer(
         &mut self,
@@ -77,7 +90,7 @@ impl StrataAppState {
             self.basemap_tiles_painted = 0;
             return;
         };
-        let api_key = self.vworld_api_key.get().to_owned();
+        let api_key = self.current_vworld_api_key(ctx);
         let mpp = self.home_map.viewport.meters_per_pixel.max(1e-6);
         let z = crate::basemap_tiles::basemap_zoom_for(mpp, rect);
         let view = TileView::from_viewport(&self.home_map.viewport, rect, self.work_crs);
@@ -129,7 +142,7 @@ impl StrataAppState {
         if !crate::basemap_cadastral::cadastral_visible_at_scale(scale_denom) {
             return;
         }
-        let key = self.vworld_api_key.get().to_owned();
+        let key = self.current_vworld_api_key(ctx);
         if key.trim().is_empty() {
             return;
         }
@@ -200,9 +213,12 @@ impl StrataAppState {
             }
         }
         missing.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| (a.2, a.1).cmp(&(b.2, b.1))));
-        for (_, tx, ty) in missing {
+        for &(_, tx, ty) in &missing {
             let k = (z, tx, ty);
             self.cadastral_fetch.request_with(k, Some(ctx), make_job(&key, z, tx, ty));
+        }
+        if let Some(delay) = self.cadastral_fetch.earliest_retry_delay(missing.iter().map(|&(_, tx, ty)| (z, tx, ty))) {
+            ctx.request_repaint_after(delay);
         }
         if self.cadastral_cells.len() > CADASTRAL_TEXTURE_LIMIT {
             self.cadastral_cells.retain_keys(&used);

@@ -189,6 +189,7 @@ mod app_state_layer_remove;
 mod app_state_home_facts;
 mod user_settings;
 mod basemap_cadastral_jobs;
+mod basemap_tile_key;
 mod basemap_fetch;
 mod basemap_mesh;
 mod basemap_paint;
