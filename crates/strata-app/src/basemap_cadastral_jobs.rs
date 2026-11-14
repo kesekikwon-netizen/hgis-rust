@@ -230,8 +230,7 @@ where
         let spawned = std::thread::Builder::new()
             .name("map-tile".to_owned())
             .spawn(move || {
-                // The guard's Drop does the bookkeeping for every way the worker ends. It is moved in and
-                // dropped by name: rustc 1.100 rejects a captured value that is only assigned to.
+                // Moved in and dropped by name (its Drop does the bookkeeping): rustc 1.100 rejects an assign-only capture.
                 let mut guard = guard;
                 guard.outcome = job();
                 drop(guard);
