@@ -32,8 +32,18 @@ pub(super) fn run_frame_events(
     events: Vec<Event>,
     f: impl FnOnce(&egui::Context, &egui::Painter),
 ) -> egui::FullOutput {
+    run_frame_events_at(ctx, rect, None, events, f)
+}
+
+pub(super) fn run_frame_events_at(
+    ctx: &egui::Context,
+    rect: Rect,
+    time: Option<f64>,
+    events: Vec<Event>,
+    f: impl FnOnce(&egui::Context, &egui::Painter),
+) -> egui::FullOutput {
     let mut f = Some(f);
-    let raw = RawInput { screen_rect: Some(rect), events, predicted_dt: 0.0, ..Default::default() };
+    let raw = RawInput { screen_rect: Some(rect), time, events, predicted_dt: 0.0, ..Default::default() };
     ctx.run(raw, |ctx| {
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(cb) = f.take() {
@@ -228,4 +238,49 @@ fn test_map1c_4_request_repaint_after_receives_exact_remaining_rest_time_and_not
     });
     assert_eq!(out_idle.viewport_output[&egui::ViewportId::ROOT].repaint_delay, Duration::MAX);
     assert!(delays.lock().unwrap().is_empty(), "must not request continuous repaints after rest");
+}
+
+/// (MAP1d) Holding a mouse button without moving past `InputOptions::max_click_duration` (`0.8 s`,
+/// `egui-0.31.1/src/input_state/mod.rs:33,44,1270-1274`) must NOT count as a drag or block tile
+/// requests, while moving beyond `max_click_dist` (`6.0 pt`) stays a drag even back at origin.
+#[test]
+fn test_map1d_held_button_without_movement_past_click_duration_does_not_block_requests() {
+    let (mut app, rect) = map_app_at(CHUNCHEON.0, CHUNCHEON.1, 1.0, [900.0, 600.0]);
+    let (t0, now_cell) = install_clock(&mut app);
+    let ctx = egui::Context::default();
+    let (p0, p1) = (Pos2::new(200.0, 200.0), Pos2::new(240.0, 200.0));
+    let btn = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+
+    *now_cell.lock().unwrap() = t0;
+    run_frame_events_at(&ctx, rect, Some(0.0), vec![Event::PointerMoved(p0), btn(p0, true)], |ctx, p| {
+        app.paint_basemap_layer_with(ctx, p, rect, |_k, _key, _z, _x, _y| move || Some(one_px()));
+    });
+    assert_eq!(app.basemap_fetch.requests_started(), 0);
+
+    // 1.0 s > 0.8 s (`max_click_duration`) held at p0 without moving: `could_any_button_be_click()` is false, yet not dragging.
+    *now_cell.lock().unwrap() = t0 + Duration::from_secs(1);
+    run_frame_events_at(&ctx, rect, Some(1.0), vec![], |ctx, p| {
+        app.paint_basemap_layer_with(ctx, p, rect, |_k, _key, _z, _x, _y| move || Some(one_px()));
+    });
+    app.basemap_fetch.wait_for_idle();
+    // At least the ceiling: a worker that ends while this frame is still asking frees its slot for one more request.
+    assert!(app.basemap_fetch.requests_started() >= MAX_IN_FLIGHT, "stationary button hold > 0.8 s must not block tile requests");
+
+    // Release, pan to fresh view, press at p0, drag 40 pt (> 6.0 pt) and back onto p0 while still held:
+    run_frame_events_at(&ctx, rect, Some(1.1), vec![btn(p0, false)], |ctx, p| {
+        app.paint_basemap_layer_with(ctx, p, rect, |_k, _key, _z, _x, _y| move || Some(one_px()));
+    });
+    app.home_map.viewport.center_xy[0] += 5_000.0;
+    let before_drag = app.basemap_fetch.requests_started();
+    for (ms, t_sec, evs) in [
+        (1200_u64, 1.2, vec![btn(p0, true)]),
+        (1220, 1.22, vec![Event::PointerMoved(p1), Event::PointerMoved(p0)]),
+        (1500, 1.5, vec![]),
+    ] {
+        *now_cell.lock().unwrap() = t0 + Duration::from_millis(ms);
+        run_frame_events_at(&ctx, rect, Some(t_sec), evs, |ctx, p| {
+            app.paint_basemap_layer_with(ctx, p, rect, |_k, _key, _z, _x, _y| move || Some(one_px()));
+        });
+    }
+    assert_eq!(app.basemap_fetch.requests_started(), before_drag, "real drag returning to origin stays dragging while held");
 }

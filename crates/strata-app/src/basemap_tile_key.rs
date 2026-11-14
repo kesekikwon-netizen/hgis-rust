@@ -95,12 +95,64 @@ impl ViewRestState {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PressDragLatch {
+    origin: egui::Pos2,
+    start_time: Option<f64>,
+    moved_past_threshold: bool,
+    aborted: bool,
+}
+
+/// True while a pointer press that started inside `rect` has moved past `InputOptions::max_click_dist`
+/// and is still held down (and not aborted with `Escape`).
+///
+/// `PointerState::could_any_button_be_click` and `is_decidedly_dragging` (`egui-0.31.1/src/input_state/mod.rs:25,33,43-44,1264-1296`)
+/// flip after `max_click_duration` (`0.8 s`, for touch long-press menus) even with zero movement,
+/// while `has_moved_too_much_for_a_click` (`mod.rs:848,930-933,958-960`) is `pub(crate)`. Latching
+/// movement past `max_click_dist` per `(press_origin, press_start_time)` (`mod.rs:838-845,1085-1117,1157-1159,1201-1203`,
+/// `src/interaction.rs:137-141`, `src/util/id_type_map.rs:369,385`) ignores stationary holds of any length.
 pub(crate) fn is_map_drag_in_progress(ctx: &egui::Context, rect: egui::Rect) -> bool {
-    ctx.input(|i| {
-        i.pointer.any_down()
-            && !i.pointer.could_any_button_be_click()
-            && i.pointer.press_origin().is_some_and(|origin| rect.contains(origin))
-    })
+    let latch_id = egui::Id::new("ka_map_press_drag_latch");
+    let max_click_dist = ctx.options(|o| o.input_options.max_click_dist);
+    let prev = ctx.data(|d| d.get_temp::<Option<PressDragLatch>>(latch_id)).flatten();
+    let next = ctx.input(|i| {
+        if !i.pointer.any_down() {
+            return None;
+        }
+        let origin = i.pointer.press_origin()?;
+        let start_time = i.pointer.press_start_time();
+        let fresh_press = i.pointer.any_pressed()
+            || prev.is_none_or(|p| p.origin != origin || p.start_time != start_time);
+        let (mut moved, mut aborted) = match prev {
+            Some(p) if !fresh_press => (p.moved_past_threshold, p.aborted),
+            _ => (false, false),
+        };
+        if i.key_pressed(egui::Key::Escape) {
+            aborted = true;
+        }
+        if !moved {
+            for ev in i.events.iter().rev() {
+                match ev {
+                    egui::Event::PointerButton { pressed: true, .. } if fresh_press => break,
+                    egui::Event::PointerMoved(pos) if origin.distance(*pos) > max_click_dist => {
+                        moved = true;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            if !moved {
+                if let Some(pos) = i.pointer.interact_pos().or_else(|| i.pointer.latest_pos()) {
+                    moved = origin.distance(pos) > max_click_dist;
+                }
+            }
+        }
+        Some(PressDragLatch { origin, start_time, moved_past_threshold: moved, aborted })
+    });
+    if next != prev {
+        ctx.data_mut(|d| d.insert_temp(latch_id, next));
+    }
+    next.is_some_and(|l| rect.contains(l.origin) && l.moved_past_threshold && !l.aborted)
 }
 
 /// Keeps the VWorld API key in app state and re-reads key stores at most every `KEY_REFRESH_INTERVAL`.

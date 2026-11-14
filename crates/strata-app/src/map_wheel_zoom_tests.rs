@@ -10,7 +10,7 @@ use eframe::egui::{self, epaint::Shape, Event, Modifiers, MouseWheelUnit, Pointe
 use super::wheel_zoom_mpp_factor;
 use crate::app_state::{MainTab, StrataAppState};
 
-fn new_map_app() -> (StrataAppState, egui::Context) {
+pub(super) fn new_map_app() -> (StrataAppState, egui::Context) {
     let mut app = StrataAppState::new_startup();
     app.active_tab = MainTab::Map;
     app.home_map.active_basemap = strata_net::tile_fetcher::BasemapSource::Daedongyeojido;
@@ -23,7 +23,7 @@ fn new_map_app() -> (StrataAppState, egui::Context) {
     (app, ctx)
 }
 
-fn run_frame(app: &mut StrataAppState, ctx: &egui::Context, events: Vec<Event>) -> Vec<egui::epaint::ClippedShape> {
+pub(super) fn run_frame(app: &mut StrataAppState, ctx: &egui::Context, events: Vec<Event>) -> Vec<egui::epaint::ClippedShape> {
     let raw = RawInput {
         screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1680.0, 960.0))),
         predicted_dt: 1.0 / 60.0,
@@ -37,7 +37,7 @@ fn run_frame(app: &mut StrataAppState, ctx: &egui::Context, events: Vec<Event>) 
 
 /// Windows mouse wheel notch as delivered by `winit 0.30.13` (`src/platform_impl/windows/event_loop.rs:1727-1742`,
 /// `src/event.rs:953-959`) -> `egui-winit 0.31.1` (`src/lib.rs:694-711`) -> `egui 0.31.1` (`src/data/input.rs:503-519, 1161-1170`).
-fn windows_wheel_notch(notches: f32, modifiers: Modifiers) -> Event {
+pub(super) fn windows_wheel_notch(notches: f32, modifiers: Modifiers) -> Event {
     Event::MouseWheel {
         unit: MouseWheelUnit::Line,
         delta: Vec2::new(0.0, notches),

@@ -18,8 +18,11 @@
 //!   by `WHEEL_DELTA` (`120`) into `MouseScrollDelta::LineDelta(0.0, 1.0)` per notch.
 //! - `egui-winit 0.31.1` (`src/lib.rs:694-711`) pushes `egui::Event::MouseWheel { unit: MouseWheelUnit::Line, delta: vec2(0.0, 1.0), modifiers }`.
 //! - `egui 0.31.1` (`src/data/input.rs:503-519, 1161-1170`, `src/input_state/mod.rs:321-399`, `src/memory/mod.rs:285-286, 315`)
-//!   converts `Line` by `options.line_scroll_speed` (`40.0` pt) and smooths `smooth_scroll_delta` across multiple frames
-//!   while routing `Ctrl` + wheel out of `smooth_scroll_delta`. Reading `Event::MouseWheel` directly applies each event once.
+//!   converts `Line` by `options.line_scroll_speed` (`40.0` pt), turns `Shift` + wheel into horizontal `raw_scroll_delta`
+//!   (`src/input_state/mod.rs:327-331`), and smooths `smooth_scroll_delta` across multiple frames while routing `Ctrl` + wheel
+//!   out of `smooth_scroll_delta`. C++ Strata defines no `Shift` + wheel rule on `m_canvas` (`MainWindow.cpp:510, 2258-2265`,
+//!   `LayerOps.cpp:2255-2258`, `KaDrawingTools.cpp:102-122`), so reading `Event::MouseWheel` directly applies `1.2` once per notch
+//!   with or without `Shift`.
 
 use eframe::egui::{self, Event, MouseWheelUnit, Pos2, Rect};
 use strata_canvas2d::viewport::ViewportTransform;
@@ -52,12 +55,28 @@ pub(crate) fn wheel_zoom_mpp_factor(notches: f64, ctrl: bool) -> f64 {
 }
 
 /// Applies all `Event::MouseWheel` events of this frame around the rectangle-local cursor position in `rect`.
+///
+/// Modal dialogs in `strata-app` use centered `egui::Window` layers (`Order::Middle`, `egui-0.31.1/src/containers/area.rs:212`,
+/// `src/layers.rs:10-27`) without a full-screen backdrop, leaving the `CentralPanel` (`Order::Background`,
+/// `src/containers/panel.rs:384-390`) hovered beside the dialog. Ignore background wheel zoom whenever any modal,
+/// popup, or `Middle`/`Foreground` area is open (`src/memory/mod.rs:972-974, 1077-1079, 1229-1235, 1306-1318`).
 pub(crate) fn apply_map_wheel_zoom(
     ui: &egui::Ui,
     rect: Rect,
     hover_pos: Option<Pos2>,
     vp: &mut ViewportTransform,
 ) {
+    if ui.layer_id().order == egui::Order::Background
+        && ui.ctx().memory(|m| {
+            m.top_modal_layer().is_some()
+                || m.any_popup_open()
+                || m.areas().visible_layer_ids().iter().any(|l| {
+                    matches!(l.order, egui::Order::Middle | egui::Order::Foreground)
+                })
+        })
+    {
+        return;
+    }
     let line_speed = f64::from(ui.ctx().options(|o| o.line_scroll_speed));
     let (factor, any_wheel, ptr_pos) = ui.input(|i| {
         let mut combined = 1.0_f64;
@@ -94,3 +113,6 @@ pub(crate) fn apply_map_wheel_zoom(
 #[cfg(test)]
 #[path = "map_wheel_zoom_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "map_wheel_zoom_tests_b.rs"]
+mod tests_b;
