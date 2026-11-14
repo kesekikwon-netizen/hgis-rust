@@ -3,6 +3,7 @@
 //! 둘째 선 흰색 알파 200). 그리는 동안 왼쪽 끌기는 지도를 옮기지 않는다(QGIS 그리기 도구) — 가운데 끌기로 옮긴다.
 
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke};
+use strata_canvas2d::map_tools::MapToolKind;
 
 use crate::app_state::StrataAppState;
 
@@ -13,7 +14,7 @@ use super::gui_tab_map_survey::fill_mesh;
 type Presses = (Option<Pos2>, Option<Pos2>);
 
 impl StrataAppState {
-    // Route canvas presses and double-clicks to DrawPolygon and DrawLine capture
+    // Route canvas presses and double-clicks to polygon, line, and point capture
     // (target/cpp-ref/src/app/KaCaptureMapTool.cpp:260-314).
     pub(crate) fn handle_polygon_capture_input(&mut self, ui: &egui::Ui, response: &egui::Response, rect: Rect) -> bool {
         if !self.capture_active() {
@@ -40,9 +41,8 @@ impl StrataAppState {
                 }
             }
         }
-        // egui 는 빠른 두 번 누름이면 자리가 달라도 더블클릭으로 본다. Qt(Windows)는 두 누름이 4 px 안일 때만이다
-        // (SM_CXDOUBLECLK) — 빠르게 다른 자리를 찍어도 면이 마쳐지지 않게 한다.
-        if response.double_clicked() {
+        // Ignore double-click in Mode::Point (target/cpp-ref/src/app/KaCaptureMapTool.cpp:306); Qt counts double-clicks within 4 px.
+        if self.active_tool != MapToolKind::PlacePoint && response.double_clicked() {
             let (prev, last) = ui.data(|d| d.get_temp::<Presses>(presses_id).unwrap_or_default());
             let same_spot = matches!((prev, last), (Some(a), Some(b)) if a.distance(b) <= 4.0);
             if let (true, Some(pos)) = (same_spot, response.interact_pointer_pos()) {
@@ -116,3 +116,6 @@ mod tests;
 #[cfg(test)]
 #[path = "gui_tab_map_capture_line_tests.rs"]
 mod line_tests;
+#[cfg(test)]
+#[path = "gui_tab_map_capture_point_tests.rs"]
+mod point_tests;

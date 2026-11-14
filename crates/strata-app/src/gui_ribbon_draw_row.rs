@@ -157,12 +157,8 @@ impl StrataAppState {
                     "area" => self.start_edit_survey_area(),
                     "poly" => self.start_edit_feature_poly(),
                     "line" => self.start_edit_feature_line(),
-                    "artifact" => {
-                        // 유물 위치(점) 그리기는 지시 3-5 — 그때까지 예전 점 찍기 도구.
-                        self.active_tab = MainTab::Map;
-                        self.active_tool = MapToolKind::PlacePoint;
-                        self.home_map.update_guide_for_tool(MapToolKind::PlacePoint);
-                    }
+                    // Wire 유물위치표시 to startEditArtifact (target/cpp-ref/src/app/MainWindowRibbon.cpp:905-910).
+                    "artifact" => self.start_edit_artifact(),
                     _ => {} // 쉽게그리기는 뒤 지시(따로 메모리 레이어에 그린다).
                 }
             }

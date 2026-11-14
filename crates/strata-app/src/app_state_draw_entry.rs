@@ -50,6 +50,11 @@ impl StrataAppState {
         self.begin_edit_layer("section_line", "단면선");
     }
 
+    // Ensure artifact_point with title "유물" and begin point capture (target/cpp-ref/src/app/MainWindowEditing.cpp:1168-1174).
+    pub(crate) fn start_edit_artifact(&mut self) {
+        self.begin_edit_layer("artifact_point", "유물");
+    }
+
     /// 범례 우클릭 「그리기·편집 시작」 — `beginEdit(layer)`(MainWindowContextMenus.cpp:261-262). 조사 표가 아닌
     /// 레이어면 그릴 대상을 비우고 그리기 도구를 켜지 않는다.
     pub(crate) fn start_edit_from_legend(&mut self, label: &str) {
@@ -67,7 +72,7 @@ impl StrataAppState {
     pub(crate) fn begin_edit_layer(&mut self, key: &str, title_ko: &str) {
         if self.survey_path.is_none() {
             // C++ 은 여기서 「새 조사」를 물어본다(:805-812).
-            self.home_map.draw_guide_message = Some("먼저 「새 조사」로 저장 경로를 만드세요.".to_owned());
+            self.show_status_message("먼저 「새 조사」로 저장 경로를 만드세요.");
             return;
         }
         // LayerOps::ensureDomainLayer — 이미 있으면 그 레이어, 없으면 그 이름으로 맨 위에.
@@ -94,7 +99,13 @@ impl StrataAppState {
             .iter()
             .find(|t| t.table == key)
             .and_then(|t| GeomKind::from_type_name(&t.geometry_type))
-            .unwrap_or(if key.ends_with("_line") { GeomKind::Line } else { GeomKind::Polygon });
+            .unwrap_or(if key.ends_with("_line") {
+                GeomKind::Line
+            } else if key.ends_with("_point") || key == "control_points" {
+                GeomKind::Point
+            } else {
+                GeomKind::Polygon
+            });
         // KaCaptureMapTool::setMode → resetSession — 그리던 점은 지운다.
         self.draw_sketch = crate::draw_sketch::DrawSketch::default();
         // beginEdit — 보이게, 현재 레이어로, 도형 형식대로 그리기 도구.
@@ -107,7 +118,7 @@ impl StrataAppState {
             GeomKind::Point => MapToolKind::PlacePoint,
         };
         let how = if kind == GeomKind::Point { "좌클릭으로 점 찍기" } else { "좌클릭 점 · 우클릭/Enter 완료 · Esc 취소" };
-        self.home_map.draw_guide_message = Some(format!("{name} — {how}"));
+        self.show_status_message(format!("{name} — {how}"));
     }
 }
 

@@ -54,29 +54,22 @@ impl StrataAppState {
         } = input;
         if is_draw_tool {
             let key = self.edit_layer_key.as_deref().unwrap_or("");
-            // C++ currentToolIconId (target/cpp-ref/src/app/KaDrawSketchTools.cpp:220-227);
-            // "region" (Lucide map-pin) stands in for "gps" until a dedicated "gps" icon id is added.
+            // C++ currentToolIconId and currentToolLabel (target/cpp-ref/src/app/KaDrawSketchTools.cpp:178-199,220-227).
             let icon_id = if key == "control_points" {
-                "region"
-            } else if key.starts_with("artifact") || effective_tool == MapToolKind::PlacePoint {
+                "gps"
+            } else if key.starts_with("artifact") {
                 "artifact"
             } else if key == "feature_line" || key == "section_line" {
                 "draw_line"
             } else {
                 "draw_poly"
             };
-            let title = if effective_tool == MapToolKind::PlacePoint
-                && key != "control_points"
-                && !key.starts_with("artifact")
-            {
-                "그리기 · 유물 위치".to_owned()
-            } else {
-                self.tool_chip_label()
-            };
+            let title = self.tool_chip_label();
             if title.trim().is_empty() {
                 return None;
             }
-            let hint = if icon_id == "region" || icon_id == "artifact" {
+            // C++ hintForTool (target/cpp-ref/src/app/MainWindowChrome.cpp:71-76).
+            let hint = if icon_id == "gps" || icon_id == "artifact" {
                 "클릭한 자리에 점을 놓습니다".to_owned()
             } else {
                 "클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)".to_owned()

@@ -33,6 +33,7 @@ fn attribute_panel_sentence(drawing: bool, has_card: bool) -> &'static str {
 impl StrataAppState {
     pub(crate) fn render_ri_attribute_card(&mut self, ui: &mut egui::Ui) {
         self.drop_card_if_gone();
+        // Drawing covers polygon, line, and point capture (target/cpp-ref/src/app/MainWindowFeatureCard.cpp:60,72).
         let drawing = Self::is_capture_tool(self.active_tool);
         let view = self.card_view_now();
         let msg = attribute_panel_sentence(drawing, view.is_some());

@@ -208,7 +208,7 @@ fn guide_band_paints_em_dash_hint_label_at_12_12_height_36() {
     let empty_hint_out = ctx.run(RawInput::default(), |ctx| {
         egui::CentralPanel::default().show(ctx, |ui| {
             let p = ui.painter_at(canvas);
-            let spec = super::GuideBandSpec { icon_id: "region", title: "그리기 · 기준점".to_owned(), hint: String::new(), measure: None };
+            let spec = super::GuideBandSpec { icon_id: "gps", title: "그리기 · 기준점".to_owned(), hint: String::new(), measure: None };
             assert_eq!(app.paint_guide_band(ui, &p, canvas, Some(&spec)), 56.0);
         });
     });
@@ -223,27 +223,35 @@ fn guide_band_paints_em_dash_hint_label_at_12_12_height_36() {
     assert_eq!(find_rect_of_width(&folded_shapes, 260.0).unwrap().min - canvas2.min, Vec2::new(12.0, 12.0));
 }
 
-// Ported from target/cpp-ref/src/app/KaDrawSketchTools.cpp:216-236 (currentToolIconId).
+// Ported from target/cpp-ref/src/app/KaDrawSketchTools.cpp:178-199,216-236,
+// target/cpp-ref/src/app/MainWindowChrome.cpp:71-76, and target/cpp-ref/src/app/KaIconsOutlineA.cpp:113-122.
 #[test]
-fn guide_band_icon_follows_active_tool_and_edit_layer() {
+fn guide_band_icon_and_point_title_follow_active_tool_and_edit_layer() {
     let mut app = StrataAppState::new_startup();
     app.active_tab = MainTab::Map;
     let cases = [
-        (MapToolKind::DrawLine, Some("feature_line"), "draw_line"),
-        (MapToolKind::DrawLine, Some("section_line"), "draw_line"),
-        (MapToolKind::DrawPolygon, Some("feature_poly"), "draw_poly"),
-        (MapToolKind::DrawPolygon, Some("survey_area"), "draw_poly"),
-        (MapToolKind::PlacePoint, Some("control_points"), "region"),
-        (MapToolKind::PlacePoint, Some("artifact_point"), "artifact"),
+        (MapToolKind::DrawLine, Some("feature_line"), "draw_line", "그리기 · 유구 선", "— 클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)"),
+        (MapToolKind::DrawLine, Some("section_line"), "draw_line", "그리기 · 단면선", "— 클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)"),
+        (MapToolKind::DrawPolygon, Some("feature_poly"), "draw_poly", "그리기 · 유구 면", "— 클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)"),
+        (MapToolKind::DrawPolygon, Some("survey_area"), "draw_poly", "그리기 · 조사구역", "— 클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)"),
+        (MapToolKind::PlacePoint, Some("control_points"), "gps", "그리기 · 기준점", "— 클릭한 자리에 점을 놓습니다"),
+        (MapToolKind::PlacePoint, Some("artifact_point"), "artifact", "그리기 · 유물 위치", "— 클릭한 자리에 점을 놓습니다"),
+        (MapToolKind::PlacePoint, None, "draw_poly", "그리기", "— 클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)"),
+        (MapToolKind::PlacePoint, Some("custom_point"), "draw_poly", "그리기", "— 클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)"),
     ];
-    for (tool, key, want_icon) in cases {
+    for (tool, key, want_icon, want_title, want_hint) in cases {
         app.active_tool = tool;
         app.edit_layer_key = key.map(str::to_owned);
         let (canvas, shapes) = paint_hud(&mut app, draw_flags(tool, None));
+        assert_eq!(pill_strings(&shapes), vec![want_title, want_hint], "{tool:?} / {key:?}");
         let glyph_box = Rect::from_min_size(Pos2::new(canvas.left() + 22.0, canvas.top() + 20.0), Vec2::splat(20.0));
         let want = expected_svg_signature(canvas, want_icon);
         assert!(!want.is_empty());
         assert_eq!(glyph_signature_in_hud(&shapes, glyph_box), want, "{tool:?} / {key:?} ({want_icon})");
+        if want_icon == "gps" {
+            assert_ne!(want, expected_svg_signature(canvas, "region"), "gps must use oGps, not region");
+            assert_ne!(want, expected_svg_signature(canvas, "artifact"));
+        }
     }
 
     let other_cases = [

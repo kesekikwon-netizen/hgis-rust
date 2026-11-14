@@ -69,6 +69,47 @@ fn an_empty_table_is_added_with_the_cpp_title() {
     assert_eq!(app.active_tool, MapToolKind::DrawLine);
 }
 
+// Ported from target/cpp-ref/src/app/MainWindowEditing.cpp:975-1023,1168-1174 and
+// target/cpp-ref/tests/test_save_open.cpp:367-376: startEditArtifact ensures artifact_point with title "유물"
+// and selects PlacePoint with the point status message; legend start on control_points also uses PlacePoint.
+#[test]
+fn start_edit_artifact_and_control_points_select_point_capture_with_cpp_title_and_status() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("새 조사_유물.gpkg");
+    let mut fresh = StrataAppState::new_startup();
+    strata_storage::gpkg::GpkgRepository::create_new_survey(&path, fresh.modals.new_survey_crs).expect("create");
+    fresh.start_new_survey_project_with_path("새 조사", &path, fresh.modals.new_survey_crs);
+    fresh.status_bar_hint = "남아 있던 리본 안내".to_owned();
+    assert!(!fresh.left_layers.entries.iter().any(|e| e.layer_key == "artifact_point"));
+
+    fresh.start_edit_artifact();
+
+    let first_row = fresh
+        .left_layers
+        .entries
+        .iter()
+        .find(|e| e.group == strata_types::schema::LegendGroup::SurveyData)
+        .expect("survey row");
+    assert_eq!((first_row.layer_key.as_str(), first_row.label_ko.as_str()), ("artifact_point", "유물"));
+    assert_eq!(fresh.edit_layer_key.as_deref(), Some("artifact_point"));
+    assert_eq!(fresh.right_inspector.selected_layer_key.as_deref(), Some("유물"));
+    assert_eq!(fresh.active_tool, MapToolKind::PlacePoint);
+    assert!(fresh.home_map.real_survey.is_layer_visible("유물"));
+    assert_eq!(fresh.status_left_message(), "유물 — 좌클릭으로 점 찍기");
+
+    let mut demo = opened_demo(dir.path());
+    demo.start_edit_artifact();
+    assert_eq!(demo.edit_layer_key.as_deref(), Some("artifact_point"));
+    assert_eq!(demo.active_tool, MapToolKind::PlacePoint);
+    assert_eq!(demo.status_left_message(), "유물 — 좌클릭으로 점 찍기");
+
+    let cp_title = demo.left_layers.entries.iter().find(|e| e.layer_key == "control_points").expect("cp").label_ko.clone();
+    demo.start_edit_from_legend(&cp_title);
+    assert_eq!(demo.edit_layer_key.as_deref(), Some("control_points"));
+    assert_eq!(demo.active_tool, MapToolKind::PlacePoint);
+    assert_eq!(demo.status_left_message(), format!("{cp_title} — 좌클릭으로 점 찍기"));
+}
+
 /// 조사 파일이 없으면 그리지 않는다(C++ 은 「새 조사」를 물어본다 — 그 창은 아직 없다).
 #[test]
 fn without_a_survey_nothing_is_targeted() {

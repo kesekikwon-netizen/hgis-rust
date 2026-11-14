@@ -142,17 +142,22 @@ fn inspector_panel_shows_empty_and_drawing_sentences() {
     let t1 = rendered_card_texts(&mut app);
     assert!(t1.contains(s_idle_empty), "{t1}");
 
-    // 2. Drawing (line and polygon), no card.
-    for tool in [MapToolKind::DrawLine, MapToolKind::DrawPolygon] {
+    // 2. Drawing (line, polygon, and point), no card (target/cpp-ref/src/app/MainWindowFeatureCard.cpp:60,72).
+    for tool in [MapToolKind::DrawLine, MapToolKind::DrawPolygon, MapToolKind::PlacePoint] {
         app.active_tool = tool;
+        app.resync_card_on_tool_change();
+        app.home_map.selected_shape = Some(("feature_poly".to_owned(), 2));
+        app.sync_card_with_selection();
+        assert!(app.home_map.card.is_none(), "no selection follow while {tool:?}");
         let t2 = rendered_card_texts(&mut app);
         assert!(t2.contains(s_draw_empty), "{tool:?}: {t2}");
         assert!(!t2.contains(s_idle_empty), "{tool:?}: {t2}");
     }
+    app.home_map.selected_shape = None;
 
-    // 3. Drawing (line and polygon) with an editable record on the card: card stays visible alongside sentence.
+    // 3. Drawing (line, polygon, and point) with an editable record on the card: card stays visible alongside sentence.
     app.set_card_target("feature_poly", 1, false);
-    for tool in [MapToolKind::DrawLine, MapToolKind::DrawPolygon] {
+    for tool in [MapToolKind::DrawLine, MapToolKind::DrawPolygon, MapToolKind::PlacePoint] {
         app.active_tool = tool;
         let t3 = rendered_card_texts(&mut app);
         assert!(t3.contains("1호 주거지"), "card must stay visible while drawing ({tool:?}): {t3}");

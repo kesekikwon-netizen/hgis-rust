@@ -107,20 +107,21 @@ impl StrataAppState {
                     .zoom_at(if sy > 0.0 { 0.85 } else { 1.18 }, anchor);
             }
         }
-        if response.dragged() && !(capture && response.dragged_by(egui::PointerButton::Primary)) {
+        let capture_owns_drag = (capture || self.modal_window_open())
+            && response.dragged_by(egui::PointerButton::Primary);
+        if response.dragged() && !capture_owns_drag {
             let d = response.drag_delta();
             self.home_map
                 .viewport
                 .pan_by_pixels(f64::from(d.x), f64::from(d.y));
         }
-        if !capture && response.clicked() {
+        if !capture && !self.modal_window_open() && response.clicked() {
             if let Some(cp) = response.interact_pointer_pos() {
                 let wxy = s2w(rect, &self.home_map.viewport, cp);
                 match effective_tool {
-                    MapToolKind::DrawPolygon
-                    | MapToolKind::DrawLine
-                    | MapToolKind::PlacePoint
-                    | MapToolKind::Measure => {
+                    // Polygon, line, and point capture are handled by handle_polygon_capture_input
+                    // (target/cpp-ref/src/app/KaCaptureMapTool.cpp:260-314).
+                    MapToolKind::Measure => {
                         let cur_layer = self.right_inspector.selected_layer_key.clone();
                         self.home_map.on_canvas_left_click_on_layer(
                             wxy,
@@ -211,9 +212,9 @@ impl StrataAppState {
                 }
             }
         }
-        if !capture && response.secondary_clicked() {
-            // MainWindowContextMenus.cpp:163-166 — 그리기·측거 도구일 때는 메뉴 없이
-            // 도구 쪽 우클릭(마침)을 그대로 쓴다.
+        if !capture && !self.modal_window_open() && response.secondary_clicked() {
+            // Suppress context menu while a drawing or measure tool is active
+            // (target/cpp-ref/src/app/MainWindowContextMenus.cpp:163-166).
             let drawing_tool = matches!(
                 effective_tool,
                 MapToolKind::DrawPolygon
@@ -222,8 +223,9 @@ impl StrataAppState {
                     | MapToolKind::PlacePoint
             );
             if drawing_tool {
-                // 면 그리기는 위에서 처리한다. 선·점·줄자는 아직 예전 도구다(지시 3-4·3-5).
-                let _ = self.home_map.cad.on_right_click(effective_tool, &mut self.home_map.scene);
+                if effective_tool == MapToolKind::Measure {
+                    let _ = self.home_map.cad.on_right_click(effective_tool, &mut self.home_map.scene);
+                }
             } else if let Some(pos) = response.interact_pointer_pos() {
                 // MainWindowContextMenus.cpp:112-161 mapContextMenu
                 let wxy = s2w(rect, &self.home_map.viewport, pos);

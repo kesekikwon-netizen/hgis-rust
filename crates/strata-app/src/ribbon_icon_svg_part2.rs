@@ -132,6 +132,12 @@ pub fn parts_2(id: &str) -> Option<&'static [SvgPart]> {
             SvgPart::Path("M18 22H6"),
             SvgPart::Path("M9 2h6"),
         ],
+        // C++ KaIconsOutline::oGps on a 64x64 grid scaled by 24/64 to the 24x24 viewBox
+        // (target/cpp-ref/src/app/KaIconsOutlineA.cpp:113-122, target/cpp-ref/src/app/KaIcons.cpp:1033-1036).
+        "gps" => &[
+            SvgPart::Path("M12 19.5C6 13.5 6 7.5 12 5.25C18 7.5 18 13.5 12 19.5Z"),
+            SvgPart::Circle("12|10.5|1.875"),
+        ],
         "transform" => &[
             SvgPart::Path("M12 2v20"),
             SvgPart::Path("m15 19-3 3-3-3"),
