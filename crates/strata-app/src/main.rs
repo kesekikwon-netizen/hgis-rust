@@ -158,6 +158,7 @@ mod extent_history;
 mod home_connection_model;
 mod home_text;
 mod map_context_menu_model;
+mod map_wheel_zoom;
 mod status_bar_text;
 mod edit_geometry_repair;
 mod draw_sketch;

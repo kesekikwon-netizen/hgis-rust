@@ -96,16 +96,12 @@ impl StrataAppState {
             }
         }
         if response.hovered() {
-            let sy = ui.input(|i| i.smooth_scroll_delta.y);
-            let anchor = [
-                f64::from(rect.width()) * 0.5,
-                f64::from(rect.height()) * 0.5,
-            ];
-            if sy.abs() > 0.1 {
-                self.home_map
-                    .viewport
-                    .zoom_at(if sy > 0.0 { 0.85 } else { 1.18 }, anchor);
-            }
+            crate::map_wheel_zoom::apply_map_wheel_zoom(
+                ui,
+                rect,
+                response.hover_pos(),
+                &mut self.home_map.viewport,
+            );
         }
         let capture_owns_drag = (capture || self.modal_window_open())
             && response.dragged_by(egui::PointerButton::Primary);

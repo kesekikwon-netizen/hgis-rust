@@ -67,9 +67,11 @@ impl StrataAppState {
                     f64::from(rect.width()) * 0.5,
                     f64::from(rect.height()) * 0.5,
                 ];
+                // target/cpp-ref/src/app/KaMapControls.cpp:87-88 -> QgsMapCanvas::zoomIn / zoomOut
+                // using qgis/zoom_factor = LayerOps::kWheelZoomFactor (target/cpp-ref/src/core/LayerOps.h:44).
                 match i {
-                    0 => self.home_map.viewport.zoom_at(0.8, center_px),
-                    1 => self.home_map.viewport.zoom_at(1.25, center_px),
+                    0 => self.home_map.viewport.zoom_at(crate::map_wheel_zoom::ZOOM_IN_MPP_FACTOR, center_px),
+                    1 => self.home_map.viewport.zoom_at(crate::map_wheel_zoom::ZOOM_OUT_MPP_FACTOR, center_px),
                     _ => self.fit_to_survey_area(),
                 }
             }

@@ -1,11 +1,9 @@
-//! CAD 세션의 커서 미리보기와 휠 줌.
-//!
-//! `impl CadSessionController` 가 266줄이라 여기로 나눴다.
+//! Cursor snap preview helpers for `CadSessionController`
+//! (wheel zoom lives in `strata-app::map_wheel_zoom`, `target/cpp-ref/src/core/LayerOps.h:44`).
 
 use crate::cad_session::CadSessionController;
 use crate::cad_snap_trace::nearby_vertices;
 use crate::painter_scene::MapSceneModel;
-use crate::viewport::ViewportTransform;
 
 impl CadSessionController {
     #[must_use]
@@ -40,18 +38,5 @@ impl CadSessionController {
             48.0,
             24,
         );
-    }
-
-    pub fn on_wheel_zoom(
-        &mut self,
-        scroll_delta_y: f32,
-        cursor_px: [f64; 2],
-        vp: &mut ViewportTransform,
-    ) {
-        if scroll_delta_y.abs() < 0.01 {
-            return;
-        }
-        let factor = if scroll_delta_y > 0.0 { 0.85 } else { 1.18 };
-        vp.zoom_at(factor, cursor_px);
     }
 }
