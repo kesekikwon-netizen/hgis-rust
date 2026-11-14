@@ -93,14 +93,12 @@ pub fn is_local_target(url: &str) -> bool {
     }
     let Some((scheme, rest)) = url.split_once("://") else { return false };
     if scheme.eq_ignore_ascii_case("file") {
-        // No `\` and no `%`: curl decodes `%5C` / `%2F` in a file path, and `/\host/share` is a network share (NET0c5).
-        let plain = !rest.contains('\\') && !rest.contains('%');
-        let Some((auth, path)) = plain.then(|| rest.split_once('/')).flatten() else {
-            return false;
-        };
+        // Only `file:///C:/...` or `file://localhost/C:/...`, with none of `\ % { } [ ]`: curl decodes `%5C`,
+        // collapses `/.//` and expands `{,/}`, and each turns another shape into `//host/share` (NET0c5).
+        let Some((auth, path)) = rest.split_once('/') else { return false };
         return (auth.is_empty() || auth.eq_ignore_ascii_case("localhost"))
-            && !path.is_empty()
-            && !path.starts_with('/');
+            && matches!(path.as_bytes(), [drive, b':', b'/', ..] if drive.is_ascii_alphabetic())
+            && !rest.contains(['\\', '%', '{', '}', '[', ']']);
     }
     if !scheme.eq_ignore_ascii_case("http") || url.chars().any(char::is_whitespace) {
         return false;

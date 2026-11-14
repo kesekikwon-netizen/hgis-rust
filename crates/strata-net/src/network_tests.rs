@@ -257,7 +257,7 @@ fn ngii_fetch_launch_site_respects_switch_and_preserves_command() {
 #[test]
 fn is_local_target_accepts_only_file_and_loopback_http() {
     for ok in [
-        "file:///C:/Users/test/tile.txt", "file:///tmp/tile.txt", "FILE://LOCALHOST/tmp/tile.txt",
+        "file:///C:/Users/test/tile.txt", "file:///d:/tile.txt", "FILE://LOCALHOST/C:/tmp/tile.txt",
         "http://127.0.0.1", "http://127.0.0.1/", "http://127.0.0.1:8080/tile?x=1",
         "http://[::1]", "http://[::1]:9000/api", "http://localhost", "http://localhost:3000/a",
         "HTTP://LOCALHOST:8080/x", "HTTP://127.0.0.1/x", "HTTP://[::1]:80/x",

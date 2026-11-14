@@ -48,6 +48,7 @@ fn offline_local_launch_records_disable_first_noproxy_and_max_redirs_zero_last()
             "5",
             "--config",
             "-",
+            "--globoff",
             "--noproxy",
             "*",
             "--max-redirs",
@@ -142,7 +143,7 @@ fn offline_local_launch_refuses_positional_url_or_extra_config() {
 fn local_curl_guard_args_builds_guarded_command() {
     let (first, last) = local_curl_guard_args();
     assert_eq!(first, ["-q"]);
-    assert_eq!(last, ["--noproxy", "*", "--max-redirs", "0"]);
+    assert_eq!(last, ["--globoff", "--noproxy", "*", "--max-redirs", "0"]);
 
     let urls = [
         "http://127.0.0.1:18080/a.png",

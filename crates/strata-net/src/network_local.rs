@@ -7,11 +7,12 @@ use std::process::Command;
 /// Guard arguments (`first`, `last`) required around an offline local-only `curl` launch.
 ///
 /// `first` (`["-q"]`) must come before every other argument so `curl` ignores `.curlrc` /
-/// `_curlrc`, and `last` (`["--noproxy", "*", "--max-redirs", "0"]`) must come at the end so
-/// loopback traffic bypasses proxies and never follows redirects.
+/// `_curlrc`, and `last` (`["--globoff", "--noproxy", "*", "--max-redirs", "0"]`) must come at the
+/// end so the URL is taken as written (no `{}` / `[]` expansion, `NET0c5`), loopback traffic
+/// bypasses proxies and no redirect is followed.
 #[must_use]
 pub const fn local_curl_guard_args() -> (&'static [&'static str], &'static [&'static str]) {
-    (&["-q"], &["--noproxy", "*", "--max-redirs", "0"])
+    (&["-q"], &["--globoff", "--noproxy", "*", "--max-redirs", "0"])
 }
 
 fn denied(msg: &'static str) -> io::Error {
@@ -224,3 +225,7 @@ mod network_local_tests;
 #[cfg(test)]
 #[path = "network_local_net0c4_tests.rs"]
 mod network_local_net0c4_tests;
+
+#[cfg(test)]
+#[path = "network_local_net0c5_tests.rs"]
+mod network_local_net0c5_tests;
