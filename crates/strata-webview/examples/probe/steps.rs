@@ -236,14 +236,14 @@ impl Probe {
                 }
                 self.answer().map(|json| json == "\"onload saw ready-script/ready-script/undefined\"")
             }
-            10..=15 => crate::steps_more::advance(self, enter),
-            16..=18 => crate::steps_end::advance(self, enter, frame),
+            10..=16 => crate::steps_more::advance(self, enter),
+            17..=19 => crate::steps_end::advance(self, enter, frame),
             _ => {
                 self.step = 99;
                 return;
             }
         };
-        const NAMES: [&str; 19] = [
+        const NAMES: [&str; 20] = [
             "the local site loads in a hidden view with the network switch off",
             "a script's value comes back as JSON",
             "a popup becomes a second hidden view with its opener",
@@ -260,6 +260,7 @@ impl Probe {
             "no request reaches another address while the switch is off",
             "the first empty page of a popup has quiet dialogs too",
             "a javascript: link runs in its page and is no navigation",
+            "a second file from the same page arrives complete as well",
             "a refused second offer leaves the running transfer alone, then the session is shut down",
             "shut down leaves no part file and the data folder can be removed",
             "a session that is simply dropped lets go of its folder too",

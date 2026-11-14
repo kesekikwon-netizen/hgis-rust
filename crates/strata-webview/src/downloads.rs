@@ -25,6 +25,19 @@ pub enum DownloadRefusal {
     Exists,
 }
 
+/// File types the engine does not finish when a page starts the download without a click. Edge asks the user
+/// whether to keep such a file ("this type of file can harm your device") and a hidden view has nobody to
+/// answer, so the file sits on disk, complete, and is never reported. The same address asked for by the
+/// host counts as typed in by the user and is finished (both measured on 2026-11-15 for .xml; the others
+/// are its markup siblings in the engine's file type policy). Data files (.zip, .dxf …) are not held back.
+const NEEDS_A_CLICK: [&str; 13] = ["xml", "xsl", "htm", "html", "shtm", "shtml", "xht", "xhtm", "xhtml", "mht", "mhtm", "mhtml", "svg"];
+
+/// Whether the engine holds a file of this name back when a page starts its download (see `NEEDS_A_CLICK`).
+#[must_use]
+pub fn held_back_without_click(file_name: &str) -> bool {
+    file_name.rsplit_once('.').is_some_and(|(stem, extension)| !stem.is_empty() && NEEDS_A_CLICK.iter().any(|e| extension.eq_ignore_ascii_case(e)))
+}
+
 /// Longest part-file path handed to the engine, in UTF-16 units: the 260 of Windows less the room the
 /// engine needs for a temporary name beside it.
 const LONGEST_PATH: usize = 240;
@@ -142,6 +155,19 @@ mod tests {
         fs::create_dir_all(&deep).unwrap();
         assert_eq!(plan_download(&deep, &long, 1), Err(DownloadRefusal::PathTooLong));
         assert!(plan_download(&deep, "a.zip", 1).is_ok());
+    }
+
+    /// Measured with the real engine on 2026-11-15 (probe step "a second file from the same page"): a file
+    /// named .xml that a page starts without a click is written to disk and never reported complete, while
+    /// .zip, .dxf and .txt are. Every sheet of the NGII site comes with an .xml beside its data file.
+    #[test]
+    fn markup_files_are_held_back_by_the_engine_and_data_files_are_not() {
+        for held in ["terrain_378044.xml", "A.XML", "page.html", "page.htm", "drawing.svg", "sheet.xsl", "saved.mhtml", "x.tar.xhtml"] {
+            assert!(held_back_without_click(held), "{held}");
+        }
+        for free in ["terrain_378044.zip", "terrain_378044.dxf", "notes.txt", "xml", "sheet.xml.zip", "no-extension", ""] {
+            assert!(!held_back_without_click(free), "{free}");
+        }
     }
 
     #[test]

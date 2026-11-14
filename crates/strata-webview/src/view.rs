@@ -15,7 +15,7 @@ use wry::{
 };
 
 use crate::dialogs::QUIET_DIALOGS_SCRIPT;
-use crate::downloads::{plan_download, DownloadRefusal, PlannedFile};
+use crate::downloads::{held_back_without_click, plan_download, DownloadRefusal, PlannedFile};
 use crate::events::{BrowserError, DownloadDecider, DownloadId, DownloadOffer, ScriptCall, ViewId};
 use crate::names::safe_file_name;
 use crate::policy::{Navigation, NavigationPolicy};
@@ -33,6 +33,8 @@ pub(crate) enum Signal {
     DownloadStarted { id: DownloadId, view: ViewId, url: String, plan: PlannedFile, file_name: String },
     DownloadRefused { view: ViewId, url: String, why: DownloadRefusal },
     DownloadEnded { part_path: Option<PathBuf>, url: String, success: bool },
+    /// A page started a file the engine would hold back; the host asks for the same address itself.
+    AskAgain { view: ViewId, url: String },
 }
 
 /// State the callbacks of all views share.
@@ -48,6 +50,8 @@ pub(crate) struct Shared {
     pub(crate) ready_script: Option<String>,
     /// Page messages taken since the last `pump`: a page cannot make the host hoard more than a few.
     pub(crate) messages: Cell<u32>,
+    /// Addresses of held-back files the host has asked for itself and whose offer is still to come.
+    pub(crate) asked_again: RefCell<Vec<String>>,
 }
 
 /// Page messages taken between two `pump` calls, and the longest one taken (a dialog notice is far shorter).
@@ -152,6 +156,18 @@ pub(crate) fn build_hidden_view<W: HasWindowHandle>(
         .with_download_started_handler(move |url, path| {
             let offered = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             let offer = DownloadOffer { view: id, url: url.clone(), suggested_name: safe_file_name(&offered) };
+            // A file of a type the engine holds back is refused here and asked for again by the host
+            // (`session::pump`); that second offer of the same address passes.
+            if held_back_without_click(&offer.suggested_name) {
+                let mut asked = shared_dl.asked_again.borrow_mut();
+                match asked.iter().position(|a| *a == url) {
+                    Some(at) => drop(asked.remove(at)),
+                    None => {
+                        let _ = tx_start.send(Signal::AskAgain { view: id, url });
+                        return false;
+                    }
+                }
+            }
             // A decider that is itself busy deciding (it let the window handle messages) refuses this one.
             let place = shared_dl.decider.try_borrow_mut().ok().and_then(|mut decider| decider.as_mut().and_then(|decide| decide(&offer)));
             let Some(place) = place else {

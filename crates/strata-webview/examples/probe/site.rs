@@ -117,6 +117,13 @@ fn answer(mut stream: TcpStream, log: &Mutex<Vec<String>>) -> Option<TcpStream> 
             );
             let _ = stream.write_all(&vec![b'Z'; FILE_BYTES]);
         }
+        "/second.xml" => {
+            // A small second file, as a sheet's metadata file follows its data file.
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/zip\r\nContent-Disposition: attachment; filename=second.xml\r\nContent-Length: 23\r\nConnection: close\r\n\r\nPK-public-sheet-fixture"
+            );
+        }
         "/slow.zip" => {
             let _ = write!(
                 stream,

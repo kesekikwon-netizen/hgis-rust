@@ -12,16 +12,16 @@ use raw_window_handle::HasWindowHandle;
 use wry::{WebContext, WebView};
 
 use crate::dialogs::parse_page_message;
-use crate::downloads::{discard_download, finish_download, received_bytes, PlannedFile};
+use crate::downloads::{received_bytes, PlannedFile};
 use crate::events::{BrowserError, BrowserEvent, DownloadDecider, DownloadId, ScriptCall, ViewId, ViewInfo};
 use crate::policy::{Navigation, NavigationPolicy};
 use crate::profile::SessionFolder;
 use crate::view::{build_hidden_view, Engine, Shared, Signal};
 
 /// Spare views kept ready for popups (a login chain opens one window after another).
-const SPARE_VIEWS: usize = 2;
+pub(crate) const SPARE_VIEWS: usize = 2;
 /// After so many failures in a row no further spare view is tried; popups are then refused and reported.
-const SPARE_ATTEMPTS: u8 = 3;
+pub(crate) const SPARE_ATTEMPTS: u8 = 3;
 
 /// How a session is set up.
 #[derive(Debug, Clone)]
@@ -33,32 +33,32 @@ pub struct BrowserOptions {
     pub document_ready_script: Option<String>,
 }
 
-struct OpenView {
-    id: ViewId,
-    opener: Option<ViewId>,
-    view: WebView,
+pub(crate) struct OpenView {
+    pub(crate) id: ViewId,
+    pub(crate) opener: Option<ViewId>,
+    pub(crate) view: WebView,
 }
 
-struct Transfer {
-    id: DownloadId,
-    url: String,
-    plan: PlannedFile,
-    reported: u64,
+pub(crate) struct Transfer {
+    pub(crate) id: DownloadId,
+    pub(crate) url: String,
+    pub(crate) plan: PlannedFile,
+    pub(crate) reported: u64,
 }
 
 /// The session. Dropping it closes every view and leaves no unfinished file; `shut_down` also says which
 /// data folder to remove.
 pub struct HiddenBrowser {
-    views: Vec<OpenView>,
-    shared: Rc<Shared>,
-    tx: Sender<Signal>,
+    pub(crate) views: Vec<OpenView>,
+    pub(crate) shared: Rc<Shared>,
+    pub(crate) tx: Sender<Signal>,
     rx: Receiver<Signal>,
-    transfers: Vec<Transfer>,
+    pub(crate) transfers: Vec<Transfer>,
     /// Addresses of offers that were refused: the engine reports their end too, and that end must not be
     /// taken for the end of a running transfer of the same address (review of 2026-11-15, S2).
-    refused_ends: Vec<String>,
-    spare_failures: u8,
-    next_view: u32,
+    pub(crate) refused_ends: Vec<String>,
+    pub(crate) spare_failures: u8,
+    pub(crate) next_view: u32,
     next_call: u64,
     // Declared after the views: the engine's context and the folder's lock outlive every view.
     _context: WebContext,
@@ -93,6 +93,7 @@ impl HiddenBrowser {
             next_download: Cell::new(1),
             ready_script: options.document_ready_script,
             messages: Cell::new(0),
+            asked_again: RefCell::new(Vec::new()),
         });
         let first = build_hidden_view(parent, ViewId(1), Engine::Fresh { context: &mut context, arguments }, &shared, &tx)?;
         let mut session = Self {
@@ -173,26 +174,6 @@ impl HiddenBrowser {
         }
     }
 
-    /// Builds one spare view when one is missing.
-    fn add_spare<W: HasWindowHandle>(&mut self, parent: &W) {
-        if self.spare_failures >= SPARE_ATTEMPTS || self.shared.spare.borrow().len() >= SPARE_VIEWS {
-            return;
-        }
-        let Some(first) = self.views.first() else {
-            return;
-        };
-        let id = ViewId(self.next_view);
-        match build_hidden_view(parent, id, Engine::SameAs(&first.view), &self.shared, &self.tx) {
-            Ok(view) => {
-                self.next_view += 1;
-                self.spare_failures = 0;
-                self.shared.spare.borrow_mut().push((id, view));
-            }
-            // Without a spare view the next popup is refused and reported; nothing else breaks.
-            Err(_) => self.spare_failures += 1,
-        }
-    }
-
     /// Collects what happened since the last call, takes over popups, keeps spare views ready and measures
     /// running transfers. Call once per frame from the UI thread.
     pub fn pump<W: HasWindowHandle>(&mut self, parent: &W) -> Vec<BrowserEvent> {
@@ -205,6 +186,7 @@ impl HiddenBrowser {
             self.views.push(OpenView { id, opener: Some(opener), view });
         }
         let mut events = Vec::new();
+        let mut ask_again = Vec::new();
         while let Ok(signal) = self.rx.try_recv() {
             match signal {
                 Signal::LoadStarted { view, url } => events.push(BrowserEvent::PageLoadStarted { view, url }),
@@ -227,6 +209,18 @@ impl HiddenBrowser {
                     events.push(BrowserEvent::DownloadRefused { view, url, why });
                 }
                 Signal::DownloadEnded { part_path, url, success } => self.transfer_ended(part_path, &url, success, &mut events),
+                Signal::AskAgain { view, url } => {
+                    // The end of the offer that was refused for this is not the end of any transfer.
+                    self.refused_ends.push(url.clone());
+                    ask_again.push((view, url));
+                }
+            }
+        }
+        for (view, url) in ask_again {
+            self.shared.asked_again.borrow_mut().push(url.clone());
+            if self.navigate(view, &url).is_err() {
+                self.shared.asked_again.borrow_mut().retain(|a| *a != url);
+                events.push(BrowserEvent::DownloadRefused { view, url, why: crate::downloads::DownloadRefusal::Declined });
             }
         }
         // When a page closes its window, wry destroys the view's container window on the engine's close
@@ -244,46 +238,6 @@ impl HiddenBrowser {
             }
         }
         events
-    }
-
-    /// The engine says a download ended. A complete one names its file; one that broke off or was refused
-    /// names only its address.
-    fn transfer_ended(&mut self, part_path: Option<PathBuf>, url: &str, success: bool, events: &mut Vec<BrowserEvent>) {
-        if part_path.is_none() {
-            if let Some(at) = self.refused_ends.iter().position(|refused| refused == url) {
-                self.refused_ends.remove(at);
-                return;
-            }
-        }
-        let at = self.transfers.iter().position(|t| part_path.as_ref().map_or(t.url == url, |p| *p == t.plan.part_path));
-        let Some(transfer) = at.map(|i| self.transfers.remove(i)) else {
-            return;
-        };
-        match success.then(|| finish_download(&transfer.plan)) {
-            Some(Ok(bytes)) => events.push(BrowserEvent::DownloadFinished { id: transfer.id, path: transfer.plan.final_path, bytes }),
-            _ => {
-                discard_download(&transfer.plan);
-                events.push(BrowserEvent::DownloadFailed { id: transfer.id, url: transfer.url });
-            }
-        }
-    }
-
-    /// Closes every view (the spare ones hold the shared state that holds them: review of 2026-11-15, S4)
-    /// and removes what unfinished transfers left.
-    fn close_everything(&mut self) {
-        self.views.clear();
-        if let Ok(mut spare) = self.shared.spare.try_borrow_mut() {
-            spare.clear();
-        }
-        if let Ok(mut adopted) = self.shared.adopted.try_borrow_mut() {
-            adopted.clear();
-        }
-        if let Ok(mut decider) = self.shared.decider.try_borrow_mut() {
-            *decider = None;
-        }
-        for transfer in self.transfers.drain(..) {
-            discard_download(&transfer.plan);
-        }
     }
 
     /// Ends the session and hands back the data folder. The engine's helper processes may hold files in it

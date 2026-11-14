@@ -1,4 +1,4 @@
-//! The last checks of the probe (steps 16 to 18): transfers of one address, and how a session ends.
+//! The last checks of the probe (steps 17 to 19): transfers of one address, and how a session ends.
 
 use std::time::Duration;
 
@@ -12,7 +12,7 @@ pub fn advance(probe: &mut Probe, enter: bool, frame: &eframe::Frame) -> Option<
     let main = ViewId(1);
     let seen = |probe: &Probe, wanted: fn(&BrowserEvent) -> bool| probe.seen.iter().any(wanted);
     match probe.step_number() {
-        16 => {
+        17 => {
             if enter {
                 probe.accept.set(true);
                 probe.run(main, "location.href = '/slow.zip'; 1");
@@ -35,12 +35,12 @@ pub fn advance(probe: &mut Probe, enter: bool, frame: &eframe::Frame) -> Option<
                 !failed && part_alive && probe.released.is_some()
             })
         }
-        17 => {
+        18 => {
             // The engine's processes let go of their files a moment after the views are closed.
             let folder_gone = probe.released.as_deref().is_some_and(remove_session_folder);
-            (folder_gone && probe.files() == vec!["_evil name_.zip".to_owned()]).then_some(true)
+            (folder_gone && probe.files() == vec!["_evil name_.zip".to_owned(), "second.xml".to_owned()]).then_some(true)
         }
-        18 => {
+        19 => {
             if enter {
                 if probe.start(frame).is_err() {
                     return Some(false);

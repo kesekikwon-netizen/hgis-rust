@@ -1,4 +1,4 @@
-//! Further checks of the probe (steps 10 to 15): layout in a hidden view, windows that pages close, requests
+//! Further checks of the probe (steps 10 to 16): layout in a hidden view, windows that pages close, requests
 //! to other addresses, the first empty page of a popup.
 
 use strata_webview::{BrowserEvent, HiddenBrowser, ViewId};
@@ -90,6 +90,17 @@ pub fn advance(probe: &mut Probe, enter: bool) -> Option<bool> {
                 (1, Some(json)) => Some(json == "7" && !refused),
                 _ => None,
             }
+        }
+        16 => {
+            if enter {
+                probe.accept.set(true);
+                probe.run(main, "location.href = '/second.xml'; 1");
+            }
+            probe.seen.iter().find_map(|e| match e {
+                BrowserEvent::DownloadFinished { path, bytes, .. } => Some(path.ends_with("second.xml") && *bytes == 23 && path.is_file()),
+                BrowserEvent::DownloadFailed { .. } => Some(false),
+                _ => None,
+            })
         }
         _ => Some(false),
     }

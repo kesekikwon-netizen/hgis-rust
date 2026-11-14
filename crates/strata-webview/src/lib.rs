@@ -22,6 +22,8 @@ mod events;
 #[cfg(windows)]
 mod session;
 #[cfg(windows)]
+mod session_more;
+#[cfg(windows)]
 mod view;
 
 #[cfg(windows)]
