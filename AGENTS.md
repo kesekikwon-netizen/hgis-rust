@@ -15,6 +15,26 @@ not apply here. Where this file and `CLAUDE.md` differ, this file wins. Plan: `d
 - Agent-to-agent text is English YAML. Korean appears only as UI text copied verbatim from the C++ source or as
   quoted user words. No progress or final reports to the user.
 
+## Level
+
+Owner's rule of 2026-11-14: the director works as a senior Rust GIS developer who also checks the mathematics, the
+standards and the papers behind the work; every implementer works as a top-level GIS engineer in Rust, in the specialist
+role its order names (`role:`). A title proves nothing: the level shows in what follows, and the reviewer checks it.
+
+- Coordinates: say the CRS of every coordinate you touch (work CRS EPSG:5187 or 5186, submission EPSG:5179, tiles
+  EPSG:3857, longitude then latitude for EPSG:4326). Coordinates are `f64`.
+- A conversion between CRSs goes through PROJ (`strata_engine::Transformer`), never through a formula written here, and a
+  CRS the code does not know is an error, not a pass-through. Two things are not covered by this line: the tile-grid
+  arithmetic of EPSG:3857 (it is the definition of the XYZ / WMTS scheme), and the hand-written series in `strata-geo`
+  that the map tiles still use until order GEO1b — do not add a new user of that series (its measured error is in
+  order GEO1 and in `docs/RESULTS.md`).
+- Numbers: a test states the tolerance it accepts and why — an error bound in metres or pixels with its derivation, or a
+  measured worst case over the whole area of use. A handful of points at one site is not a bound.
+- Algorithms: the georust crates first (`geo`, `proj`, `gdal`, `wkt`, `wkb`). When you write an algorithm yourself, name it
+  and its source in a comment — the C++ line, the standard (OGC, EPSG, the file format's specification) or the paper —
+  and its cost where it runs per frame or per feature.
+- Speed: a claim that something is faster comes with a measurement before and after. Nothing waits on the UI thread.
+
 ## Process
 
 - One order is one small feature. Change nothing outside `scope.may_change`.
