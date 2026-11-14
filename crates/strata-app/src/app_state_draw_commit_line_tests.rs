@@ -108,7 +108,8 @@ fn section_line_continuous_draw_and_undo_redo_follow_edit_buffer() {
     assert_eq!(table_features(&app, "section_line").len(), 2);
 }
 
-// Empty finish does nothing; 1-point finish emits TOO_FEW_TEXT and keeps the vertex
+// Empty finish does nothing; 1-point finish emits TOO_FEW_TEXT and keeps the vertex;
+// canceling clears once and a second cancel on an empty sketch stays silent
 // (target/cpp-ref/src/app/KaCaptureMapTool.cpp:398-402, target/cpp-ref/tests/test_editing_tools.cpp:135-146).
 #[test]
 fn one_point_line_finish_keeps_vertex_and_empty_finish_is_silent() {
@@ -127,6 +128,14 @@ fn one_point_line_finish_keeps_vertex_and_empty_finish_is_silent() {
     assert_eq!(app.draw_sketch.points.len(), 1);
     assert_eq!(table_features(&app, "feature_line").len(), 1);
     assert!(!app.is_dirty);
+
+    app.sketch_cancel();
+    assert!(app.draw_sketch.points.is_empty());
+    assert_eq!(app.home_map.draw_guide_message.as_deref(), Some("그리던 도형을 지웠습니다."));
+    app.home_map.draw_guide_message = None;
+    app.sketch_cancel();
+    assert!(app.draw_sketch.points.is_empty());
+    assert_eq!(app.home_map.draw_guide_message, None, "second cancel on empty sketch stays silent");
 }
 
 // Save, close, reopen on a tempdir demo copy: feature_line has one more feature with matching coordinates.
@@ -181,26 +190,81 @@ fn drawn_line_saves_to_gpkg_and_reopens_with_same_coordinates() {
     assert!(fresh.save_survey_project());
 }
 
-// Ported from target/cpp-ref/tests/test_workflow.cpp:3310-3365 (captureClickOnSavedVertex_startsNewSketch):
-// clicking on a saved line vertex starts a new sketch without altering the buffered feature.
+// Ported from target/cpp-ref/tests/test_workflow.cpp:3299-3365 (captureClickOnSavedVertex_startsNewSketch):
+// across all three C++ CRS rows (5186/5186, 5187/5187, and a 5186 view into a 5187 layer), clicking on a saved
+// line vertex starts a new sketch without altering the buffered edit, stored geometry, or modified flag.
 #[test]
 fn clicking_saved_line_vertex_starts_new_sketch_without_touching_existing_line() {
+    use strata_types::crs::WorkCrs;
+
     let dir = tempfile::tempdir().expect("temp dir");
-    let (mut app, _) = opened_demo(dir.path());
-    let fid = table_features(&app, "feature_line")[0].fid;
-    let orig_wkt = table_features(&app, "feature_line")[0].wkt_geom.clone();
-    let WkbGeometry::LineString(orig_pts) = &wkt_to_parts(&orig_wkt).unwrap()[0] else { panic!("line") };
-    let to_work = Transformer::new(5186, CrsCode::from(app.work_crs).epsg_number()).expect("PROJ");
-    let saved_vertex = to_work.transform(orig_pts[0]).expect("transform");
+    let rows = [
+        ("5186", WorkCrs::Epsg5186, WorkCrs::Epsg5186),
+        ("5187", WorkCrs::Epsg5187, WorkCrs::Epsg5187),
+        ("reprojected", WorkCrs::Epsg5186, WorkCrs::Epsg5187),
+    ];
+    for (row_name, canvas_crs, layer_crs) in rows {
+        let gpkg_path = dir.path().join(format!("saved_vertex_{row_name}.gpkg"));
+        strata_storage::gpkg::GpkgRepository::create_new_survey(&gpkg_path, layer_crs).expect("create");
+        let mut seed = StrataAppState::new_startup();
+        seed.start_new_survey_project_with_path(row_name, &gpkg_path, layer_crs);
+        seed.active_tab = MainTab::Map;
+        seed.home_map.viewport.meters_per_pixel = 0.05;
+        seed.start_edit_feature_line();
+        seed.sketch_press([200_000.0, 450_000.0]);
+        seed.sketch_press([200_080.0, 450_080.0]);
+        seed.sketch_finish();
+        seed.skip_feature_form();
+        let seed_fid = table_features(&seed, "feature_line")[0].fid;
+        seed.set_card_target("feature_line", seed_fid, false);
+        assert!(seed.card_set_value("note", "saved"));
+        assert!(seed.save_survey_project());
 
-    let pending = [("note".to_owned(), Some("pending note".to_owned()))];
-    let idx = app.survey_tables.iter().position(|t| t.table == "feature_line").unwrap();
-    assert!(app.survey_tables[idx].layer.change_attributes(fid, &pending));
+        let mut app = StrataAppState::new_startup();
+        app.open_survey_gpkg(&gpkg_path);
+        app.active_tab = MainTab::Map;
+        app.work_crs = canvas_crs;
+        app.home_map.viewport.meters_per_pixel = 0.05;
 
-    app.start_edit_feature_line();
-    app.sketch_press(saved_vertex);
-    assert_eq!(app.draw_sketch.points.len(), 1);
-    assert_eq!(table_features(&app, "feature_line").len(), 1);
-    assert_eq!(table_features(&app, "feature_line")[0].wkt_geom, orig_wkt);
-    assert_eq!(table_features(&app, "feature_line")[0].attributes.get("note").map(String::as_str), Some("pending note"));
+        let fid = table_features(&app, "feature_line")[0].fid;
+        let orig_wkt = table_features(&app, "feature_line")[0].wkt_geom.clone();
+        app.set_card_target("feature_line", fid, false);
+        assert!(app.card_set_value("note", "pending note"));
+
+        let layer_epsg = CrsCode::from(layer_crs).epsg_number();
+        let canvas_epsg = CrsCode::from(canvas_crs).epsg_number();
+        let map_original = if layer_epsg == canvas_epsg {
+            [200_000.0, 450_000.0]
+        } else {
+            Transformer::new(layer_epsg, canvas_epsg)
+                .expect("PROJ")
+                .transform([200_000.0, 450_000.0])
+                .expect("transform")
+        };
+
+        app.home_map.cad.snap_enabled = false;
+        app.start_edit_feature_line();
+        app.sketch_press(map_original);
+
+        assert_eq!(app.draw_sketch.points.len(), 1, "{row_name}");
+        let table = app.survey_tables.iter().find(|t| t.table == "feature_line").unwrap();
+        assert_eq!(table.srs_id, i32::try_from(layer_epsg).unwrap(), "{row_name}");
+        assert_eq!(app.work_crs.auth_id(), canvas_crs.auth_id(), "{row_name}");
+        assert_eq!(table.layer.features.len(), 1, "{row_name}");
+        assert_eq!(table.layer.features[0].wkt_geom, orig_wkt, "{row_name}");
+        assert_eq!(table.layer.features[0].attributes.get("note").map(String::as_str), Some("pending note"), "{row_name}");
+
+        assert_eq!(table.baseline[0].wkt_geom, orig_wkt, "{row_name}");
+        assert_eq!(table.baseline[0].attributes.get("note").map(String::as_str), Some("saved"), "{row_name}");
+        let on_disk = strata_storage::survey_gpkg_read::read_survey_tables(&gpkg_path).expect("read gpkg");
+        let stored = &on_disk.iter().find(|t| t.table == "feature_line").unwrap().layer.features[0];
+        assert_eq!(stored.wkt_geom, orig_wkt, "{row_name}");
+        assert_eq!(stored.attributes.get("note").map(String::as_str), Some("saved"), "{row_name}");
+        assert!(
+            table.baseline != table.layer.features
+                && app.is_dirty
+                && app.unsaved_chip_text().as_deref() == Some("저장 안 됨 1건"),
+            "{row_name}: modified flag must stay set"
+        );
+    }
 }

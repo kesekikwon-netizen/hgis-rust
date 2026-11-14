@@ -19,18 +19,29 @@ fn sentence(ui: &mut egui::Ui, text: &str) {
     ui.add_space(16.0);
 }
 
+// Inspector attribute-tab sentence for the four states present before read-only reference cards are wired
+// (target/cpp-ref/src/app/KaInspectorPanel.cpp:162-174, target/cpp-ref/src/app/KaFeatureCardEditors.cpp:212-216).
+fn attribute_panel_sentence(drawing: bool, has_card: bool) -> &'static str {
+    match (drawing, has_card) {
+        (true, false) => "도형을 다 그리면 그 기록이 여기에 나옵니다.",
+        (true, true) => "그리는 중에도 여기서 바로 고칠 수 있습니다. 지도를 누르면 이어서 그립니다.",
+        (false, false) => "지도에서 도형 하나를 고르면 기록이 여기에 나옵니다.",
+        (false, true) => "",
+    }
+}
+
 impl StrataAppState {
     pub(crate) fn render_ri_attribute_card(&mut self, ui: &mut egui::Ui) {
         self.drop_card_if_gone();
-        // Show drawing sentence for DrawPolygon and DrawLine (target/cpp-ref/src/app/KaInspectorPanel.cpp:166-169).
         let drawing = Self::is_capture_tool(self.active_tool);
-        let Some(view) = self.card_view_now() else {
-            sentence(ui, if drawing { "도형을 다 그리면 그 기록이 여기에 나옵니다." } else { "지도에서 도형 하나를 고르면 기록이 여기에 나옵니다." });
+        let view = self.card_view_now();
+        let msg = attribute_panel_sentence(drawing, view.is_some());
+        if !msg.is_empty() {
+            sentence(ui, msg);
+        }
+        let Some(view) = view else {
             return;
         };
-        if drawing {
-            sentence(ui, "그리는 중에도 여기서 바로 고칠 수 있습니다. 지도를 누르면 이어서 그립니다.");
-        }
         let enabled = !self.modal_window_open();
         ui.add_enabled_ui(enabled, |ui| self.render_card_body(ui, &view));
     }

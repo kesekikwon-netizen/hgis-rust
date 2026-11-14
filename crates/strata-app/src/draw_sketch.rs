@@ -77,7 +77,13 @@ impl DrawSketch {
     }
 
     // Line finish from target/cpp-ref/src/app/KaCaptureMapTool.cpp:398-420: need = 2 points,
-    // consecutive points within nearPoint tolerance (:416-417) are dropped, sketch stays until committed.
+    // consecutive points within nearPoint tolerance (:414-418) are dropped, sketch stays until committed.
+    // Deliberate improvement over C++: C++ appends a double-click point unless strictly equal to the last
+    // (target/cpp-ref/src/app/KaCaptureMapTool.cpp:305-313), checks raw point count (:399-402) before
+    // dropping near points (:414-418), and refuses only an empty geometry in MainWindow::onGeometryCaptured
+    // (target/cpp-ref/src/app/MainWindowEditing.cpp:789-792), so double-clicking the sole vertex can store
+    // a 1-vertex line. Here we check `line.len() >= 2` after deduplication and return `FinishShort::TooFew`
+    // while keeping the sketch.
     pub(crate) fn finish_line(&self, mupp: f64) -> Result<Vec<[f64; 2]>, FinishShort> {
         if self.points.len() < 2 {
             return Err(if self.points.is_empty() { FinishShort::Empty } else { FinishShort::TooFew });

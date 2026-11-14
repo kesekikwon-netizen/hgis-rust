@@ -9,6 +9,12 @@ use strata_canvas2d::map_tools::MapToolKind;
 
 use crate::app_state::StrataAppState;
 
+const BAND_MARGIN: f32 = 12.0;
+const BAND_HEIGHT: f32 = 36.0;
+const BAND_BUTTON_GAP: f32 = 8.0;
+const BAND_GLYPH_PX: f32 = 20.0;
+const PILL_PAD_X: f32 = 10.0;
+const PILL_ITEM_GAP: f32 = 6.0;
 
 /// HUD 가 쓰는 도구 상태 묶음 — `gui_tab_map_canvas` 가 채워 넘긴다.
 #[derive(Debug, Clone, Copy)]
@@ -22,8 +28,21 @@ pub(crate) struct MapToolFlags {
     pub(crate) cursor_world: Option<[f64; 2]>,
 }
 
+// Guide band content matching KaDrawGuideBand::setTool and setMeasure
+// (target/cpp-ref/src/app/KaDrawGuideBand.h:23-44, target/cpp-ref/src/app/KaDrawGuideBand.cpp:129-158).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GuideBandSpec {
+    pub(crate) icon_id: &'static str,
+    pub(crate) title: String,
+    pub(crate) hint: String,
+    pub(crate) measure: Option<String>,
+}
+
 impl StrataAppState {
-    pub(crate) fn map_guide_band_info(&self, input: MapToolFlags) -> Option<(String, String)> {
+    // Active tool icon, title, hint, and optional paper-look sketch measure for KaDrawGuideBand
+    // (target/cpp-ref/src/app/KaDrawSketchTools.cpp:173-237, target/cpp-ref/src/app/MainWindowChrome.cpp:71-82,
+    // target/cpp-ref/src/app/KaDrawGuideBand.cpp:129-158, target/cpp-ref/src/app/KaSketchMeasure.cpp:7-26).
+    pub(crate) fn map_guide_band_spec(&self, input: MapToolFlags) -> Option<GuideBandSpec> {
         let MapToolFlags {
             is_trench,
             is_measure,
@@ -34,52 +53,148 @@ impl StrataAppState {
             ..
         } = input;
         if is_draw_tool {
-            if effective_tool == MapToolKind::PlacePoint {
-                Some((
-                    "그리기 · 유물 위치".to_owned(),
-                    "클릭한 자리에 점을 놓습니다".to_owned(),
-                ))
+            let key = self.edit_layer_key.as_deref().unwrap_or("");
+            // C++ currentToolIconId (target/cpp-ref/src/app/KaDrawSketchTools.cpp:220-227);
+            // "region" (Lucide map-pin) stands in for "gps" until a dedicated "gps" icon id is added.
+            let icon_id = if key == "control_points" {
+                "region"
+            } else if key.starts_with("artifact") || effective_tool == MapToolKind::PlacePoint {
+                "artifact"
+            } else if key == "feature_line" || key == "section_line" {
+                "draw_line"
             } else {
-                // Share title = tool_chip_label(), hint, and live KaSketchMeasure text for DrawPolygon and DrawLine
-                // (target/cpp-ref/src/app/KaDrawSketchTools.cpp:250-260, target/cpp-ref/src/app/MainWindowChrome.cpp:71-73,
-                // target/cpp-ref/src/app/KaCaptureMapTool.cpp:218-225, target/cpp-ref/src/app/KaSketchMeasure.cpp:7-26).
-                let title = self.tool_chip_label();
-                let measure_txt = if self.draw_sketch.points.is_empty() {
-                    String::new()
-                } else {
-                    let mut measured = self.draw_sketch.points.clone();
-                    if let Some(c) = cursor_world {
-                        measured.push(c);
-                    }
-                    crate::draw_sketch::sketch_measure_text(
-                        &measured,
-                        effective_tool == MapToolKind::DrawPolygon,
-                    )
-                };
-                if measure_txt.is_empty() {
-                    Some((title, "클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)".to_owned()))
-                } else {
-                    Some((title, measure_txt))
-                }
+                "draw_poly"
+            };
+            let title = if effective_tool == MapToolKind::PlacePoint
+                && key != "control_points"
+                && !key.starts_with("artifact")
+            {
+                "그리기 · 유물 위치".to_owned()
+            } else {
+                self.tool_chip_label()
+            };
+            if title.trim().is_empty() {
+                return None;
             }
+            let hint = if icon_id == "region" || icon_id == "artifact" {
+                "클릭한 자리에 점을 놓습니다".to_owned()
+            } else {
+                "클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)".to_owned()
+            };
+            // KaDrawGuideBand::setMeasure shows figures only in KaTheme::displayOptions().paperLook
+            // (target/cpp-ref/src/app/KaDrawGuideBand.cpp:129-135).
+            let measure = if matches!(effective_tool, MapToolKind::DrawPolygon | MapToolKind::DrawLine)
+                && self.display_options.paper_look
+                && !self.draw_sketch.points.is_empty()
+            {
+                let mut measured = self.draw_sketch.points.clone();
+                if let Some(c) = cursor_world {
+                    measured.push(c);
+                }
+                let text = crate::draw_sketch::sketch_measure_text(
+                    &measured,
+                    effective_tool == MapToolKind::DrawPolygon,
+                );
+                (!text.is_empty()).then_some(text)
+            } else {
+                None
+            };
+            Some(GuideBandSpec { icon_id, title, hint, measure })
         } else if is_measure {
-            Some((
-                "줄자".to_owned(),
-                "두 점을 클릭하면 거리가, 셋 이상이면 면적이 나옵니다".to_owned(),
-            ))
+            Some(GuideBandSpec {
+                icon_id: "measure",
+                title: "줄자".to_owned(),
+                hint: "두 점을 클릭하면 거리가, 셋 이상이면 면적이 나옵니다".to_owned(),
+                measure: None,
+            })
         } else if is_trench {
-            Some((
-                "시굴 격자".to_owned(),
-                "격자를 놓을 원점을 클릭합니다".to_owned(),
-            ))
+            Some(GuideBandSpec {
+                icon_id: "trench_grid",
+                title: "시굴 격자".to_owned(),
+                hint: "격자를 놓을 원점을 클릭합니다".to_owned(),
+                measure: None,
+            })
         } else if is_select_tool {
-            Some((
-                "도형선택".to_owned(),
-                "도형을 클릭하면 수정점이 나옵니다. 점을 끌어 옮깁니다".to_owned(),
-            ))
+            Some(GuideBandSpec {
+                icon_id: "select",
+                title: "도형선택".to_owned(),
+                hint: "도형을 클릭하면 수정점이 나옵니다. 점을 끌어 옮깁니다".to_owned(),
+                measure: None,
+            })
         } else {
             None
         }
+    }
+
+    // Paint KaDrawGuideBand pill at (12, 12) with height 36 and return the top y for KaLayerOpacityRail
+    // (target/cpp-ref/src/app/KaDrawGuideBand.h:23-29, target/cpp-ref/src/app/KaDrawGuideBand.cpp:28-53,142-158).
+    pub(crate) fn paint_guide_band(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &egui::Painter,
+        rect: Rect,
+        spec: Option<&GuideBandSpec>,
+    ) -> f32 {
+        let Some(spec) = spec.filter(|s| !s.title.trim().is_empty()) else {
+            return BAND_MARGIN;
+        };
+        let accent = Color32::from_rgb(181, 87, 58);
+        let title_ink = Color32::from_rgb(28, 25, 23);
+        let hint_ink = Color32::from_rgb(87, 83, 78);
+        let has_glyph = !spec.icon_id.is_empty() && crate::ribbon_icon_svg::svg_parts(spec.icon_id).is_some();
+
+        let title_galley = p.layout_no_wrap(spec.title.trim().to_owned(), FontId::proportional(12.0), title_ink);
+        let hint_trimmed = spec.hint.trim();
+        let hint_galley = (!hint_trimmed.is_empty())
+            .then(|| p.layout_no_wrap(format!("— {hint_trimmed}"), FontId::proportional(12.0), hint_ink));
+        let measure_galley = spec
+            .measure
+            .as_deref()
+            .filter(|m| !m.is_empty())
+            .map(|m| p.layout_no_wrap(m.to_owned(), FontId::monospace(12.0), title_ink));
+
+        let mut content_w = title_galley.size().x;
+        if has_glyph {
+            content_w += BAND_GLYPH_PX + PILL_ITEM_GAP;
+        }
+        if let Some(hg) = &hint_galley {
+            content_w += PILL_ITEM_GAP + hg.size().x;
+        }
+        if let Some(mg) = &measure_galley {
+            content_w += PILL_ITEM_GAP + mg.size().x;
+        }
+        let pill_r = Rect::from_min_size(
+            rect.min + Vec2::new(BAND_MARGIN, BAND_MARGIN),
+            Vec2::new(PILL_PAD_X + content_w + PILL_PAD_X, BAND_HEIGHT),
+        );
+        p.rect_filled(pill_r, 6.0, Color32::from_rgba_unmultiplied(255, 255, 255, 248));
+        p.rect_stroke(pill_r, 6.0, Stroke::new(1.2, accent), egui::StrokeKind::Middle);
+
+        let mut x = pill_r.left() + PILL_PAD_X;
+        if has_glyph {
+            let glyph_r = Rect::from_min_size(
+                Pos2::new(x, pill_r.center().y - BAND_GLYPH_PX * 0.5),
+                Vec2::splat(BAND_GLYPH_PX),
+            );
+            let _ = crate::svg_path_paint::paint_svg_icon(p, glyph_r, spec.icon_id, accent);
+            x += BAND_GLYPH_PX + PILL_ITEM_GAP;
+        }
+        let title_w = title_galley.size().x;
+        p.galley(Pos2::new(x, pill_r.center().y - title_galley.size().y * 0.5), title_galley, title_ink);
+        x += title_w;
+        if let Some(hg) = hint_galley {
+            x += PILL_ITEM_GAP;
+            let hw = hg.size().x;
+            p.galley(Pos2::new(x, pill_r.center().y - hg.size().y * 0.5), hg, hint_ink);
+            x += hw;
+        }
+        if let Some(mg) = measure_galley {
+            x += PILL_ITEM_GAP;
+            p.galley(Pos2::new(x, pill_r.center().y - mg.size().y * 0.5), mg, title_ink);
+        }
+
+        self.paint_undo_redo_pill(ui, p, Pos2::new(pill_r.right() + BAND_BUTTON_GAP, pill_r.top()));
+        BAND_MARGIN + BAND_HEIGHT + BAND_BUTTON_GAP
     }
 
     /// 안내 띠·투명도 레일·측정 HUD (원문 캔버스 본문 뒤쪽).
@@ -97,56 +212,8 @@ impl StrataAppState {
             ..
         } = input;
         // 1. KaDrawGuideBand (KaDrawGuideBand.cpp:28-70, MainWindowChrome.cpp:73-84)
-        let guide_info = self.map_guide_band_info(input);
-
-        let opacity_top_y = if let Some((title_txt, hint_txt)) = guide_info {
-            let full_guide_txt = format!("{title_txt} — {hint_txt}");
-            let pill_w =
-                ((full_guide_txt.chars().count() as f32) * 9.5 + 42.0).clamp(320.0, 520.0);
-            let pill_r = Rect::from_min_size(
-                rect.min + Vec2::new(12.0, 12.0),
-                Vec2::new(pill_w, 34.0),
-            );
-            p.rect_filled(
-                pill_r,
-                6.0,
-                Color32::from_rgba_unmultiplied(255, 255, 255, 248),
-            );
-            p.rect_stroke(
-                pill_r,
-                6.0,
-                Stroke::new(1.2, Color32::from_rgb(181, 87, 58)),
-                egui::StrokeKind::Middle,
-            );
-            // KaDrawGuideBand.cpp:25 — KaIcons::tinted("draw-polygon", 16, KaTheme::palette().accent)
-            let ic = Pos2::new(pill_r.left() + 16.0, pill_r.center().y);
-            let accent = Color32::from_rgb(181, 87, 58);
-            let poly_pts = [
-                Pos2::new(ic.x - 5.0, ic.y - 4.0),
-                Pos2::new(ic.x + 4.0, ic.y - 5.0),
-                Pos2::new(ic.x + 5.0, ic.y + 4.0),
-                Pos2::new(ic.x - 4.0, ic.y + 5.0),
-                Pos2::new(ic.x - 5.0, ic.y - 4.0),
-            ];
-            p.add(egui::Shape::line(
-                poly_pts.to_vec(),
-                Stroke::new(1.5, accent),
-            ));
-            for &v in &poly_pts[..4] {
-                p.circle_filled(v, 2.0, accent);
-            }
-            p.text(
-                Pos2::new(pill_r.left() + 30.0, pill_r.center().y),
-                egui::Align2::LEFT_CENTER,
-                &full_guide_txt,
-                FontId::proportional(12.0),
-                Color32::from_rgb(28, 25, 23),
-            );
-            self.paint_undo_redo_pill(ui, p, Pos2::new(pill_r.right() + 8.0, pill_r.top()));
-            12.0 + 34.0 + 8.0
-        } else {
-            12.0
-        };
+        let guide_spec = self.map_guide_band_spec(input);
+        let opacity_top_y = self.paint_guide_band(ui, p, rect, guide_spec.as_ref());
 
         // 2. KaLayerOpacityRail (KaLayerOpacityRail.cpp:18-177) — 좌상단 투명도(0~100) · 밝기(-255~255) 레일
         let selected_layer = self.right_inspector.selected_layer_key.clone();

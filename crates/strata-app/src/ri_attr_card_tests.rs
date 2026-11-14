@@ -106,3 +106,65 @@ fn line_draw_tool_holds_card_and_shows_drawing_sentence() {
     app.resync_card_on_tool_change();
     assert_eq!(app.home_map.card.as_ref().map(|c| c.fid), Some(2));
 }
+
+fn rendered_card_texts(app: &mut StrataAppState) -> String {
+    let ctx = egui::Context::default();
+    let out = ctx.run(RawInput::default(), |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            app.render_ri_attribute_card(ui);
+        });
+    });
+    out.shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Text(t) => Some(t.galley.text()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// Ported from target/cpp-ref/tests/test_inspector_panel.cpp:103-121 (emptyAndDrawingSentences)
+// and target/cpp-ref/src/app/KaInspectorPanel.cpp:162-173 for the four states supported before
+// read-only reference cards are wired in the Rust feature card.
+#[test]
+fn inspector_panel_shows_empty_and_drawing_sentences() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut app = opened_demo(dir.path());
+    let s_idle_empty = "지도에서 도형 하나를 고르면 기록이 여기에 나옵니다.";
+    let s_draw_empty = "도형을 다 그리면 그 기록이 여기에 나옵니다.";
+    let s_draw_edit = "그리는 중에도 여기서 바로 고칠 수 있습니다. 지도를 누르면 이어서 그립니다.";
+    let s_draw_ref = "그리는 중입니다. 이 기록은 참조 자료라 고치지 않습니다.";
+
+    // 1. Not drawing, no card.
+    app.active_tool = MapToolKind::Pan;
+    app.clear_card();
+    let t1 = rendered_card_texts(&mut app);
+    assert!(t1.contains(s_idle_empty), "{t1}");
+
+    // 2. Drawing (line and polygon), no card.
+    for tool in [MapToolKind::DrawLine, MapToolKind::DrawPolygon] {
+        app.active_tool = tool;
+        let t2 = rendered_card_texts(&mut app);
+        assert!(t2.contains(s_draw_empty), "{tool:?}: {t2}");
+        assert!(!t2.contains(s_idle_empty), "{tool:?}: {t2}");
+    }
+
+    // 3. Drawing (line and polygon) with an editable record on the card: card stays visible alongside sentence.
+    app.set_card_target("feature_poly", 1, false);
+    for tool in [MapToolKind::DrawLine, MapToolKind::DrawPolygon] {
+        app.active_tool = tool;
+        let t3 = rendered_card_texts(&mut app);
+        assert!(t3.contains("1호 주거지"), "card must stay visible while drawing ({tool:?}): {t3}");
+        assert!(t3.contains(s_draw_edit), "{tool:?}: {t3}");
+        assert!(!t3.contains(s_draw_empty), "{tool:?}: {t3}");
+    }
+
+    // 4. Not drawing with a card: card stays visible and no inspector sentence is shown.
+    app.active_tool = MapToolKind::Pan;
+    let t4 = rendered_card_texts(&mut app);
+    assert!(t4.contains("1호 주거지"), "{t4}");
+    for s in [s_idle_empty, s_draw_empty, s_draw_edit, s_draw_ref] {
+        assert!(!t4.contains(s), "unexpected sentence {s:?} when not drawing with card: {t4}");
+    }
+}

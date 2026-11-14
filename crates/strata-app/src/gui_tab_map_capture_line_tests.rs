@@ -149,6 +149,14 @@ fn one_point_finish_shows_too_few_text_and_keeps_vertex() {
     assert_eq!(h.app.status_left_message(), TOO_FEW_TEXT);
     assert_eq!(h.app.draw_sketch.points.len(), 1);
     assert_eq!(h.last_line_len().0, 1);
+
+    h.key(Key::Escape);
+    assert!(h.app.draw_sketch.points.is_empty());
+    assert_eq!(h.app.status_left_message(), "그리던 도형을 지웠습니다.");
+    h.app.home_map.draw_guide_message = None;
+    h.key(Key::Escape);
+    assert!(h.app.draw_sketch.points.is_empty());
+    assert_ne!(h.app.status_left_message(), "그리던 도형을 지웠습니다.");
 }
 
 #[test]
@@ -172,6 +180,14 @@ fn undo_vertex_keys_and_escape_work_for_line_sketch() {
     assert_eq!(h.app.active_tool, MapToolKind::DrawLine);
     assert!(h.app.draw_row_open());
     assert_eq!(h.app.status_left_message(), "그리던 도형을 지웠습니다.");
+
+    // Second cancel on an already-empty sketch stays silent (target/cpp-ref/tests/test_editing_tools.cpp:145-146).
+    h.app.home_map.draw_guide_message = None;
+    h.key(Key::Escape);
+    assert!(h.app.draw_sketch.points.is_empty());
+    assert_eq!(h.app.active_tool, MapToolKind::DrawLine);
+    assert!(h.app.draw_row_open());
+    assert_eq!(h.app.home_map.draw_guide_message, None);
 }
 
 #[test]
