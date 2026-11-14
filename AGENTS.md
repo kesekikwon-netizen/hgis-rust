@@ -27,6 +27,13 @@ not apply here. Where this file and `CLAUDE.md` differ, this file wins. Plan: `d
   write one line in `evolve` (what, where, why it is better). The director turns the good ones into orders.
 - Ordinary obstacles (build lock, timeout, compile error, your own failing test) are not stop conditions: find the cause and continue.
 
+## Skills
+
+- The superpowers skill pack is installed for Antigravity and for Claude Code on this PC (owner's instruction, 2026-11-14).
+- An `ORDER.yaml` is the approved design and the approved plan. For an order, do not run brainstorming, writing-plans, using-git-worktrees, finishing-a-development-branch, subagent-driven-development or dispatching-parallel-agents, and never wait for a human reply: nobody is watching the pane.
+- Do use test-driven-development, systematic-debugging and verification-before-completion while you work. Their results go into the report: `tests_added` (failed before, passes now) and `verify`.
+- Code review is the director's: an independent reviewer reads your commit. Do not request or run a review of your own.
+
 ## Code
 
 - Match the surrounding names, comments and shape. Every changed line traces to the order. No drive-by refactors.
