@@ -95,14 +95,14 @@ fn embedded_user_sheet_returns_has_user_sheet_and_keeps_bytes() {
     insert_text_project(&gpkg, "survey", &hex);
 
     let before = sha256_file(&gpkg);
-    assert_eq!(survey_user_sheet(&gpkg), Ok(SheetCheck::HasUserSheet));
+    assert_eq!(survey_user_sheet(&gpkg), Ok(SheetCheck::UserSheetWithoutMap));
     assert_eq!(sha256_file(&gpkg), before);
 
     // Self-closing <Layout name="user_sheet" .../> is also recognized.
     let gpkg_empty_tag = dir.path().join("empty_tag.gpkg");
     let hex_empty = hex_encode(&workspace_zip("<Layout name=\"user_sheet\" units=\"mm\"/>"));
     insert_text_project(&gpkg_empty_tag, "survey", &hex_empty);
-    assert_eq!(survey_user_sheet(&gpkg_empty_tag), Ok(SheetCheck::HasUserSheet));
+    assert_eq!(survey_user_sheet(&gpkg_empty_tag), Ok(SheetCheck::UserSheetWithoutMap));
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn companion_qgz_checked_when_embedded_absent() {
     let qgz = dir.path().join("site.2026.qgz");
     std::fs::write(&qgz, workspace_zip("<Layout name=\"user_sheet\" units=\"mm\"/>"))
         .expect("write companion with sheet");
-    assert_eq!(survey_user_sheet(&gpkg), Ok(SheetCheck::HasUserSheet));
+    assert_eq!(survey_user_sheet(&gpkg), Ok(SheetCheck::UserSheetWithoutMap));
 
     std::fs::write(&qgz, workspace_zip("")).expect("write companion without sheet");
     assert_eq!(survey_user_sheet(&gpkg), Ok(SheetCheck::NoUserSheet));
@@ -202,7 +202,7 @@ fn embedded_project_decides_when_companion_also_present() {
         .expect("update embedded with sheet");
     }
     std::fs::write(&qgz, workspace_zip("")).expect("write companion without sheet");
-    assert_eq!(survey_user_sheet(&gpkg), Ok(SheetCheck::HasUserSheet));
+    assert_eq!(survey_user_sheet(&gpkg), Ok(SheetCheck::UserSheetWithoutMap));
 
     // Embedded is corrupt while companion is valid -> embedded still decides (Err).
     {
@@ -221,7 +221,7 @@ fn blob_content_reads_hex_text_first_then_raw_zip() {
 
     let gpkg_hex_blob = dir.path().join("hex_blob.gpkg");
     insert_blob_project(&gpkg_hex_blob, hex_encode(&zip_with).to_ascii_uppercase().as_bytes());
-    assert_eq!(survey_user_sheet(&gpkg_hex_blob), Ok(SheetCheck::HasUserSheet));
+    assert_eq!(survey_user_sheet(&gpkg_hex_blob), Ok(SheetCheck::UserSheetWithoutMap));
 
     let gpkg_hex_none = dir.path().join("hex_none.gpkg");
     insert_blob_project(&gpkg_hex_none, hex_encode(&zip_without).as_bytes());
@@ -229,7 +229,7 @@ fn blob_content_reads_hex_text_first_then_raw_zip() {
 
     let gpkg_raw_with = dir.path().join("raw_with.gpkg");
     insert_blob_project(&gpkg_raw_with, &zip_with);
-    assert_eq!(survey_user_sheet(&gpkg_raw_with), Ok(SheetCheck::HasUserSheet));
+    assert_eq!(survey_user_sheet(&gpkg_raw_with), Ok(SheetCheck::UserSheetWithoutMap));
 
     let gpkg_raw_without = dir.path().join("raw_without.gpkg");
     insert_blob_project(&gpkg_raw_without, &zip_without);
