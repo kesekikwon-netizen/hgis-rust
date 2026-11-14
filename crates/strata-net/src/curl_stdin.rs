@@ -22,7 +22,7 @@ pub fn with_url_on_stdin(mut cmd: Command, url: &str) -> (Command, String) {
 /// curl 을 시작하지 못하거나 표준입력에 쓰지 못함.
 pub fn output_with_url_on_stdin(cmd: Command, url: &str) -> std::io::Result<Output> {
     let (cmd, config) = with_url_on_stdin(cmd, url);
-    crate::network::run_output_with_stdin(cmd, config.as_bytes())
+    crate::network::run_curl_url_with_stdin(cmd, url, config.as_bytes())
 }
 
 #[cfg(test)]

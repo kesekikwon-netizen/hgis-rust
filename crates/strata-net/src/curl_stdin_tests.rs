@@ -33,7 +33,6 @@ fn quotes_and_backslashes_are_escaped() {
 
 /// 실제 curl 이 표준입력의 주소로 받는다 — 내려받기 없이 file:// 로(표준출력·-o 파일 둘 다).
 #[test]
-#[ignore = "starts curl; NET0c runs cargo test with STRATA_OFFLINE=1 and forbids starting curl in tests"]
 fn curl_reads_the_url_from_stdin() {
     let dir = std::env::temp_dir().join(format!("strata-sec1-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("dir");
@@ -52,4 +51,57 @@ fn curl_reads_the_url_from_stdin() {
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     assert_eq!(std::fs::read(&dest).expect("copied"), b"tile bytes");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn local_target_launch_offline_adds_noproxy_refuses_redirects_and_blocks_remote() {
+    use crate::network::{allowed_launches, probe_dry_run};
+
+    // Switch off + local target without redirect flags: allowed and carries --noproxy *.
+    let before = allowed_launches();
+    let local_url = "http://127.0.0.1:18080/tile.png";
+    let (launches, cmds) = probe_dry_run(false, || {
+        let mut cmd = Command::new("curl");
+        cmd.args(["-sS"]);
+        let _ = output_with_url_on_stdin(cmd, local_url);
+    });
+    assert_eq!(launches, 1);
+    assert!(allowed_launches() > before);
+    assert!(
+        cmds[0].args.windows(2).any(|w| w == ["--noproxy", "*"]),
+        "offline local launch must carry --noproxy *: {:?}",
+        cmds[0].args
+    );
+    assert_eq!(cmds[0].stdin, curl_url_config(local_url).into_bytes());
+
+    // Switch off + local target with -L or --location: refused, starts nothing.
+    let count_before_refusal = allowed_launches();
+    for redirect_flag in ["-L", "--location", "-sSL"] {
+        let (r_launches, r_cmds) = probe_dry_run(false, || {
+            let mut cmd = Command::new("curl");
+            cmd.args(["-sS", redirect_flag]);
+            assert!(output_with_url_on_stdin(cmd, local_url).is_err());
+        });
+        assert_eq!(r_launches, 0, "redirect flag {redirect_flag} must be refused");
+        assert!(r_cmds.is_empty());
+    }
+    assert_eq!(allowed_launches(), count_before_refusal);
+
+    // Switch off + non-local target: starts nothing.
+    let (remote_launches, remote_cmds) = probe_dry_run(false, || {
+        let mut cmd = Command::new("curl");
+        cmd.args(["-sS"]);
+        assert!(output_with_url_on_stdin(cmd, "https://api.vworld.kr/req/wmts/1").is_err());
+    });
+    assert_eq!(remote_launches, 0);
+    assert!(remote_cmds.is_empty());
+
+    // Switch on + local target (even with -L): unchanged, no --noproxy added, nothing refused.
+    let (on_launches, on_cmds) = probe_dry_run(true, || {
+        let mut cmd = Command::new("curl");
+        cmd.args(["-sS", "-L"]);
+        let _ = output_with_url_on_stdin(cmd, local_url);
+    });
+    assert_eq!(on_launches, 1);
+    assert_eq!(on_cmds[0].args, vec!["-sS", "-L", "--config", "-"]);
 }

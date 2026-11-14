@@ -9,8 +9,8 @@ use crate::dem_copernicus::{self, DemProgress, DemTile};
 use crate::heritage_intranet::{self, HeritageIntranetFlow};
 use crate::internet_check::{vworld_reachable, CHECK_URL};
 use crate::network::{
-    allowed_launches, is_allowed, offline_from_env, probe_dry_run, startup_allows_network,
-    OFFLINE_ENV,
+    allow_launch_urls, allowed_launches, is_allowed, is_local_target, offline_from_env,
+    probe_dry_run, startup_allows_network, OFFLINE_ENV,
 };
 use crate::ngii_topographic::{self, NgiiTopographicClient};
 
@@ -110,15 +110,9 @@ fn address_geocode_launch_site_respects_switch_and_preserves_command() {
     assert_eq!(
         on_cmds[0].args,
         vec![
-            "-sS",
-            "--max-time",
-            "15",
-            "-A",
-            "ka-hgis/0.3 (Korean archaeology HGIS; contact: local)",
-            "-H",
-            "Accept: application/json",
-            "--config",
-            "-",
+            "-sS", "--max-time", "15",
+            "-A", "ka-hgis/0.3 (Korean archaeology HGIS; contact: local)",
+            "-H", "Accept: application/json", "--config", "-",
         ]
     );
     assert_eq!(on_cmds[0].stdin, curl_url_config(url).into_bytes());
@@ -148,21 +142,9 @@ fn dem_fetch_launch_site_respects_switch_and_preserves_command() {
     assert_eq!(
         on_cmds[0].args,
         vec![
-            "-sS",
-            "--connect-timeout",
-            "5",
-            "--speed-time",
-            "15",
-            "--speed-limit",
-            "1",
-            "-f",
-            "-A",
-            "ka-hgis/0.8 (Korean archaeology HGIS; contact: local)",
-            "-o",
-            &dest.to_string_lossy(),
-            "-w",
-            "%{http_code}",
-            &tile.url(),
+            "-sS", "--connect-timeout", "5", "--speed-time", "15", "--speed-limit", "1", "-f",
+            "-A", "ka-hgis/0.8 (Korean archaeology HGIS; contact: local)",
+            "-o", &dest.to_string_lossy(), "-w", "%{http_code}", &tile.url(),
         ]
     );
 }
@@ -262,20 +244,56 @@ fn ngii_fetch_launch_site_respects_switch_and_preserves_command() {
     assert_eq!(
         on_cmds[0].args,
         vec![
-            "-sS",
-            "--max-time",
-            "30",
-            "-A",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ka-hgis/0.3",
-            "-H",
-            "Content-Type: application/x-www-form-urlencoded; charset=UTF-8",
-            "-H",
-            "Referer: https://map.ngii.go.kr/ms/map/NlipMap.do",
-            "-X",
-            "POST",
-            "--data-binary",
-            &body,
-            &url,
+            "-sS", "--max-time", "30",
+            "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ka-hgis/0.3",
+            "-H", "Content-Type: application/x-www-form-urlencoded; charset=UTF-8",
+            "-H", "Referer: https://map.ngii.go.kr/ms/map/NlipMap.do",
+            "-X", "POST", "--data-binary", &body, &url,
         ]
     );
+}
+
+#[test]
+fn is_local_target_accepts_only_file_and_loopback_http() {
+    for ok in [
+        "file:///C:/Users/test/tile.txt", "file:///tmp/tile.txt", "FILE://LOCALHOST/tmp/tile.txt",
+        "http://127.0.0.1", "http://127.0.0.1/", "http://127.0.0.1:8080/tile?x=1",
+        "http://[::1]", "http://[::1]:9000/api", "http://localhost", "http://localhost:3000/a",
+        "HTTP://LOCALHOST:8080/x", "HTTP://127.0.0.1/x", "HTTP://[::1]:80/x",
+    ] {
+        assert!(is_local_target(ok), "expected local: {ok}");
+    }
+    for bad in [
+        "", "   ", "not a url ::: garbage", "://127.0.0.1", "http://", "file://", "file:///",
+        "https://127.0.0.1", "https://localhost:8443/x", "https://[::1]/x",
+        "http://127.0.0.1.example.com", "http://localhost.example.com",
+        "http://user@127.0.0.1@example.com", "http://user@127.0.0.1", "http://user@localhost/x",
+        "http://example.com/127.0.0.1", "http://127.0.0.2/x", "http://0.0.0.0/x",
+        "http://127.0.0.1:", "http://127.0.0.1:0/x", "http://127.0.0.1:70000/x",
+        "http://127.0.0.1\\@example.com", "file://evil.example.com/share/a", "file:////srv/a",
+    ] {
+        assert!(!is_local_target(bad), "expected non-local: {bad}");
+    }
+}
+
+#[test]
+fn allow_launch_urls_allows_all_local_offline_and_remote_only_online() {
+    let all_local = ["file:///C:/tmp/a.tif", "http://127.0.0.1:8000/b", "http://[::1]/c", "http://localhost/d"];
+    let mixed = ["http://127.0.0.1:8000/a", "https://api.vworld.kr/req/wmts/1.0.0/FAKE/1/2.jpeg"];
+    let before = allowed_launches();
+    let (local_launches, _) = probe_dry_run(false, || assert!(allow_launch_urls(all_local)));
+    assert_eq!(local_launches, 1);
+    assert!(allowed_launches() > before);
+
+    let after_local = allowed_launches();
+    let (mixed_off, _) = probe_dry_run(false, || {
+        assert!(!allow_launch_urls(mixed));
+        assert!(!allow_launch_urls(std::iter::empty::<&str>()));
+    });
+    assert_eq!(mixed_off, 0);
+    assert_eq!(allowed_launches(), after_local);
+
+    let (mixed_on, _) = probe_dry_run(true, || assert!(allow_launch_urls(mixed)));
+    assert_eq!(mixed_on, 1);
+    assert!(allowed_launches() > after_local);
 }
