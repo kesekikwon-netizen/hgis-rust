@@ -271,3 +271,23 @@ fn ribbon_group_layout_uses_unreduced_chip_base_widths() {
     assert_eq!(expected_x, 1321.0);
     assert!(expected_x <= 1328.0);
 }
+
+/// A `--snap` run works on temporary copies and ends by itself: closing it never waits on the save prompt.
+/// (A run whose steps changed something stayed open until it was killed, 2026-11-15.)
+#[test]
+fn test_snap_run_closes_without_the_save_prompt() {
+    for (snap, want_prompt) in [(false, true), (true, false)] {
+        let mut app = StrataAppState::new_startup();
+        app.is_dirty = true;
+        if snap {
+            app.snap = Some(crate::snap_shot::SnapRequest::parse("out", ""));
+        }
+        let ctx = egui::Context::default();
+        let mut raw = egui::RawInput::default();
+        raw.viewports.entry(egui::ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close);
+        let out = ctx.run(raw, |ctx| app.render_close_prompt(ctx));
+        assert_eq!(app.close_prompt_open, want_prompt, "snap = {snap}");
+        let cancelled = out.viewport_output.values().any(|v| v.commands.contains(&egui::ViewportCommand::CancelClose));
+        assert_eq!(cancelled, want_prompt, "snap = {snap}");
+    }
+}

@@ -25,7 +25,9 @@ impl StrataAppState {
         let entry = self.left_layers.entries.iter().find(|e| e.layer_key == key)?;
         let table = self.survey_tables.iter().find(|t| t.table == key);
         // 배경 타일과 VWorld 지적 그림은 래스터(QgsRasterLayer), 나머지(조사 표·주변 거리 고리)는 벡터.
-        let vector = entry.group != LegendGroup::Basemap && key != "vworld_cadastral_wms";
+        let vector = entry.group != LegendGroup::Basemap
+            && key != "vworld_cadastral_wms"
+            && crate::ref_tile_layers::ref_tile_layer(key).is_none();
         let geom = match table.map(|t| t.geometry_type.to_ascii_uppercase()) {
             Some(g) if g.contains("POLYGON") => Some(MenuGeom::Polygon),
             Some(g) if g.contains("LINE") => Some(MenuGeom::Line),

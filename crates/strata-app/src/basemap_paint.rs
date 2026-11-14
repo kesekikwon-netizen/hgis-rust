@@ -44,7 +44,8 @@ impl TileTextureCache {
     #[must_use]
     pub fn get(&self, k: &TexKey) -> Option<&egui::TextureHandle> { self.0.get(k) }
     pub fn insert(&mut self, k: TexKey, v: egui::TextureHandle) { self.0.insert(k, v); }
-    pub fn retain_keys(&mut self, keep: &HashSet<TexKey>) { self.0.retain(|k, _| keep.contains(k)); }
+    /// Drops the textures of `kind` that are not in `keep`. The other kinds share this store and stay.
+    pub fn retain_kind(&mut self, kind: TileKind, keep: &HashSet<TexKey>) { self.0.retain(|k, _| k.0 != kind || keep.contains(k)); }
 }
 
 /// 지적 타일 `(z, x, y)` 별 텍스처 캐시.
@@ -172,7 +173,7 @@ where
     }
 
     if textures.len() > BASEMAP_TEXTURE_LIMIT {
-        textures.retain_keys(&used);
+        textures.retain_kind(kind, &used);
     }
     painted
 }

@@ -27,7 +27,20 @@ pub fn tile_mesh_points(
     tx: u32,
     ty: u32,
 ) -> Option<Vec<Pos2>> {
-    let n = TILE_MESH_STEPS;
+    tile_grid_points(view, params, rect, z, tx, ty, TILE_MESH_STEPS)
+}
+
+/// The same grid with `n` cells along a side (a tile on the rim of a clip circle uses a finer one).
+#[must_use]
+pub fn tile_grid_points(
+    view: &TileView,
+    params: &TmParams,
+    rect: Rect,
+    z: u8,
+    tx: u32,
+    ty: u32,
+    n: usize,
+) -> Option<Vec<Pos2>> {
     let mut pts = Vec::with_capacity((n + 1) * (n + 1));
     for j in 0..=n {
         for i in 0..=n {

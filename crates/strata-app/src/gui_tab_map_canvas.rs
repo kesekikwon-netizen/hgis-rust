@@ -243,6 +243,7 @@ impl StrataAppState {
             let _perf =
                 crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::BackgroundTiles);
             self.paint_basemap_layer(ctx, &p, rect);
+            self.paint_reference_tile_layers(ctx, &p, rect);
         }
         {
             let _perf =

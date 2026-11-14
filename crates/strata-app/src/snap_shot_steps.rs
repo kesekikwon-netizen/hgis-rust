@@ -66,6 +66,10 @@ impl StrataAppState {
                     self.run_layer_menu_action(Some(key), &crate::menu_popup::MenuPick { id, value: value.to_owned() });
                 }
             }
+            // 옛 지도 → 대동여지도 (the menu row itself needs a pointer).
+            "@old_map_daedong" => {
+                self.add_reference_tile_layer(&crate::ref_tile_layers::DAEDONGYEOJIDO);
+            }
             _ if action.starts_with("@layer_menu_path=") => {
                 self.home_map.layer_menu_path = action["@layer_menu_path=".len()..].split(',').filter_map(|s| s.trim().parse().ok()).collect();
             }

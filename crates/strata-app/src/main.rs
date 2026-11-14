@@ -203,6 +203,7 @@ mod basemap_fetch;
 mod basemap_mesh;
 mod basemap_paint;
 mod basemap_tiles;
+mod ref_tile_layers;
 mod diag_layout;
 mod snap_shot;
 mod snap_shot_run;

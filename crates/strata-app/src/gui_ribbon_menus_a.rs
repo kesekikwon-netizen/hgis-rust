@@ -220,35 +220,26 @@ impl StrataAppState {
                 .resizable(false)
                 .fixed_pos(anchor)
                 .show(ctx, |ui| {
-                    for item in ["▤  대동여지도", "▤  1919 조선지형도 1:5만"] {
-                        if ui
-                            .add_sized(
+                    // The 1919 map is not connected yet (it said 「배경을 적용했습니다」 without adding anything).
+                    for (item, connected) in [("▤  대동여지도", true), ("▤  1919 조선지형도 1:5만", false)] {
+                        let row = ui.add_enabled_ui(connected, |ui| {
+                            ui.add_sized(
                                 [196.0, 26.0],
                                 egui::Button::new(egui::RichText::new(item).size(12.5))
                                     .fill(Color32::TRANSPARENT)
                                     .stroke(Stroke::NONE),
                             )
-                            .clicked()
-                        {
+                        });
+                        if row.inner.on_disabled_hover_text("아직 Rust 판에서 연결하지 않았습니다 (지시 F7)").clicked() {
                             picked = Some(item);
                         }
                     }
                 });
-            if let Some(item) = picked {
+            if picked.is_some() {
                 self.ribbon.old_map_menu_open = false;
                 self.active_tab = MainTab::Map;
-                let map_type = if item.contains("대동여지도") {
-                    strata_net::tile_fetcher::HistoricalMapType::Daedongyeojido
-                } else {
-                    strata_net::tile_fetcher::HistoricalMapType::Chosun1919_1to50000
-                };
-                let spec = strata_net::tile_fetcher::build_historical_tms_layer_spec(map_type, 0.8);
-                self.home_map.draw_guide_message = Some(format!(
-                    "{} ({}) 배경을 적용했습니다 (투명도 {:.0}%).",
-                    spec.layer_title_ko,
-                    self.work_crs.auth_id(),
-                    spec.opacity * 100.0
-                ));
+                // MainWindowRibbon.cpp:493-494 → MainWindow::addDaedongyeojidoMap (MainWindowOffline.cpp:456-465).
+                self.add_reference_tile_layer(&crate::ref_tile_layers::DAEDONGYEOJIDO);
             }
         }
         self.render_ribbon_context_menus_b(ctx, anchor);

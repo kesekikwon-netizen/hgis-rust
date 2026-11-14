@@ -14,12 +14,14 @@ pub enum TileKind {
     Base,
     /// 연속지적도 (WMS — 별도 처리).
     Cadastral,
+    /// 대동여지도 — NGII old-map WMS asked for by XYZ tile square (`BasemapOps.cpp:1547-1563`).
+    Daedongyeojido,
 }
 
 impl TileKind {
     #[must_use]
     pub const fn is_xyz(self) -> bool {
-        matches!(self, Self::Satellite | Self::Base)
+        matches!(self, Self::Satellite | Self::Base | Self::Daedongyeojido)
     }
 }
 
@@ -42,6 +44,24 @@ pub fn tile_url(kind: TileKind, key: &str, z: u8, x: u32, y: u32) -> String {
             } else {
                 format!("https://api.vworld.kr/req/wmts/1.0.0/{key}/Base/{z}/{y}/{x}.png")
             }
+        }
+        TileKind::Daedongyeojido => {
+            // `BasemapOps.cpp:1547-1563`: WMS 1.1.1 (1.3.0 answered empty), PNG, transparent, no key. The
+            // square asked for is the tile's own: the XYZ scheme cuts the EPSG:3857 world square, of half
+            // side π·a (a = 6 378 137 m), into 2^z by 2^z tiles with row 0 in the north.
+            let half = std::f64::consts::PI * 6_378_137.0;
+            let span = 2.0 * half / f64::from(1_u32 << u32::from(z));
+            let min_x = -half + f64::from(x) * span;
+            let max_y = half - f64::from(y) * span;
+            format!(
+                "https://map.ngii.go.kr/spcemapserver/korea_old_map/ows?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
+                 &LAYERS=korea_oldmap_ddymap_kyu&STYLES=&SRS=EPSG:3857&BBOX={:.3},{:.3},{:.3},{:.3}\
+                 &WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE",
+                min_x,
+                max_y - span,
+                min_x + span,
+                max_y
+            )
         }
         TileKind::Cadastral => String::new(),
     }

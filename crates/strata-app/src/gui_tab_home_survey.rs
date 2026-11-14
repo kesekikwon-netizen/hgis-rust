@@ -103,6 +103,7 @@ impl StrataAppState {
         self.active_tool = MapToolKind::Pan;
         // 조사 데이터 레이어만 제거. 배경지도·지적은 호출부가 다시 보장한다.
         self.left_layers.remove_survey_domain_layers();
+        self.remove_reference_tile_rows();
         self.right_inspector = crate::right_inspector::RightInspectorState::new_default();
         self.home_map.scene = strata_canvas2d::painter_scene::MapSceneModel::default();
         self.home_map.selected_feature_idx = None;

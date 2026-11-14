@@ -8,6 +8,32 @@ use super::gui_tab_map_format::BrightRow;
 use super::gui_tab_map_geom::{brightness_row_text, is_raster_image_layer};
 /// `KaLayerOpacityRail.cpp:18-177` — 좌상단 투명도(0~100) · 밝기(-255~255) 레일
 impl StrataAppState {
+    /// The legend row called `title` whose picture is faded by the row's own opacity: the background tiles
+    /// (`gui_tab_map_basemap.rs` basemap_opacity) and the reference tiles (`ref_tile_layers.rs`).
+    fn picture_row_index(&self, title: &str) -> Option<usize> {
+        self.left_layers.entries.iter().position(|e| {
+            e.label_ko == title
+                && (e.group == strata_types::schema::LegendGroup::Basemap
+                    || crate::ref_tile_layers::ref_tile_layer(&e.layer_key).is_some())
+        })
+    }
+
+    /// What the 투명도 rail shows for the selected row (0 = clear, 1 = solid).
+    pub(crate) fn rail_opacity(&self, title: &str) -> f32 {
+        self.picture_row_index(title).map_or(self.home_map.real_survey.layer_opacity, |i| self.left_layers.entries[i].opacity)
+    }
+
+    /// The 투명도 rail was moved to `t` for the selected row. C++ applies it to the current layer
+    /// (`MainWindow.cpp:994` LayerOps::applyLayerOpacity), the same property the legend menu sets
+    /// (`MainWindowContextMenus.cpp:381`).
+    pub(crate) fn apply_rail_opacity(&mut self, title: &str, t: f32) {
+        self.home_map.real_survey.layer_opacity = t;
+        self.home_map.set_basemap_opacity(t);
+        if let Some(i) = self.picture_row_index(title) {
+            self.left_layers.entries[i].opacity = t;
+        }
+    }
+
     pub(crate) fn paint_opacity_card(
     &mut self,
     ctx: &egui::Context,
@@ -35,7 +61,7 @@ impl StrataAppState {
         Color32::from_rgb(28, 25, 23),
     );
 
-    let opacity_val = self.home_map.real_survey.layer_opacity.clamp(0.0, 1.0);
+    let opacity_val = self.rail_opacity(title).clamp(0.0, 1.0);
     let bright_val = self.home_map.real_survey.layer_brightness.clamp(0.0, 1.0);
     let opacity_pct = (opacity_val * 100.0).round() as i32;
     let bright_int = ((bright_val - 0.5) * 2.0 * 255.0).round() as i32;
@@ -127,8 +153,7 @@ impl StrataAppState {
             if let Some(pos) = resp.interact_pointer_pos() {
                 let t = ((pos.x - sx0) / (sx1 - sx0).max(1.0)).clamp(0.0, 1.0);
                 if row_i == 0 {
-                    self.home_map.real_survey.layer_opacity = t;
-                    self.home_map.set_basemap_opacity(t);
+                    self.apply_rail_opacity(title, t);
                 } else {
                     self.home_map.real_survey.layer_brightness = t;
                     self.home_map.set_basemap_brightness((t - 0.5) * 2.0);

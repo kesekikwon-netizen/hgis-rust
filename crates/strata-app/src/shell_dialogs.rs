@@ -65,7 +65,8 @@ impl StrataAppState {
     }
     /// `KaClosePrompt.cpp` — 저장하지 않은 편집이 있으면 닫기 전에 한 번 묻는다.
     pub(crate) fn render_close_prompt(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested()) && self.is_dirty && !self.close_prompt_open
+        // A `--snap` run works on temporary copies and ends by itself: nobody is there to answer.
+        if ctx.input(|i| i.viewport().close_requested()) && self.is_dirty && !self.close_prompt_open && self.snap.is_none()
         {
             self.close_prompt_open = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
