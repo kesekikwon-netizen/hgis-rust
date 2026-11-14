@@ -1,129 +1,291 @@
-//! 연속지적도 타일을 **화면을 멈추지 않고** 뒤에서 받는다.
-//!
-//! 예전에는 그리는 도중(UI 스레드)에서 curl 로 받아, 처음 보는 곳마다 화면이 멈췄고
-//! 받기에 실패한 칸은 매 프레임 다시 받아 최대 15초씩 멈출 수 있었다.
-//! C++ 은 QGIS 가 WMS 를 뒤에서 받는다. 여기서도 받기·풀기(PNG → 그림)는 작업 스레드가 하고,
-//! 화면은 끝난 그림만 텍스처로 올린다.
+//! Background tile fetchers and cached API key for VWorld basemap and cadastral layers
+//! (target/cpp-ref/src/app/MainWindow.cpp:514,526 — canvas caching and background preview jobs keep UI responsive).
 
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::hash::Hash;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use eframe::egui;
 
-/// 지적 타일 키 `(z, x, y)`.
+use crate::basemap_tiles::TileKind;
+
+/// Cadastral WMS tile key `(z, x, y)`.
 pub type CadKey = (u8, u32, u32);
 
-/// 동시에 받는 최대 장수. QGIS 네트워크 관리자와 같은 감각(호스트당 6).
+/// Background XYZ tile key `(kind, z, x, y)`.
+pub type TexKey = (TileKind, u8, u32, u32);
+
+/// Shared ceiling of concurrent requests to the map service across cadastral and background tiles.
 pub const MAX_IN_FLIGHT: usize = 6;
 
-/// 실패한 칸을 다시 받기까지 기다리는 시간.
+/// Cooldown before retrying a tile whose download or image decode failed.
 pub const RETRY_AFTER: Duration = Duration::from_secs(30);
 
-#[derive(Default)]
-struct FetchState {
-    in_flight: HashSet<CadKey>,
-    failed: HashMap<CadKey, Instant>,
-    done: Vec<(CadKey, egui::ColorImage)>,
+/// Maximum finished tile images converted into GPU textures per UI frame.
+pub const MAX_UPLOADS_PER_FRAME: usize = 8;
+
+/// Minimum interval between re-reading the VWorld API key from key stores.
+pub const KEY_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
+
+struct FetchState<K> {
+    in_flight: HashSet<K>,
+    failed: HashMap<K, Instant>,
+    done: VecDeque<(K, egui::ColorImage)>,
 }
 
-/// 지적 타일 받기 작업 관리자. 복제하면 같은 상태를 함께 쓴다.
-#[derive(Clone, Default)]
-pub struct CadastralFetcher {
-    inner: Arc<Mutex<FetchState>>,
-}
-
-impl std::fmt::Debug for CadastralFetcher {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CadastralFetcher").finish_non_exhaustive()
+impl<K> Default for FetchState<K> {
+    fn default() -> Self {
+        Self {
+            in_flight: HashSet::new(),
+            failed: HashMap::new(),
+            done: VecDeque::new(),
+        }
     }
 }
 
-impl CadastralFetcher {
-    /// 칸 하나를 뒤에서 받기 시작한다. 이미 받는 중이거나, 방금 실패했거나,
-    /// 동시 상한에 닿았으면 시작하지 않고 `false`.
-    pub fn request_with<F>(&self, key: CadKey, ctx: Option<&egui::Context>, job: F) -> bool
+/// Background worker queue generic over tile key `K`, sharing an optional `AtomicUsize` ceiling.
+#[derive(Clone)]
+pub struct TileFetcher<K> {
+    inner: Arc<(Mutex<FetchState<K>>, Condvar)>,
+    in_flight_total: Arc<AtomicUsize>,
+    clock: Arc<dyn Fn() -> Instant + Send + Sync>,
+}
+
+pub type CadastralFetcher = TileFetcher<CadKey>;
+pub type BasemapFetcher = TileFetcher<TexKey>;
+
+/// Creates paired background and cadastral fetchers sharing one `MAX_IN_FLIGHT` counter.
+#[must_use]
+pub fn shared_tile_fetchers() -> (BasemapFetcher, CadastralFetcher) {
+    let total = Arc::new(AtomicUsize::new(0));
+    let clock: Arc<dyn Fn() -> Instant + Send + Sync> = Arc::new(Instant::now);
+    (
+        TileFetcher::new(Arc::clone(&total), Arc::clone(&clock)),
+        TileFetcher::new(total, clock),
+    )
+}
+
+impl<K> Default for TileFetcher<K> {
+    fn default() -> Self {
+        Self::new(Arc::new(AtomicUsize::new(0)), Arc::new(Instant::now))
+    }
+}
+
+impl<K> std::fmt::Debug for TileFetcher<K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TileFetcher")
+            .field("in_flight_total", &self.in_flight_total.load(Ordering::Relaxed))
+            .finish_non_exhaustive()
+    }
+}
+
+impl<K> TileFetcher<K> {
+    fn new(
+        in_flight_total: Arc<AtomicUsize>,
+        clock: Arc<dyn Fn() -> Instant + Send + Sync>,
+    ) -> Self {
+        Self {
+            inner: Arc::new((Mutex::new(FetchState::default()), Condvar::new())),
+            in_flight_total,
+            clock,
+        }
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub fn with_clock(clock: Arc<dyn Fn() -> Instant + Send + Sync>) -> Self {
+        Self::new(Arc::new(AtomicUsize::new(0)), clock)
+    }
+
+    /// Total requests currently in flight across all fetchers sharing this counter.
+    #[must_use]
+    pub fn in_flight_count(&self) -> usize {
+        self.in_flight_total.load(Ordering::Acquire)
+    }
+
+    #[cfg(test)]
+    pub fn wait_for_idle(&self) {
+        let (lock, cvar) = &*self.inner;
+        if let Ok(guard) = lock.lock() {
+            drop(cvar.wait_while(guard, |st| !st.in_flight.is_empty()));
+        }
+    }
+}
+
+impl<K> TileFetcher<K>
+where
+    K: Copy + Eq + Hash + Send + 'static,
+{
+    /// Starts `job` on a worker thread unless `key` is already in flight/queued, within `RETRY_AFTER`,
+    /// or the shared `MAX_IN_FLIGHT` ceiling is full.
+    pub fn request_with<F>(&self, key: K, ctx: Option<&egui::Context>, job: F) -> bool
     where
         F: FnOnce() -> Option<egui::ColorImage> + Send + 'static,
     {
-        let Ok(mut st) = self.inner.lock() else {
+        let (lock, cvar) = &*self.inner;
+        let Ok(mut st) = lock.lock() else {
             return false;
         };
-        if st.in_flight.contains(&key) || st.in_flight.len() >= MAX_IN_FLIGHT {
+        if st.in_flight.contains(&key) || st.done.iter().any(|(dk, _)| *dk == key) {
             return false;
         }
-        if let Some(t) = st.failed.get(&key) {
-            if t.elapsed() < RETRY_AFTER {
+        let now = (self.clock)();
+        if let Some(&failed_at) = st.failed.get(&key) {
+            if now.saturating_duration_since(failed_at) < RETRY_AFTER {
                 return false;
             }
-            st.failed.remove(&key);
         }
+        let reserved = self
+            .in_flight_total
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < MAX_IN_FLIGHT).then_some(n + 1)
+            })
+            .is_ok();
+        if !reserved {
+            return false;
+        }
+        st.failed.remove(&key);
         st.in_flight.insert(key);
         drop(st);
 
         let inner = Arc::clone(&self.inner);
+        let total = Arc::clone(&self.in_flight_total);
+        let clock = Arc::clone(&self.clock);
         let ctx = ctx.cloned();
         let spawned = std::thread::Builder::new()
-            .name("cadastral-tile".to_owned())
+            .name("map-tile".to_owned())
             .spawn(move || {
                 let result = job();
-                if let Ok(mut st) = inner.lock() {
-                    st.in_flight.remove(&key);
-                    match result {
-                        Some(img) => st.done.push((key, img)),
-                        None => {
-                            st.failed.insert(key, Instant::now());
-                        }
+                let (lock, cvar) = &*inner;
+                let mut st = lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                st.in_flight.remove(&key);
+                match result {
+                    Some(img) => st.done.push_back((key, img)),
+                    None => {
+                        st.failed.insert(key, (clock)());
                     }
                 }
+                total.fetch_sub(1, Ordering::AcqRel);
+                cvar.notify_all();
+                drop(st);
                 if let Some(ctx) = ctx {
                     ctx.request_repaint();
                 }
             });
         if spawned.is_err() {
-            if let Ok(mut st) = self.inner.lock() {
-                st.in_flight.remove(&key);
-            }
+            let mut st = lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            st.in_flight.remove(&key);
+            self.in_flight_total.fetch_sub(1, Ordering::AcqRel);
+            cvar.notify_all();
             return false;
         }
         true
     }
 
-    /// 다 받은 그림을 꺼낸다(꺼낸 것은 목록에서 빠진다).
+    /// Drains all finished images.
     #[must_use]
-    pub fn take_done(&self) -> Vec<(CadKey, egui::ColorImage)> {
-        self.inner
-            .lock()
-            .map(|mut st| std::mem::take(&mut st.done))
+    pub fn take_done(&self) -> Vec<(K, egui::ColorImage)> {
+        let (lock, _) = &*self.inner;
+        lock.lock()
+            .map(|mut st| st.done.drain(..).collect())
             .unwrap_or_default()
     }
 
-    /// 지금 받는 중인지.
+    /// Drains up to `limit` finished images and reports whether more remain queued.
     #[must_use]
-    pub fn is_in_flight(&self, key: CadKey) -> bool {
-        self.inner
-            .lock()
-            .map(|st| st.in_flight.contains(&key))
-            .unwrap_or(false)
+    pub fn take_done_limited(&self, limit: usize) -> (Vec<(K, egui::ColorImage)>, bool) {
+        let (lock, _) = &*self.inner;
+        let Ok(mut st) = lock.lock() else {
+            return (Vec::new(), false);
+        };
+        let n = st.done.len().min(limit);
+        let out = st.done.drain(..n).collect();
+        (out, !st.done.is_empty())
+    }
+
+    /// Returns whether `key` is currently being fetched.
+    #[must_use]
+    pub fn is_in_flight(&self, key: K) -> bool {
+        let (lock, _) = &*self.inner;
+        lock.lock().is_ok_and(|st| st.in_flight.contains(&key))
     }
 }
 
-/// 디스크 캐시나 VWorld 에서 칸 하나를 얻어 그림으로 푼다(작업 스레드에서 부른다).
+/// Keeps the VWorld API key in app state and re-reads key stores at most every `KEY_REFRESH_INTERVAL`.
+#[derive(Clone)]
+pub struct CachedApiKey {
+    cached: Option<(String, Instant)>,
+    reader: Arc<dyn Fn() -> String + Send + Sync>,
+    clock: Arc<dyn Fn() -> Instant + Send + Sync>,
+}
+
+impl Default for CachedApiKey {
+    fn default() -> Self {
+        Self {
+            cached: None,
+            reader: Arc::new(crate::basemap_fetch::current_key),
+            clock: Arc::new(Instant::now),
+        }
+    }
+}
+
+impl std::fmt::Debug for CachedApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CachedApiKey")
+            .field("has_cached", &self.cached.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+impl CachedApiKey {
+    pub fn get(&mut self) -> &str {
+        let now = (self.clock)();
+        let stale = match &self.cached {
+            None => true,
+            Some((_, read_at)) => now.saturating_duration_since(*read_at) >= KEY_REFRESH_INTERVAL,
+        };
+        if stale {
+            self.cached = Some(((self.reader)(), now));
+        }
+        self.cached.as_ref().map_or("", |(k, _)| k.as_str())
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub fn with_reader_and_clock(
+        reader: Arc<dyn Fn() -> String + Send + Sync>,
+        clock: Arc<dyn Fn() -> Instant + Send + Sync>,
+    ) -> Self {
+        Self { cached: None, reader, clock }
+    }
+}
+
+/// Fetches and decodes one cadastral WMS tile on a worker thread.
 #[must_use]
 pub fn load_cadastral_image(key: &str, z: u8, x: u32, y: u32) -> Option<egui::ColorImage> {
     let path = crate::basemap_cadastral::fetch_cadastral_tile(key, z, x, y)?;
-    let decoded = image::open(&path).ok().map(|img| img.to_rgba8());
+    decode_cached_tile_image(&path)
+}
+
+/// Fetches and decodes one satellite/base XYZ tile on a worker thread.
+#[must_use]
+pub fn load_basemap_image(kind: TileKind, key: &str, z: u8, x: u32, y: u32) -> Option<egui::ColorImage> {
+    let path = crate::basemap_fetch::fetch_tile(kind, key, z, x, y)?;
+    decode_cached_tile_image(&path)
+}
+
+fn decode_cached_tile_image(path: &std::path::Path) -> Option<egui::ColorImage> {
+    let decoded = image::open(path).ok().map(|img| img.to_rgba8());
     let Some(rgba) = decoded else {
-        // 깨진 캐시 파일은 지우고 다음에 다시 받는다.
-        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(path);
         return None;
     };
     let (w, h) = (rgba.width() as usize, rgba.height() as usize);
     if w == 0 || h == 0 {
+        let _ = std::fs::remove_file(path);
         return None;
     }
-    Some(egui::ColorImage::from_rgba_unmultiplied(
-        [w, h],
-        rgba.as_raw(),
-    ))
+    Some(egui::ColorImage::from_rgba_unmultiplied([w, h], rgba.as_raw()))
 }

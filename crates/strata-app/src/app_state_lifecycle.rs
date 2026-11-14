@@ -23,6 +23,8 @@ impl StrataAppState {
     #[must_use]
     pub fn new_startup() -> Self {
         let accounts = AccountDialogState::probe_user_accounts();
+        let (basemap_fetch, cadastral_fetch) =
+            crate::basemap_cadastral_jobs::shared_tile_fetchers();
         let default_opts = DisplayOptions {
             paper_look: true,
             ..DisplayOptions::default()
@@ -67,7 +69,9 @@ impl StrataAppState {
             basemap_textures: crate::basemap_paint::TileTextureCache::default(),
             basemap_tiles_painted: 0,
             cadastral_cells: crate::basemap_paint::CadastralCellCache::default(),
-            cadastral_fetch: crate::basemap_cadastral_jobs::CadastralFetcher::default(),
+            cadastral_fetch,
+            basemap_fetch,
+            vworld_api_key: crate::basemap_cadastral_jobs::CachedApiKey::default(),
             active_tool: MapToolKind::Pan,
             ribbon: KaBeginnerRibbon::default(),
             left_layers: LeftLayerPanel::new_empty(),

@@ -113,6 +113,10 @@ pub struct StrataAppState {
     pub cadastral_cells: crate::basemap_paint::CadastralCellCache,
     /// 연속지적도 타일을 뒤에서 받는 작업(화면을 멈추지 않는다).
     pub cadastral_fetch: crate::basemap_cadastral_jobs::CadastralFetcher,
+    /// Background satellite/base XYZ tile fetcher (`target/cpp-ref/src/app/MainWindow.cpp:526`).
+    pub basemap_fetch: crate::basemap_cadastral_jobs::BasemapFetcher,
+    /// Cached VWorld API key refreshed at most every 2 seconds across both tile paths.
+    pub(crate) vworld_api_key: crate::basemap_cadastral_jobs::CachedApiKey,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,
