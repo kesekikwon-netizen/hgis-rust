@@ -1,263 +1,254 @@
-//! 레이어 카드(layer card) 본문.
-//!
-//! `right_inspector.rs` 가 300줄을 넘어 옮겼다.
-use eframe::egui::{self, Color32, Stroke, Vec2};
+//! Right-inspector `스타일` tab (`target/cpp-ref/src/app/KaInspectorStyle.cpp:27-225`,
+//! `target/cpp-ref/src/app/MainWindowChrome.cpp:100-118`).
+
+use eframe::egui::{self, Color32, Pos2, RichText, Stroke, Vec2};
+use strata_types::schema::LegendGroup;
+
 use crate::app_state::StrataAppState;
-use crate::right_inspector::{KA_STYLE_PALETTE};
+use crate::gui_tab_home::saved_gpkg_layer_title;
+use crate::right_inspector::{read_simple_vector_style, KA_STYLE_PALETTE};
+use crate::survey_paint_layers::base_style_for_table;
+use crate::survey_style::{mm_to_points, DomainStyle, GeomKind, MARKER_OUTLINE_MM};
+
+const INK: Color32 = Color32::from_rgb(0x1F, 0x23, 0x28);
+const MUTED: Color32 = Color32::from_rgb(0x65, 0x6D, 0x76);
+const BORDER: Color32 = Color32::from_rgb(0xD0, 0xCD, 0xC2);
+
+const EMPTY_SENTENCE: &str =
+    "지도에서 도형을 고르거나 왼쪽 목록에서 레이어를 고르면 그 레이어의 색과 굵기를 여기서 바로 바꿉니다.";
+const LINE_MAP_SENTENCE: &str =
+    "선으로 된 지도의 선 색은 왼쪽 목록에서 그 레이어를 오른쪽 클릭해 「면·외곽선 색」으로 바꿉니다.";
+
+#[derive(Clone, Default)]
+struct StyleSourceMemory {
+    last_list: Option<String>,
+    last_card: Option<(String, i64)>,
+    prefer_card: bool,
+}
+
+enum StyleTarget {
+    Empty,
+    LineMap,
+    Editable { table: String, name: String, kind: GeomKind },
+}
+
+fn infer_geom_kind(key: &str) -> GeomKind {
+    match key {
+        "feature_line" | "section_line" => GeomKind::Line,
+        k if k.starts_with("user:buffer_ring_") => GeomKind::Line,
+        "control_points" | "artifact_point" => GeomKind::Point,
+        k if k.starts_with("user:buffer_label_") => GeomKind::Point,
+        _ => GeomKind::Polygon,
+    }
+}
+
+/// Plate `20x14` layer symbol swatch (`target/cpp-ref/src/app/KaInspectorStyle.cpp:47-53, 141-144`).
+fn paint_layer_swatch(ui: &mut egui::Ui, kind: GeomKind, s: DomainStyle) {
+    let (frame, _) = ui.allocate_exact_size(Vec2::new(20.0, 14.0), egui::Sense::hover());
+    let rgba = |c: [u8; 4]| Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]);
+    let clip = ui.painter().with_clip_rect(frame);
+    match kind {
+        GeomKind::Polygon => {
+            if s.fill[3] > 0 {
+                clip.rect_filled(frame, 0.0, rgba(s.fill));
+            }
+            if s.stroke[3] > 0 {
+                let st = Stroke::new(mm_to_points(s.stroke_width_mm), rgba(s.stroke));
+                clip.rect_stroke(frame, 0.0, st, egui::StrokeKind::Middle);
+            }
+        }
+        GeomKind::Line => {
+            let ends = [Pos2::new(frame.left(), frame.center().y), Pos2::new(frame.right(), frame.center().y)];
+            if let Some((c, w)) = s.casing {
+                clip.line_segment(ends, Stroke::new(mm_to_points(w), rgba(c)));
+            }
+            if s.stroke[3] > 0 {
+                clip.line_segment(ends, Stroke::new(mm_to_points(s.stroke_width_mm), rgba(s.stroke)));
+            }
+        }
+        GeomKind::Point => {
+            let r = mm_to_points(s.marker_size_mm) * 0.5;
+            if s.fill[3] > 0 {
+                clip.circle_filled(frame.center(), r, rgba(s.fill));
+            }
+            if s.stroke[3] > 0 {
+                clip.circle_stroke(frame.center(), r, Stroke::new(mm_to_points(MARKER_OUTLINE_MM), rgba(s.stroke)));
+            }
+        }
+    }
+    ui.painter().rect_stroke(frame, 0.0, Stroke::new(1.0, INK), egui::StrokeKind::Inside);
+}
+
+fn sentence(ui: &mut egui::Ui, text: &str) {
+    ui.add_space(16.0);
+    ui.add(egui::Label::new(RichText::new(text).size(12.0).color(MUTED)).wrap());
+    ui.add_space(16.0);
+}
 
 impl StrataAppState {
-    /// 레이어 카드의 「저장 (Enter)」. 조사 파일에 쓰지 않으므로 「*」는 건드리지 않는다
-    /// (지시 2C-fix2, 버튼 자체는 지시 4).
-    pub(crate) fn on_layer_card_save_clicked(&mut self) {
-        self.home_map.draw_guide_message =
-            Some("도형 기록을 저장했습니다.".to_owned());
+    /// Resolves the most recently chosen layer between feature card and legend list
+    /// (`target/cpp-ref/src/app/MainWindowChrome.cpp:100-118`, `KaInspectorStyle.cpp:117-127`).
+    fn resolve_style_target(&mut self, ctx: &egui::Context) -> StyleTarget {
+        self.drop_card_if_gone();
+        let cur_list = self.right_inspector.selected_layer_key.clone();
+        let cur_card = self.home_map.card.as_ref().map(|c| (c.table.clone(), c.fid));
+        let id = egui::Id::new("ka_ri_style_source");
+        let prefer_card = ctx.data_mut(|d| {
+            let mut m = d.get_temp::<StyleSourceMemory>(id).unwrap_or_default();
+            let list_changed = cur_list != m.last_list;
+            let card_changed = cur_card != m.last_card;
+            if list_changed {
+                m.prefer_card = false;
+            } else if card_changed && cur_card.is_some() {
+                m.prefer_card = true;
+            } else if cur_card.is_none() {
+                m.prefer_card = false;
+            }
+            m.last_list = cur_list.clone();
+            m.last_card = cur_card.clone();
+            let out = m.prefer_card;
+            d.insert_temp(id, m);
+            out
+        });
+        if prefer_card {
+            let key = cur_card.map(|(t, _)| t);
+            self.lookup_style_layer(key.as_deref(), true)
+        } else {
+            self.lookup_style_layer(cur_list.as_deref(), false)
+        }
     }
 
-    pub(crate) fn render_ri_layer_card(&mut self, ui: &mut egui::Ui) {
-let layer_name = self
-    .right_inspector
-    .selected_layer_key
-    .as_deref()
-    .unwrap_or("조사구역");
-let stroke_col = self.right_inspector.active_stroke_color();
-ui.horizontal(|ui| {
-    let (sr, _) =
-        ui.allocate_exact_size(Vec2::new(16.0, 12.0), egui::Sense::hover());
-    let sp = ui.painter_at(sr);
-    sp.rect_filled(
-        sr,
-        1.0,
-        Color32::from_rgba_unmultiplied(
-            stroke_col.r(),
-            stroke_col.g(),
-            stroke_col.b(),
-            70,
-        ),
-    );
-    sp.rect_stroke(
-        sr,
-        1.0,
-        Stroke::new(2.0, stroke_col),
-        egui::StrokeKind::Middle,
-    );
-    ui.label(
-        egui::RichText::new(layer_name)
-            .size(12.5)
-            .color(Color32::from_rgb(35, 35, 32)),
-    );
-});
-// KaFeatureCard.cpp — 유형별 추가 편집 필드
-egui::Grid::new("ka_feature_card_extra")
-    .num_columns(2)
-    .spacing([6.0, 5.0])
-    .show(ui, |ui| {
-        let layer_kind = self
-            .right_inspector
-            .selected_layer_key
-            .clone()
-            .unwrap_or_else(|| "조사구역".to_owned());
-        if layer_kind.contains("기준점") {
-            ui.label(egui::RichText::new("기준점 번호").size(11.5));
-            if ui
-                .add(
-                    egui::TextEdit::singleline(
-                        &mut self.right_inspector.control_point_id,
-                    )
-                    .desired_width(150.0),
-                )
-                .changed()
-            {
-                self.is_dirty = true;
-            }
-            ui.end_row();
-            ui.label(egui::RichText::new("X(북)").size(11.5));
-            ui.add(
-                egui::DragValue::new(&mut self.right_inspector.control_x)
-                    .speed(0.01)
-                    .fixed_decimals(3),
-            );
-            ui.end_row();
-            ui.label(egui::RichText::new("Y(동)").size(11.5));
-            ui.add(
-                egui::DragValue::new(&mut self.right_inspector.control_y)
-                    .speed(0.01)
-                    .fixed_decimals(3),
-            );
-            ui.end_row();
-            ui.label(egui::RichText::new("Z(표고)").size(11.5));
-            ui.add(
-                egui::DragValue::new(&mut self.right_inspector.control_z)
-                    .speed(0.01)
-                    .fixed_decimals(2)
-                    .suffix(" m"),
-            );
-            ui.end_row();
-        } else if layer_kind.contains("단면") {
-            ui.label(egui::RichText::new("단면 번호").size(11.5));
-            if ui
-                .add(
-                    egui::TextEdit::singleline(
-                        &mut self.right_inspector.section_id,
-                    )
-                    .desired_width(150.0)
-                    .hint_text("A-A'"),
-                )
-                .changed()
-            {
-                self.is_dirty = true;
-            }
-            ui.end_row();
-        } else if layer_kind.contains("조사구역") {
-            ui.label(egui::RichText::new("유적명").size(11.5));
-            if ui
-                .add(
-                    egui::TextEdit::singleline(
-                        &mut self.right_inspector.site_name,
-                    )
-                    .desired_width(150.0),
-                )
-                .changed()
-            {
-                self.is_dirty = true;
-            }
-            ui.end_row();
+    fn lookup_style_layer(&self, raw: Option<&str>, by_key: bool) -> StyleTarget {
+        let Some(sel) = raw.filter(|s| !s.is_empty()) else {
+            return StyleTarget::Empty;
+        };
+        let entry = if by_key {
+            self.left_layers.entries.iter().find(|e| e.layer_key == sel)
         } else {
-            ui.label(egui::RichText::new("이름").size(11.5));
-            if ui
-                .add(
-                    egui::TextEdit::singleline(
-                        &mut self.right_inspector.feature_name,
-                    )
-                    .desired_width(150.0),
-                )
-                .changed()
-            {
-                self.is_dirty = true;
+            self.left_layers
+                .entries
+                .iter()
+                .find(|e| e.label_ko == sel)
+                .or_else(|| self.left_layers.entries.iter().find(|e| e.layer_key == sel))
+        };
+        if let Some(e) = entry {
+            // Raster basemap / VWorld WMS picture: QgsRasterLayer -> nullptr (`MainWindowChrome.cpp:103`).
+            if e.group == LegendGroup::Basemap || e.layer_key == "vworld_cadastral_wms" {
+                return StyleTarget::Empty;
             }
-            ui.end_row();
-        }
-    });
-// KaFeatureCard.cpp 하단 액션 버튼
-ui.horizontal_wrapped(|ui| {
-    let save_btn = egui::Button::new(
-        egui::RichText::new("저장 (Enter)")
-            .color(Color32::WHITE)
-            .strong()
-            .size(11.5),
-    )
-    .fill(Color32::from_rgb(181, 87, 58))
-    .corner_radius(5.0)
-    .min_size(Vec2::new(92.0, 24.0));
-    if ui
-        .add(save_btn)
-        .on_hover_text("지금 카드에 적은 값을 도형 기록에 저장합니다.")
-        .clicked()
-    {
-        self.on_layer_card_save_clicked();
-    }
-    if ui
-        .button(egui::RichText::new("되돌리기").size(11.0))
-        .on_hover_text("마지막 편집을 되돌립니다 (Ctrl+Z).")
-        .clicked()
-    {
-        // Ctrl+Z 와 같은 undoMapAction(예전에는 아무것도 하지 않고 「되돌렸습니다」만 띄웠다).
-        self.undo_map_action();
-    }
-    if ui
-        .button(egui::RichText::new("도형 삭제 (Del)").size(11.0))
-        .on_hover_text("이 도형을 지웁니다.")
-        .clicked()
-    {
-        if let Some(idx) = self.home_map.selected_feature_idx {
-            if idx < self.home_map.real_survey.survey_rings.len() {
-                self.home_map.real_survey.survey_rings.remove(idx);
-                self.home_map.selected_feature_idx = None;
-                self.is_dirty = true;
-                self.home_map.draw_guide_message =
-                    Some("도형을 지웠습니다.".to_owned());
+            // Reference or downloaded cadastral vector layer (`KaInspectorStyle.cpp:119`).
+            if e.group != LegendGroup::SurveyData {
+                return StyleTarget::LineMap;
             }
+            let kind = self
+                .survey_tables
+                .iter()
+                .find(|t| t.table == e.layer_key)
+                .and_then(|t| GeomKind::from_type_name(&t.geometry_type))
+                .unwrap_or_else(|| infer_geom_kind(&e.layer_key));
+            let name = if e.label_ko.is_empty() { saved_gpkg_layer_title(&e.layer_key) } else { e.label_ko.clone() };
+            return StyleTarget::Editable { table: e.layer_key.clone(), name, kind };
         }
+        let Some(t) = self
+            .survey_tables
+            .iter()
+            .find(|t| t.table == sel || (!by_key && saved_gpkg_layer_title(&t.table) == sel))
+        else {
+            return StyleTarget::Empty;
+        };
+        let Some(kind) = GeomKind::from_type_name(&t.geometry_type) else {
+            return StyleTarget::Empty;
+        };
+        StyleTarget::Editable { table: t.table.clone(), name: saved_gpkg_layer_title(&t.table), kind }
     }
-    if ui
-        .button(egui::RichText::new("면·선 색상…").size(11.0))
-        .on_hover_text("이 도형의 면·외곽선 색과 굵기를 고칩니다.")
-        .clicked()
-    {
-        self.modals.active =
-            Some(crate::dialogs_modal::ActiveModalDialog::LineColor);
-    }
-});
-ui.add_space(6.0);
-ui.label(
-    egui::RichText::new("색")
-        .size(12.0)
-        .color(Color32::from_rgb(80, 79, 74)),
-);
-ui.add_space(2.0);
-egui::Grid::new("ka_inspector_style_palette")
-    .spacing([5.0, 5.0])
-    .show(ui, |ui| {
-        for (idx, (r, g, b, name)) in KA_STYLE_PALETTE.iter().enumerate() {
-            let (rect, resp) = ui.allocate_exact_size(
-                Vec2::new(46.0, 24.0),
-                egui::Sense::click(),
-            );
-            let p = ui.painter_at(rect);
-            let col = Color32::from_rgb(*r, *g, *b);
-            p.rect_filled(rect, 4.0, col);
-            let chosen = self.right_inspector.style_color_index == idx;
-            let border = if chosen {
-                Stroke::new(2.6, Color32::from_rgb(28, 28, 26))
-            } else {
-                Stroke::new(1.0, Color32::from_rgb(175, 172, 162))
+
+    /// Renders `KaInspectorStyle` (`target/cpp-ref/src/app/KaInspectorStyle.cpp:27-225`).
+    pub(crate) fn render_ri_layer_card(&mut self, ui: &mut egui::Ui) {
+        let target = self.resolve_style_target(ui.ctx());
+        let (table, name, kind) = match target {
+            StyleTarget::Empty => return sentence(ui, EMPTY_SENTENCE),
+            StyleTarget::LineMap => return sentence(ui, LINE_MAP_SENTENCE),
+            StyleTarget::Editable { table, name, kind } => (table, name, kind),
+        };
+        let enabled = !self.modal_window_open();
+        ui.add_enabled_ui(enabled, |ui| {
+            ui.spacing_mut().item_spacing.y = 8.0;
+            let domain = self
+                .home_map
+                .real_survey
+                .layer_styles
+                .get(&table)
+                .copied()
+                .unwrap_or_else(|| base_style_for_table(&table));
+            // Plate name row: 20x14 layer swatch + non-bold layer name (`KaInspectorStyle.cpp:43-54, 141-147`).
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                paint_layer_swatch(ui, kind, domain);
+                ui.add(egui::Label::new(RichText::new(&name).size(13.0).color(INK)).wrap());
+            });
+            // Colour swatches: label "색" above 2x4 grid of 44x24 buttons (`KaInspectorStyle.cpp:55-70, 213-225`).
+            ui.label(RichText::new("색").size(12.0).color(INK));
+            let simple = read_simple_vector_style(&table, &self.home_map.real_survey.layer_styles);
+            let current = if kind == GeomKind::Point || simple.no_stroke { simple.fill } else { simple.stroke };
+            let mut picked: Option<[u8; 3]> = None;
+            for row in KA_STYLE_PALETTE.chunks(4) {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    for &(r, g, b, tip) in row {
+                        let chosen = current[3] > 0 && [r, g, b] == [current[0], current[1], current[2]];
+                        let (rect, resp) = ui.allocate_exact_size(Vec2::new(44.0, 24.0), egui::Sense::click());
+                        let stroke = if chosen { Stroke::new(3.0, INK) } else { Stroke::new(1.0, BORDER) };
+                        ui.painter().rect(rect, 4.0, Color32::from_rgb(r, g, b), stroke, egui::StrokeKind::Inside);
+                        if resp.on_hover_text(tip).clicked() {
+                            picked = Some([r, g, b]);
+                        }
+                    }
+                });
+            }
+            if let Some(rgb) = picked {
+                self.style_tab_pick_color(&table, kind, rgb);
+            }
+            // Checkboxes hidden on Line layers (`KaInspectorStyle.cpp:72-79, 131-133, 156-157`).
+            if kind != GeomKind::Line {
+                let cur = read_simple_vector_style(&table, &self.home_map.real_survey.layer_styles);
+                let mut nf = cur.no_fill;
+                if ui.checkbox(&mut nf, "채우기 없음 (선만)").changed() {
+                    self.style_tab_set_off(&table, kind, true, nf);
+                }
+                let cur = read_simple_vector_style(&table, &self.home_map.real_survey.layer_styles);
+                let mut ns = cur.no_stroke;
+                if ui.checkbox(&mut ns, "선 없음").changed() {
+                    self.style_tab_set_off(&table, kind, false, ns);
+                }
+            }
+            // Plate width row: label left, spin right max 96 px (`KaInspectorStyle.cpp:80-98, 134, 148-149, 158`).
+            let cur = read_simple_vector_style(&table, &self.home_map.real_survey.layer_styles);
+            let width_label = match kind {
+                GeomKind::Point => "점 크기",
+                GeomKind::Line => "선 굵기",
+                GeomKind::Polygon => "외곽선 굵기",
             };
-            p.rect_stroke(rect, 4.0, border, egui::StrokeKind::Middle);
-            if resp.on_hover_text(*name).clicked() {
-                self.right_inspector.style_color_index = idx;
-            }
-            if idx % 4 == 3 {
-                ui.end_row();
-            }
-        }
-    });
-ui.add_space(6.0);
-let mut nf = self.right_inspector.no_fill;
-if ui
-    .add(egui::Checkbox::new(&mut nf, "채우기 없음 (선만)"))
-    .changed()
-{
-    self.right_inspector.no_fill = nf;
-    if nf {
-        self.right_inspector.no_stroke = false;
+            let raw_mm = if kind == GeomKind::Point { cur.marker_size_mm } else { cur.stroke_width_mm };
+            let clamped = f64::from(raw_mm).clamp(0.2, 12.0);
+            let mut val = clamped;
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(width_label).size(12.0).color(INK));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let drag = egui::DragValue::new(&mut val)
+                        .range(0.2..=12.0)
+                        .speed(0.2)
+                        .fixed_decimals(1)
+                        .suffix(" mm");
+                    let resp = ui.add_sized([78.0, 22.0], drag);
+                    if resp.changed() && (val - clamped).abs() > 1e-6 {
+                        self.style_tab_set_width(&table, kind, val as f32);
+                    }
+                });
+            });
+        });
     }
 }
-let mut ns = self.right_inspector.no_stroke;
-if ui
-    .add(egui::Checkbox::new(&mut ns, "선 없음"))
-    .changed()
-{
-    self.right_inspector.no_stroke = ns;
-    if ns {
-        self.right_inspector.no_fill = false;
-    }
-}
-ui.add_space(6.0);
-ui.horizontal(|ui| {
-    ui.label(
-        egui::RichText::new("외곽선 굵기")
-            .size(12.0)
-            .color(Color32::from_rgb(80, 79, 74)),
-    );
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        // KaInspectorStyle.cpp:87-94 — QDoubleSpinBox 0.2..=12.0
-        ui.add(
-            egui::DragValue::new(&mut self.right_inspector.stroke_width_mm)
-                .range(0.2..=12.0)
-                .speed(0.2)
-                .fixed_decimals(1)
-                .suffix(" mm"),
-        );
-    });
-});
-    }
-}
+
+#[cfg(test)]
+#[path = "ri_layer_card_tests.rs"]
+mod tests;

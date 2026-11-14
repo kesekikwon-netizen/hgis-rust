@@ -123,11 +123,3 @@ fn saving_a_vanished_survey_file_creates_nothing_and_keeps_edits() {
     assert!(poly.layer.features.iter().any(|f| f.fid < 0), "the unsaved edit stays in memory");
 }
 
-/// 레이어 카드의 「저장」은 조사 파일에 쓰지 않으므로 「*」를 지우지 않는다(조사카드 창은 C++ 「도형 속성」 창이 대신한다).
-#[test]
-fn card_save_buttons_do_not_clear_the_unsaved_star() {
-    let mut app = StrataAppState::new_startup();
-    app.is_dirty = true;
-    app.on_layer_card_save_clicked();
-    assert!(app.is_dirty, "layer card 저장 must not clear '*'");
-}

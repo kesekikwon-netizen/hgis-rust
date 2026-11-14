@@ -177,6 +177,11 @@ fn build_feature(
     Some(PaintFeature { parts, label: label_text(rule, attrs, area), anchor, area })
 }
 
+/// Default domain style for a survey table (`target/cpp-ref/src/core/LayerStyleDefaults.cpp:42-78`).
+pub(crate) fn base_style_for_table(table: &str) -> DomainStyle {
+    domain_style_for_key(if crate::survey_area_setup::is_survey_area_key(table) { "survey_area" } else { table })
+}
+
 /// 조사 표들을 작업 좌표계 `work` 의 그릴 레이어로. 형식·좌표계를 모르는 표는 뺀다.
 #[cfg(test)]
 pub(crate) fn build_paint_layers(tables: &[SurveyFileTable], work: CrsCode) -> Vec<PaintLayer> {
@@ -184,11 +189,12 @@ pub(crate) fn build_paint_layers(tables: &[SurveyFileTable], work: CrsCode) -> V
 }
 
 /// 레이어 메뉴로 바꾼 라벨 내용(`views`, layer_key 마다)이 있으면 그것으로.
-pub(crate) fn build_paint_layers_with(
-    tables: &[SurveyFileTable],
-    work: CrsCode,
-    views: &std::collections::BTreeMap<String, crate::real_survey::LabelView>,
-) -> Vec<PaintLayer> {
+pub(crate) fn build_paint_layers_with(tables: &[SurveyFileTable], work: CrsCode, views: &std::collections::BTreeMap<String, crate::real_survey::LabelView>) -> Vec<PaintLayer> {
+    build_paint_layers_styled(tables, work, views, &std::collections::BTreeMap::new())
+}
+
+/// Builds paint layers with per-layer styles (`target/cpp-ref/src/core/LayerOps.cpp:487-522`).
+pub(crate) fn build_paint_layers_styled(tables: &[SurveyFileTable], work: CrsCode, views: &std::collections::BTreeMap<String, crate::real_survey::LabelView>, styles: &std::collections::BTreeMap<String, DomainStyle>) -> Vec<PaintLayer> {
     let mut out = Vec::new();
     for t in tables {
         let (Some(kind), Some(tr)) = (GeomKind::from_type_name(&t.geometry_type), transformer(t.srs_id, work.epsg_number()))
@@ -209,7 +215,7 @@ pub(crate) fn build_paint_layers_with(
             table: t.table.clone(),
             title: crate::gui_tab_home::saved_gpkg_layer_title(&t.table),
             kind,
-            style: domain_style_for_key(&t.table),
+            style: styles.get(&t.table).copied().unwrap_or_else(|| base_style_for_table(&t.table)),
             rule,
             features,
         });
