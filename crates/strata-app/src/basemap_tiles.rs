@@ -16,12 +16,14 @@ pub enum TileKind {
     Cadastral,
     /// 대동여지도 — NGII old-map WMS asked for by XYZ tile square (`BasemapOps.cpp:1547-1563`).
     Daedongyeojido,
+    /// 지형맵 — OpenTopoMap XYZ tiles (`BasemapOps.cpp:1583-1586`).
+    Terrain,
 }
 
 impl TileKind {
     #[must_use]
     pub const fn is_xyz(self) -> bool {
-        matches!(self, Self::Satellite | Self::Base | Self::Daedongyeojido)
+        matches!(self, Self::Satellite | Self::Base | Self::Daedongyeojido | Self::Terrain)
     }
 }
 
@@ -63,6 +65,8 @@ pub fn tile_url(kind: TileKind, key: &str, z: u8, x: u32, y: u32) -> String {
                 max_y
             )
         }
+        // `BasemapOps.cpp:1585`: the first of the two addresses; zmin 5 and zmax 17 are kept by the layer.
+        TileKind::Terrain => format!("https://tile.opentopomap.org/{z}/{x}/{y}.png"),
         TileKind::Cadastral => String::new(),
     }
 }

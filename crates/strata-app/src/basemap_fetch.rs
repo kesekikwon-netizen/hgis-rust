@@ -36,13 +36,14 @@ fn kind_dir(kind: TileKind) -> &'static str {
         TileKind::Base => "base",
         TileKind::Cadastral => "cadastral",
         TileKind::Daedongyeojido => "daedongyeojido",
+        TileKind::Terrain => "opentopomap",
     }
 }
 
 fn ext_for(kind: TileKind) -> &'static str {
     match kind {
         TileKind::Satellite => "jpeg",
-        TileKind::Base | TileKind::Cadastral | TileKind::Daedongyeojido => "png",
+        TileKind::Base | TileKind::Cadastral | TileKind::Daedongyeojido | TileKind::Terrain => "png",
     }
 }
 
@@ -118,7 +119,7 @@ pub(crate) fn fetch_tile_in(
     if let Some(dir) = dest.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let ok = run_curl(&url, &dest);
+    let ok = run_curl(kind, &url, &dest);
     if !ok {
         return None;
     }
@@ -140,12 +141,25 @@ pub(crate) fn tile_curl(dest: &Path) -> Command {
     cmd
 }
 
+/// The fetch command of one tile kind. The terrain tiles come from a volunteer-run service: it is told which
+/// program asks, and gets no made-up Referer (docs/RUST_PLAN.md 2.8). Every other kind keeps `tile_curl`.
+pub(crate) fn tile_curl_for(kind: TileKind, dest: &Path) -> Command {
+    if kind != TileKind::Terrain {
+        return tile_curl(dest);
+    }
+    let mut cmd = Command::new("curl");
+    strata_types::process::no_window(&mut cmd);
+    let agent = concat!("User-Agent: Strata/", env!("CARGO_PKG_VERSION"), " (desktop GIS)");
+    cmd.args(["-sS", "-L", "--max-time", "12", "-H", agent, "-o"]).arg(dest);
+    cmd
+}
+
 /// curl 로 받아 파일로 쓴다. 키가 든 주소는 명령줄이 아니라 표준입력으로 준다(SEC1).
-fn run_curl(url: &str, dest: &Path) -> bool {
+fn run_curl(kind: TileKind, url: &str, dest: &Path) -> bool {
     if !strata_net::network::is_allowed() {
         return false;
     }
-    let out = strata_net::curl_stdin::output_with_url_on_stdin(tile_curl(dest), url);
+    let out = strata_net::curl_stdin::output_with_url_on_stdin(tile_curl_for(kind, dest), url);
     matches!(out, Ok(o) if o.status.success())
 }
 

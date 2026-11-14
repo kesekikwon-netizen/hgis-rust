@@ -9,20 +9,11 @@ impl StrataAppState {
     /// 뒤쪽 라벨들.
     pub(crate) fn handle_ribbon_click_b(&mut self, label: &str) {
         match label {
-            // C++ MainWindowOverlay.cpp:243-271 toggleTerrainMap. 이미 있는 「지형맵」 은
-            // :247 toggleExistingOverlay(:225-240)가 껐다 켰다 하고 `지형맵를 껐습니다.` /
-            // `지형맵를 다시 켰습니다.` 를 내며, 처음 올릴 때만 :267 의
-            // `지형맵을 올렸습니다. 다시 누르면 숨깁니다.` 가 나간다.
+            // MainWindowOverlay.cpp:239-267 toggleTerrainMap — the first click adds 「지형맵」, later clicks
+            // hide and show its legend row (ref_tile_layers.rs).
             "지형" => {
                 self.active_tab = MainTab::Map;
-                if !self.toggle_existing_overlay("지형맵") {
-                    self.home_map
-                        .real_survey
-                        .layer_visible
-                        .insert("지형맵".to_owned(), true);
-                    self.status_bar_hint =
-                        "지형맵을 올렸습니다. 다시 누르면 숨깁니다.".to_owned();
-                }
+                self.toggle_reference_tile_layer(&crate::ref_tile_layers::TERRAIN_MAP);
             }
             // C++ MainWindowRibbon.cpp:429-436 — `contour` 단추에는 setCheckable 이 없어
             // 토글이 아니고, 누르면 MainWindowSurveyContour.cpp:104 createSurveyContours 만

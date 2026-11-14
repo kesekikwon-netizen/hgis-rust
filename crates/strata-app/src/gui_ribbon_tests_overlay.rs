@@ -12,24 +12,6 @@ fn test_r8_toggle_existing_overlay_returns_false_when_absent() {
     assert_eq!(app.status_bar_hint, "");
 }
 
-/// R8 — 「지형」: C++ `MainWindowOverlay.cpp:243-271`.
-/// 처음 누르면 :267 문구(올림), 다음부터는 :231/:236 문구(껐다 켰다).
-#[test]
-fn test_r8_terrain_toggle_uses_cpp_first_and_repeat_texts() {
-    let mut app = StrataAppState::new_startup();
-    app.handle_ribbon_click("지형");
-    assert!(app.home_map.real_survey.is_layer_visible("지형맵"));
-    assert_eq!(app.status_bar_hint, "지형맵을 올렸습니다. 다시 누르면 숨깁니다.");
-
-    app.handle_ribbon_click("지형");
-    assert!(!app.home_map.real_survey.is_layer_visible("지형맵"));
-    assert_eq!(app.status_bar_hint, "지형맵를 껐습니다.");
-
-    app.handle_ribbon_click("지형");
-    assert!(app.home_map.real_survey.is_layer_visible("지형맵"));
-    assert_eq!(app.status_bar_hint, "지형맵를 다시 켰습니다.");
-}
-
 /// R8 — 「토양」·「수계」는 `MainWindowOverlay.cpp:357,479` 가
 /// `토양도(흙토람)` / `수계도(하천망)` 이름으로 토글한다.
 #[test]

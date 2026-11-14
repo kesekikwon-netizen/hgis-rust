@@ -1,6 +1,6 @@
-//! Online reference tile layers of the legend: 대동여지도.
+//! Online reference tile layers of the legend: 대동여지도 and 지형맵.
 //!
-//! C++ adds them to the project as live tile layers (`target/cpp-ref/src/core/BasemapOps.cpp:1565-1575`,
+//! C++ adds them to the project as live tile layers (`target/cpp-ref/src/core/BasemapOps.cpp:1565-1595`,
 //! addXyzBasemap `:860-977`): a legend row the user can uncheck, fade and remove. Owner's decision of
 //! 2026-11-15 (「모든 ui버튼은 조사구역을 그린것을 중심으로 생성되어야한다. 대동여지도 조사구역반경100km」):
 //! the command works from the drawn survey area and the map covers a circle around it.
@@ -54,6 +54,18 @@ pub(crate) struct RefTileLayer {
     pub(crate) added_text: &'static str,
     /// Status text when no survey area is drawn (modelled on `MainWindowCadastral.cpp:114`).
     pub(crate) needs_area_text: &'static str,
+    /// What the command does to the view.
+    pub(crate) on_add: ViewOnAdd,
+}
+
+/// What adding a layer does to the view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ViewOnAdd {
+    /// The whole circle in view, the survey area in the middle (a small-scale map such as 대동여지도).
+    FrameCircle,
+    /// The view stays (`MainWindowOverlay.cpp:239-263` changes no extent); only a view centred outside the
+    /// circle, which would show nothing of the new map, is moved onto the survey area at its scale.
+    Keep,
 }
 
 /// 대동여지도 (1861). The picture of the service has the resolution of zoom 12 (about 30 m per pixel in
@@ -66,22 +78,41 @@ pub(crate) const DAEDONGYEOJIDO: RefTileLayer = RefTileLayer {
     radius_m: 100_000.0,
     added_text: "대동여지도를 올렸습니다. 조사구역에서 반경 100km 안에 보입니다.",
     needs_area_text: "조사구역을 먼저 그려 주세요. 조사구역에서 반경 100km 안의 대동여지도를 올립니다.",
+    on_add: ViewOnAdd::FrameCircle,
 };
 
-const REF_TILE_LAYERS: [&RefTileLayer; 1] = [&DAEDONGYEOJIDO];
+/// 지형맵 — OpenTopoMap, zoom 5 to 17 (`BasemapOps.cpp:1580-1590`); the ribbon button 「지형」
+/// (`MainWindowRibbon.cpp:369-377`, `MainWindowOverlay.cpp:239-267`).
+pub(crate) const TERRAIN_MAP: RefTileLayer = RefTileLayer {
+    key: "ref_terrain_map",
+    title: "지형맵",
+    kind: TileKind::Terrain,
+    max_zoom: 17,
+    radius_m: 100_000.0,
+    added_text: "지형맵을 올렸습니다. 다시 누르면 숨깁니다.",
+    needs_area_text: "조사구역을 먼저 그려 주세요. 조사구역에서 반경 100km 안의 지형맵을 올립니다.",
+    on_add: ViewOnAdd::Keep,
+};
+
+const REF_TILE_LAYERS: [&RefTileLayer; 2] = [&DAEDONGYEOJIDO, &TERRAIN_MAP];
 
 /// The reference tile layer whose legend row has this `layer_key`.
 pub(crate) fn ref_tile_layer(key: &str) -> Option<&'static RefTileLayer> {
     REF_TILE_LAYERS.iter().copied().find(|l| l.key == key)
 }
 
-/// Adds the row unless it is there. Live tiles sink below the other layers and the satellite stays lowest
-/// (`BasemapOps.cpp:362-401` ensureSatelliteAtBottom): the row goes directly above the background rows.
+/// Adds the row unless it is there. Live tiles sink below the other layers in their own order and the
+/// satellite stays lowest (`BasemapOps.cpp:362-401` ensureSatelliteAtBottom): the row goes directly above the
+/// older tile rows and the background rows.
 fn ensure_row(panel: &mut LeftLayerPanel, layer: &RefTileLayer) {
     if panel.entries.iter().any(|e| e.layer_key == layer.key) {
         return;
     }
-    let at = panel.entries.iter().position(|e| e.group == LegendGroup::Basemap).unwrap_or(panel.entries.len());
+    let at = panel
+        .entries
+        .iter()
+        .position(|e| e.group == LegendGroup::Basemap || ref_tile_layer(&e.layer_key).is_some())
+        .unwrap_or(panel.entries.len());
     panel.entries.insert(
         at,
         LayerTreeEntry {
@@ -98,7 +129,7 @@ fn ensure_row(panel: &mut LeftLayerPanel, layer: &RefTileLayer) {
 }
 
 impl StrataAppState {
-    /// The ribbon command (옛 지도 → 대동여지도): the legend row, checked, and the view on the whole circle.
+    /// The ribbon command: the legend row, checked, and the view as the layer asks (`ViewOnAdd`).
     /// Without a drawn survey area nothing is added and the status bar says what to do first.
     pub(crate) fn add_reference_tile_layer(&mut self, layer: &'static RefTileLayer) -> bool {
         let Some(centre) = self.reference_circle_centre() else {
@@ -110,11 +141,41 @@ impl StrataAppState {
         if let Some(name) = self.left_layers.entries.iter().find(|e| e.layer_key == layer.key).map(|e| e.label_ko.clone()) {
             self.home_map.real_survey.layer_visible.insert(name, true);
         }
-        // The command frames the circle: the survey area in the middle, the whole radius in view.
-        let r = layer.radius_m * 1.1;
-        self.home_map.set_view_extent([centre[0] - r, centre[1] - r, centre[0] + r, centre[1] + r]);
+        let view = self.home_map.viewport.center_xy;
+        match layer.on_add {
+            ViewOnAdd::FrameCircle => {
+                let r = layer.radius_m * 1.1;
+                self.home_map.set_view_extent([centre[0] - r, centre[1] - r, centre[0] + r, centre[1] + r]);
+            }
+            ViewOnAdd::Keep if (view[0] - centre[0]).hypot(view[1] - centre[1]) > layer.radius_m => {
+                self.home_map.viewport.center_xy = centre;
+                self.home_map.note_view();
+            }
+            ViewOnAdd::Keep => {}
+        }
         self.show_status_message(layer.added_text);
         true
+    }
+
+    /// Whether the layer has a legend row and that row is checked (the ribbon button shows it as pressed:
+    /// `MainWindowOverlay.cpp:245-247`).
+    pub(crate) fn reference_tile_layer_shown(&self, layer: &RefTileLayer) -> bool {
+        self.left_layers
+            .entries
+            .iter()
+            .any(|e| e.layer_key == layer.key && self.home_map.real_survey.is_layer_visible(&e.label_ko))
+    }
+
+    /// A checkable ribbon button (지형): the first click adds the layer, later clicks hide and show its row
+    /// with the texts of toggleExistingOverlay (`MainWindowOverlay.cpp:221-236`).
+    pub(crate) fn toggle_reference_tile_layer(&mut self, layer: &'static RefTileLayer) {
+        let Some(name) = self.left_layers.entries.iter().find(|e| e.layer_key == layer.key).map(|e| e.label_ko.clone()) else {
+            self.add_reference_tile_layer(layer);
+            return;
+        };
+        let shown = self.home_map.real_survey.is_layer_visible(&name);
+        self.home_map.real_survey.layer_visible.insert(name, !shown);
+        self.show_status_message(if shown { format!("{}를 껐습니다.", layer.title) } else { format!("{}를 다시 켰습니다.", layer.title) });
     }
 
     /// Rows of an earlier survey do not belong to the next one (its survey area is elsewhere).
@@ -215,6 +276,9 @@ mod tests;
 #[cfg(test)]
 #[path = "ref_tile_layers_tests_b.rs"]
 mod tests_b;
+#[cfg(test)]
+#[path = "ref_tile_layers_tests_c.rs"]
+mod tests_c;
 #[cfg(test)]
 #[path = "ref_tile_layers_tests_d.rs"]
 mod tests_d;
