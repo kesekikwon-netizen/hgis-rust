@@ -9,7 +9,7 @@ use eframe::egui::{self, Color32, Pos2, Stroke, Vec2};
 use strata_storage::gpkg::KA_LONGITUDE_RULER_CITIES;
 
 /// 126°~130° 경도 자 (128° 중부|동부 경계 + 0.1° 눈금 + 8개 도시 + 지도 중심 표시).
-pub(crate) fn paint_longitude_ruler(ui: &mut egui::Ui) {
+pub(crate) fn paint_longitude_ruler(ui: &mut egui::Ui, map_lon: Option<f64>) {
     // C++ KaLongitudeRuler (126°~130°, 128° 중부|동부 경계 + 8개 도시 눈금)
     let (ruler_r, _) =
         ui.allocate_exact_size(Vec2::new(440.0, 62.0), egui::Sense::hover());
@@ -83,33 +83,30 @@ pub(crate) fn paint_longitude_ruler(ui: &mut egui::Ui) {
             Stroke::new(if is_whole { 1.2 } else { 1.0 }, tick_c),
         );
     }
-    // KaLongitudeRuler.cpp:92-106 — 지도 중심(동경 129.2°) 클레이 마커
-    let center_lon = 129.2_f64;
-    let cx = x_of(center_lon);
-    let clay = Color32::from_rgb(181, 87, 58);
-    rp.line_segment(
-        [
-            Pos2::new(cx, ruler_r.top() + 2.0),
-            Pos2::new(cx, bar_y + 2.0),
-        ],
-        Stroke::new(1.5, clay),
-    );
-    rp.add(egui::Shape::convex_polygon(
-        vec![
-            Pos2::new(cx, bar_y + 1.0),
-            Pos2::new(cx - 4.0, bar_y - 6.0),
-            Pos2::new(cx + 4.0, bar_y - 6.0),
-        ],
-        clay,
-        Stroke::NONE,
-    ));
-    rp.text(
-        Pos2::new(cx + 6.0, bar_y - 10.0),
-        egui::Align2::LEFT_CENTER,
-        "129.2°",
-        egui::FontId::proportional(10.0),
-        clay,
-    );
+    // target/cpp-ref/src/app/KaLongitudeRuler.cpp:14-16,99-107 — centre mark (vertical line and
+    // small triangle, no degree text) only when longitude is finite and within 126..=130.
+    if let Some(center_lon) =
+        map_lon.filter(|lon| lon.is_finite() && (126.0..=130.0).contains(lon))
+    {
+        let cx = x_of(center_lon);
+        let clay = Color32::from_rgb(181, 87, 58);
+        rp.line_segment(
+            [
+                Pos2::new(cx, ruler_r.top() + 2.0),
+                Pos2::new(cx, bar_y + 2.0),
+            ],
+            Stroke::new(1.5, clay),
+        );
+        rp.add(egui::Shape::convex_polygon(
+            vec![
+                Pos2::new(cx, bar_y + 1.0),
+                Pos2::new(cx - 4.0, bar_y - 6.0),
+                Pos2::new(cx + 4.0, bar_y - 6.0),
+            ],
+            clay,
+            Stroke::NONE,
+        ));
+    }
     for (city, lon) in KA_LONGITUDE_RULER_CITIES {
         let cx = x_of(lon);
         let col = if lon < 128.0 {

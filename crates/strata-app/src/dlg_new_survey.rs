@@ -37,12 +37,17 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
             {
                 app.modals.new_survey_error = None;
             }
-            if let Err(err_msg) = validate_survey_name_ko(&app.modals.new_survey_name) {
-                ui.label(
-                    egui::RichText::new(err_msg)
-                        .size(11.5)
-                        .color(Color32::from_rgb(185, 28, 28)),
-                );
+            // target/cpp-ref/src/app/KaNewSurveyDialog.cpp:166-171 — hide validation text while
+            // the trimmed field is empty; keep 「다음」 disabled whenever nameProblem is non-empty.
+            let name_problem = validate_survey_name_ko(&app.modals.new_survey_name);
+            if !app.modals.new_survey_name.trim().is_empty() {
+                if let Err(err_msg) = name_problem {
+                    ui.label(
+                        egui::RichText::new(err_msg)
+                            .size(11.5)
+                            .color(Color32::from_rgb(185, 28, 28)),
+                    );
+                }
             }
             ui.add_space(6.0);
             ui.horizontal(|ui| {
@@ -55,7 +60,14 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                     );
                 });
             });
-            paint_longitude_ruler(ui);
+            // target/cpp-ref/src/app/MainWindowSession.cpp:681-685,
+            // target/cpp-ref/src/app/KaNewSurveyDialog.cpp:124-135,172-179,205-212
+            let map_lon = crate::tabs_home_map::canvas_center_longitude(
+                Some(&app.home_map.viewport),
+                app.work_crs.epsg_code(),
+            );
+            let suggested = suggested_work_crs(map_lon);
+            paint_longitude_ruler(ui, map_lon);
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 for (crs_opt, title, sub) in [
@@ -76,8 +88,8 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                     } else {
                         Color32::WHITE
                     };
-                    let lbl = if crs_opt == WorkCrs::Epsg5187 {
-                        format!("{title}  [추천]\n{sub}")
+                    let lbl = if suggested == Some(crs_opt) {
+                        format!("{title}  추천\n{sub}")
                     } else {
                         format!("{title}\n{sub}")
                     };
@@ -98,34 +110,17 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                     }
                 }
             });
-            // KaNewSurveyDialog.cpp:160-176 updateState — 지도 중심 경도를 실제로
-            // 계산해 「지금 지도 중심(동경 N.N°)은 ○○원점(NNNN) 구역입니다.」 를 만든다.
-            let map_lon = {
-                let [cx, cy] = app.home_map.viewport.center_xy;
-                match strata_geo::crs_transform::TmParams::for_crs(
-                    strata_types::crs::CrsCode::Epsg5187,
-                ) {
-                    Some(p) => strata_geo::crs_transform::tm_to_lonlat(cx, cy, &p)[0],
-                    None => 129.2,
-                }
-            };
-            // KaNewSurveyDialog.cpp:205-212 suggestedWorkCrs — 126~128 중부, 128~130 동부
-            let suggested = if (126.0..128.0).contains(&map_lon) {
-                Some(WorkCrs::Epsg5186)
-            } else if (128.0..130.0).contains(&map_lon) {
-                Some(WorkCrs::Epsg5187)
-            } else {
-                None
-            };
-            if let Some(sug) = suggested {
+            // target/cpp-ref/src/app/KaNewSurveyDialog.cpp:37-40,172-179 — shown only when
+            // suggestedWorkCrs yields an origin; paper look ends after this sentence.
+            if let (Some(lon), Some(sug)) = (map_lon, suggested) {
                 let zone = match sug {
                     WorkCrs::Epsg5186 => "중부원점(5186)",
-                    _ => "동부원점(5187)",
+                    WorkCrs::Epsg5187 => "동부원점(5187)",
                 };
                 ui.add_space(4.0);
                 ui.label(
                     egui::RichText::new(format!(
-                        "지금 지도 중심(동경 {map_lon:.1}°)은 {zone} 구역입니다."
+                        "지금 지도 중심(동경 {lon:.1}°)은 {zone} 구역입니다."
                     ))
                     .size(11.5)
                     .strong()
@@ -170,8 +165,7 @@ pub(crate) fn render_new_survey(app: &mut StrataAppState, ctx: &egui::Context, o
                         app.modals.new_survey_error = None;
                         app.modals.active = None;
                     }
-                    let valid =
-                        validate_survey_name_ko(&app.modals.new_survey_name).is_ok();
+                    let valid = name_problem.is_ok();
                     let start_btn = egui::Button::new(
                         egui::RichText::new("다음")
                             .color(Color32::WHITE)
@@ -219,3 +213,22 @@ pub(crate) fn new_survey_error_text(e: &StrataError) -> String {
         other => format!("새 조사를 만들지 못했습니다: {other}"),
     }
 }
+
+/// Suggested origin for a WGS84 longitude (`target/cpp-ref/src/app/KaNewSurveyDialog.cpp:205-212`).
+#[must_use]
+pub(crate) fn suggested_work_crs(longitude: Option<f64>) -> Option<WorkCrs> {
+    let lon = longitude?;
+    if !lon.is_finite() {
+        None
+    } else if (126.0..128.0).contains(&lon) {
+        Some(WorkCrs::Epsg5186)
+    } else if (128.0..130.0).contains(&lon) {
+        Some(WorkCrs::Epsg5187)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+#[path = "dlg_new_survey_tests.rs"]
+mod tests;

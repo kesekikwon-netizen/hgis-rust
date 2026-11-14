@@ -15,7 +15,6 @@ pub struct ModalDialogController {
     /// KaCadImportNotice.cpp — 끌어 놓은 CAD 도면 경로
     pub cad_import_path: String,
     pub new_survey_name: String,
-    pub new_survey_lon_deg: f64,
     pub new_survey_crs: WorkCrs,
     pub new_survey_crs_manual: bool,
     pub new_survey_error: Option<String>,
@@ -144,7 +143,6 @@ impl Default for ModalDialogController {
             cad_import_path: String::new(),
             // target/cpp-ref/src/app/KaNewSurveyDialog.cpp:55-57 — starts empty.
             new_survey_name: String::new(),
-            new_survey_lon_deg: 129.21,
             new_survey_crs: WorkCrs::Epsg5187,
             new_survey_crs_manual: false,
             new_survey_error: None,
