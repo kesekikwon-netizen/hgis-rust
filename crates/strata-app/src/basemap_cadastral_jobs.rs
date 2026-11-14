@@ -137,12 +137,18 @@ where
                 return false;
             }
         }
-        let reserved = self
-            .in_flight_total
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-                (n < MAX_IN_FLIGHT).then_some(n + 1)
-            })
-            .is_ok();
+        // A plain compare-and-swap loop: `fetch_update` is deprecated from rustc 1.100 (CI runs the newest
+        // stable with -D warnings) and its replacement `try_update` does not exist on rustc 1.91.
+        let mut seen = self.in_flight_total.load(Ordering::Acquire);
+        let reserved = loop {
+            if seen >= MAX_IN_FLIGHT {
+                break false;
+            }
+            match self.in_flight_total.compare_exchange_weak(seen, seen + 1, Ordering::AcqRel, Ordering::Acquire) {
+                Ok(_) => break true,
+                Err(now) => seen = now,
+            }
+        };
         if !reserved {
             return false;
         }
