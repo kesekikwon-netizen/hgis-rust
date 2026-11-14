@@ -24,7 +24,8 @@ pub use geom_wkt::{union_area, wkt_area, wkt_is_valid, wkt_length, wkt_point_rel
 pub use rings::{distance_rings, ring_label_points};
 #[cfg(feature = "gdal")]
 pub use submit_shp::{
-    set_gdal_proj_search_paths, write_submit_shapefiles, ShpLayerReport, SubmitEncoding, SubmitSource, SUBMIT_KEYS,
+    install_submit_proj_db, set_gdal_proj_search_paths, write_submit_shapefiles, ShpLayerReport, SubmitEncoding,
+    SubmitSource, SUBMIT_KEYS,
 };
 
 /// 엔진 오류(PROJ·GEOS 가 돌려준 글).

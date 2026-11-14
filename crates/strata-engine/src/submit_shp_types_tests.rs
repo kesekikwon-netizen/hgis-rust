@@ -1,4 +1,4 @@
-//! R2-1b — every GPKG field type written as QGIS writes it, EUC-KR (CP949), and several layers per key
+//! R2-1b — every GPKG field type written as in the cpp packages, EUC-KR (CP949), and several layers per key
 //! merged (SubmitShp.cpp:82-133). Truth = cpp packages in tests/fixtures (dbf bytes 1..3 masked).
 //! Ported from target/cpp-ref/tests/test_submit_package.cpp:168 mergeKeepsFieldsOfEveryLayerAndReadmeRecordsProvenance.
 

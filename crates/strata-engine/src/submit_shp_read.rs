@@ -10,7 +10,7 @@ use gdal::Dataset;
 
 use super::SubmitSource;
 
-/// The field kinds the QGIS shapefile writer tells apart.
+/// The field kinds whose DBF columns differ in the cpp truth sets (tests/fixtures/cpp_submit_types_*).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Kind {
     Integer,
@@ -30,7 +30,7 @@ pub(crate) struct Field {
     pub(crate) precision: i32,
 }
 
-/// One value. Dates are OGR's `YYYY/MM/DD`; date-times are already the text QGIS writes for a shapefile.
+/// One value. Dates are OGR's `YYYY/MM/DD`; date-times are already the text the cpp packages hold.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Value {
     Null,
@@ -40,7 +40,7 @@ pub(crate) enum Value {
     Bool(bool),
 }
 
-/// One key's features in memory: `fields[0]` is the GPKG FID column as QGIS shows it.
+/// One key's features in memory: `fields[0]` is the GPKG FID column (first DBF column of every cpp package).
 #[derive(Debug)]
 pub(crate) struct Table {
     pub(crate) fields: Vec<Field>,
@@ -49,7 +49,7 @@ pub(crate) struct Table {
     pub(crate) geom_type: OGRwkbGeometryType::Type,
 }
 
-/// The field QGIS shows for the GPKG FID column.
+/// DBF name of the GPKG FID column in every cpp package (`fid` N(20,0)).
 const FID_FIELD: &str = "fid";
 
 /// Reads one GPKG layer, features by fid.
@@ -119,7 +119,8 @@ fn read_value(f: &gdal::vector::Feature<'_>, i: usize, kind: Kind) -> gdal::erro
     })
 }
 
-/// QGIS writes a date-time into a shapefile text column through OGR without a time zone:
+/// The cpp packages hold a date-time as text without a time zone (cpp_submit_types_*: `2026/11/14 08:30:15.000`
+/// for `2026-11-14T08:30:15Z`):
 /// `YYYY/MM/DD HH:MM:SS.sss` (from OGR's `YYYY/MM/DD HH:MM:SS[.sss][+TZ]`).
 fn shapefile_datetime(ogr: &str) -> String {
     let (Some(stamp), Some(rest)) = (ogr.get(..17), ogr.get(17..)) else {
@@ -178,7 +179,8 @@ pub(crate) fn merge_tables(key: &str, sources: &[&SubmitSource], notes: &mut Vec
     Ok(merged)
 }
 
-/// `QgsField::convertCompatible` for the kinds above; `None` = the value cannot be held (becomes NULL + note).
+/// Value conversion of SubmitShp.cpp:36-47 (copyValue) for the kinds above; no cpp truth set covers mixed types.
+/// `None` = the value cannot be held (becomes NULL + note).
 fn convert(v: &Value, to: Kind) -> Option<Value> {
     let rounded = |d: f64, max: i64| (d.is_finite() && d.round().abs() <= max as f64).then(|| Value::Int(d.round() as i64));
     match (v, to) {

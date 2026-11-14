@@ -24,20 +24,26 @@ OSGeo4W에서 복사한 QGIS `LICENSE`/`AUTHORS`는 포터블 `licenses/QGIS-*`.
 
 ## Rust 앱(hgis-rust) 엔진 — `crates/strata-engine`
 
-Rust 판은 QGIS 를 링크하지 않는다. 좌표 변환·도형 고치기 엔진은 아래 라이브러리를 실행 파일 안에 정적으로 넣는다(측정 2026-11-13, 판은 `crates/strata-engine/Cargo.toml` 에 고정). 앱 자체는 GPLv2 이상이므로 아래 라이선스와 함께 쓸 수 있다.
+Rust 판은 QGIS 나 OSGeo4W DLL 묶음을 링크하지 않는다. 네이티브 라이브러리와 자료 현황(측정 2026-11-14, 판은 `crates/strata-engine/Cargo.toml` 에 고정):
 
-| 구성 | 판 | 라이선스 | 공식 근거 |
+| 라이브러리 | 판 | 라이선스 | 정적 / DLL | 배포 여부 | 공식 근거·출처 |
+| --- | --- | --- | --- | --- | --- |
+| GDAL/OGR (`gdal-src` `0.3.0+3.12.1` 소스 빌드: 드라이버 `ESRI Shapefile`·`GPKG`/`SQLite`, `GDAL_USE_GEOS=OFF`, 외부 의존 없음) | 3.12.1 | 본체(`gcore`, `ogr`, `port`, `alg`, `gnm`, `appslib`, `ogr_Shape`, `ogr_GeoPackage`, `ogr_SQLite`, `gdal_MEM`, `gdal_vrt`): **MIT/X**. `gdal-src` 안 `source/LICENSE.TXT` 중 이 빌드에 실제로 컴파일되는 제3자 코드: `port/cpl_float.cpp`(**BSD-3-Clause**, Industrial Light & Magic), `port/cpl_minizip*`(**Info-ZIP**), `alg/thinplatespline.cpp`(**SunSoft** 허용 고지, Sun Microsystems), `alg/internal_libqhull`(`alg/libqhull`, **Qhull** 라이선스, C.B. Barber & The Geometry Center) — 비활성 드라이버(`hdf4`, `pcraster`, `grib`, `dxf`, `pdf`, `mrf`, `flatgeobuf`) 코드는 컴파일되지 않음. `GDAL_USE_INTERNAL_LIBS=ON` 으로 함께 정적 컴파일되는 내장 라이브러리: `ogr/ogrsf_frmts/shape/shapelib`(Shapelib 1.6, `MIT OR LGPL-2.0-or-later` 중 **MIT**), `ogr/ogrsf_frmts/geojson/libjson`(json-c, **MIT**), `frmts/zlib`·`contrib/infback9`(zlib 1.3.1, **zlib**), `frmts/png/libpng`(libpng 1.6.43, **libpng v2**), `frmts/jpeg/libjpeg`·`libjpeg12`(**IJG**), `frmts/gtiff/libtiff`(**libtiff** BSD 계열), `frmts/gtiff/libgeotiff`(**MIT/X** 계열), `third_party/LercLib`(Esri LERC, **Apache-2.0**), 머리말 전용 `third_party/fast_float`(**Apache-2.0 OR MIT OR BSL-1.0**)·`third_party/libdivide`(**BSL-1.0 OR zlib**) | 정적 | CI 전용 (`gdal` 기능에서만 링크; `strata-app` 은 지시 R2-3c 에서 켜며 그때 실행 파일에 동봉) | https://gdal.org/en/stable/license.html · `gdal-src` `source/LICENSE.TXT` |
+| PROJ 9.8.1 `proj.db` (`crates/strata-engine/data/proj-9.8.1/proj.db`, 제출 SHP `.prj` 기준 자료) | PROJ 9.8.1 · EPSG Dataset v12.029 | PROJ 자료: **MIT**; **EPSG Geodetic Parameter Dataset v12.029**: EPSG 이용 약관(무료 사용·재배포, 출처 「EPSG Geodetic Parameter Dataset, IOGP」 표기, 자료를 고쳐 EPSG 이름으로 내지 않음) | 정적 내장 자료 (`include_bytes!`, 첫 사용 시 `proj.db` 로 기록; DLL 아님) | 저장소 동봉 · 실행 파일에는 현재 CI 전용 (`gdal` 기능에서만 포함; 지시 R2-3c 에서 앱 동봉) | https://proj.org/en/stable/about.html · https://epsg.org/terms-of-use.html · 출처 OSGeo4W `proj-runtime-data-9.8.1-1.tar.bz2` (sha256 `599b2307ed72001ab1b28b9cf4ac007523687571ee0cc1ec54c511a893f74f1d`), `proj.db` 10,280,960 바이트 (sha256 `37165492257d87ad504c0f7097b96f3bd504d1238bed292ecb73273ab5ae4ebf`) |
+| PROJ (`proj-sys` `0.27.0` bundled 소스 빌드, 내장 `proj.db` 포함) | 9.6.2 (내장 EPSG v12.013, 2025-05-26) | **MIT** · 내장 `proj.db` 는 EPSG 이용 약관(무료 사용·재배포, 출처 「EPSG Geodetic Parameter Dataset, IOGP」 표기, 자료를 고쳐 EPSG 이름으로 내지 않음) | 정적 | 앱 동봉 (`ka-hgis.exe` 안에 포함) | https://proj.org/en/stable/about.html · https://epsg.org/terms-of-use.html |
+| SQLite (`libsqlite3-sys` `0.30.1` bundled — `rusqlite`, PROJ, `gdal` 기능의 GDAL GPKG/SQLite 드라이버 공유) | 3.46.0 | **Public domain** | 정적 | 앱 동봉 (`ka-hgis.exe` 안에 포함; 빌드용 명령줄 도구 `sqlite3.exe` 3.46.0 은 CI·빌드 전용) | https://www.sqlite.org/copyright.html |
+| GEOS (`geos-src` `0.2.5` 소스 빌드) | 3.15.1 | **LGPL-2.1** (알려진 항목 `LC2`, 지시 R2-3a 에서 변경 없음. 현재 앱 자체는 GPL-2.0-or-later 라 정적 링크 가능하며 받은 사람은 앱 소스와 GEOS 소스를 받을 수 있다; 카피레프트 제거 전 `LC2` 에서 전환 예정) | 정적 | 앱 동봉 (`ka-hgis.exe` 안에 포함) | https://libgeos.org/project/license/ |
+
+Rust 래퍼·빌드 크레이트(`crates/strata-engine/Cargo.toml`):
+
+| 크레이트 | 판 | 라이선스 | 공식 근거 |
 | --- | --- | --- | --- |
-| PROJ (소스 빌드, 정적) | 9.6.2 | MIT | https://proj.org/en/stable/about.html |
-| EPSG Geodetic Parameter Dataset (PROJ `proj.db` 안, 실행 파일에 들어 있음) | v12.013 (2025-05-26) | EPSG 이용 약관: 무료 사용·재배포, 출처 「EPSG Geodetic Parameter Dataset, IOGP」 표기, 자료를 고쳐 EPSG 이름으로 내지 않음 | https://epsg.org/terms-of-use.html |
-| GEOS (소스 빌드, 정적) | 3.15.1 | LGPL-2.1. 정적 링크해도 GPLv2+ 앱에 넣을 수 있다(LGPL 2.1 제3조). 받은 사람은 앱 소스(GPL)와 GEOS 소스(https://libgeos.org/)를 받을 수 있다 | https://libgeos.org/project/license/ |
-| SQLite (PROJ 가 proj.db 를 읽는 데 씀, libsqlite3-sys bundled) | 3.46.0 | Public domain | https://www.sqlite.org/copyright.html |
-| Rust 크레이트 `proj` 0.31.0 · `proj-sys` 0.27.0 | — | MIT 또는 Apache-2.0 | https://github.com/georust/proj |
-| Rust 크레이트 `geos` 11.3.1 · `geos-sys` 2.0.10 · `geos-src` 0.2.5 | — | MIT | https://github.com/georust/geos |
-| Rust 크레이트 `libsqlite3-sys` 0.30.1 | — | MIT | https://github.com/rusqlite/rusqlite |
-| Rust 크레이트 `link-cplusplus` 1.0.12 | — | MIT 또는 Apache-2.0 | https://github.com/dtolnay/link-cplusplus |
-| GDAL/OGR (동적 링크, 기능 `gdal` 에서만 — 앱은 아직 켜지 않는다, 지시 R2-3) | 개발 PC 3.14 dev(OSGeo4W), CI 3.12.1(GISInternals) | MIT/X. 일부 파일 BSD 등 | https://gdal.org/en/stable/license.html |
-| Rust 크레이트 `gdal` 0.19.0 · `gdal-sys` 0.12.0 | — | MIT | https://github.com/georust/gdal |
+| `proj` · `proj-sys` | 0.31.0 · 0.27.0 | MIT 또는 Apache-2.0 | https://github.com/georust/proj |
+| `geos` · `geos-sys` · `geos-src` | 11.3.1 · 2.0.10 · 0.2.5 | 크레이트 MIT (컴파일되는 GEOS C++ 소스는 위 표의 LGPL-2.1) | https://github.com/georust/geos |
+| `libsqlite3-sys` | 0.30.1 | 크레이트 MIT (컴파일되는 SQLite C 소스는 Public domain) | https://github.com/rusqlite/rusqlite |
+| `link-cplusplus` | 1.0.12 | MIT 또는 Apache-2.0 | https://github.com/dtolnay/link-cplusplus |
+| `gdal` · `gdal-sys` (기능 `gdal`) | 0.19.0 · 0.12.0 | MIT | https://github.com/georust/gdal |
+| `gdal-src` (기능 `gdal`) | 0.3.0+3.12.1 | 빌드 스크립트 MIT, 동봉 GDAL 3.12.1 소스는 `source/LICENSE.TXT` (위 GDAL/OGR 행 참조) | https://github.com/georust/gdal |
 
 C++ 앱(OSGeo4W)은 PROJ 9.8.1(EPSG v12.029)·GEOS 3.15.0 이다. 한반도 기준점 변환은 1 mm 안, makeValid 결과는 정규화 비교로 같다(`crates/strata-engine/src/*_tests.rs`).
 

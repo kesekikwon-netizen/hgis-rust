@@ -41,18 +41,16 @@ cargo run -p strata-app --bin ka-hgis
 
 ### 제출 SHP 엔진(GDAL) — `strata-engine --features gdal`
 
-앱은 아직 이 기능을 켜지 않는다(지시 R2-3 에서 GDAL DLL 과 함께 켠다). 엔진만 빌드·시험할 때:
+앱(`strata-app`)은 아직 이 기능을 켜지 않는다(지시 R2-3c 에서 켠다). `gdal-src` `0.3.0+3.12.1`(`gdal-sys` `bundled`)이 `ESRI Shapefile` 과 `GPKG`/`SQLite` 드라이버만 넣어 GDAL 3.12.1 을 소스에서 정적으로 빌드하므로 OSGeo4W 나 외부 GDAL DLL, `GDAL_HOME`·`GDAL_VERSION` 환경 변수가 필요 없다. 빌드에는 `cmake` 와 `sqlite3` 명령줄 도구만 `PATH` 에 있으면 된다(PROJ 소스 빌드가 `proj.db` 를 만들 때 쓴다):
 
-```bash
-# 빌드: GDAL_HOME = OSGeo4W 의 apps/gdal-dev (lib/gdal_i.lib, include/). GDAL_VERSION 은 gdal-sys 의
-# 미리 만든 3.12 바인딩을 고른다(bindgen 은 3.14 헤더에서 gdal 0.19 를 깨뜨린다).
-export GDAL_HOME='<OSGeo4W>\apps\gdal-dev' GDAL_VERSION=3.12.0
-# 실행: 시험 프로세스의 PATH 에 <OSGeo4W>/apps/gdal-dev/bin 과 <OSGeo4W>/bin (GDAL DLL)
+```powershell
 cargo clippy -p strata-engine --features gdal --all-targets -- -D warnings
 cargo test -p strata-engine --features gdal
+cargo clippy -p strata-check-export --features gdal --all-targets -- -D warnings
+cargo test -p strata-check-export --features gdal
 ```
 
-PROJ 자료(`proj.db`)는 GDAL 이 쓰는 PROJ 가 제 옆 `share/proj` 에서 찾는다. 앱은 환경 변수를 바꾸지 않고 `strata_engine::set_gdal_proj_search_paths` 로 폴더를 넘긴다. 제출 SHP 의 `.prj` 글은 `proj.db` 판을 따른다: C++ 기준 꾸러미(`crates/strata-engine/tests/fixtures/cpp_submit_demo/`)는 PROJ 9.8.1 의 `proj.db` 로 만들었다. CI 는 GISInternals GDAL 3.12.1 과 OSGeo4W `proj-runtime-data-9.8.1-1` 을 sha256 으로 고정해 받는다(`.github/workflows/ci.yml`).
+제출 SHP 의 `.prj` 글은 `proj.db` 판을 따른다. C++ 기준 꾸러미(`crates/strata-engine/tests/fixtures/cpp_submit_demo/` 등)가 만들어진 PROJ 9.8.1 의 `proj.db` 가 `crates/strata-engine/data/proj-9.8.1/proj.db` 로 프로그램 안에 들어 있으며, 첫 사용 때 폴더에 풀고 환경 변수를 바꾸지 않은 채 GDAL `PROJ_DATA` 설정(`strata_engine::install_submit_proj_db` / `set_gdal_proj_search_paths`)으로 넘긴다. CI 도 `sqlite3` 명령줄 도구만 받아 같은 정적 빌드로 검증한다(`.github/workflows/ci.yml`).
 
 ## C++ (`95d15a9`) ↔ Rust 1:1 대조 계획서
 - [`docs/superpowers/plans/2026-11-07-cpp-to-rust-1to1-대조-전환-계획.md`](docs/superpowers/plans/2026-11-07-cpp-to-rust-1to1-대조-전환-계획.md)

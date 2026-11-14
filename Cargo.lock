@@ -1405,11 +1405,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "gdal-src"
+version = "0.3.0+3.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "529210c62af5a747e8b268d4a527c8dd54f45a07db0682acfcc9313e869c54d3"
+dependencies = [
+ "cmake",
+ "libsqlite3-sys",
+ "link-cplusplus",
+ "proj-sys",
+]
+
+[[package]]
 name = "gdal-sys"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cceef1cc08a1f031c5717cb645bb361a3114470cc142cc96bc5e62b79695632e"
 dependencies = [
+ "gdal-src",
  "pkg-config",
  "semver",
 ]
@@ -3535,6 +3548,8 @@ name = "strata-engine"
 version = "2.0.0"
 dependencies = [
  "gdal",
+ "gdal-src",
+ "gdal-sys",
  "geos",
  "libsqlite3-sys",
  "proj",

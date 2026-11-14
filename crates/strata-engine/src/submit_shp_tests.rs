@@ -223,41 +223,71 @@ fn schema_fields_are_shapefile_safe() {
     assert_eq!(layers, 7);
 }
 
-/// GDAL's PROJ folder goes through the GDAL config option (no environment variable, no unsafe): an empty
-/// folder hides EPSG:5179; a copy of the installed proj.db under a folder with Korean letters resolves it
-/// and the demo package still equals the cpp one (incl. the 7 .prj).
+/// The `.prj` text follows the proj.db version: with GDAL's PROJ left on the bundled PROJ 9.6.2's own database the
+/// datum is `GCS_KGD2002`; with the shipped PROJ 9.8.1 database (the one the cpp packages were made with) it is
+/// `KGD2002`, and the demo package equals the cpp one. The shipped database works from a folder with Korean letters,
+/// handed to GDAL through its `PROJ_DATA` setting (no env var, no unsafe). Runs in a child process so static GDAL's
+/// open sqlite handle on `proj.db` closes on exit before the tempdir is removed.
 #[test]
-fn proj_folder_goes_through_the_gdal_config() {
-    let _gdal = gdal_lock();
+fn shipped_proj_db_gives_the_cpp_prj_text() {
+    const SUB_DIR: &str = "STRATA_TEST_SHIPPED_PROJ_SUBDIR";
+    if let Some(sub) = std::env::var_os(SUB_DIR) {
+        let esri_wkt = || {
+            std::thread::spawn(|| {
+                let srs = SpatialRef::from_epsg(5179).expect("EPSG:5179");
+                srs.morph_to_esri().expect("ESRI");
+                srs.to_wkt().expect("WKT")
+            })
+            .join()
+            .expect("thread")
+        };
+        let root = PathBuf::from(sub);
+        let korean = root.join("조사 자료").join("proj");
+        let work = root.join("work");
+        std::fs::create_dir(&work).expect("work dir");
+        let bundled = esri_wkt();
+        assert!(bundled.contains(r#"GEOGCS["GCS_KGD2002""#), "{bundled}");
+        super::install_submit_proj_db(&korean).expect("install proj.db");
+        let shipped = esri_wkt();
+        assert!(shipped.contains(r#"GEOGCS["KGD2002""#), "{shipped}");
+        let diffs = std::thread::spawn(move || demo_differences(&work)).join().expect("thread");
+        assert!(diffs.is_empty(), "differs from the cpp package:\n{}", diffs.join("\n"));
+        return;
+    }
     let dir = tempfile::tempdir().expect("temp dir");
-    let empty = dir.path().join("empty");
-    std::fs::create_dir(&empty).expect("empty dir");
-    let korean = dir.path().join("조사 자료").join("proj");
-    std::fs::create_dir_all(&korean).expect("korean dir");
-    std::fs::copy(installed_proj_db(), korean.join("proj.db")).expect("copy proj.db");
-    let work = dir.path().join("work");
-    std::fs::create_dir(&work).expect("work dir");
-    // Each step on a fresh thread: GDAL keeps one PROJ context per thread.
-    super::set_gdal_proj_search_paths(&[&empty]).expect("set empty");
-    let unknown = std::thread::spawn(|| SpatialRef::from_epsg(5179).is_err()).join();
-    super::set_gdal_proj_search_paths(&[&korean]).expect("set korean");
-    let known = std::thread::spawn(|| SpatialRef::from_epsg(5179).is_ok()).join();
-    let diffs = std::thread::spawn(move || demo_differences(&work)).join();
-    // Back to GDAL's own PROJ folder before any assert, so a failure here does not break later tests.
-    gdal::config::clear_config_option("PROJ_DATA").expect("clear PROJ_DATA");
-    assert!(unknown.expect("thread"), "an empty PROJ folder must hide EPSG:5179");
-    assert!(known.expect("thread"), "proj.db under {} must resolve EPSG:5179", korean.display());
-    let diffs = diffs.expect("thread");
-    assert!(diffs.is_empty(), "differs from the cpp package:\n{}", diffs.join("\n"));
+    let out = std::process::Command::new(std::env::current_exe().expect("test exe"))
+        .args(["--exact", "submit_shp::tests::shipped_proj_db_gives_the_cpp_prj_text", "--nocapture"])
+        .env(SUB_DIR, dir.path())
+        .env_remove("PROJ_DATA")
+        .env_remove("PROJ_LIB")
+        .output()
+        .expect("run child");
+    assert!(
+        out.status.success(),
+        "child failed:\n{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(std::fs::read(dir.path().join("조사 자료/proj/proj.db")).expect("proj.db").len(), 10_280_960);
+    dir.close().expect("remove test tempdir cleanly");
 }
 
-/// proj.db of the GDAL this crate was built against: OSGeo4W `<root>/share/proj` beside `apps/gdal-dev`,
-/// CI `GDAL_HOME/share/proj`.
-fn installed_proj_db() -> PathBuf {
-    let home = PathBuf::from(std::env::var_os("GDAL_HOME").expect("GDAL_HOME (the GDAL this crate builds against)"));
-    [home.join("share").join("proj"), home.join("..").join("..").join("share").join("proj")]
-        .into_iter()
-        .map(|d| d.join("proj.db"))
-        .find(|p| p.is_file())
-        .expect("proj.db next to the GDAL used for the build")
+/// The GDAL inside is the bundled 3.12.1 built with only the drivers the submit files need, and without GEOS
+/// (an OSGeo4W GDAL is 3.14 and brings PDF, MySQL and PostgreSQL drivers and GEOS).
+#[test]
+fn bundled_gdal_is_3_12_1_with_the_needed_drivers_only() {
+    assert_eq!(gdal::version::version_info("RELEASE_NAME"), "3.12.1");
+    let drivers: Vec<String> =
+        (0..DriverManager::count()).map(|i| DriverManager::get_driver(i).expect("driver").short_name()).collect();
+    for need in ["ESRI Shapefile", "GPKG", "SQLite"] {
+        assert!(drivers.iter().any(|d| d == need), "{need} missing: {drivers:?}");
+    }
+    for never in ["PDF", "MySQL", "PostgreSQL", "netCDF", "HDF5"] {
+        assert!(!drivers.iter().any(|d| d == never), "{never} built in: {drivers:?}");
+    }
+    let build = gdal::version::version_info("BUILD_INFO");
+    assert!(!gdal::version::VersionInfo::has_geos(), "{build}");
+    assert!(!build.contains("GEOS_ENABLED") && !build.contains("CURL_ENABLED"), "{build}");
+    let square = gdal::vector::Geometry::from_wkt("POLYGON((0 0,1 0,1 1,0 1,0 0))").expect("wkt");
+    assert!(!square.is_valid(), "OGR geometry validity check succeeded, so GEOS was linked into GDAL");
 }

@@ -1,5 +1,5 @@
-//! Writes one in-memory table as an EPSG:5179 shapefile the way `QgsVectorFileWriter` does
-//! (cpp `ExportService.cpp:164-176`). DBF columns per kind (cpp harness, 2026-11-14): Integer N(10,0),
+//! Writes one in-memory table as an EPSG:5179 shapefile like the cpp package (`ExportService.cpp:164-176`).
+//! DBF columns per kind as in the cpp truth sets (tests/fixtures/cpp_submit_types_*): Integer N(10,0),
 //! Integer64 N(20,0), Real N(24,15), Date D(8), DateTime C(24), Boolean L(1), TEXT(n) C(n), TEXT C(254).
 
 use std::path::Path;
@@ -16,15 +16,16 @@ pub(crate) fn write_table(key: &str, table: &Table, names: &[String], shp: &Path
     let mut dst_srs = SpatialRef::from_epsg(5179).map_err(|e| e.to_string())?;
     dst_srs.set_axis_mapping_strategy(AxisMappingStrategy::TraditionalGisOrder);
     let ct = CoordTransform::new(&table.srs, &dst_srs).map_err(|e| e.to_string())?;
-    // ExportService.cpp:117-119 — EUC-KR / CP949 -> CP949, else UTF-8; QGIS hands OGR the code page
-    // number for "CPnnn" (QgsVectorFileWriter convertCodecNameForEncodingOption), so the .cpg says 949.
+    // ExportService.cpp:117-119 — EUC-KR / CP949 -> CP949, else UTF-8. The cpp EUC-KR packages carry
+    // .cpg = 949 (cpp_submit_types_euckr, cpp_submit_bad_euckr_5186), so OGR gets ENCODING=949.
     let encoding = match enc {
         SubmitEncoding::Utf8 => "ENCODING=UTF-8",
         SubmitEncoding::EucKr => "ENCODING=949",
     };
-    // QgsVectorFileWriter sets SHAPE_ENCODING="" and hands OGR text it encoded itself, so OGR cuts an
-    // over-long value at the byte width (not at a UTF-8 character). For UTF-8 that text is our &str; for
-    // CP949 OGR's own recoding (ENCODING=949) gives the same bytes. Thread-local, cleared right after.
+    // The cpp UTF-8 package cuts an over-long value at the byte width, inside a character
+    // (cpp_submit_types_utf8 c_long); OGR does that when SHAPE_ENCODING is empty and the text goes in as is.
+    // For CP949, OGR's recoding (ENCODING=949) gives the cpp bytes, cut included (cpp_submit_long_euckr).
+    // Thread-local, cleared right after.
     let raw_text = enc == SubmitEncoding::Utf8;
     if raw_text {
         gdal::config::set_thread_local_config_option("SHAPE_ENCODING", "").map_err(|e| e.to_string())?;
@@ -98,7 +99,7 @@ fn write_shapefile(
     Ok(())
 }
 
-/// QGIS writes a boolean as OFTInteger + OFSTBoolean, which OGR stores as DBF L(1) ('T' / 'F' / '?').
+/// The cpp packages hold a boolean as DBF L(1): 'T' (cpp_submit_types_*); OGR writes 'F' / '?' for false / NULL.
 /// gdal 0.19 has no safe field-subtype call (and OGR SQL `ADD COLUMN ... boolean` falls back to
 /// VARCHAR(80) on a shapefile), so the column is written as C(1) with the same bytes and its descriptor
 /// type byte becomes 'L': DBF header 32 bytes, then one 32-byte descriptor per field, type at offset 11.
@@ -114,7 +115,7 @@ fn mark_logical(dbf: &Path, fields: &[usize]) -> Result<(), String> {
     std::fs::write(dbf, bytes).map_err(|e| format!("{}: {e}", dbf.display()))
 }
 
-/// OGR column for a kind: type, width (`None` = driver default) and precision, as QGIS asks for it.
+/// OGR column for a kind: type, width (`None` = driver default) and precision, as the cpp truth sets show.
 fn column(kind: Kind, width: i32, precision: i32) -> (OGRFieldType::Type, Option<i32>, i32) {
     match kind {
         Kind::Integer => (OGRFieldType::OFTInteger, Some(if width > 0 && width <= 10 { width } else { 10 }), 0),
@@ -122,7 +123,7 @@ fn column(kind: Kind, width: i32, precision: i32) -> (OGRFieldType::Type, Option
         Kind::Real if width > 0 => (OGRFieldType::OFTReal, Some(width), precision),
         Kind::Real => (OGRFieldType::OFTReal, Some(24), 15),
         Kind::Date => (OGRFieldType::OFTDate, None, 0),
-        // A shapefile has no date-time column: QGIS makes it text of 24.
+        // A shapefile has no date-time column: the cpp packages use text of 24.
         Kind::DateTime => (OGRFieldType::OFTString, Some(24), 0),
         Kind::Boolean => (OGRFieldType::OFTString, Some(1), 0),
         Kind::String => (OGRFieldType::OFTString, Some(if width > 0 && width < 254 { width } else { 254 }), 0),

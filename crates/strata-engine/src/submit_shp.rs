@@ -1,6 +1,6 @@
-//! Submit shapefiles (EPSG:5179) of survey GPKG layers through GDAL, the writer QGIS uses.
+//! Submit shapefiles (EPSG:5179) of survey GPKG layers through GDAL, as the cpp packages are written.
 //! ≡ cpp `ExportService.cpp:117-181` + `SubmitShp.cpp`: layers of one key merged (`mergeLayers`),
-//! SHP field names (`withShapefileFieldNames`), written as QGIS writes them, re-read (`verifyWritten`).
+//! SHP field names (`withShapefileFieldNames`), written as the cpp truth sets show, re-read (`verifyWritten`).
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -9,6 +9,8 @@ use gdal::spatial_ref::SpatialRef;
 use gdal::vector::LayerAccess;
 use gdal::Dataset;
 
+#[path = "submit_shp_proj.rs"]
+mod submit_shp_proj;
 #[path = "submit_shp_read.rs"]
 mod submit_shp_read;
 #[path = "submit_shp_write.rs"]
@@ -18,6 +20,8 @@ use crate::submit_shp_names::field_name_for;
 use crate::EngineError;
 use submit_shp_read::{merge_tables, read_table, Field};
 use submit_shp_write::write_table;
+
+pub use submit_shp_proj::install_submit_proj_db;
 
 /// SHP text encoding (`ExportService.cpp:117-120`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,15 +66,18 @@ pub const SUBMIT_KEYS: [&str; 7] = [
 
 /// Writes `<out_dir>/<key>.shp` (+ .shx .dbf .prj .cpg) for each key in cpp order and returns the
 /// README layer reports and the field notes (merge notes, then `"{key} {from}={to}"`, `SubmitShp.cpp:149`).
-/// A key whose layers have no feature writes nothing (`ExportService.cpp:147-153`).
+/// A key whose layers have no feature writes nothing (`ExportService.cpp:147-153`). GDAL uses the caller's PROJ
+/// folder, else the shipped proj.db (see `install_submit_proj_db`).
 ///
 /// # Errors
-/// The cpp texts for a layer without CRS, a failed merge, a write failure or a failed re-read.
+/// The cpp texts for a layer without CRS, a failed merge, a write failure or a failed re-read; the shipped
+/// proj.db cannot be written.
 pub fn write_submit_shapefiles(
     sources: &[(&'static str, Vec<SubmitSource>)],
     out_dir: &Path,
     enc: SubmitEncoding,
 ) -> Result<(Vec<ShpLayerReport>, Vec<String>), EngineError> {
+    submit_shp_proj::ensure_submit_proj_db()?;
     let mut reports = Vec::new();
     let mut notes = Vec::new();
     for key in SUBMIT_KEYS {
@@ -140,7 +147,7 @@ pub(crate) fn verify_written(shp: &Path, expected: u64) -> Result<(), EngineErro
     let count = layer.as_ref().map(LayerAccess::feature_count);
     let is_5179 = layer.as_ref().and_then(LayerAccess::spatial_ref).is_some_and(|srs| {
         let named = |s: &SpatialRef| s.auth_name().as_deref() == Some("EPSG") && s.auth_code().ok() == Some(5179);
-        // Same identification fallback as the QGIS OGR provider for an ESRI .prj (SubmitShp.cpp:193-196).
+        // SubmitShp.cpp:193-196 also accepts an ESRI .prj that carries no EPSG code but identifies as 5179.
         named(&srs) || {
             let mut probe = srs.clone();
             probe.auto_identify_epsg().is_ok() && named(&probe)
