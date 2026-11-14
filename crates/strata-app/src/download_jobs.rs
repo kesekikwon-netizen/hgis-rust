@@ -5,7 +5,7 @@
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Weak};
 
 #[path = "download_jobs_list.rs"]
 mod download_jobs_list;
@@ -154,13 +154,35 @@ impl DownloadJob {
     }
 }
 
+#[derive(Clone)]
+pub(super) struct JobClock(pub(super) Arc<dyn Fn() -> f64 + Send + Sync>);
+
+impl JobClock {
+    pub(super) fn now(&self) -> f64 {
+        let t = (self.0)();
+        if t.is_finite() { t } else { 0.0 }
+    }
+}
+
+impl fmt::Debug for JobClock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("JobClock(..)")
+    }
+}
+
+/// Worker-side handle for reporting progress, recovery, and completion of a download job.
+///
+/// Dropping every clone of a job's `DownloadJobHandle` while the job is still unfinished
+/// ends the job with `Stopped { code: StopCode::App1, .. }` (`APP-1`) on a subsequent
+/// [`DownloadJobList::tick`]. A download worker must keep its handle alive until after
+/// sending its final report (`report_done`, `report_stopped`, or `report_cancelled`).
 #[derive(Debug, Clone)]
 pub struct DownloadJobHandle {
     pub(super) id: DownloadJobId,
     pub(super) run_seq: u64,
     pub(super) cancel: Arc<AtomicBool>,
     pub(super) tx: Sender<(DownloadJobId, u64, DownloadJobUpdate)>,
-    pub(super) clock: Arc<Mutex<f64>>,
+    pub(super) clock: JobClock,
     pub(super) alive: Arc<()>,
 }
 
@@ -179,8 +201,7 @@ impl DownloadJobHandle {
     }
 
     pub fn report_recovering(&self, attempt: u32, reason: impl Into<String>, retry_in_secs: f64) {
-        let reported_at = self.clock.lock().map_or(0.0, |c| *c);
-        self.report_recovering_at(attempt, reason, reported_at, retry_in_secs);
+        self.report_recovering_at(attempt, reason, self.clock.now(), retry_in_secs);
     }
 
     pub fn report_recovering_at(

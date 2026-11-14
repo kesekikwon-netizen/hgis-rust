@@ -6,8 +6,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, Weak};
 
 use super::{
-    DownloadJob, DownloadJobHandle, DownloadJobId, DownloadJobState, DownloadJobUpdate, StopCode,
-    APP1_STOP_REASON, CANCELLED_LINGER_SECS, DONE_LINGER_SECS,
+    DownloadJob, DownloadJobHandle, DownloadJobId, DownloadJobState, DownloadJobUpdate, JobClock,
+    StopCode, APP1_STOP_REASON, CANCELLED_LINGER_SECS, DONE_LINGER_SECS,
 };
 
 fn sanitize_state(state: DownloadJobState) -> DownloadJobState {
@@ -28,7 +28,8 @@ pub struct DownloadJobList {
     jobs: Vec<DownloadJob>,
     next_id: u64,
     pub popup_open: bool,
-    clock: Arc<Mutex<f64>>,
+    clock: JobClock,
+    ui_clock: Option<Arc<Mutex<f64>>>,
     tx: Sender<(DownloadJobId, u64, DownloadJobUpdate)>,
     rx: Mutex<Receiver<(DownloadJobId, u64, DownloadJobUpdate)>>,
     preset_guards: Vec<Arc<()>>,
@@ -39,36 +40,29 @@ impl Clone for DownloadJobList {
     /// so ticking or cancelling a clone never drains or cancels the original list's workers.
     fn clone(&self) -> Self {
         let (tx, rx) = mpsc::channel();
-        let now = self.clock.lock().map_or(0.0, |c| *c);
+        let (clock, ui_clock) = match &self.ui_clock {
+            Some(c) => {
+                let fresh = Arc::new(Mutex::new(c.lock().map_or(0.0, |g| *g)));
+                let reader = Arc::clone(&fresh);
+                (JobClock(Arc::new(move || reader.lock().map_or(0.0, |g| *g))), Some(fresh))
+            }
+            None => (self.clock.clone(), None),
+        };
         let jobs = self
             .jobs
             .iter()
             .map(|j| DownloadJob {
-                id: j.id,
-                title: j.title.clone(),
-                state: j.state.clone(),
-                run_seq: j.run_seq,
+                id: j.id, title: j.title.clone(), state: j.state.clone(), run_seq: j.run_seq,
                 cancel: Arc::new(AtomicBool::new(j.is_cancel_requested())),
-                settled_at: j.settled_at,
-                worker_alive: Weak::clone(&j.worker_alive),
+                settled_at: j.settled_at, worker_alive: Weak::clone(&j.worker_alive),
             })
             .collect();
-        Self {
-            jobs,
-            next_id: self.next_id,
-            popup_open: self.popup_open,
-            clock: Arc::new(Mutex::new(now)),
-            tx,
-            rx: Mutex::new(rx),
-            preset_guards: self.preset_guards.clone(),
-        }
+        Self { jobs, next_id: self.next_id, popup_open: self.popup_open, clock, ui_clock, tx, rx: Mutex::new(rx), preset_guards: self.preset_guards.clone() }
     }
 }
 
 impl Default for DownloadJobList {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl fmt::Debug for DownloadJobList {
@@ -83,13 +77,22 @@ impl fmt::Debug for DownloadJobList {
 impl DownloadJobList {
     #[must_use]
     pub fn new() -> Self {
+        let ui_clock = Arc::new(Mutex::new(0.0_f64));
+        let reader = Arc::clone(&ui_clock);
+        let mut list = Self::with_clock(Arc::new(move || reader.lock().map_or(0.0, |c| *c)));
+        list.ui_clock = Some(ui_clock);
+        list
+    }
+
+    #[must_use]
+    pub fn with_clock(clock: Arc<dyn Fn() -> f64 + Send + Sync>) -> Self {
         let (tx, rx) = mpsc::channel();
-        Self { jobs: Vec::new(), next_id: 1, popup_open: false, clock: Arc::new(Mutex::new(0.0)), tx, rx: Mutex::new(rx), preset_guards: Vec::new() }
+        Self { jobs: Vec::new(), next_id: 1, popup_open: false, clock: JobClock(clock), ui_clock: None, tx, rx: Mutex::new(rx), preset_guards: Vec::new() }
     }
 
     fn update_clock(&self, now: f64) {
         if now.is_finite() {
-            if let Ok(mut c) = self.clock.lock() {
+            if let Some(Ok(mut c)) = self.ui_clock.as_ref().map(|m| m.lock()) {
                 *c = now;
             }
         }
@@ -121,22 +124,10 @@ impl DownloadJobList {
         let state = sanitize_state(initial);
         let settled_at = settled_time_for(&state, now);
         self.jobs.push(DownloadJob {
-            id,
-            title: title.into(),
-            state,
-            run_seq: 1,
-            cancel: Arc::clone(&cancel),
-            settled_at,
-            worker_alive: Arc::downgrade(&alive),
+            id, title: title.into(), state, run_seq: 1,
+            cancel: Arc::clone(&cancel), settled_at, worker_alive: Arc::downgrade(&alive),
         });
-        let handle = DownloadJobHandle {
-            id,
-            run_seq: 1,
-            cancel,
-            tx: self.tx.clone(),
-            clock: Arc::clone(&self.clock),
-            alive,
-        };
+        let handle = DownloadJobHandle { id, run_seq: 1, cancel, tx: self.tx.clone(), clock: self.clock.clone(), alive };
         (id, handle)
     }
 
@@ -172,7 +163,7 @@ impl DownloadJobList {
         job.state = clean;
         job.cancel = Arc::clone(&cancel);
         job.worker_alive = Arc::downgrade(&alive);
-        Some(DownloadJobHandle { id, run_seq, cancel, tx: self.tx.clone(), clock: Arc::clone(&self.clock), alive })
+        Some(DownloadJobHandle { id, run_seq, cancel, tx: self.tx.clone(), clock: self.clock.clone(), alive })
     }
 
     /// Sets only the job's cancel flag; the worker responds by reporting `Cancelled`.
@@ -192,7 +183,20 @@ impl DownloadJobList {
     }
 
     pub fn tick(&mut self, now: f64) {
+        self.tick_between(now, || {});
+    }
+
+    fn tick_between(&mut self, now: f64, between_drain_and_check: impl FnOnce()) {
         self.update_clock(now);
+        // Snapshot unfinished jobs whose handles were already dropped before draining `rx`.
+        // `Weak::upgrade` performs an Acquire load on count 0 paired with `Arc`'s Release drop,
+        // so any final update sent before the handle dropped is already queued in `self.rx`.
+        let dead_before_drain: Vec<(DownloadJobId, u64)> = self
+            .jobs
+            .iter()
+            .filter(|j| j.is_unfinished() && j.worker_alive.upgrade().is_none())
+            .map(|j| (j.id, j.run_seq))
+            .collect();
         let mut updates = Vec::new();
         if let Ok(rx) = self.rx.lock() {
             while let Ok(msg) = rx.try_recv() {
@@ -215,8 +219,9 @@ impl DownloadJobList {
             };
             let _ = self.set_state(id, next, now);
         }
+        between_drain_and_check();
         for job in &mut self.jobs {
-            if job.is_unfinished() && job.worker_alive.strong_count() == 0 {
+            if job.is_unfinished() && dead_before_drain.contains(&(job.id, job.run_seq)) {
                 job.state = DownloadJobState::Stopped {
                     code: StopCode::App1,
                     reason: APP1_STOP_REASON.to_owned(),

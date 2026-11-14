@@ -5,6 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::download_jobs::{
@@ -204,4 +205,91 @@ fn cloned_job_list_does_not_swallow_original_worker_updates() {
         }
     );
     assert!(!original.get(id).unwrap().is_cancel_requested());
+}
+
+#[test]
+fn done_sent_and_handle_dropped_between_drain_and_check_ends_done_not_app1() {
+    let mut list = DownloadJobList::new();
+    let (done_id, done_h) = list.add_job("DEM", DownloadJobState::Waiting, 0.0);
+    done_h.report_running(Some(0.90), None);
+    let (cancel_id, cancel_h) = list.add_job("지적도", DownloadJobState::Waiting, 0.0);
+    let (drop_id, drop_h) = list.add_job("주변유적", DownloadJobState::Waiting, 0.0);
+    list.tick(0.5);
+
+    // Deterministic reproduction of order DL1c f1: between draining rx and checking
+    // worker liveness, workers send final states and drop their handles (and drop_h
+    // drops without sending a final state).
+    let mut maybe_done = Some(done_h);
+    let mut maybe_cancel = Some(cancel_h);
+    let mut maybe_drop = Some(drop_h);
+    list.tick_between(1.0, || {
+        let h1 = maybe_done.take().unwrap();
+        h1.report_done("dem.tif");
+        drop(h1);
+
+        let h2 = maybe_cancel.take().unwrap();
+        h2.report_cancelled();
+        drop(h2);
+
+        drop(maybe_drop.take().unwrap());
+    });
+    assert!(list.get(drop_id).unwrap().is_unfinished());
+
+    // Next tick drains the final states queued during the previous tick and judges drop_id.
+    list.tick(1.1);
+    assert_eq!(
+        list.get(done_id).unwrap().state,
+        DownloadJobState::Done {
+            result: "dem.tif".to_owned(),
+        }
+    );
+    assert_eq!(list.get(cancel_id).unwrap().state, DownloadJobState::Cancelled);
+    assert_eq!(
+        list.get(drop_id).unwrap().state,
+        DownloadJobState::Stopped {
+            code: StopCode::App1,
+            reason: APP1_STOP_REASON.to_owned(),
+        }
+    );
+}
+
+#[test]
+fn recovering_report_takes_time_from_worker_side_of_injected_clock() {
+    let fake_now = Arc::new(Mutex::new(0.0_f64));
+    let reader = Arc::clone(&fake_now);
+    let mut list = DownloadJobList::with_clock(Arc::new(move || *reader.lock().unwrap()));
+    let (id, handle) = list.add_job("DEM", DownloadJobState::Waiting, 0.0);
+
+    *fake_now.lock().unwrap() = 5.0;
+    list.tick(5.0);
+
+    // Advance injected clock to 7.25 between UI frames; worker reports before next tick.
+    let (go_tx, go_rx) = mpsc::channel();
+    let (reported_tx, reported_rx) = mpsc::channel();
+    let (exit_tx, exit_rx) = mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        go_rx.recv().unwrap();
+        handle.report_recovering(2, "파일 대신 웹페이지가 돌아왔습니다.", 20.0);
+        reported_tx.send(()).unwrap();
+        let _ = exit_rx.recv();
+    });
+
+    *fake_now.lock().unwrap() = 7.25;
+    go_tx.send(()).unwrap();
+    reported_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+
+    // UI ticks later at 12.0: deadline must be 7.25 + 20.0 = 27.25 (not 25.0 and not 32.0).
+    *fake_now.lock().unwrap() = 12.0;
+    list.tick(12.0);
+    assert_eq!(
+        list.get(id).unwrap().state,
+        DownloadJobState::Recovering {
+            attempt: 2,
+            reason: "파일 대신 웹페이지가 돌아왔습니다.".to_owned(),
+            next_attempt_at: 27.25,
+        }
+    );
+
+    let _ = exit_tx.send(());
+    worker.join().unwrap();
 }
