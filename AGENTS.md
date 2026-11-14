@@ -40,7 +40,11 @@ Rule set by the owner on 2026-11-14: every order names, in YAML, the superpowers
   are not run for it, and no skill makes you wait for a human reply: where a skill says to ask or to get approval, the order's text is the answer.
 - An order without a `skills` block is worked with test-driven-development, systematic-debugging and verification-before-completion;
   say in the report that the block was missing.
+- At the start of every order open the `SKILL.md` of each skill under `use` again, also when you read it for an earlier order:
+  an earlier read may no longer be in your conversation.
 - The report lists what you invoked: `skills_used [{skill, at, effect}]`.
+- For test-driven-development the report also lists each new test with the line it failed with before your change:
+  `red [{test, failed_with}]`. A stub that lets the test compile may come first; the code that makes it pass comes after the failing run.
 - Code review is the director's: an independent reviewer reads your commit. Do not request or run a review of your own.
 
 ## Code
@@ -49,6 +53,11 @@ Rule set by the owner on 2026-11-14: every order names, in YAML, the superpowers
 - No unrequested configuration or abstraction, and no handling of cases that cannot happen.
 - Each `.rs` file stays at 300 lines or fewer (split like the existing `*_a` / `*_b` files).
 - New comments are English and cite the C++ line (`target/cpp-ref/src/...:line`). Never claim parity or completeness.
+- Before you write or change a call into a crate, the toolkit (egui, winit, wry) or a native library (GDAL, PROJ, SQLite, curl),
+  open the source or the documentation of the version this workspace pins (`Cargo.lock`; crate sources are on this PC under
+  `%USERPROFILE%/.cargo/registry/src`) and work from what it says, not from memory: behaviour differs between versions.
+  List what you opened in the report: `docs_checked [{what, where}]` (file:line or the page). No particular tool is required.
+  (Owner's rule of 2026-10-11 for the C++ app, carried over.)
 - Korean UI strings are copied verbatim from the C++ source.
 - No hardcoded user paths. No keys or secrets in code, logs, tests or commits.
 - Delete what your change makes unused. Pre-existing dead code goes to `not_done`.
