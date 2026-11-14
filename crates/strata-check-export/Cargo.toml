@@ -16,12 +16,15 @@ zip = { workspace = true }
 quick-xml = { workspace = true }
 # R2-2 submit package builder (feature `gdal`; the app does not enable it until R2-3).
 strata-engine = { path = "../strata-engine", optional = true }
-tempfile = { workspace = true }
+tempfile = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 iana-time-zone = { version = "=0.1.65", optional = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [features]
-gdal = ["dep:strata-engine", "strata-engine/gdal", "dep:chrono", "dep:iana-time-zone"]
+gdal = ["dep:strata-engine", "strata-engine/gdal", "dep:tempfile", "dep:chrono", "dep:iana-time-zone"]
 
 [lints]
 workspace = true

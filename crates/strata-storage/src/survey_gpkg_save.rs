@@ -9,9 +9,10 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 
 use crate::gpkg_sql_functions::register_gpkg_sql_functions;
+use crate::sqlite_read::{open_survey_read_only, SqliteReadError};
 use crate::survey_gpkg_apply::apply_table_edits;
 use crate::survey_gpkg_create::make_temp_dir;
 use crate::survey_gpkg_migrate::migrate_generation_copy;
@@ -27,10 +28,12 @@ pub enum SaveFailure {
 /// C++ copySurvey 의 사본 — 원본을 읽기 전용으로 열어 `VACUUM INTO` 한다(WAL 의 행까지, 원본은
 /// 바꾸지 않는다). `dst` 가 이미 있으면(비어 있지 않으면) SQLite 가 거절한다.
 pub fn copy_survey_snapshot(src: &Path, dst: &Path) -> Result<(), String> {
-    let fail = |e: rusqlite::Error| format!("조사 파일 사본을 만들지 못했습니다: {e}");
-    let conn = Connection::open_with_flags(src, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
-        .map_err(fail)?;
-    conn.execute("VACUUM INTO ?1", [dst.to_string_lossy()]).map_err(fail)?;
+    let conn = open_survey_read_only(src).map_err(|e| match e {
+        SqliteReadError::TempSpaceFull => e.to_string(),
+        other => format!("조사 파일 사본을 만들지 못했습니다: {other}"),
+    })?;
+    conn.execute("VACUUM INTO ?1", [dst.to_string_lossy()])
+        .map_err(|e| format!("조사 파일 사본을 만들지 못했습니다: {e}"))?;
     Ok(())
 }
 

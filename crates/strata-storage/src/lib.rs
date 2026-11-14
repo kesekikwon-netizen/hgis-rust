@@ -28,6 +28,7 @@ pub mod project_actions;
 pub mod project_recent;
 pub mod qt_ini;
 pub mod recent_surveys;
+pub mod sqlite_read;
 pub mod survey_facts;
 pub mod survey_facts_probe;
 pub mod session_save;

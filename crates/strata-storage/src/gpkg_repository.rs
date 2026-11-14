@@ -5,9 +5,10 @@
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{params, Connection, OpenFlags};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use strata_types::crs::WorkCrs;
@@ -16,6 +17,7 @@ use strata_types::schema::DomainLayerKey;
 
 use crate::edit_buffer::LayerEditBuffer;
 use crate::gpkg_schema::GPKG_MAGIC_HEADER;
+use crate::sqlite_read::{open_survey_read_only, SqliteReadError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SurveyWorkspace {
@@ -31,17 +33,18 @@ pub struct GpkgRepository;
 impl GpkgRepository {
 
     pub fn open_read_only(path: &Path) -> StrataResult<SurveyWorkspace> {
-        let bytes = std::fs::read(path)?;
-        if bytes.len() < GPKG_MAGIC_HEADER.len() || &bytes[..16] != GPKG_MAGIC_HEADER {
+        let mut magic = [0_u8; GPKG_MAGIC_HEADER.len()];
+        let mut file = std::fs::File::open(path)?;
+        if file.read_exact(&mut magic).is_err() || &magic != GPKG_MAGIC_HEADER {
             return Err(StrataError::Storage(
                 "유효한 GeoPackage(SQLite 3) 헤더가 아닙니다".into(),
             ));
         }
-        let conn = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(|e| StrataError::Storage(format!("GPKG 읽기 전용 열기 실패: {e}")))?;
+        drop(file);
+        let conn = open_survey_read_only(path).map_err(|e| match e {
+            SqliteReadError::TempSpaceFull => StrataError::Storage(e.to_string()),
+            other => StrataError::Storage(format!("GPKG 읽기 전용 열기 실패: {other}")),
+        })?;
 
         let json_str: String = conn
             .query_row(

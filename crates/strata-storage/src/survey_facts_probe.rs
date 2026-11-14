@@ -5,10 +5,9 @@ use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 
-use rusqlite::{Connection, OpenFlags};
-
 use crate::qt_ini::IniFile;
 use crate::recent_surveys::normalized_path;
+use crate::sqlite_read::open_survey_read_only;
 use crate::survey_facts::{lookup_in, now_ms, store_counts};
 
 /// 세지 않는 까닭(ProbeBlock).
@@ -79,7 +78,7 @@ pub fn probe_block_for(path: &str, open: &[String], drive_kind: &dyn Fn(char) ->
 /// countLayers — GPKG 의 survey_area, feature_poly + feature_line 도형 수(읽기만). GPKG 가 아니면 None.
 #[must_use]
 pub fn count_layers(path: &str) -> Option<(i32, i32)> {
-    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX).ok()?;
+    let conn = open_survey_read_only(Path::new(path)).ok()?;
     let has = |t: &str| conn.query_row("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1", [t], |r| r.get::<_, i64>(0)).unwrap_or(0) > 0;
     if !has("gpkg_contents") {
         return None;

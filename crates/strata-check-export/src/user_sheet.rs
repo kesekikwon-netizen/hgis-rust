@@ -8,11 +8,12 @@
 //!    read as plain project XML (`target/cpp-ref/src/app/MainWindowSession.cpp:284-286`
 //!    and `:323-325`; `target/cpp-ref/src/core/SurveySession.cpp:37-41`).
 
-use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use rusqlite::types::ValueRef;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
+
+use strata_storage::sqlite_read::open_survey_read_only;
 
 #[path = "user_sheet_xml.rs"]
 mod xml;
@@ -78,65 +79,14 @@ pub fn survey_user_sheet(survey: &Path) -> Result<SheetCheck, String> {
 }
 
 /// `target/cpp-ref/src/core/SurveyStorage.cpp:345-370` — reads `qgis_projects` row `'survey'`
-/// from a private temporary copy of `survey` (and `<survey>-wal` when present) so SQLite never
-/// creates `-shm` or `-wal` sidecars in `survey`'s folder, even for WAL-mode files.
+/// using `strata_storage::sqlite_read::open_survey_read_only` so reading never leaves `-shm` or
+/// `-wal` sidecars beside `survey` and works when write access to `survey`'s folder is denied.
 fn read_embedded_workspace(survey: &Path) -> Result<Option<SheetCheck>, String> {
-    let (temp_dir, staged) = stage_survey_for_sqlite(survey)?;
-    let result = query_embedded_workspace(&staged);
-    let _ = temp_dir.close();
-    result
+    let conn = open_survey_read_only(survey).map_err(|e| e.english_reason())?;
+    query_embedded_workspace(&conn)
 }
 
-/// Copies `survey` and any present `<survey>-wal` into a fresh temp folder as writable files.
-/// `<survey>-shm` is intentionally not copied: it holds only SQLite's transient wal-index cache,
-/// and omitting it lets SQLite rebuild a clean wal-index from the copied `-wal` frames.
-fn stage_survey_for_sqlite(survey: &Path) -> Result<(tempfile::TempDir, PathBuf), String> {
-    let mut src =
-        File::open(survey).map_err(|e| format!("cannot open survey file ({:?})", e.kind()))?;
-    let meta = src
-        .metadata()
-        .map_err(|e| format!("cannot stat survey file ({:?})", e.kind()))?;
-    if !meta.is_file() {
-        return Err("cannot open survey file: not a regular file".to_owned());
-    }
-    let temp_dir = tempfile::tempdir()
-        .map_err(|e| format!("cannot create temporary workspace folder ({:?})", e.kind()))?;
-    let staged = temp_dir.path().join("survey.gpkg");
-    copy_stream(&mut src, &staged, "survey file")?;
-
-    let wal_src = sidecar_path(survey, "-wal");
-    match File::open(&wal_src) {
-        Ok(mut wal_file) => {
-            let staged_wal = sidecar_path(&staged, "-wal");
-            copy_stream(&mut wal_file, &staged_wal, "survey -wal file")?;
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(format!("cannot open survey -wal file ({:?})", e.kind())),
-    }
-    Ok((temp_dir, staged))
-}
-
-fn sidecar_path(base: &Path, suffix: &str) -> PathBuf {
-    let mut os = base.as_os_str().to_os_string();
-    os.push(suffix);
-    PathBuf::from(os)
-}
-
-fn copy_stream(src: &mut File, dst_path: &Path, label: &str) -> Result<(), String> {
-    let mut dst = File::create(dst_path)
-        .map_err(|e| format!("cannot stage {label} ({:?})", e.kind()))?;
-    std::io::copy(src, &mut dst)
-        .map_err(|e| format!("cannot copy {label} ({:?})", e.kind()))?;
-    Ok(())
-}
-
-fn query_embedded_workspace(staged: &Path) -> Result<Option<SheetCheck>, String> {
-    let conn = Connection::open_with_flags(
-        staged,
-        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|e| format!("cannot open survey file: {}", sqlite_reason(&e)))?;
-
+fn query_embedded_workspace(conn: &Connection) -> Result<Option<SheetCheck>, String> {
     let has_table: i64 = conn
         .query_row(
             "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'qgis_projects'",

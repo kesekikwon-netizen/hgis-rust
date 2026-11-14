@@ -8,13 +8,14 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use rusqlite::types::ValueRef;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 
 use strata_types::error::{StrataError, StrataResult};
 use strata_types::schema::DomainLayerKey;
 
 use crate::edit_buffer::{FeatureRecord, LayerEditBuffer};
 use crate::gpkg_geometry::gpkg_blob_to_wkt;
+use crate::sqlite_read::{open_survey_read_only, SqliteReadError, SurveyReadConn, TEMP_SPACE_FULL_KO};
 
 /// 조사 파일의 도형 표 하나(gpkg_contents 순서)와 그 도형들. 도메인이 아닌 표는 `layer.key` 가 None.
 /// `baseline` 은 열었을 때(저장한 뒤)의 도형 — 저장은 `layer.features` 와 이것이 다른 것만 쓴다.
@@ -31,14 +32,18 @@ pub struct SurveyFileTable {
     pub baseline: Vec<FeatureRecord>,
 }
 
-fn open_read_only(path: &Path) -> rusqlite::Result<Connection> {
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
+fn open_read_only(path: &Path) -> Result<SurveyReadConn, SqliteReadError> {
+    open_survey_read_only(path)
 }
 
 /// C++ `SurveyStorage.cpp:371-389` — GPKG 로 열리고 `PRAGMA quick_check` 가 ok 인지. 오류 문구는 C++ 그대로.
 pub fn validate_survey_for_open(path: &Path) -> Result<(), String> {
     let not_gpkg = || "읽을 수 있는 GeoPackage 조사 파일이 아닙니다.".to_owned();
-    let conn = open_read_only(path).map_err(|_| not_gpkg())?;
+    let conn = match open_read_only(path) {
+        Ok(conn) => conn,
+        Err(SqliteReadError::TempSpaceFull) => return Err(TEMP_SPACE_FULL_KO.to_owned()),
+        Err(_) => return Err(not_gpkg()),
+    };
     let has_contents: i64 = conn
         .query_row(
             "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'gpkg_contents'",
@@ -65,10 +70,17 @@ fn db(e: rusqlite::Error) -> StrataError {
     StrataError::Storage(format!("조사 파일을 읽지 못했습니다: {e}"))
 }
 
+fn open_db(e: SqliteReadError) -> StrataError {
+    match e {
+        SqliteReadError::TempSpaceFull => StrataError::Storage(e.to_string()),
+        other => StrataError::Storage(format!("조사 파일을 읽지 못했습니다: {other}")),
+    }
+}
+
 /// gpkg_contents 의 도형 표(rowid 순)를 모두 읽는다. 목록에만 있고 실제 표가 없으면 건너뛴다
 /// (C++ 은 그런 표를 열지 못해 넘어간다). NULL 값은 속성에 넣지 않는다.
 pub fn read_survey_tables(path: &Path) -> StrataResult<Vec<SurveyFileTable>> {
-    let conn = open_read_only(path).map_err(db)?;
+    let conn = open_read_only(path).map_err(open_db)?;
     let mut stmt = conn
         .prepare(
             "SELECT c.table_name, g.column_name, g.srs_id, g.geometry_type_name FROM gpkg_contents c
