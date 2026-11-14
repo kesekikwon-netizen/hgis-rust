@@ -32,7 +32,7 @@ not apply here. Where this file and `CLAUDE.md` differ, this file wins. Plan: `d
 Rule set by the owner on 2026-11-14: every order names, in YAML, the superpowers skills it is worked with.
 
 - The superpowers skill pack (7.0.2) is installed for Antigravity and for Claude Code on this PC. Skill files:
-  `%USERPROFILE%.geminiconfigpluginssuperpowersskills<name>SKILL.md`; in Claude Code the names are `superpowers:<name>`.
+  `%USERPROFILE%/.gemini/config/plugins/superpowers/skills/<name>/SKILL.md`; in Claude Code the names are `superpowers:<name>`.
 - Every `ORDER.yaml` has a `skills` block: `use` (each skill with the step at which it is invoked), `do_not_use`, `rule`, `report`.
   Invoke each skill under `use` by its name at that step. If your conversation does not list the skill, read its `SKILL.md` and follow it.
 - An order is the approved design and the approved plan. The skills under `do_not_use` (brainstorming, writing-plans, executing-plans,
