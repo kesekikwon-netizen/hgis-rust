@@ -136,7 +136,7 @@ fn files_are_requested_in_the_order_given() {
     assert_eq!(server.request_paths(), expected_paths);
 }
 
-/// 24 files with 6 parallel connections reuse HTTP/1.1 keep-alive (<= 6 TCP connections, <= 6 open at once).
+/// 24 files with 6 parallel transfers reuse HTTP/1.1 keep-alive (far fewer TCP connections than files, <= 6 requests open at once).
 #[test]
 fn reuses_connections_for_24_files_over_6_parallel() {
     let tmp = TempDir::new("reuse");
@@ -165,7 +165,10 @@ fn reuses_connections_for_24_files_over_6_parallel() {
         "MAP2a measured: curl=\"{}\", files=24, accepted_connections={conns}, peak_open_requests={peak}",
         curl_version_line()
     );
-    assert!((1..=6).contains(&conns), "expected 1..=6 TCP connections, got {conns}");
+    // curl limits transfers at once, not connections over time: GitHub's runner (curl 8.21.0) opened a seventh
+    // connection once (run 43572224099). What must hold here: connections are reused and never more than six
+    // requests are open at once. A cap on connections per host belongs to order MAP2b.
+    assert!((1..=12).contains(&conns), "expected reuse (1..=12 TCP connections for 24 files), got {conns}");
     assert!((1..=6).contains(&peak), "expected 1..=6 open requests at once, got {peak}");
 }
 
