@@ -72,6 +72,7 @@ impl StrataAppState {
             cadastral_fetch,
             basemap_fetch,
             vworld_api_key: crate::basemap_cadastral_jobs::CachedApiKey::default(),
+            download_jobs: crate::download_jobs::DownloadJobList::default(),
             active_tool: MapToolKind::Pan,
             ribbon: KaBeginnerRibbon::default(),
             left_layers: LeftLayerPanel::new_empty(),

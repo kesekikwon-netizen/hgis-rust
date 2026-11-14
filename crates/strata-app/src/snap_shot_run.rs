@@ -81,7 +81,15 @@ impl StrataAppState {
             return;
         };
         if let Some(action) = step.action.clone() {
-            self.snap_apply_action(&action);
+            if matches!(
+                action.as_str(),
+                "@gauge=running" | "@gauge=recovering" | "@gauge=stopped" | "@gauge=two"
+            ) {
+                let now = ctx.input(|i| i.time);
+                self.download_jobs.apply_snap_preset(&action["@gauge=".len()..], now);
+            } else {
+                self.snap_apply_action(&action);
+            }
             if let Some(snap) = self.snap.as_mut() {
                 // 액션은 한 번만 실행한다. 단계는 남겨 두고 action 만 지워서
                 // 다음 바퀴에 이 단계가 "캡처" 로 처리되게 한다.
@@ -133,6 +141,10 @@ impl StrataAppState {
             "@tab_drawing" => self.open_studio_tab(crate::app_state::MainTab::Drawing),
             "@tab_paleo" => self.open_studio_tab(crate::app_state::MainTab::Paleo),
             "@tab_terrain3d" => self.open_studio_tab(crate::app_state::MainTab::Terrain3d),
+            // Picture-only status-bar gauge presets (order DL1a).
+            "@gauge=running" | "@gauge=recovering" | "@gauge=stopped" | "@gauge=two" => {
+                self.download_jobs.apply_snap_preset(&action["@gauge=".len()..], 0.0);
+            }
             // 뒤에서 받는 지적 타일이 올 때까지 한 단계 더 기다린다.
             "@wait" => {}
             _ if action.starts_with("@goto=") => self.snap_goto(&action["@goto=".len()..]),

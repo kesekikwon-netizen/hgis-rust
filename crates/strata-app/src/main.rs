@@ -11,6 +11,8 @@ pub mod dem_download_ui;
 pub mod dialogs_account;
 pub mod dialogs_download_print;
 pub mod dialogs_modal;
+pub mod download_gauge;
+pub mod download_jobs;
 pub mod gui_layer_panel;
 pub mod gui_ribbon_bar;
 pub mod gui_shell;
