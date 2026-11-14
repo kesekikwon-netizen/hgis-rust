@@ -55,6 +55,15 @@ cargo test -p strata-check-export --features gdal
 
 제출 SHP 의 `.prj` 글은 `proj.db` 판을 따른다. C++ 기준 꾸러미(`crates/strata-engine/tests/fixtures/cpp_submit_demo/` 등)가 만들어진 PROJ 9.8.1 의 `proj.db` 가 `crates/strata-engine/data/proj-9.8.1/proj.db` 로 프로그램 안에 들어 있으며, 첫 사용 때 폴더에 풀고 환경 변수를 바꾸지 않은 채 GDAL `PROJ_DATA` 설정(`strata_engine::install_submit_proj_db` / `set_gdal_proj_search_paths`)으로 넘긴다. CI 도 `sqlite3` 명령줄 도구만 받아 같은 정적 빌드로 검증한다(`.github/workflows/ci.yml`).
 
+### 고정 컴파일러 버전 — `rust-toolchain.toml` (`1.91.1`)
+
+저장소 루트의 `rust-toolchain.toml` 이 `1.91.1`(`profile = "minimal"`, `components = ["clippy", "rustfmt"]`)을 고정하고, `.github/workflows/ci.yml` 의 차단 작업 두 개(`check-and-test`, `gdal-feature`)도 `dtolnay/rust-toolchain@1.91.1` 로 똑같은 버전을 쓴다. 개발 PC 전체 검증(`rustc 1.91.1`)을 통과한 변경이 GitHub 의 `@stable` 자동 판올림(`1.100.0` 비권장 항목 + `-D warnings`) 때문에 막히지 않게 하기 위해서다. 비차단 작업 `newest-stable`(`continue-on-error: true`, `dtolnay/rust-toolchain@stable`)이 최신 안정 컴파일러의 `clippy -D warnings` 와 단위 시험 결과를 따로 보여 준다.
+
+고정 버전을 올릴 때는 다음 순서로 진행하며 작업 중 임의로 `rustup update` 를 돌리지 않는다:
+1. GitHub Actions 의 `newest-stable` 작업 기록을 읽어 새로 생긴 비권장 항목·린트·시험 실패를 먼저 고친다.
+2. 목표 버전을 설치한 뒤 `rust-toolchain.toml` 의 `channel` 과 `.github/workflows/ci.yml` 의 두 차단 작업(`dtolnay/rust-toolchain@<버전>`)을 같은 버전으로 바꾼다.
+3. 로컬 전체 검증(`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `--features gdal` 검사, 릴리스 `--verify-all` · `--smoke-quit`)이 모두 통과한 것을 확인한 뒤 반영한다.
+
 ## C++ (`95d15a9`) ↔ Rust 1:1 대조 계획서
 - [`docs/superpowers/plans/2026-11-07-cpp-to-rust-1to1-대조-전환-계획.md`](docs/superpowers/plans/2026-11-07-cpp-to-rust-1to1-대조-전환-계획.md)
 - [`docs/superpowers/specs/2026-11-07-strata-pure-rust-conversion-design.md`](docs/superpowers/specs/2026-11-07-strata-pure-rust-conversion-design.md)
