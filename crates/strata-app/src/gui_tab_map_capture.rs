@@ -13,9 +13,10 @@ use super::gui_tab_map_survey::fill_mesh;
 type Presses = (Option<Pos2>, Option<Pos2>);
 
 impl StrataAppState {
-    /// 누름·더블클릭을 그리던 면에 넘긴다. 면 그리기 도구가 켜져 있지 않으면 false(다른 도구가 처리).
+    // Route canvas presses and double-clicks to DrawPolygon and DrawLine capture
+    // (target/cpp-ref/src/app/KaCaptureMapTool.cpp:260-314).
     pub(crate) fn handle_polygon_capture_input(&mut self, ui: &egui::Ui, response: &egui::Response, rect: Rect) -> bool {
-        if !self.polygon_capture_active() {
+        if !self.capture_active() {
             return false;
         }
         let presses_id = response.id.with("ka_capture_presses");
@@ -51,9 +52,10 @@ impl StrataAppState {
         true
     }
 
-    /// 그리던 면(찍은 점 + 마우스 자리).
+    // Paint capture rubberband: closed with fill for >= 3 polygon points, open polyline without fill for lines
+    // (target/cpp-ref/src/app/KaCaptureMapTool.cpp:192-217).
     pub(crate) fn paint_polygon_sketch(&self, p: &egui::Painter, rect: Rect, cursor: Option<Pos2>) {
-        if !self.polygon_capture_active() || self.draw_sketch.points.is_empty() {
+        if !self.capture_active() || self.draw_sketch.points.is_empty() {
             return;
         }
         let vp = &self.home_map.viewport;
@@ -61,7 +63,7 @@ impl StrataAppState {
         if let Some(c) = cursor.filter(|c| rect.contains(*c)) {
             pts.push(c);
         }
-        let closed = pts.len() >= 3;
+        let closed = self.polygon_capture_active() && pts.len() >= 3;
         if closed {
             p.add(fill_mesh(std::slice::from_ref(&pts), Color32::from_rgba_unmultiplied(30, 103, 198, 80)));
         }
@@ -111,3 +113,6 @@ impl StrataAppState {
 #[cfg(test)]
 #[path = "gui_tab_map_capture_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "gui_tab_map_capture_line_tests.rs"]
+mod line_tests;

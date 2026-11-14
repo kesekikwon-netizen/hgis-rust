@@ -22,7 +22,8 @@ fn sentence(ui: &mut egui::Ui, text: &str) {
 impl StrataAppState {
     pub(crate) fn render_ri_attribute_card(&mut self, ui: &mut egui::Ui) {
         self.drop_card_if_gone();
-        let drawing = self.active_tool == strata_canvas2d::map_tools::MapToolKind::DrawPolygon;
+        // Show drawing sentence for DrawPolygon and DrawLine (target/cpp-ref/src/app/KaInspectorPanel.cpp:166-169).
+        let drawing = Self::is_capture_tool(self.active_tool);
         let Some(view) = self.card_view_now() else {
             sentence(ui, if drawing { "도형을 다 그리면 그 기록이 여기에 나옵니다." } else { "지도에서 도형 하나를 고르면 기록이 여기에 나옵니다." });
             return;

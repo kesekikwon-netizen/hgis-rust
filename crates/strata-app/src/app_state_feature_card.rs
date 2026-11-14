@@ -29,9 +29,9 @@ impl StrataAppState {
         self.home_map.card_failure = None;
     }
 
-    /// syncFeatureCard — 그리기 도구가 켜져 있으면 그대로, 도형 하나를 고르면 그것, 고른 것이 없으면 따라가던 카드만 비운다.
+    // Hold card while a capture tool is active (target/cpp-ref/src/app/MainWindowFeatureCard.cpp:72-76).
     pub(crate) fn sync_card_with_selection(&mut self) {
-        if self.active_tool == strata_canvas2d::map_tools::MapToolKind::DrawPolygon {
+        if Self::is_capture_tool(self.active_tool) {
             return;
         }
         match self.home_map.selected_shape.clone() {

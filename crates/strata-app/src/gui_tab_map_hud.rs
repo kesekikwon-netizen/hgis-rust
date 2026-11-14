@@ -19,69 +19,43 @@ pub(crate) struct MapToolFlags {
     pub(crate) is_select_tool: bool,
     pub(crate) is_style: bool,
     pub(crate) effective_tool: MapToolKind,
+    pub(crate) cursor_world: Option<[f64; 2]>,
 }
 
 impl StrataAppState {
-    /// 안내 띠·투명도 레일·측정 HUD (원문 캔버스 본문 뒤쪽).
-    pub(crate) fn paint_map_hud(
-        &mut self,
-        ctx: &egui::Context,
-        ui: &mut egui::Ui,
-        p: &egui::Painter,
-        rect: Rect,
-        input: MapToolFlags,
-    ) {
+    pub(crate) fn map_guide_band_info(&self, input: MapToolFlags) -> Option<(String, String)> {
         let MapToolFlags {
             is_trench,
             is_measure,
             is_draw_tool,
             is_select_tool,
-            is_style,
             effective_tool,
+            cursor_world,
+            ..
         } = input;
-        // 1. KaDrawGuideBand (KaDrawGuideBand.cpp:28-70, MainWindowChrome.cpp:73-84)
-        let guide_info: Option<(String, String)> = if is_draw_tool {
+        if is_draw_tool {
             if effective_tool == MapToolKind::PlacePoint {
                 Some((
                     "그리기 · 유물 위치".to_owned(),
                     "클릭한 자리에 점을 놓습니다".to_owned(),
                 ))
-            } else if effective_tool == MapToolKind::DrawLine {
-                Some((
-                    "그리기 · 유구 선".to_owned(),
-                    "클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)".to_owned(),
-                ))
             } else {
-                // KaDrawSketchTools.cpp:257-259 — 띠 제목은 도구 칸 글(currentToolLabel) 그대로.
+                // Share title = tool_chip_label(), hint, and live KaSketchMeasure text for DrawPolygon and DrawLine
+                // (target/cpp-ref/src/app/KaDrawSketchTools.cpp:250-260, target/cpp-ref/src/app/MainWindowChrome.cpp:71-73,
+                // target/cpp-ref/src/app/KaCaptureMapTool.cpp:218-225, target/cpp-ref/src/app/KaSketchMeasure.cpp:7-26).
                 let title = self.tool_chip_label();
-                // KaDrawGuideBand.cpp:48-62 — m_measure 실시간 길이·면적
-                let mut measure_txt = String::new();
-                let ring = &self.draw_sketch.points;
-                if ring.len() >= 2 {
-                    let mut len_m = 0.0_f64;
-                    for w in ring.windows(2) {
-                        let dx = w[1][0] - w[0][0];
-                        let dy = w[1][1] - w[0][1];
-                        len_m += (dx * dx + dy * dy).sqrt();
+                let measure_txt = if self.draw_sketch.points.is_empty() {
+                    String::new()
+                } else {
+                    let mut measured = self.draw_sketch.points.clone();
+                    if let Some(c) = cursor_world {
+                        measured.push(c);
                     }
-                    measure_txt = if len_m >= 1000.0 {
-                        format!("길이 {:.1} m ({:.2} km)", len_m, len_m / 1000.0)
-                    } else {
-                        format!("길이 {len_m:.1} m")
-                    };
-                    if ring.len() >= 3 {
-                        let mut area = 0.0_f64;
-                        for k in 0..ring.len() {
-                            let a = ring[k];
-                            let b = ring[(k + 1) % ring.len()];
-                            area += a[0] * b[1] - b[0] * a[1];
-                        }
-                        measure_txt.push_str(&format!(
-                            " · 면적 {:.1} ㎡",
-                            area.abs() * 0.5
-                        ));
-                    }
-                }
+                    crate::draw_sketch::sketch_measure_text(
+                        &measured,
+                        effective_tool == MapToolKind::DrawPolygon,
+                    )
+                };
                 if measure_txt.is_empty() {
                     Some((title, "클릭으로 점을 찍고 우클릭으로 마칩니다 (Esc 취소)".to_owned()))
                 } else {
@@ -105,7 +79,25 @@ impl StrataAppState {
             ))
         } else {
             None
-        };
+        }
+    }
+
+    /// 안내 띠·투명도 레일·측정 HUD (원문 캔버스 본문 뒤쪽).
+    pub(crate) fn paint_map_hud(
+        &mut self,
+        ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        p: &egui::Painter,
+        rect: Rect,
+        input: MapToolFlags,
+    ) {
+        let MapToolFlags {
+            is_measure,
+            is_style,
+            ..
+        } = input;
+        // 1. KaDrawGuideBand (KaDrawGuideBand.cpp:28-70, MainWindowChrome.cpp:73-84)
+        let guide_info = self.map_guide_band_info(input);
 
         let opacity_top_y = if let Some((title_txt, hint_txt)) = guide_info {
             let full_guide_txt = format!("{title_txt} — {hint_txt}");
@@ -226,3 +218,7 @@ impl StrataAppState {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "gui_tab_map_hud_tests.rs"]
+mod tests;

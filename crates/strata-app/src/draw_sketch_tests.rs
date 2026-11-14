@@ -74,3 +74,43 @@ fn finishing_with_too_few_points_keeps_the_sketch() {
     assert_eq!(s.close(0.02), Err(FinishShort::TooFew));
     assert_eq!(s.points.len(), 2);
 }
+
+// Line finish rules from target/cpp-ref/src/app/KaCaptureMapTool.cpp:398-420:
+// need = 2 points; consecutive points within nearPoint tolerance are dropped.
+#[test]
+fn line_finish_needs_two_distinct_points_and_drops_near_duplicates() {
+    let mut s = DrawSketch::default();
+    assert_eq!(s.finish_line(0.02), Err(FinishShort::Empty));
+    s.press_left([0.0, 0.0], 0.02);
+    assert_eq!(s.finish_line(0.02), Err(FinishShort::TooFew));
+    assert_eq!(s.points.len(), 1);
+    s.double_click([0.01, 0.0]);
+    assert_eq!(s.points.len(), 2);
+    assert_eq!(s.finish_line(0.02), Err(FinishShort::TooFew));
+    assert_eq!(s.points.len(), 2);
+    s.press_left([10.0, 0.0], 0.02);
+    s.double_click([10.01, 0.0]);
+    assert_eq!(s.finish_line(0.02), Ok(vec![[0.0, 0.0], [10.0, 0.0]]));
+}
+
+// Ported from target/cpp-ref/tests/test_sketch_measure.cpp:13-16,21-23,57-59.
+#[test]
+fn sketch_measure_polygon_edge_and_area() {
+    assert_eq!(sketch_measure_text(&[[1.0, 1.0]], true), "");
+    assert_eq!(sketch_measure_text(&[[0.0, 0.0], [4.2, 0.0]], true), "변 4.20 m");
+    assert_eq!(
+        sketch_measure_text(&[[0.0, 0.0], [10.0, 0.0], [10.0, 5.0]], true),
+        "변 5.00 m · 면적 25.0 ㎡"
+    );
+}
+
+// Ported from target/cpp-ref/tests/test_sketch_measure.cpp:17-20,57-60.
+#[test]
+fn sketch_measure_line_edge_and_length() {
+    assert_eq!(sketch_measure_text(&[], false), "");
+    assert_eq!(sketch_measure_text(&[[1.0, 1.0]], false), "");
+    assert_eq!(
+        sketch_measure_text(&[[0.0, 0.0], [3.0, 4.0], [3.0, 10.0]], false),
+        "변 6.00 m · 길이 11.00 m"
+    );
+}

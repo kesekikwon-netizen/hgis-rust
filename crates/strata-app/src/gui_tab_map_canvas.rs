@@ -256,6 +256,7 @@ impl StrataAppState {
                 is_select_tool,
                 is_style,
                 effective_tool,
+                cursor_world: response.hover_pos().filter(|c| rect.contains(*c)).map(|hp| s2w(rect, &self.home_map.viewport, hp)),
             },
         );
         self.paint_map_overlays(ctx, ui, &p, rect);

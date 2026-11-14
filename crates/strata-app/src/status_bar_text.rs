@@ -79,8 +79,8 @@ impl StrataAppState {
                     _ => "",
                 };
                 let mut text = if target.is_empty() { "그리기".to_owned() } else { format!("그리기 · {target}") };
-                // currentToolLabel 의 「점 n」 — 면은 그리던 면(KaCaptureMapTool), 선·점은 아직 예전 도구.
-                let points = if self.active_tool == MapToolKind::DrawPolygon {
+                // Count draw_sketch vertices for DrawPolygon and DrawLine (target/cpp-ref/src/app/KaDrawSketchTools.cpp:173-199).
+                let points = if Self::is_capture_tool(self.active_tool) {
                     self.draw_sketch.points.len()
                 } else {
                     self.home_map.scene.active_rubberband.len()

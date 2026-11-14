@@ -45,26 +45,41 @@ fn polygon_wkt(rings: &PolygonRings) -> String {
     format!("POLYGON ({})", body.join(", "))
 }
 
+fn linestring_wkt(pts: &[[f64; 2]]) -> String {
+    let body = pts.iter().map(|p| format!("{} {}", p[0], p[1])).collect::<Vec<_>>().join(", ");
+    format!("LINESTRING ({body})")
+}
+
 impl StrataAppState {
-    /// 지도 탭에서 면 그리기 도구가 그릴 레이어를 갖고 켜져 있는가(C++ mapTool() == m_captureTool, 면 모드).
-    pub(crate) fn polygon_capture_active(&self) -> bool {
-        // 창(조사구역 설정·이름·번호·도형 속성)이 열려 있으면 지도 입력을 받지 않는다(C++ 창은 모달).
+    // Polygon and line capture share KaCaptureMapTool (target/cpp-ref/src/app/MainWindowEditing.cpp:975-1015).
+    pub(crate) fn is_capture_tool(tool: MapToolKind) -> bool {
+        matches!(tool, MapToolKind::DrawPolygon | MapToolKind::DrawLine)
+    }
+
+    // Active capture session on the map tab with an edit layer and no modal dialog open
+    // (target/cpp-ref/src/app/KaDrawSketchTools.cpp:144-145, target/cpp-ref/src/app/MainWindowEditing.cpp:989-1015).
+    pub(crate) fn capture_active(&self) -> bool {
         self.active_tab == MainTab::Map
-            && self.active_tool == MapToolKind::DrawPolygon
+            && Self::is_capture_tool(self.active_tool)
             && self.edit_layer_key.is_some()
             && !self.modal_window_open()
     }
 
+    // True when polygon capture is active on the map tab (target/cpp-ref/src/app/MainWindowEditing.cpp:975-988).
+    pub(crate) fn polygon_capture_active(&self) -> bool {
+        self.capture_active() && self.active_tool == MapToolKind::DrawPolygon
+    }
+
     /// 왼쪽 누름 — 점 더하기.
     pub(crate) fn sketch_press(&mut self, xy: [f64; 2]) {
-        if self.polygon_capture_active() {
+        if self.capture_active() {
             self.draw_sketch.press_left(xy, self.home_map.viewport.meters_per_pixel);
         }
     }
 
     /// 더블클릭 — 그 자리를 더하고 마친다.
     pub(crate) fn sketch_double_click(&mut self, xy: [f64; 2]) {
-        if self.polygon_capture_active() {
+        if self.capture_active() {
             self.draw_sketch.double_click(xy);
             self.sketch_finish();
         }
@@ -72,7 +87,7 @@ impl StrataAppState {
 
     /// Ctrl+Z·Backspace·Delete·「되돌리기」 — 마지막 점 하나(MainWindowUndo.cpp:331).
     pub(crate) fn sketch_undo_vertex(&mut self) -> bool {
-        if !self.polygon_capture_active() || !self.draw_sketch.undo_last() {
+        if !self.capture_active() || !self.draw_sketch.undo_last() {
             return false;
         }
         self.show_status_message("꼭짓점 하나를 되돌렸습니다.".to_owned());
@@ -86,20 +101,33 @@ impl StrataAppState {
         }
     }
 
-    /// 우클릭·Enter·더블클릭·「완료」 — 면을 닫아 편집 레이어에 넣는다.
+    // Finish polygon or line sketch and add one feature to the target layer edit buffer
+    // (target/cpp-ref/src/app/KaCaptureMapTool.cpp:393-456, target/cpp-ref/src/app/MainWindowEditing.cpp:782-916).
     pub(crate) fn sketch_finish(&mut self) {
-        if !self.polygon_capture_active() {
+        if !self.capture_active() {
             return;
         }
-        let closed = match self.draw_sketch.close(self.home_map.viewport.meters_per_pixel) {
-            Ok(closed) => closed,
-            Err(FinishShort::Empty) => return,
-            Err(FinishShort::TooFew) => {
-                self.show_status_message(TOO_FEW_TEXT.to_owned());
-                return;
+        let mupp = self.home_map.viewport.meters_per_pixel;
+        let is_line = self.active_tool == MapToolKind::DrawLine;
+        let (poly_closed, line_pts) = if is_line {
+            match self.draw_sketch.finish_line(mupp) {
+                Ok(line) => (None, Some(line)),
+                Err(FinishShort::Empty) => return,
+                Err(FinishShort::TooFew) => {
+                    self.show_status_message(TOO_FEW_TEXT.to_owned());
+                    return;
+                }
+            }
+        } else {
+            match self.draw_sketch.close(mupp) {
+                Ok(closed) => (Some(closed), None),
+                Err(FinishShort::Empty) => return,
+                Err(FinishShort::TooFew) => {
+                    self.show_status_message(TOO_FEW_TEXT.to_owned());
+                    return;
+                }
             }
         };
-        let Some(rings) = closed.rings.clone() else { return };
         let Some(key) = self.edit_layer_key.clone() else { return };
         let Some(idx) = self.survey_tables.iter().position(|t| t.table == key) else {
             self.draw_sketch.points.clear();
@@ -107,37 +135,54 @@ impl StrataAppState {
             return;
         };
         let work = CrsCode::from(self.work_crs).epsg_number();
-        let table = &self.survey_tables[idx];
-        let rings = match u32::try_from(table.srs_id) {
-            Ok(dst) if dst == work => rings,
-            Ok(dst) if dst > 0 => {
-                let moved = Transformer::new(work, dst).and_then(|t| {
-                    rings.iter().map(|r| t.transform_all(r)).collect::<Result<Vec<_>, _>>()
-                });
-                match moved {
+        let dst_crs = u32::try_from(self.survey_tables[idx].srs_id).ok().filter(|&d| d > 0 && d != work);
+        let (wkt, notice) = if let Some(line) = line_pts {
+            let line = match dst_crs {
+                Some(dst) => match Transformer::new(work, dst).and_then(|t| t.transform_all(&line)) {
                     Ok(moved) => moved,
                     Err(_) => {
-                        // failFinish — 그리던 점은 남긴다.
                         self.show_status_message(TOO_FEW_TEXT.to_owned());
                         return;
                     }
+                },
+                None => line,
+            };
+            (linestring_wkt(&line), None)
+        } else {
+            let Some(closed) = poly_closed else { return };
+            let Some(rings) = closed.rings.clone() else { return };
+            let rings = match dst_crs {
+                Some(dst) => {
+                    let moved = Transformer::new(work, dst).and_then(|t| {
+                        rings.iter().map(|r| t.transform_all(r)).collect::<Result<Vec<_>, _>>()
+                    });
+                    match moved {
+                        Ok(moved) => moved,
+                        Err(_) => {
+                            self.show_status_message(TOO_FEW_TEXT.to_owned());
+                            return;
+                        }
+                    }
                 }
-            }
-            _ => rings,
+                None => rings,
+            };
+            (polygon_wkt(&rings), crate::edit_geometry_repair::notice(&closed))
         };
-        let attrs = stamped_attributes(&table.columns);
+        let attrs = stamped_attributes(&self.survey_tables[idx].columns);
         // MainWindowEditing.cpp:826 — 카드에 적던 값은 그 도형의 따로 한 단계로 먼저 쓴다.
         self.commit_card_typing();
-        let fid = self.survey_tables[idx].layer.add_unsaved_feature(polygon_wkt(&rings), attrs);
-        // m_lastDrawnLayer·m_lastDrawnFid(MainWindowEditing.cpp:846-847, 면 레이어만).
-        self.home_map.last_drawn_shape = Some((key.clone(), fid));
+        let fid = self.survey_tables[idx].layer.add_unsaved_feature(wkt, attrs);
+        // m_lastDrawnLayer / m_lastDrawnFid are polygon-only (target/cpp-ref/src/app/MainWindowEditing.cpp:845-849).
+        if !is_line {
+            self.home_map.last_drawn_shape = Some((key.clone(), fid));
+        }
         self.draw_sketch.points.clear();
         self.redo_tables.clear();
         self.undo_tables.push(crate::app_state_layer_remove::UndoStep::Table(key.clone()));
         self.is_dirty = true;
         self.after_layer_edit(&key);
         // 이름·번호 창(연속 그리기 꺼짐)과 그 뒤 상태 글 — app_state_feature_form.rs.
-        self.after_capture(&key, fid, crate::edit_geometry_repair::notice(&closed));
+        self.after_capture(&key, fid, notice);
     }
 
     /// onGeometryCaptured 끝의 상태 글(MainWindowEditing.cpp:905-916) — 이름·번호를 받은 뒤에 센다.
@@ -233,3 +278,6 @@ impl StrataAppState {
 #[cfg(test)]
 #[path = "app_state_draw_commit_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "app_state_draw_commit_line_tests.rs"]
+mod line_tests;

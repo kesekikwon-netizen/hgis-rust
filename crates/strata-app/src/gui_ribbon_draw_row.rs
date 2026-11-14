@@ -169,8 +169,8 @@ impl StrataAppState {
         }
         separator(&p, base, 1253.0);
 
-        // 완료·되돌리기·취소는 그리는 동안만 보인다(syncDrawSketchButtons) — 보이면 뒤 단추가 180 실제 px 밀린다.
-        let sketching = self.polygon_capture_active() && !self.draw_sketch.points.is_empty();
+        // On-screen finish, undo, and cancel buttons while sketching (target/cpp-ref/src/app/KaDrawSketchTools.cpp:144-145).
+        let sketching = self.capture_active() && !self.draw_sketch.points.is_empty();
         let shift = if sketching {
             let sketch: [(&str, &str, f32); 3] = [
                 ("check", "그리던 도형을 마칩니다. 우클릭·Enter·더블클릭과 같습니다.", 1264.0),

@@ -69,3 +69,40 @@ fn leaving_the_draw_tool_reads_the_selection_again() {
     app.resync_card_on_tool_change();
     assert_eq!(app.home_map.card.as_ref().map(|c| c.fid), Some(2));
 }
+
+// While DrawLine is active, the card does not follow the selection and shows the drawing sentence
+// (target/cpp-ref/src/app/MainWindowFeatureCard.cpp:72-76, target/cpp-ref/src/app/KaInspectorPanel.cpp:166-169).
+#[test]
+fn line_draw_tool_holds_card_and_shows_drawing_sentence() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut app = opened_demo(dir.path());
+    app.active_tool = MapToolKind::DrawLine;
+    app.resync_card_on_tool_change();
+    app.home_map.selected_shape = Some(("feature_poly".to_owned(), 2));
+    app.sync_card_with_selection();
+    assert!(app.home_map.card.is_none(), "no selection follow while drawing a line");
+
+    let ctx = egui::Context::default();
+    let out = ctx.run(RawInput::default(), |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            app.render_ri_attribute_card(ui);
+        });
+    });
+    let texts: String = out
+        .shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Text(t) => Some(t.galley.text()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        texts.contains("도형을 다 그리면 그 기록이 여기에 나옵니다."),
+        "unexpected inspector sentence: {texts}"
+    );
+
+    app.active_tool = MapToolKind::Pan;
+    app.resync_card_on_tool_change();
+    assert_eq!(app.home_map.card.as_ref().map(|c| c.fid), Some(2));
+}

@@ -25,9 +25,9 @@ impl StrataAppState {
         let wants_kb = ctx.wants_keyboard_input();
         let mut save_requested: Option<bool> = None;
         let mut open_requested = false;
-        // KaCaptureMapTool::keyPressEvent(:379-391) — 면 그리기 중 Esc 는 그리던 도형만, Enter 는 마치기,
-        // Backspace·Delete 는 마지막 점(MainWindowUndo.cpp:485-494). 도구·창은 그대로다.
-        let capture = !wants_kb && self.modals.active.is_none() && self.polygon_capture_active();
+        // KaCaptureMapTool::keyPressEvent (target/cpp-ref/src/app/KaCaptureMapTool.cpp:379-391) and
+        // target/cpp-ref/src/app/MainWindowUndo.cpp:486-495 apply Esc, Enter, Backspace and Delete to capture.
+        let capture = !wants_kb && self.modals.active.is_none() && self.capture_active();
         ctx.input(|i| {
             if capture && i.key_pressed(egui::Key::Escape) {
                 self.sketch_cancel();

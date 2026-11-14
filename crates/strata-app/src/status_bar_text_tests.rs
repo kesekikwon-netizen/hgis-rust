@@ -48,6 +48,20 @@ fn tool_chip_names_the_current_tool() {
     assert_eq!(app.tool_chip_label(), "", "only on the map tab");
 }
 
+// Line tool chip counts draw_sketch vertices too (target/cpp-ref/src/app/KaDrawSketchTools.cpp:173-199).
+#[test]
+fn line_tool_chip_counts_draw_sketch_points() {
+    let mut app = map_start();
+    app.active_tool = MapToolKind::DrawLine;
+    app.edit_layer_key = Some("feature_line".to_owned());
+    assert_eq!(app.tool_chip_label(), "그리기 · 유구 선");
+    app.draw_sketch.points = vec![[0.0, 0.0], [5.0, 0.0]];
+    assert_eq!(app.tool_chip_label(), "그리기 · 유구 선 · 점 2");
+    app.edit_layer_key = Some("section_line".to_owned());
+    app.draw_sketch.points.push([5.0, 5.0]);
+    assert_eq!(app.tool_chip_label(), "그리기 · 단면선 · 점 3");
+}
+
 /// `KaStatusBar::clearCoordinate`·`setCoordinate`(KaStatusBar.cpp:167-175) — 마우스가 지도에 오기 전엔 「X —    Y —」.
 #[test]
 fn xy_readout_waits_for_the_mouse() {

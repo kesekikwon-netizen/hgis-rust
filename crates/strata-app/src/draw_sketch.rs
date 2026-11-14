@@ -75,6 +75,52 @@ impl DrawSketch {
             Err(FinishShort::TooFew)
         }
     }
+
+    // Line finish from target/cpp-ref/src/app/KaCaptureMapTool.cpp:398-420: need = 2 points,
+    // consecutive points within nearPoint tolerance (:416-417) are dropped, sketch stays until committed.
+    pub(crate) fn finish_line(&self, mupp: f64) -> Result<Vec<[f64; 2]>, FinishShort> {
+        if self.points.len() < 2 {
+            return Err(if self.points.is_empty() { FinishShort::Empty } else { FinishShort::TooFew });
+        }
+        let mut line: Vec<[f64; 2]> = Vec::with_capacity(self.points.len());
+        for &p in &self.points {
+            if line.last().is_none_or(|last| !Self::near(*last, p, mupp)) {
+                line.push(p);
+            }
+        }
+        if line.len() >= 2 {
+            Ok(line)
+        } else {
+            Err(FinishShort::TooFew)
+        }
+    }
+}
+
+// Live sketch edge and area/length text (target/cpp-ref/src/app/KaSketchMeasure.cpp:7-26).
+pub(crate) fn sketch_measure_text(points: &[[f64; 2]], polygon: bool) -> String {
+    if points.len() < 2 {
+        return String::new();
+    }
+    let a = points[points.len() - 2];
+    let b = points[points.len() - 1];
+    let out = format!("변 {:.2} m", (b[0] - a[0]).hypot(b[1] - a[1]));
+    if polygon {
+        if points.len() < 3 {
+            return out;
+        }
+        let mut twice = 0.0_f64;
+        for i in 0..points.len() {
+            let p = points[i];
+            let q = points[(i + 1) % points.len()];
+            twice += p[0] * q[1] - q[0] * p[1];
+        }
+        return format!("{out} · 면적 {:.1} ㎡", twice.abs() / 2.0);
+    }
+    let length: f64 = points
+        .windows(2)
+        .map(|w| (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]))
+        .sum();
+    format!("{out} · 길이 {length:.2} m")
 }
 
 #[cfg(test)]
