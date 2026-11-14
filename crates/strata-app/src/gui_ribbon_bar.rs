@@ -3,10 +3,9 @@
 //!
 //! 원래 한 파일(2,892줄, 가장 큰 `render_cpp_top_bars` 가 710줄)이던 것을
 //! 300줄 규칙(마스터플랜 Chapter 07)에 맞춰 나눴다.
-//! 기존 `crate::gui_ribbon_bar::<이름>` 경로는 그대로 동작한다 —
-//! `app_state`·`app_state_lifecycle` 이 쓰는 `AlignSessionState`,
-//! `gui_shell` 이 쓰는 `UX_RIBBON_*`·`ux_ribbon_group_*`·`REGION_*`,
-//! `verify_harness_v15_gate` 가 쓰는 `UX_RIBBON_GROUPS` 를 모두 여기서 재수출한다.
+//! Re-exports `AlignSessionState` (`app_state`, `app_state_lifecycle`) and the ribbon layout
+//! constants (`UX_RIBBON_GROUPS`, `UX_RIBBON_*`, `ux_ribbon_group_*`, `REGION_*`;
+//! target/cpp-ref/src/app/MainWindowRibbon.cpp:248-254) for `gui_shell`, `diag_layout`, and tests.
 //!
 //! 본문은 이름 하나 바뀌지 않았다. 300줄을 넘던 함수들은 연속 구간으로 잘라
 //! `&mut self` 메서드로 옮겼고, 각 메서드 머리의 alias 줄이 원래 지역변수 이름을

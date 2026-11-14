@@ -89,10 +89,9 @@ impl Default for ButtonMetrics {
             ribbon_icon_size: 32,
             ribbon_font_size: 13,
             ribbon_min_font_size: 12,
-            // C++ `KaTheme.h` d7afcc8: `ribbonChipWidth = 36`, `ribbonMinWidth = 36`
-            // (10% 축소, 40 → 36). 「시추」 단추를 더해도 1줄 리본이 줄바꿈되지 않게 한다.
-            ribbon_chip_width: 36,
-            ribbon_min_width: 36,
+            // Default ribbon chip width and minimum width (target/cpp-ref/src/app/KaTheme.h:97-98).
+            ribbon_chip_width: 40,
+            ribbon_min_width: 40,
             ribbon_label_padding: 8,
             ribbon_max_label_width: 64,
             scale_button_height: 30,

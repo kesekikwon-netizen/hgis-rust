@@ -6,22 +6,28 @@ pub const UX_RIBBON_HEIGHT: f32 = 91.0;
 pub const UX_VIEW_TAB_BAR_HEIGHT: f32 = 51.0;
 pub const UX_RIBBON_BUTTON_SIZE: Vec2 = Vec2::new(69.0, 100.0);
 
-/// Seven ribbon groups (target/cpp-ref/src/app/MainWindowRibbon.cpp:248-254) and their chip labels;
-/// group 「자료 받기」 (:250) holds DEM (:402), 지적 (:472), 수치지형 (:385, :484), 유산 (:544, :550).
+/// Seven ribbon groups (target/cpp-ref/src/app/MainWindowRibbon.cpp:248-254) and their chip labels
+/// in widget-addition order (target/cpp-ref/src/app/KaBeginnerRibbon.cpp:111-138):
+/// - survey 「조사」: 새 조사 (:270), 열기 (:274), 저장 (:277), 다른 이름 (:285)
+/// - record 「기록」: 선택 (:301), 측거 (:331), 그리기 (:342, added :353), 시굴격자 (:363), 버퍼 (:528, added :538)
+/// - fetch 「자료 받기」: 지적 (:472), 수치지형 (:385, added :484), 유산 (:544, added :550)
+/// - basemap 「배경 지도」: 지형 (:372, added :381), DEM (:402, added :428), 등고선 (:432, added :436),
+///   토양 (:440, added :461), 고지형 (:465, added :470), 지질 (:502), 수계 (:509), 옛 지도 (:488, added :521)
+/// - align 「정합」: 정합 (:522)
+/// - out 「내보내기」: 도면 (:553), 인쇄 (:560), GeoTIFF (:567), 검수·제출 (:575)
+/// - more 「기타」: 더보기 (:625, added :711)
 pub const UX_RIBBON_GROUPS: [(&str, &[&str]); 7] = [
     ("조사", &["새 조사", "열기", "저장", "다른 이름"]),
     ("기록", &["선택", "측거", "그리기", "시굴격자", "버퍼"]),
-    ("자료 받기", &["DEM", "지적", "수치지형", "유산"]),
+    ("자료 받기", &["지적", "수치지형", "유산"]),
     (
         "배경 지도",
-        &["지형", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"],
+        &["지형", "DEM", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"],
     ),
     ("정합", &["정합"]),
     ("내보내기", &["도면", "인쇄", "GeoTIFF", "검수·제출"]),
     ("기타", &["더보기"]),
 ];
-/// Retained scale factor; target/cpp-ref/src/app/KaTheme.h:97-98 defines ribbonChipWidth = 40 (restored in a separate order).
-pub const RIBBON_CHIP_SCALE: f32 = 36.0 / 40.0;
 /// `439-449` — 한 칩의 기준 폭(px, 12.5px 라벨 실측값). 배율을 곱하기 전 값이다.
 #[must_use]
 pub fn ribbon_chip_base_width(group_idx: usize, label: &str) -> f32 {
@@ -49,7 +55,7 @@ pub fn ribbon_group_layout() -> ([f32; 7], [f32; 7]) {
     for (g_idx, (_, items)) in UX_RIBBON_GROUPS.iter().enumerate() {
         let sum: f32 = items
             .iter()
-            .map(|label| ribbon_chip_base_width(g_idx, label) * RIBBON_CHIP_SCALE)
+            .map(|label| ribbon_chip_base_width(g_idx, label))
             .sum();
         xs[g_idx] = x;
         widths[g_idx] = sum + 2.0;

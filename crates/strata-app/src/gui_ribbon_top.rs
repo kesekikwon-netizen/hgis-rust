@@ -12,7 +12,6 @@ use crate::ribbon::SubToolsMode;
 
 use super::gui_ribbon_consts::{
     ribbon_chip_base_width, ribbon_group_layout, UX_RIBBON_GROUPS, UX_RIBBON_HEIGHT,
-    RIBBON_CHIP_SCALE,
 };
 
 /// 상단 띠가 쓰는 값 묶음 — 원래 `render_cpp_top_bars` 의 지역변수들이었다.
@@ -95,7 +94,7 @@ impl StrataAppState {
         let groups: &[(&str, &[&str])] = &UX_RIBBON_GROUPS;
 
         let chip_base_w = |g_idx: usize, label: &str| -> f32 {
-            ribbon_chip_base_width(g_idx, label) * RIBBON_CHIP_SCALE
+            ribbon_chip_base_width(g_idx, label)
         };
 
         for (g_idx, (g_title, items)) in groups.iter().enumerate() {

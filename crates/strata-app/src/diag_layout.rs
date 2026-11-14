@@ -5,7 +5,6 @@ use eframe::egui;
 
 use crate::gui_ribbon_bar::{
     ribbon_chip_base_width, ribbon_group_layout, UX_RIBBON_GROUPS, UX_RIBBON_HEIGHT,
-    RIBBON_CHIP_SCALE,
 };
 
 pub fn run() {
@@ -15,7 +14,7 @@ pub fn run() {
     for (i, (title, items)) in UX_RIBBON_GROUPS.iter().enumerate() {
         let sum: f32 = items
             .iter()
-            .map(|l| ribbon_chip_base_width(i, l) * RIBBON_CHIP_SCALE)
+            .map(|l| ribbon_chip_base_width(i, l))
             .sum();
         println!(
             "  {:<10} x={:7.1} w={:6.1}  (칩 {}개, 합계검산 {:.1})",
@@ -28,7 +27,6 @@ pub fn run() {
         total = xs[i] + ws[i];
     }
     println!("  → 마지막 그룹 끝: {total:.1} px (h_scale 전)");
-    println!("  → RIBBON_CHIP_SCALE = {RIBBON_CHIP_SCALE:.4}");
 
     println!();
     println!("=== 실제 화면 기준 (egui 가 보는 값) ===");

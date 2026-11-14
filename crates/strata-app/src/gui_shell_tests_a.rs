@@ -7,7 +7,10 @@ use crate::gui_shell::*;
 use crate::gui_layer_panel::{
     UX_FILE_DRAWER_HEIGHT, UX_LAYER_CARD_HEIGHT, UX_LEFT_PANEL_WIDTH,
 };
-use crate::gui_ribbon_bar::{ux_ribbon_group_widths, ux_ribbon_group_xs, UX_RIBBON_BUTTON_SIZE, UX_RIBBON_GROUPS, UX_RIBBON_HEIGHT, UX_VIEW_TAB_BAR_HEIGHT};
+use crate::gui_ribbon_bar::{
+    ribbon_chip_base_width, ribbon_group_layout, ux_ribbon_group_widths, ux_ribbon_group_xs,
+    UX_RIBBON_BUTTON_SIZE, UX_RIBBON_GROUPS, UX_RIBBON_HEIGHT, UX_VIEW_TAB_BAR_HEIGHT,
+};
 use crate::gui_tab_map::{UX_MAP_CANVAS_WIDTH, UX_MAP_LEFT_WIDTH, UX_MAP_RIGHT_WIDTH};
 
 // D12 KaStatusBar.cpp:77-136 — 13단계 축척 프리셋, 직접 입력 칸, 지도갱신 토글
@@ -169,9 +172,11 @@ fn test_u1_ux_layout_spec_1600x900_skeleton_ribbon_and_3_column_split() {
     );
     assert_eq!(UX_RIBBON_GROUPS.len(), 7);
     assert_eq!(UX_RIBBON_GROUPS[2].0, "자료 받기");
+    assert_eq!(UX_RIBBON_GROUPS[2].1, &["지적", "수치지형", "유산"][..]);
+    assert_eq!(UX_RIBBON_GROUPS[3].0, "배경 지도");
     assert_eq!(
-        UX_RIBBON_GROUPS[2].1,
-        &["DEM", "지적", "수치지형", "유산"][..]
+        UX_RIBBON_GROUPS[3].1,
+        &["지형", "DEM", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"][..]
     );
     assert_eq!(UX_STATUS_BAR_Y, 839.0);
     assert_eq!(UX_STATUS_BAR_HEIGHT, 32.0);
@@ -220,13 +225,49 @@ fn test_u1_ux_layout_spec_1600x900_skeleton_ribbon_and_3_column_split() {
     );
 }
 
-// Order F1f-1 — target/cpp-ref/src/app/MainWindowRibbon.cpp:250,402,472,484,550 has no borehole chip.
+// Order F1f-1 + RB1a — target/cpp-ref/src/app/MainWindowRibbon.cpp:250,385,472,484,544,550
+// adds three chips to group "fetch" (자료 받기) and has no borehole chip.
 #[test]
-fn fetch_ribbon_group_has_four_chips_without_borehole() {
+fn fetch_ribbon_group_has_three_chips_without_borehole() {
     assert_eq!(UX_RIBBON_GROUPS[2].0, "자료 받기");
-    assert_eq!(UX_RIBBON_GROUPS[2].1, &["DEM", "지적", "수치지형", "유산"][..]);
+    assert_eq!(UX_RIBBON_GROUPS[2].1, &["지적", "수치지형", "유산"][..]);
     assert!(UX_RIBBON_GROUPS.iter().flat_map(|(_, items)| items.iter()).all(|l| *l != "시추"));
     assert_eq!(crate::ribbon_icons::cpp_icon_id("시추"), None);
     assert_eq!(crate::ribbon_icons::cpp_ribbon_tooltip("시추"), "");
     assert!(crate::ribbon_icon_svg::svg_parts("borehole").is_none());
+}
+
+// Order RB1a — seven groups and their chip order from target/cpp-ref/src/app/MainWindowRibbon.cpp:248-711
+// and target/cpp-ref/src/app/KaBeginnerRibbon.cpp:78-138.
+#[test]
+fn ribbon_groups_hold_cpp_buttons_in_cpp_order() {
+    assert_eq!(UX_RIBBON_GROUPS[0], ("조사", &["새 조사", "열기", "저장", "다른 이름"][..]));
+    assert_eq!(UX_RIBBON_GROUPS[1], ("기록", &["선택", "측거", "그리기", "시굴격자", "버퍼"][..]));
+    assert_eq!(UX_RIBBON_GROUPS[2], ("자료 받기", &["지적", "수치지형", "유산"][..]));
+    assert_eq!(
+        UX_RIBBON_GROUPS[3],
+        ("배경 지도", &["지형", "DEM", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"][..])
+    );
+    assert_eq!(UX_RIBBON_GROUPS[4], ("정합", &["정합"][..]));
+    assert_eq!(UX_RIBBON_GROUPS[5], ("내보내기", &["도면", "인쇄", "GeoTIFF", "검수·제출"][..]));
+    assert_eq!(UX_RIBBON_GROUPS[6], ("기타", &["더보기"][..]));
+    assert_eq!(crate::ribbon_icons::cpp_icon_id("DEM"), Some("dem"));
+    assert!(!crate::ribbon_icons::cpp_ribbon_tooltip("DEM").is_empty());
+}
+
+// Order RB1a — group widths use unreduced base chip widths (target/cpp-ref/src/app/KaTheme.h:97-98)
+// and fit within the 1328 px one-row ribbon at 1600 px window width.
+#[test]
+fn ribbon_group_layout_uses_unreduced_chip_base_widths() {
+    assert_eq!(ribbon_chip_base_width(3, "DEM"), 47.0);
+    let (xs, widths) = ribbon_group_layout();
+    let mut expected_x = 9.0_f32;
+    for (g_idx, (_title, items)) in UX_RIBBON_GROUPS.iter().enumerate() {
+        let base_sum: f32 = items.iter().map(|l| ribbon_chip_base_width(g_idx, l)).sum();
+        assert_eq!(xs[g_idx], expected_x);
+        assert_eq!(widths[g_idx], base_sum + 2.0);
+        expected_x += widths[g_idx];
+    }
+    assert_eq!(expected_x, 1321.0);
+    assert!(expected_x <= 1328.0);
 }

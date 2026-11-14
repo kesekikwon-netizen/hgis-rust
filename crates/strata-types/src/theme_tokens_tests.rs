@@ -78,13 +78,14 @@ fn test_three_kingdoms_color_mapping_and_era_presets() {        // TestKaArchaeo
     assert_eq!(pos[0], 1712);
 }
 
-/// C++ `TestKaTheme::testRibbonChipWidthTenPercentReduction` (`d7afcc8`):
-/// 「시추」 단추를 더한 1줄 리본이 되도록 칩 최소 너비를 40 → 36 (10% 축소) 으로 고정한다.
+/// Default ribbon chip width and minimum width are 40 px
+/// (target/cpp-ref/src/app/KaTheme.h:97-98, target/cpp-ref/tests/test_theme.cpp:301-302,
+/// target/cpp-ref/tests/test_theme_options.cpp:152).
 #[test]
-fn test_ribbon_chip_width_is_36_after_ten_percent_reduction() {
+fn ribbon_chip_and_min_width_are_40() {
     let m = ButtonMetrics::default();
-    assert_eq!(m.ribbon_chip_width, 36);
-    assert_eq!(m.ribbon_min_width, 36);
+    assert_eq!(m.ribbon_chip_width, 40);
+    assert_eq!(m.ribbon_min_width, 40);
     assert_eq!(m.ribbon_icon_size, 32);
     assert_eq!(m.ribbon_label_padding, 8);
     assert_eq!(m.ribbon_max_label_width, 64);
