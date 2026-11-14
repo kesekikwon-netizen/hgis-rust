@@ -142,9 +142,12 @@ pub(crate) fn render_control_point(app: &mut StrataAppState, ctx: &egui::Context
                         .size(11.0)
                         .color(Color32::from_rgb(95, 94, 88)),
                 );
+                // target/cpp-ref/src/app/KaControlPointDialog.cpp:68,125 — cell fills column width
+                // (ComboBox::width(INFINITY) leaves NaN max_rect on frame 2 in egui debug builds).
+                let origin_w = cols[3].available_width();
                 egui::ComboBox::from_id_salt("ka_cp_origin_combo")
                     .selected_text(&app.modals.cp_origin)
-                    .width(f32::INFINITY)
+                    .width(origin_w)
                     .show_ui(&mut cols[3], |ui| {
                         for orig in [
                             "서부원점",
@@ -199,9 +202,10 @@ pub(crate) fn render_control_point(app: &mut StrataAppState, ctx: &egui::Context
                         .size(11.0)
                         .color(Color32::from_rgb(95, 94, 88)),
                 );
+                let fix_w = cols[2].available_width();
                 egui::ComboBox::from_id_salt("ka_cp_fix_combo")
                     .selected_text(&app.modals.cp_fix)
-                    .width(f32::INFINITY)
+                    .width(fix_w)
                     .show_ui(&mut cols[2], |ui| {
                         for fix in ["RTK", "PPK", "DGPS", "단독측위"] {
                             ui.selectable_value(
@@ -259,3 +263,7 @@ pub(crate) fn render_control_point(app: &mut StrataAppState, ctx: &egui::Context
             });
         });
 }
+
+#[cfg(test)]
+#[path = "modal_control_tests.rs"]
+mod tests;

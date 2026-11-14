@@ -12,11 +12,12 @@ use crate::dialogs_modal::*;
 #[test]
 fn test_t6_cpp_dialogs_4_variants_and_defaults() {
     let mut ctrl = ModalDialogController::default();
-    assert_eq!(ctrl.cp_id, "GCP-01");
+    // target/cpp-ref/src/app/KaControlPointDialog.cpp:16-19,60-71 — id and origin start empty.
+    assert_eq!(ctrl.cp_id, "");
     assert_eq!(ctrl.cp_datum, "세계측지계");
     assert_eq!(ctrl.cp_ellipsoid, "GRS80");
     assert_eq!(ctrl.cp_projection, "TM/UTM-K");
-    assert_eq!(ctrl.cp_origin, "동부원점");
+    assert_eq!(ctrl.cp_origin, "");
     assert_eq!(ctrl.cp_fix, "RTK");
     assert_eq!(ctrl.survey_area_layer_name, "조사구역");
     assert_eq!(ctrl.survey_area_color_idx, 1);
@@ -38,6 +39,27 @@ fn test_t6_cpp_dialogs_4_variants_and_defaults() {
         assert!(ctrl.show_exclusive_modal(variant));
         assert_eq!(ctrl.active, Some(variant));
     }
+}
+
+// F1d-1 — target/cpp-ref/src/app/KaNewSurveyDialog.cpp:55-57,
+// target/cpp-ref/src/app/KaSurveyContourDialog.cpp:29,128-130,
+// target/cpp-ref/src/app/KaControlPointDialog.cpp:16-19,60-71.
+#[test]
+fn default_modal_values_start_empty_like_cpp() {
+    let ctrl = ModalDialogController::default();
+    assert_eq!(ctrl.new_survey_name, "");
+    assert_eq!(ctrl.contour_file_path, "");
+    assert_eq!(ctrl.cp_id, "");
+    assert_eq!(ctrl.cp_x, "");
+    assert_eq!(ctrl.cp_y, "");
+    assert_eq!(ctrl.cp_z, "");
+    assert_eq!(ctrl.cp_origin, "");
+    assert_eq!(ctrl.cp_datum, "세계측지계");
+    assert_eq!(ctrl.cp_ellipsoid, "GRS80");
+    assert_eq!(ctrl.cp_projection, "TM/UTM-K");
+    assert_eq!(ctrl.cp_accuracy, "1.0");
+    assert_eq!(ctrl.cp_pdop, "1.5");
+    assert_eq!(ctrl.cp_fix, "RTK");
 }
 
 /// 임시 폴더에 가짜 자료를 만들고 스캔 결과가 창 상태로 옮겨지는지 본다.

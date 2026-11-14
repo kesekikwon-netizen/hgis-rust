@@ -15,6 +15,11 @@ use super::gui_tab_drawing_frame::{ChromeRects, SheetFrame};
 impl StrataAppState {
     /// 장식띠 좌표를 계산하고 표제란·축척·방위표를 원문 순서대로 그린다.
     pub(crate) fn paint_sheet_chrome(&mut self, f: &SheetFrame) {
+        // target/cpp-ref/src/app/KaDrawingStudioSheets.cpp:60 — QDate::currentDate().
+        self.paint_sheet_chrome_on(f, chrono::Local::now().date_naive());
+    }
+
+    pub(crate) fn paint_sheet_chrome_on(&mut self, f: &SheetFrame, date: chrono::NaiveDate) {
         let sheet_rect = f.sheet_rect;
         let map_rect = f.map_rect;
         let px_per_mm = f.px_per_mm;
@@ -40,7 +45,7 @@ impl StrataAppState {
         let chrome_bar_r = f.mm_to_rect(chrome.scale_bar);
         let chrome_lbl_r = f.mm_to_rect(chrome.scale_label);
         let ink = f.ink;
-        self.paint_sheet_title_block(f, s, ink, north_rect);
+        self.paint_sheet_title_block(f, s, ink, north_rect, date);
         self.paint_sheet_decoration(
             f,
             s,
@@ -54,6 +59,19 @@ impl StrataAppState {
         );
     }
 
+    // target/cpp-ref/src/app/KaTitleBlock.cpp:62-64 — date formatted as yyyy-MM-dd.
+    pub(crate) fn sheet_title_block_lines_on(&self, date: chrono::NaiveDate) -> [String; 5] {
+        let rs = &self.home_map.real_survey;
+        let date_ymd = date.format("%Y-%m-%d").to_string();
+        format_title_block_lines(
+            &self.drawing.title_ko,
+            &rs.survey_name,
+            &rs.site_name,
+            self.drawing.sheet.scale_denominator,
+            &date_ymd,
+        )
+    }
+
     /// 표제란 (`title_block_visible` 토글 연동, `KaTitleBlock.cpp:57-111` 1:1).
     fn paint_sheet_title_block(
         &mut self,
@@ -61,12 +79,12 @@ impl StrataAppState {
         s: f32,
         ink: Color32,
         north_rect: Rect,
+        date: chrono::NaiveDate,
     ) {
         let sheet_rect = f.sheet_rect;
         let map_rect = f.map_rect;
         let px_per_mm = f.px_per_mm;
         let sheet_p = f.sheet_p.clone();
-        let rs = &self.home_map.real_survey;
         // 표제란 (title_block_visible 토글 연동, KaTitleBlock.cpp:57-111 1:1)
         // 도면명 / 조사명 / 유적명 / 축  척 / 작성일 (빈 값은 ―, 위치는 chrome.crs 아래 1.5mm 또는 지도 우하단)
         if self.drawing.sheet.title_block_visible {
@@ -88,13 +106,7 @@ impl StrataAppState {
             sheet_p.rect_filled(tb_r, 0.0, Color32::WHITE);
             sheet_p.rect_stroke(tb_r, 0.0, Stroke::new(0.9, ink), egui::StrokeKind::Middle);
             let tb_p = sheet_p.with_clip_rect(tb_r.shrink(1.0));
-            let tb_lines = format_title_block_lines(
-                &self.drawing.title_ko,
-                &rs.survey_name,
-                &rs.site_name,
-                self.drawing.sheet.scale_denominator,
-                "2026-11-08",
-            );
+            let tb_lines = self.sheet_title_block_lines_on(date);
             let tb_font_sz = (4.5 * px_per_mm).clamp(3.8, 7.6);
             let line_step = (tb_r.height() - 2.4 * s) / 5.0;
             for (li, line) in tb_lines.iter().enumerate() {
@@ -110,3 +122,7 @@ impl StrataAppState {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "gui_tab_drawing_chrome_tests.rs"]
+mod tests;

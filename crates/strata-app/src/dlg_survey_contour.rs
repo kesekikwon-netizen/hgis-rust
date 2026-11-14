@@ -18,6 +18,9 @@ pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Contex
         ])
         .show(ctx, |ui| {
             render_strata_modal_header(ui, "측량 등고선 - Strata", open);
+            if !*open {
+                app.modals.contour_empty_rejected = false;
+            }
             ui.label(
                 egui::RichText::new(
                     "엑셀·CSV·DXF의 측량 좌표(X, Y, Z)로 등고선과 표고점 레이어를 만듭니다.",
@@ -28,10 +31,15 @@ pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Contex
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.add_sized([74.0, 26.0], egui::Label::new("좌표 파일"));
-                ui.add_sized(
-                    [264.0, 26.0],
-                    egui::TextEdit::singleline(&mut app.modals.contour_file_path),
-                );
+                if ui
+                    .add_sized(
+                        [264.0, 26.0],
+                        egui::TextEdit::singleline(&mut app.modals.contour_file_path),
+                    )
+                    .changed()
+                {
+                    app.modals.contour_empty_rejected = false;
+                }
                 let _ = ui.add_sized([74.0, 26.0], egui::Button::new("찾기…"));
             });
             ui.horizontal(|ui| {
@@ -130,20 +138,23 @@ pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Contex
                     }
                 });
             }
-            ui.label(
-                egui::RichText::new(
-                    "DXF·엑셀의 점번호, X(북), Y(동), 표고는 자동으로 읽습니다.",
-                )
-                .size(11.5)
-                .color(Color32::from_rgb(95, 94, 88)),
-            );
+            // target/cpp-ref/src/app/KaSurveyContourDialog.cpp:105,126-131 — m_preview shows the
+            // column note before a file is chosen, and 「좌표 파일을 고르세요.」 when accept is clicked
+            // with an empty path. Fixed preview numbers for a non-empty path belong to a later order.
             ui.add_space(6.0);
+            let path_empty = app.modals.contour_file_path.trim().is_empty();
             let line_est = ((23.7 / app.modals.contour_interval_m.max(0.1)).round() as usize)
                 .clamp(1, 500);
-            let summary = format!(
-                "점 248개, 표고 24.5–48.2 m. 등고선 약 {line_est}줄 (간격 {:.1} m). 의심점 3개 제외.",
-                app.modals.contour_interval_m
-            );
+            let summary = if path_empty && app.modals.contour_empty_rejected {
+                "좌표 파일을 고르세요.".to_owned()
+            } else if path_empty {
+                "DXF·엑셀의 점번호, X(북), Y(동), 표고는 자동으로 읽습니다.".to_owned()
+            } else {
+                format!(
+                    "점 248개, 표고 24.5–48.2 m. 등고선 약 {line_est}줄 (간격 {:.1} m). 의심점 3개 제외.",
+                    app.modals.contour_interval_m
+                )
+            };
             egui::Frame::NONE
                 .fill(Color32::from_rgb(225, 240, 218))
                 .stroke(Stroke::new(1.0, Color32::from_rgb(155, 195, 145)))
@@ -159,6 +170,7 @@ pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Contex
             ui.add_space(8.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.add_sized([68.0, 30.0], egui::Button::new("취소")).clicked() {
+                    app.modals.contour_empty_rejected = false;
                     app.modals.active = None;
                 }
                 let make_btn = egui::Button::new(
@@ -170,16 +182,25 @@ pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Contex
                 .corner_radius(6.0)
                 .min_size(Vec2::new(108.0, 30.0));
                 if ui.add(make_btn).clicked() {
-                    app.left_layers.ensure_domain_layer(
-                        strata_types::schema::DomainLayerKey::SectionLine,
-                    );
-                    app.home_map.draw_guide_message = Some(format!(
-                        "측량점 등고선 약 {}줄(간격 {:.1} m)과 표고점 248개를 생성했습니다.",
-                        line_est, app.modals.contour_interval_m
-                    ));
-                    app.is_dirty = true;
-                    app.modals.active = None;
+                    if path_empty {
+                        app.modals.contour_empty_rejected = true;
+                    } else {
+                        app.modals.contour_empty_rejected = false;
+                        app.left_layers.ensure_domain_layer(
+                            strata_types::schema::DomainLayerKey::SectionLine,
+                        );
+                        app.home_map.draw_guide_message = Some(format!(
+                            "측량점 등고선 약 {}줄(간격 {:.1} m)과 표고점 248개를 생성했습니다.",
+                            line_est, app.modals.contour_interval_m
+                        ));
+                        app.is_dirty = true;
+                        app.modals.active = None;
+                    }
                 }
             });
         });
 }
+
+#[cfg(test)]
+#[path = "dlg_survey_contour_tests.rs"]
+mod tests;
