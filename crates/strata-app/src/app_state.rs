@@ -121,6 +121,8 @@ pub struct StrataAppState {
     pub(crate) vworld_api_key: crate::basemap_cadastral_jobs::CachedApiKey,
     // Running, queued, recovering, and stopped downloads (`docs/RUST_PLAN.md` §2.8).
     pub download_jobs: crate::download_jobs::DownloadJobList,
+    /// The run of the 「수치지형」 button (`topo_download`).
+    pub(crate) topo: crate::topo_download::TopoDownload,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,

@@ -207,9 +207,15 @@ impl StrataAppState {
                         }
                     }
                 });
-            if let Some(_item) = picked {
+            if let Some(item) = picked {
                 self.ribbon.topo_menu_open = false;
-                self.modals.active = Some(ActiveModalDialog::NgiiTopoDownload);
+                // MainWindowRibbon.cpp:391-392 — the first row is the button itself, the second opens
+                // sheets that are already on this PC.
+                if item == "국토지리정보원에서 내려받기…" {
+                    self.press_topographic_download();
+                } else {
+                    self.modals.active = Some(ActiveModalDialog::TopographicImport);
+                }
             }
         }
         // ── 옛 지도 (2항목, MainWindowRibbon.cpp:492-500 & 12-oldmap.png / 14-drawing.png)

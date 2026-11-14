@@ -12,7 +12,7 @@ use raw_window_handle::HasWindowHandle;
 use strata_net::ngii_auto::{AutoConfig, AutoEvent, NgiiAutomation, PageId, PageRef, Scope, Stage, UrlParts};
 use strata_webview::downloads::DownloadRefusal;
 use strata_webview::policy::{Navigation, NavigationPolicy};
-use strata_webview::profile::remove_session_folder;
+use strata_webview::profile::{remove_session_folder, sweep_abandoned_sessions};
 use strata_webview::{BrowserError, BrowserEvent, BrowserOptions, DownloadId, DownloadPlace, HiddenBrowser, ScriptCall, ViewId};
 
 use crate::host::{QueuedHost, Wanted};
@@ -76,6 +76,8 @@ fn local_test_origin(config: &AutoConfig) -> Option<String> {
 impl NgiiRun {
     /// Opens the hidden session inside `parent` (the app's window). Nothing is asked of the site yet.
     pub fn start<W: HasWindowHandle>(parent: &W, options: RunOptions) -> Result<Self, BrowserError> {
+        // A run that died with the app left its session folder behind.
+        let _ = sweep_abandoned_sessions(&options.data_parent);
         let local = local_test_origin(&options.config);
         // The C++ browser sets its transfer page up when the document is ready, with the same page script
         // (KaTopographicBrowser.cpp:527-534).
@@ -125,6 +127,17 @@ impl NgiiRun {
     /// Reads the run's state (phase, notice, texts) without copying it.
     pub fn with_state<T>(&self, read: impl FnOnce(&NgiiAutomation) -> T) -> T {
         read(&self.core.borrow().machine)
+    }
+
+    /// Where the pages stand, for a note about a run that stopped: host and path of each page, never the
+    /// query, the fragment or anything typed into a form (`pageOutline`, KaTopographicBrowser.cpp:389-402).
+    #[must_use]
+    pub fn page_outline(&self) -> String {
+        let Some(browser) = &self.browser else {
+            return String::new();
+        };
+        let places: Vec<String> = browser.views().iter().filter_map(|v| UrlParts::parse(&v.url)).take(6).map(|u| format!("{}{}", u.host, u.path)).collect();
+        places.join(" · ")
     }
 
     /// Whether the run is over and nothing of its session is left.

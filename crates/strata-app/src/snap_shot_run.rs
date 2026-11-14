@@ -67,9 +67,10 @@ impl StrataAppState {
         }
 
         // 2) 자리 잡을 시간을 준다(폰트·레이아웃 확정).
-        if settle > 0 {
+        // A download a step started runs over many frames; the capture waits for its end.
+        if settle > 0 || self.topographic_download_busy() {
             if let Some(snap) = self.snap.as_mut() {
-                snap.settle -= 1;
+                snap.settle = snap.settle.saturating_sub(1);
             }
             ctx.request_repaint();
             return;

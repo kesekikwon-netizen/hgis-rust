@@ -171,7 +171,8 @@ impl StrataAppState {
 }
 
 impl eframe::App for StrataAppState {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.drive_topographic_download(frame, ctx.input(|i| i.time));
         let perf_frame = crate::perf_recorder::begin_frame();
         // 첫 프레임에 창이 화면보다 크면 화면 안으로 줄인다.
         //

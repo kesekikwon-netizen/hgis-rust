@@ -160,10 +160,8 @@ impl StrataAppState {
                 self.left_layers.add_cadastral_wms_layer();
                 self.modals.active = Some(ActiveModalDialog::CadastralDownload);
             }
-            "수치지형" => {
-                self.active_tab = MainTab::Map;
-                self.modals.active = Some(ActiveModalDialog::NgiiTopoDownload);
-            }
+            // The order runs in the background; the bottom gauge shows it (docs/RUST_PLAN.md 2.8, 2.9).
+            "수치지형" => self.press_topographic_download(),
             "유산" => {
                 self.active_tab = MainTab::Map;
                 self.modals.active = Some(ActiveModalDialog::HeritageRegionSelect);

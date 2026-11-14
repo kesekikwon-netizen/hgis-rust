@@ -4011,6 +4011,7 @@ dependencies = [
  "strata-geo",
  "strata-layout",
  "strata-net",
+ "strata-ngii-run",
  "strata-paleo",
  "strata-secrets",
  "strata-storage",

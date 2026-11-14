@@ -194,7 +194,7 @@ impl StrataAppState {
     }
 
     /// Centre of the bounding box of the drawn survey area(s), work CRS metres.
-    fn reference_circle_centre(&self) -> Option<[f64; 2]> {
+    pub(crate) fn reference_circle_centre(&self) -> Option<[f64; 2]> {
         crate::survey_area_setup::survey_area_extent(self).map(|b| [(b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0])
     }
 
