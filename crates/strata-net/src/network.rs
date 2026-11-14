@@ -2,8 +2,8 @@
 //!
 //! Normal desktop startup allows external HTTP requests. Automated runs (`STRATA_OFFLINE=1`,
 //! `--snap` without `--snap-online`, `--verify-all`, `--smoke-quit`, `--smoke`) turn external
-//! requests off while permitting verified PC-local targets via [`run_curl_url_with_stdin`] and
-//! [`allow_launch_urls`].
+//! requests off while permitting verified PC-local targets via
+//! [`crate::curl_stdin::output_with_url_on_stdin`] and [`allow_launch_urls`].
 
 #[cfg(any(test, feature = "test-probe"))]
 use std::cell::RefCell;
@@ -243,10 +243,17 @@ pub fn run_output_with_stdin(cmd: Command, stdin_bytes: &[u8]) -> io::Result<Out
     spawn_with_stdin(cmd, stdin_bytes)
 }
 
-/// Runs `cmd` with `stdin_bytes` for `url`, allowing verified local targets when offline (`NET0c2`, `NET0c3`).
-pub fn run_curl_url_with_stdin(mut cmd: Command, url: &str, stdin_bytes: &[u8]) -> io::Result<Output> {
+/// Runs `cmd` with `stdin_bytes` for `url`, allowing verified local targets when offline (`NET0c2`–`NET0c4`).
+///
+/// Crate-private so [`crate::curl_stdin::output_with_url_on_stdin`] is the only public entry point;
+/// offline local launches also verify `stdin_bytes` equals [`crate::curl_stdin::curl_url_config`].
+pub(crate) fn run_curl_url_with_stdin(
+    mut cmd: Command,
+    url: &str,
+    stdin_bytes: &[u8],
+) -> io::Result<Output> {
     if !is_allowed() {
-        cmd = network_local::prepare_offline_local_curl(cmd, url)?;
+        cmd = network_local::prepare_offline_local_curl(cmd, url, stdin_bytes)?;
     }
     if record_allowed_launch(&cmd, stdin_bytes) { return Err(dry_run_err()); }
     spawn_with_stdin(cmd, stdin_bytes)

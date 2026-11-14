@@ -1,4 +1,4 @@
-//! Guard helpers for verified PC-local `curl` launches while offline (`NET0c3`).
+//! Guard helpers for verified PC-local `curl` launches while offline (`NET0c3`, `NET0c4`).
 
 use std::ffi::OsStr;
 use std::io;
@@ -22,8 +22,23 @@ fn short_opt_takes_value(ch: char) -> bool {
     matches!(
         ch,
         'E' | 'C' | 'b' | 'c' | 'd' | 'D' | 'F' | 'P' | 'H' | 'h' | 'm' | 'o' | 'Q' | 'r'
-            | 'e' | 'X' | 'Y' | 'y' | 't' | 'z' | 'T' | 'u' | 'A' | 'w'
+            | 'e' | 'X' | 'Y' | 'y' | 't' | 'z' | 'T' | 'u' | 'U' | 'x' | 'A' | 'w'
     )
+}
+
+fn is_refused_long_steering_opt(opt: &str) -> bool {
+    opt.starts_with("--proxy")
+        || opt.starts_with("--socks")
+        || opt.starts_with("--dns-")
+        || opt.starts_with("--doh-")
+        || matches!(
+            opt,
+            "--url" | "--url-query" | "--request-target" | "--next"
+                | "--alt-svc" | "--hsts" | "--resolve" | "--connect-to" | "--ech"
+                | "--interface" | "--unix-socket" | "--abstract-unix-socket"
+                | "--ipfs-gateway" | "--metalink" | "--preproxy" | "--noproxy"
+                | "--ftp-port" | "--proto" | "--proto-default" | "--no-disable"
+        )
 }
 
 fn long_opt_takes_value(opt: &str) -> bool {
@@ -88,7 +103,10 @@ fn validate_offline_local_args(args: &[&OsStr]) -> io::Result<()> {
             } else {
                 raw_opt
             };
-            if matches!(opt, "--location" | "--location-trusted" | "--follow") {
+            if matches!(
+                opt,
+                "--location" | "--location-trusted" | "--follow" | "--max-redirs" | "--proto-redir"
+            ) {
                 return Err(denied("redirects refused"));
             }
             if opt == "--config" {
@@ -103,10 +121,7 @@ fn validate_offline_local_args(args: &[&OsStr]) -> io::Result<()> {
                 i += 2;
                 continue;
             }
-            if matches!(
-                opt,
-                "--url" | "--connect-to" | "--resolve" | "--doh-url" | "--next"
-            ) {
+            if is_refused_long_steering_opt(opt) {
                 return Err(denied("steering option refused"));
             }
             if long_opt_takes_value(opt) && inline_val.is_none() {
@@ -129,7 +144,7 @@ fn validate_offline_local_args(args: &[&OsStr]) -> io::Result<()> {
                     if ch == 'K' {
                         return Err(denied("config file refused"));
                     }
-                    if ch == ':' {
+                    if matches!(ch, ':' | 'x' | 'U' | 'p' | 'P') {
                         return Err(denied("steering option refused"));
                     }
                     if short_opt_takes_value(ch) {
@@ -150,16 +165,32 @@ fn validate_offline_local_args(args: &[&OsStr]) -> io::Result<()> {
         }
         return Err(denied("positional url refused"));
     }
+    if !stdin_config_seen {
+        return Err(denied("missing stdin config"));
+    }
     Ok(())
 }
 
-pub(super) fn prepare_offline_local_curl(cmd: Command, url: &str) -> io::Result<Command> {
+pub(super) fn prepare_offline_local_curl(
+    cmd: Command,
+    url: &str,
+    stdin_bytes: &[u8],
+) -> io::Result<Command> {
     if !super::is_local_target(url) {
         return Err(denied("network disabled"));
+    }
+    if stdin_bytes != crate::curl_stdin::curl_url_config(url).as_bytes() {
+        return Err(denied("stdin config mismatch"));
     }
     let orig_args: Vec<&OsStr> = cmd.get_args().collect();
     validate_offline_local_args(&orig_args)?;
 
+    // Rebuild `Command` so `first` (`-q`) precedes every caller argument and `last` trails them.
+    // Carried over from `cmd`: program (`get_program`), arguments (`get_args`), explicit per-var
+    // `env` / `env_remove` overrides (`get_envs`), and working directory (`get_current_dir`).
+    // Not carried over (`std::process::Command` exposes no getters for them): `env_clear()`,
+    // pre-set stdio handles (`spawn_with_stdin` pipes all three), and Windows `raw_arg` or
+    // `creation_flags` other than `CREATE_NO_WINDOW` (`0x0800_0000`) set below.
     let (first, last) = local_curl_guard_args();
     let mut rebuilt = Command::new(cmd.get_program());
     rebuilt.args(first);
@@ -189,3 +220,7 @@ pub(super) fn prepare_offline_local_curl(cmd: Command, url: &str) -> io::Result<
 #[cfg(test)]
 #[path = "network_local_tests.rs"]
 mod network_local_tests;
+
+#[cfg(test)]
+#[path = "network_local_net0c4_tests.rs"]
+mod network_local_net0c4_tests;
