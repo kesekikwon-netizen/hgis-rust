@@ -294,11 +294,4 @@ pub mod perf_bench;
 pub mod perf_recorder;
 pub mod perf_stats;
 #[cfg(test)]
-#[path = "perf_tests.rs"]
-mod perf_tests;
-#[cfg(test)]
-#[path = "sound_tests.rs"]
-mod sound_tests;
-#[cfg(test)]
-#[path = "sound_tests_ui.rs"]
-mod sound_tests_ui;
+mod test_mods;
