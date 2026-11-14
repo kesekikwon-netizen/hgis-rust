@@ -52,13 +52,14 @@ fn test_geotiff_tag34735_export_embeds_model_type_1_and_epsg_5186_and_cleans_tmp
 #[test]
 fn test_a4_landscape_mediabox_84189_59528_epsg5187_geokey_and_cleanup_on_disk_full(
 ) -> StrataResult<()> {
+    // target/cpp-ref/src/app/KaDrawingStudio.h:60-67: A4 landscape field sheet is 317x220 mm (898.58 x 623.62 pt).
     let sheet = DrawingSheet::new(SheetPaperSize::A4, SheetOrientation::Landscape);
-    assert!((mm_to_pdf_points(sheet.width_mm) - 841.89).abs() <= 0.01);
-    assert!((mm_to_pdf_points(sheet.height_mm) - 595.28).abs() <= 0.01);
+    assert!((mm_to_pdf_points(sheet.width_mm) - 898.58).abs() <= 0.01);
+    assert!((mm_to_pdf_points(sheet.height_mm) - 623.62).abs() <= 0.01);
 
     let pdf = render_sheet_pdf_bytes(&sheet, "A4 가로 도면")?;
     let pdf_str = String::from_utf8_lossy(&pdf);
-    assert!(pdf_str.contains("/MediaBox [0 0 841.89 595.28]"));
+    assert!(pdf_str.contains("/MediaBox [0 0 898.58 623.62]"));
 
     // EPSG:5187 (0x1443) GeoKey 3072 (0x0C00) 인코딩 검증
     let tiff_5187 = render_geotiff_header_bytes(512, 512, 5187);

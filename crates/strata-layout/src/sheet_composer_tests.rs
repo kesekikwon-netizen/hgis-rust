@@ -109,8 +109,9 @@ fn test_scale_bar_nice_1000_yields_50m_and_a4_orientation_swap_preserves_center(
         (DrawingSheet::compute_nice_scale_bar_length(-5.0, 40.0, 80.0) - 50.0).abs() < 1e-9
     );
 
+    // target/cpp-ref/src/app/KaDrawingStudio.h:60-67, KaPaperDialog.cpp:165-168: A4 landscape is 317x220 mm.
     let mut sheet = DrawingSheet::new(SheetPaperSize::A4, SheetOrientation::Landscape);
-    assert_eq!((sheet.width_mm, sheet.height_mm), (297.0, 210.0));
+    assert_eq!((sheet.width_mm, sheet.height_mm), (317.0, 220.0));
     let new_ext = sheet.set_paper_orientation_preserving_center(
         SheetOrientation::Portrait,
         [199_900.0, 499_900.0, 200_100.0, 500_100.0],

@@ -75,6 +75,9 @@ impl StrataAppState {
                         let cell_resp = ui
                               .interact(cell_r, ui.id().with(("drawing_toolbar_btn", i)), egui::Sense::click())
                               .on_hover_text(*tip);
+                        cell_resp.widget_info(|| {
+                            egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), *lbl)
+                        });
                           if cell_resp.clicked() {
                             match i {
                                 0 => {
@@ -109,39 +112,9 @@ impl StrataAppState {
                                     self.home_map.draw_guide_message = Some("항목 이동 모드 — 범례·표제란·방위표를 끌어 자리를 옮기세요.".to_owned());
                                 }
                                 5 => {
-                                    // KaDrawingStudio.cpp — 용지 크기(A4/A3/A2/A1/A0)와 방향 전환
-                                    let next_size = match self.drawing.sheet.paper_size {
-                                        strata_layout::sheet_composer::SheetPaperSize::A4 => {
-                                            strata_layout::sheet_composer::SheetPaperSize::A3
-                                        }
-                                        strata_layout::sheet_composer::SheetPaperSize::A3 => {
-                                            strata_layout::sheet_composer::SheetPaperSize::A2
-                                        }
-                                        strata_layout::sheet_composer::SheetPaperSize::A2 => {
-                                            strata_layout::sheet_composer::SheetPaperSize::A1
-                                        }
-                                        strata_layout::sheet_composer::SheetPaperSize::A1 => {
-                                            strata_layout::sheet_composer::SheetPaperSize::A0
-                                        }
-                                        strata_layout::sheet_composer::SheetPaperSize::A0 => {
-                                            strata_layout::sheet_composer::SheetPaperSize::A4
-                                        }
-                                    };
-                                    let next_orient = match self.drawing.sheet.orientation {
-                                        strata_layout::sheet_composer::SheetOrientation::Portrait => {
-                                            strata_layout::sheet_composer::SheetOrientation::Landscape
-                                        }
-                                        strata_layout::sheet_composer::SheetOrientation::Landscape => {
-                                            strata_layout::sheet_composer::SheetOrientation::Portrait
-                                        }
-                                    };
-                                    self.drawing.sheet.change_paper(next_size, next_orient);
-                                    self.home_map.draw_guide_message = Some(format!(
-                                        "용지·방향을 바꿨습니다: {:.0}×{:.0} mm {}.",
-                                        self.drawing.sheet.width_mm,
-                                        self.drawing.sheet.height_mm,
-                                        next_orient.label_ko()
-                                    ));
+                                    // target/cpp-ref/src/app/KaDrawingStudio.cpp:447-454, 1317-1319 — openPaperSettingsDialog()
+                                    self.modals.active =
+                                        Some(crate::dialogs_modal::ActiveModalDialog::PaperSetup);
                                 }
                                 _ => {
             // KaDrawingSheetSet.cpp:135 — 도면 목록 팝업

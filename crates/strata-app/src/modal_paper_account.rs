@@ -3,38 +3,59 @@
 //! 분할 전에는 `render_active_modal_dialogs` 의 match arm 이었다.
 
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
-use strata_layout::sheet_composer::{SheetOrientation, SheetPaperSize};
+use strata_check_export::checklist_engine::ChecklistEngine;
+use strata_layout::sheet_composer::{DrawingSheet, SheetOrientation, SheetPaperSize};
+use strata_types::crs::SubmitCrs;
+
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::render_strata_modal_header;
 use crate::modal_types::ModalDialogController;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PaperChoice { A4, A3, Custom }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct PaperDialogDraft { choice: PaperChoice, orientation: SheetOrientation, width_mm: f64, height_mm: f64, last_pass: u64 }
+
+impl PaperDialogDraft {
+    // target/cpp-ref/src/app/KaPaperDialog.cpp:64-66, 80-81, 99-100, 179
+    const fn new_default(pass: u64) -> Self {
+        Self { choice: PaperChoice::A4, orientation: SheetOrientation::Portrait, width_mm: DrawingSheet::A4_PORTRAIT_WIDTH_MM, height_mm: DrawingSheet::A4_PORTRAIT_HEIGHT_MM, last_pass: pass }
+    }
+
+    // target/cpp-ref/src/app/KaPaperDialog.cpp:161-171
+    fn apply_preset(&mut self) {
+        let sz = match self.choice { PaperChoice::A4 => Some(SheetPaperSize::A4), PaperChoice::A3 => Some(SheetPaperSize::A3), PaperChoice::Custom => None };
+        if let Some(paper) = sz { (self.width_mm, self.height_mm) = DrawingSheet::preset_dimensions_mm(paper, self.orientation); }
+    }
+
+    // target/cpp-ref/src/app/KaPaperDialog.cpp:149-153 — only A4 landscape shows the field-sheet warning.
+    fn scale_note(&self) -> &'static str {
+        let ori = if self.choice == PaperChoice::A4 && self.orientation == SheetOrientation::Landscape { SheetOrientation::Landscape } else { SheetOrientation::Portrait };
+        ModalDialogController::paper_scale_note(SheetPaperSize::A4, ori)
+    }
+}
 
 pub(crate) fn render_paper_setup(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
-    egui::Window::new("ka_modal_paper_setup")
-        .title_bar(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .default_width(480.0)
-        .show(ctx, |ui| {
-            render_strata_modal_header(ui, "용지 설정 - Strata", open);
+    let draft_id = egui::Id::new("ka_paper_dialog_draft");
+    let pass = ctx.cumulative_pass_nr();
+    let mut draft = ctx.data(|d| d.get_temp::<PaperDialogDraft>(draft_id)).filter(|d| pass <= d.last_pass.saturating_add(1)).unwrap_or_else(|| PaperDialogDraft::new_default(pass));
+    draft.last_pass = pass;
+    let mut clear_draft = false;
+
+    egui::Window::new("ka_modal_paper_setup").title_bar(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).default_width(480.0).show(ctx, |ui| {
+            // target/cpp-ref/src/app/KaPaperDialog.cpp:45 — setWindowTitle("용지 설정")
+            render_strata_modal_header(ui, "용지 설정", open);
             ui.horizontal(|ui| {
                 ui.add_sized([48.0, 56.0], egui::Label::new(egui::RichText::new("용지").size(16.0)));
-                for (label, size_opt) in [("A4", Some(SheetPaperSize::A4)), ("A3", Some(SheetPaperSize::A3)), ("직접 입력", None)] {
-                    let selected = match size_opt {
-                        Some(sz) => !app.modals.custom_paper_mode && app.drawing.sheet.paper_size == sz,
-                        None => app.modals.custom_paper_mode,
-                    };
+                for (label, choice) in [("A4", PaperChoice::A4), ("A3", PaperChoice::A3), ("직접 입력", PaperChoice::Custom)] {
+                    let selected = draft.choice == choice;
                     let fill = if selected { Color32::from_rgb(214, 208, 194) } else { Color32::WHITE };
                     let stroke = if selected { Stroke::new(2.0, Color32::from_rgb(38, 37, 34)) } else { Stroke::new(1.0, Color32::from_rgb(225, 223, 215)) };
                     let btn = egui::Button::new(egui::RichText::new(label).size(15.0)).fill(fill).stroke(stroke).corner_radius(0.0).min_size(Vec2::new(112.0, 56.0));
                     if ui.add(btn).clicked() {
-                        if let Some(sz) = size_opt {
-                            app.modals.custom_paper_mode = false;
-                            let ori = app.drawing.sheet.orientation;
-                            app.drawing.set_paper_and_orientation(sz, ori);
-                        } else {
-                            app.modals.custom_paper_mode = true;
-                        }
+                        draft.choice = choice;
+                        draft.apply_preset();
                     }
                 }
             });
@@ -42,8 +63,9 @@ pub(crate) fn render_paper_setup(app: &mut StrataAppState, ctx: &egui::Context, 
             ui.horizontal(|ui| {
                 ui.add_sized([48.0, 74.0], egui::Label::new(egui::RichText::new("방향").size(16.0)));
                 for (label, ori, icon_sz) in [("세로", SheetOrientation::Portrait, Vec2::new(16.0, 26.0)), ("가로", SheetOrientation::Landscape, Vec2::new(28.0, 16.0))] {
-                    let selected = app.drawing.sheet.orientation == ori;
+                    let selected = draft.orientation == ori;
                     let (rect, resp) = ui.allocate_exact_size(Vec2::new(112.0, 74.0), egui::Sense::click());
+                    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), selected, label));
                     let p = ui.painter_at(rect);
                     p.rect_filled(rect, 0.0, if selected { Color32::from_rgb(214, 208, 194) } else { Color32::WHITE });
                     if selected {
@@ -54,62 +76,72 @@ pub(crate) fn render_paper_setup(app: &mut StrataAppState, ctx: &egui::Context, 
                     p.rect_stroke(icon_rect, 1.0, Stroke::new(1.5, Color32::from_rgb(65, 72, 80)), egui::StrokeKind::Middle);
                     p.text(Pos2::new(rect.center().x, rect.bottom() - 18.0), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(14.0), Color32::from_rgb(38, 37, 34));
                     if resp.clicked() {
-                        let sz = app.drawing.sheet.paper_size;
-                        app.drawing.set_paper_and_orientation(sz, ori);
+                        draft.orientation = ori;
+                        draft.apply_preset();
                     }
                 }
             });
             ui.add_space(12.0);
-            // KaPaperDialog.cpp:90-134 — 새 모양: the size that follows from the paper is a
-            // reading line on a dotted leader; the entry field stands in the same place and
-            // shows only under 「직접 입력」.
+            // target/cpp-ref/src/app/KaPaperDialog.cpp:44, 90-134, 154-175 — paperLook shows a reading line
+            // unless 「직접 입력」 is active; stock look keeps its disabled spin fields.
+            let custom = draft.choice == PaperChoice::Custom;
             for (dim_label, is_width) in [("가로", true), ("세로", false)] {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(dim_label).size(16.0));
-                    if app.modals.custom_paper_mode {
-                        let spin = if is_width {
-                            egui::DragValue::new(&mut app.drawing.sheet.width_mm)
-                        } else {
-                            egui::DragValue::new(&mut app.drawing.sheet.height_mm)
-                        };
-                        let _ = ui.add(
-                            spin.range(50.0..=2000.0)
-                                .speed(1.0)
-                                .fixed_decimals(1)
-                                .suffix(" mm"),
-                        );
+                    if !app.paper_look || custom {
+                        let target = if is_width { &mut draft.width_mm } else { &mut draft.height_mm };
+                        let _ = ui.add_enabled(custom, egui::DragValue::new(target).range(50.0..=2000.0).speed(1.0).fixed_decimals(1).suffix(" mm"));
                     } else {
+                        let val_mm = if is_width { draft.width_mm } else { draft.height_mm };
                         ui.label(egui::RichText::new("........................................................................").color(Color32::from_rgb(150, 148, 140)));
-                        let val_mm = if is_width {
-                            app.drawing.sheet.width_mm
-                        } else {
-                            app.drawing.sheet.height_mm
-                        };
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.label(egui::RichText::new("mm").size(15.0).color(Color32::from_rgb(94, 93, 89)));
-                            ui.label(egui::RichText::new(ModalDialogController::plain_mm(val_mm)).strong().size(15.0));
+                            ui.label(egui::RichText::new(ModalDialogController::plain_mm(val_mm)).monospace().strong().size(15.0).color(Color32::from_rgb(28, 25, 23)));
                         });
                     }
                 });
                 ui.add_space(8.0);
             }
-            ui.label(egui::RichText::new(ModalDialogController::paper_scale_note(
-                app.drawing.sheet.paper_size,
-                app.drawing.sheet.orientation,
-            )).size(14.5).color(Color32::from_rgb(38, 37, 34)));
+            ui.label(egui::RichText::new(draft.scale_note()).size(14.5).color(Color32::from_rgb(38, 37, 34)));
             ui.add_space(12.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let cancel_btn = egui::Button::new(egui::RichText::new("취소").size(14.5)).fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(140, 138, 130))).corner_radius(6.0).min_size(Vec2::new(76.0, 38.0));
-                if ui.add(cancel_btn).clicked() { app.modals.active = None; }
+                if ui.add(cancel_btn).clicked() {
+                    app.modals.active = None;
+                    clear_draft = true;
+                }
                 let ok_btn = egui::Button::new(egui::RichText::new("용지 만들기").color(Color32::WHITE).strong().size(14.5)).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(134.0, 38.0));
                 if ui.add(ok_btn).clicked() {
+                    // target/cpp-ref/src/app/MainWindowExport.cpp:216-255 + KaDrawingStudio.cpp:447-454, 555-559
+                    let was_open = app.open_studio_tabs.contains(&MainTab::Drawing);
+                    app.modals.custom_paper_mode = custom;
+                    match draft.choice {
+                        PaperChoice::A4 => app.drawing.set_paper_and_orientation(SheetPaperSize::A4, draft.orientation),
+                        PaperChoice::A3 => app.drawing.set_paper_and_orientation(SheetPaperSize::A3, draft.orientation),
+                        PaperChoice::Custom => {
+                            app.drawing.sheet.reset_paper_mm(draft.width_mm, draft.height_mm);
+                            app.drawing.last_findings = ChecklistEngine::evaluate_sheet(&app.drawing.sheet, SubmitCrs::Epsg5179, true);
+                        }
+                    }
                     app.open_studio_tab(MainTab::Drawing);
+                    app.hide_sub_tools();
+                    app.home_map.draw_guide_message = Some(if was_open {
+                        let (w, h) = (app.drawing.sheet.width_mm.round() as i64, app.drawing.sheet.height_mm.round() as i64);
+                        format!("용지 전환 완료: {w}×{h} mm — 기존 지도 범위와 배치가 유지되었습니다.")
+                    } else {
+                        app.drawing.sheet_center = None;
+                        StrataAppState::DRAWING_STUDIO_WELCOME.to_owned()
+                    });
                     app.modals.active = None;
-                    app.home_map.draw_guide_message =
-                        Some(StrataAppState::DRAWING_STUDIO_WELCOME.to_owned());
+                    clear_draft = true;
                 }
             });
         });
+    if clear_draft || !*open {
+        ctx.data_mut(|d| d.remove::<PaperDialogDraft>(draft_id));
+    } else {
+        ctx.data_mut(|d| d.insert_temp(draft_id, draft));
+    }
 }
 
 pub(crate) fn render_account_settings(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
@@ -258,3 +290,7 @@ pub(crate) fn render_account_settings(app: &mut StrataAppState, ctx: &egui::Cont
             });
         });
 }
+
+#[cfg(test)]
+#[path = "modal_paper_account_tests.rs"]
+mod tests;
