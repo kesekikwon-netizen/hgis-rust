@@ -21,11 +21,6 @@ fn sentence(ui: &mut egui::Ui, text: &str) {
 
 impl StrataAppState {
     pub(crate) fn render_ri_attribute_card(&mut self, ui: &mut egui::Ui) {
-        // C++ `KaFeatureCard.cpp:202-278` (`d7afcc8`) — 시추공을 고르면 주상도 층서 카드를 유구 카드 위에 먼저 보여 준다.
-        if self.right_inspector.borehole.has_borehole_fields() {
-            crate::borehole_card::render_borehole_card(ui, &self.right_inspector.borehole);
-            ui.add_space(6.0);
-        }
         self.drop_card_if_gone();
         let drawing = self.active_tool == strata_canvas2d::map_tools::MapToolKind::DrawPolygon;
         let Some(view) = self.card_view_now() else {

@@ -21,8 +21,6 @@ pub fn cpp_icon_id(label: &str) -> Option<&'static str> {
         "지적" => "cadastral",
         "수치지형" => "topo_download",
         "유산" => "heritage",
-        // C++ `KaIconsMockupMap.cpp:41` — {"borehole", "lucide/layers"} (d7afcc8 신규)
-        "시추" => "borehole",
         "지형" => "contour",
         "DEM" => "dem",
         "등고선" => "survey_contour",
@@ -56,8 +54,6 @@ pub fn cpp_ribbon_tooltip(label: &str) -> &'static str {
         "지적" => "조사구역 주변 5km 지적도를 받아 경계선과 지번을 표시합니다. 우클릭: 계정·선 색 설정",
         "수치지형" => "HGIS 안에서 국토지리정보원에 로그인하고 수치지형도를 받습니다. 우클릭: 받아 둔 폴더 불러오기",
         "유산" => "조사구역이 속한 시·군의 국가유산 자료를 인트라넷에서 받아 참조 지도로 올립니다",
-        // C++ `MainWindowRibbon.cpp:537` setToolTip 원문 1:1 (d7afcc8 신규)
-        "시추" => "시추자료를 별도로 받아 5가지 지반·시추 GIS 도면(주상도 마커·충적층 등층후선·성토층·기반암·지하수위)을 만듭니다",
         "지형" => "등고·음영 지형도를 켭니다. 다시 누르면 숨깁니다",
         "DEM" => "고도를 색으로 보여 줍니다. 받는 자료는 지표모델(DSM) 30m · Copernicus라 나무·건물 높이가 섞여 있습니다.\n미세지형 판독에는 우클릭 → 「국토지리원 DEM 불러오기」를 쓰세요. 다시 누르면 숨깁니다. 우클릭: 상세 메뉴",
         "등고선" => "측량 DXF·엑셀 좌표로 등고선과 해발 색 구간을 만듭니다",

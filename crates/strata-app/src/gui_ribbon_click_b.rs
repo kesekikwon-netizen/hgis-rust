@@ -9,13 +9,6 @@ impl StrataAppState {
     /// 뒤쪽 라벨들.
     pub(crate) fn handle_ribbon_click_b(&mut self, label: &str) {
         match label {
-            // C++ `MainWindowRibbon.cpp:532-547` btnBoreholeFetch (`d7afcc8`) —
-            // 조사 폴더가 없으면 「먼저 조사 폴더를 준비하세요」 안내만 남기고 창을 열지 않는다
-            // (`KaBoreholeDialog.cpp:66-70`).
-            "시추" => {
-                self.active_tab = MainTab::Map;
-                let _ = self.open_borehole_dialog();
-            }
             // C++ MainWindowOverlay.cpp:243-271 toggleTerrainMap. 이미 있는 「지형맵」 은
             // :247 toggleExistingOverlay(:225-240)가 껐다 켰다 하고 `지형맵를 껐습니다.` /
             // `지형맵를 다시 켰습니다.` 를 내며, 처음 올릴 때만 :267 의

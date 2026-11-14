@@ -255,7 +255,6 @@ impl StrataAppState {
         self.render_feature_form(ctx);
         self.render_feature_record(ctx);
         self.render_rename_layer(ctx);
-        self.render_borehole_dialog_frame(ctx);
         central_rect
     }
 }

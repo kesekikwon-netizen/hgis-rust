@@ -6,16 +6,12 @@ pub const UX_RIBBON_HEIGHT: f32 = 91.0;
 pub const UX_VIEW_TAB_BAR_HEIGHT: f32 = 51.0;
 pub const UX_RIBBON_BUTTON_SIZE: Vec2 = Vec2::new(69.0, 100.0);
 
-/// C++ `MainWindowRibbon.cpp:229-235` 7그룹과 각 그룹의 단추 순서 1:1.
-///
-/// `d7afcc8` 은 「자료 받기」에 다섯 번째 단추 「시추」(`btnBoreholeFetch`)를 더했고,
-/// 그 자리를 만들려고 리본 칩 최소 너비를 40 → 36 으로 10% 줄였다. 마스터플랜 Chapter 04
-/// 목업도 「자료 받기 (5종 완성)」 = DEM·지적·수치지형·유산·시추, 「배경 지도」 =
-/// 지형·등고선·토양·고지형·지질·수계·옛 지도 로 같다.
+/// Seven ribbon groups (target/cpp-ref/src/app/MainWindowRibbon.cpp:248-254) and their chip labels;
+/// group 「자료 받기」 (:250) holds DEM (:402), 지적 (:472), 수치지형 (:385, :484), 유산 (:544, :550).
 pub const UX_RIBBON_GROUPS: [(&str, &[&str]); 7] = [
     ("조사", &["새 조사", "열기", "저장", "다른 이름"]),
     ("기록", &["선택", "측거", "그리기", "시굴격자", "버퍼"]),
-    ("자료 받기", &["DEM", "지적", "수치지형", "유산", "시추"]),
+    ("자료 받기", &["DEM", "지적", "수치지형", "유산"]),
     (
         "배경 지도",
         &["지형", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"],
@@ -24,8 +20,7 @@ pub const UX_RIBBON_GROUPS: [(&str, &[&str]); 7] = [
     ("내보내기", &["도면", "인쇄", "GeoTIFF", "검수·제출"]),
     ("기타", &["더보기"]),
 ];
-/// `KaTheme.h:97-98` `ribbonChipWidth = 36` / `40` — d7afcc8 의 10% 축소 배율.
-/// 칩 폭 표를 이 배율로 줄여 「시추」가 더해져도 1줄 안에 들어오게 한다.
+/// Retained scale factor; target/cpp-ref/src/app/KaTheme.h:97-98 defines ribbonChipWidth = 40 (restored in a separate order).
 pub const RIBBON_CHIP_SCALE: f32 = 36.0 / 40.0;
 /// `439-449` — 한 칩의 기준 폭(px, 12.5px 라벨 실측값). 배율을 곱하기 전 값이다.
 #[must_use]

@@ -39,7 +39,6 @@ impl RightInspectorState {
             control_z: 48.50,
             section_id: "A-A'".to_owned(),
             control_csv_path: String::new(),
-            borehole: crate::borehole_card::BoreholeCardData::default(),
         }
     }
 

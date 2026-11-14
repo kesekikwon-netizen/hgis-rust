@@ -94,7 +94,4 @@ pub struct RightInspectorState {
     pub section_id: String,
     /// KaControlCsvBox.cpp — CSV 경로
     pub control_csv_path: String,
-    /// C++ `KaFeatureCard.cpp:202-278` (`d7afcc8`) — 선택한 시추공의 주상도 층서 카드.
-    /// `hole_code` 가 비면 시추 카드를 그리지 않는다(유구 카드 그대로).
-    pub borehole: crate::borehole_card::BoreholeCardData,
 }

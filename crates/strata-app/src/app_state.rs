@@ -122,8 +122,6 @@ pub struct StrataAppState {
     pub drawing: DrawingTabState,
     pub accounts: AccountDialogState,
     pub modals: ModalDialogController,
-    /// C++ `KaBoreholeDialog` 창 상태 (`d7afcc8`). 자료 받기의 「시추」 단추가 연다.
-    pub borehole_dialog: crate::dialogs_borehole::BoreholeDialogController,
 }
 
 #[cfg(test)]

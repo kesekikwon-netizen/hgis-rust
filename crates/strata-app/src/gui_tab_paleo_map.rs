@@ -22,12 +22,6 @@ impl StrataAppState {
             let painter = ui.painter_at(map_rect);
             painter.rect_filled(map_rect, 4.0, Color32::from_rgb(242, 240, 234));
 
-            // C++ `KaBoreholeDialog` 의 「적재된 시추공으로 선택 도면 다시 생성」 결과를
-            // 실제로 칠한다. 이 블록이 없으면 파일만 만들어지고 화면은 비어 있다.
-            let borehole_painted = crate::borehole_map_painter::render_borehole_map_overlay(
-                self, ctx, &painter, map_rect,
-            );
-
             if let Some(ref out) = self.paleo_3d.last_paleo_output {
                 let w = out.transform.width;
                 let h = out.transform.height;
@@ -217,26 +211,6 @@ impl StrataAppState {
                         );
                     }
                 }
-            }
-
-            // 칠한 시추 도면 표제를 지도 위에 남긴다(C++ 은 범례에 레이어명이 뜬다).
-            if let Some(title) = borehole_painted {
-                let chip = Rect::from_min_size(
-                    Pos2::new(map_rect.left() + 10.0, map_rect.top() + 8.0),
-                    Vec2::new(320.0, 20.0),
-                );
-                painter.rect_filled(
-                    chip,
-                    4.0,
-                    Color32::from_rgba_unmultiplied(0x92, 0x40, 0x0E, 232),
-                );
-                painter.text(
-                    Pos2::new(chip.left() + 7.0, chip.center().y),
-                    egui::Align2::LEFT_CENTER,
-                    title,
-                    egui::FontId::proportional(11.0),
-                    Color32::WHITE,
-                );
             }
 
             ui.add_space(4.0);

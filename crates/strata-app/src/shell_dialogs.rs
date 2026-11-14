@@ -1,54 +1,10 @@
-//! 시추 창·닫기 확인·끌어놓기·시추 도면 재생성.
-//!
-//! `gui_shell.rs` 가 300줄을 넘어 옮겼다. 본문은 그대로다.
+//! Dropped files (target/cpp-ref/src/app/MainWindowFiles.cpp:259-289) and close prompt
+//! (target/cpp-ref/src/app/KaClosePrompt.cpp).
 use eframe::egui::{self, Color32, Vec2};
 use crate::app_state::{MainTab, StrataAppState};
-use crate::dialogs_modal::{ActiveModalDialog};
+use crate::dialogs_modal::ActiveModalDialog;
 
 impl StrataAppState {
-    /// C++ `KaBoreholeDialog::openBoreholeMapDialog` 의 매 프레임 화면 (`d7afcc8`).
-    /// 창은 비모달이라 다른 작업을 막지 않는다. 세 단추의 동작은 여기서 이어 받는다.
-    /// F1c-1: the rebuild button is disabled until P1; only two actions arrive here.
-    pub(crate) fn render_borehole_dialog_frame(&mut self, ctx: &egui::Context) {
-        if !self.borehole_dialog.open {
-            return;
-        }
-        let loaded_count = self.paleo_3d.declustered_borehole_count;
-        let can_run = self.survey_path.is_some();
-        let mut open = true;
-        let action = crate::dialogs_borehole::render_borehole_dialog(
-            ctx,
-            &mut self.borehole_dialog.state,
-            loaded_count,
-            can_run,
-            &mut open,
-        );
-        if !open {
-            self.borehole_dialog.open = false;
-            return;
-        }
-        let Some(action) = action else {
-            return;
-        };
-        use crate::dialogs_borehole::BoreholeDialogAction;
-        match action {
-            // C++ 는 반경을 넘겨 고지형 자료 받기를 시작한다(`MainWindowRibbon.cpp:541-544`).
-            BoreholeDialogAction::FetchAndGenerate { radius_meters } => {
-                self.paleo_3d.source_dl_radius_km = f64::from(radius_meters) / 1000.0;
-                self.paleo_3d.radius_km = f64::from(radius_meters) / 1000.0;
-                self.status_bar_hint = format!(
-                    "시추자료를 반경 {:.0} km로 받아 5가지 지반·시추 GIS 도면을 만들 준비를 합니다.",
-                    self.paleo_3d.source_dl_radius_km
-                );
-                self.open_studio_tab(MainTab::Paleo);
-            }
-            // 옵션을 읽고 도면 스튜디오로 간다(`KaBoreholeDialog.cpp:182-186`).
-            BoreholeDialogAction::OpenLayout => {
-                self.borehole_dialog.open = false;
-                self.open_studio_tab(MainTab::Drawing);
-            }
-        }
-    }
     /// `MainWindowFiles.cpp:259-289` `tryAddDroppedPaths` — 창에 끌어 놓은 파일을
     /// 확장자에 따라 레이어로 올린다. CAD 도면은 안내 창을 먼저 띄운다.
     pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) {
@@ -184,7 +140,3 @@ impl StrataAppState {
             });
     }
 }
-
-#[cfg(test)]
-#[path = "shell_dialogs_tests.rs"]
-mod tests;

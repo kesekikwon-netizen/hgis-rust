@@ -5,14 +5,10 @@
     clippy::drain_collect
 )]
 pub mod app_state;
-pub mod borehole_card;
-pub mod borehole_map_painter;
 pub mod cadastral_download_ui;
 pub mod debug_control;
 pub mod dem_download_ui;
 pub mod dialogs_account;
-pub mod dialogs_borehole;
-pub mod dialogs_borehole_spec;
 pub mod dialogs_download_print;
 pub mod dialogs_modal;
 pub mod gui_layer_panel;

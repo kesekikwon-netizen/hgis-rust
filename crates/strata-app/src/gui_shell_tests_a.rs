@@ -160,8 +160,7 @@ fn test_u1_ux_layout_spec_1600x900_skeleton_ribbon_and_3_column_split() {
     assert_eq!(UX_RIBBON_BUTTON_SIZE, egui::Vec2::new(69.0, 100.0));
     assert_eq!(UX_RIBBON_HEIGHT, 91.0);
     assert_eq!(UX_VIEW_TAB_BAR_HEIGHT, 51.0);
-    // `d7afcc8` 은 「자료 받기」에 「시추」를 더하고 칩 최소폭을 40 → 36 으로 줄였다.
-    // 그룹 폭은 이제 칩 폭 표에서 계산되므로, 표가 1줄 리본 안에 들어오는지만 확인한다.
+    // Group widths are computed from the chip width table and fit in the one-row ribbon.
     let (xs, widths) = (ux_ribbon_group_xs(), ux_ribbon_group_widths());
     assert!(xs.windows(2).all(|w| w[0] < w[1]), "group x must ascend");
     assert!(
@@ -172,7 +171,7 @@ fn test_u1_ux_layout_spec_1600x900_skeleton_ribbon_and_3_column_split() {
     assert_eq!(UX_RIBBON_GROUPS[2].0, "자료 받기");
     assert_eq!(
         UX_RIBBON_GROUPS[2].1,
-        &["DEM", "지적", "수치지형", "유산", "시추"][..]
+        &["DEM", "지적", "수치지형", "유산"][..]
     );
     assert_eq!(UX_STATUS_BAR_Y, 839.0);
     assert_eq!(UX_STATUS_BAR_HEIGHT, 32.0);
@@ -219,4 +218,15 @@ fn test_u1_ux_layout_spec_1600x900_skeleton_ribbon_and_3_column_split() {
         map_w_1920 > map_w_1600 + 250.0,
         "center map must expand when window widens: 1600->{map_w_1600}, 1920->{map_w_1920}"
     );
+}
+
+// Order F1f-1 — target/cpp-ref/src/app/MainWindowRibbon.cpp:250,402,472,484,550 has no borehole chip.
+#[test]
+fn fetch_ribbon_group_has_four_chips_without_borehole() {
+    assert_eq!(UX_RIBBON_GROUPS[2].0, "자료 받기");
+    assert_eq!(UX_RIBBON_GROUPS[2].1, &["DEM", "지적", "수치지형", "유산"][..]);
+    assert!(UX_RIBBON_GROUPS.iter().flat_map(|(_, items)| items.iter()).all(|l| *l != "시추"));
+    assert_eq!(crate::ribbon_icons::cpp_icon_id("시추"), None);
+    assert_eq!(crate::ribbon_icons::cpp_ribbon_tooltip("시추"), "");
+    assert!(crate::ribbon_icon_svg::svg_parts("borehole").is_none());
 }
