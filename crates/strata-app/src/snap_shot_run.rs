@@ -81,12 +81,9 @@ impl StrataAppState {
             return;
         };
         if let Some(action) = step.action.clone() {
-            if matches!(
-                action.as_str(),
-                "@gauge=running" | "@gauge=recovering" | "@gauge=stopped" | "@gauge=two"
-            ) {
+            if let Some(preset) = action.strip_prefix("@gauge=") {
                 let now = ctx.input(|i| i.time);
-                self.download_jobs.apply_snap_preset(&action["@gauge=".len()..], now);
+                self.download_jobs.apply_snap_preset(preset, now);
             } else {
                 self.snap_apply_action(&action);
             }
@@ -141,10 +138,6 @@ impl StrataAppState {
             "@tab_drawing" => self.open_studio_tab(crate::app_state::MainTab::Drawing),
             "@tab_paleo" => self.open_studio_tab(crate::app_state::MainTab::Paleo),
             "@tab_terrain3d" => self.open_studio_tab(crate::app_state::MainTab::Terrain3d),
-            // Picture-only status-bar gauge presets (order DL1a).
-            "@gauge=running" | "@gauge=recovering" | "@gauge=stopped" | "@gauge=two" => {
-                self.download_jobs.apply_snap_preset(&action["@gauge=".len()..], 0.0);
-            }
             // 뒤에서 받는 지적 타일이 올 때까지 한 단계 더 기다린다.
             "@wait" => {}
             _ if action.starts_with("@goto=") => self.snap_goto(&action["@goto=".len()..]),

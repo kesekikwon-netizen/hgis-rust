@@ -1,12 +1,39 @@
 //! Popup above the status bar listing every download job and full stop reasons
 //! (`docs/RUST_PLAN.md` §2.8; slim bar precedent in `target/cpp-ref/src/app/KaProgressPlate.cpp:15-24`).
 
-use eframe::egui::{self, Align, Layout, Pos2, Rect, RichText};
+use eframe::egui::{self, Align, Color32, FontId, Layout, Pos2, Rect, RichText};
 
 use crate::app_state::StrataAppState;
 use crate::download_gauge::{job_fraction, paint_cancel_x, paint_slim_bar, tok, POPUP_BAR_WIDTH};
 use crate::download_jobs::{DownloadJob, DownloadJobState};
-use crate::status_bar_text::gauge_job_text;
+use crate::status_bar_text::{gauge_job_text, GaugeMultiSummary};
+
+pub(super) fn multi_summary_job(
+    summary: &GaugeMultiSummary,
+    warn_color: Color32,
+) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let font_id = FontId::proportional(11.5);
+    if let Some(pre) = &summary.normal_prefix {
+        job.append(
+            pre,
+            0.0,
+            egui::TextFormat {
+                font_id: font_id.clone(),
+                color: Color32::from_rgb(55, 54, 50),
+                ..Default::default()
+            },
+        );
+    }
+    if let Some(warn) = &summary.warn_suffix {
+        job.append(
+            warn,
+            0.0,
+            egui::TextFormat { font_id, color: warn_color, ..Default::default() },
+        );
+    }
+    job
+}
 
 fn estimate_popup_height(jobs: &[DownloadJob]) -> f32 {
     let mut h = 20.0_f32;
@@ -142,3 +169,7 @@ impl StrataAppState {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "download_gauge_popup_tests.rs"]
+mod tests;

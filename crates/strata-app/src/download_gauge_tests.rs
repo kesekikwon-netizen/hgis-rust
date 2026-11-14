@@ -120,7 +120,7 @@ fn empty_list_matches_baseline_and_long_job_keeps_right_cluster_fixed_at_1280px(
     // Add a job with a very long title and a very long left status message at 1280 px width.
     h.app.status_bar_hint =
         "도형을 넣었습니다 (조사구역, 1개). Ctrl+Z로 되돌리기 · 「저장」(Ctrl+S)으로 파일에 씁니다".to_owned();
-    let _ = h.app.download_jobs.add_job(
+    let (_id, _handle) = h.app.download_jobs.add_job(
         "국가유산청주변유적장거리공간자료전체목록내려받기",
         DownloadJobState::Running {
             fraction: Some(0.62),
@@ -148,7 +148,7 @@ fn empty_list_matches_baseline_and_long_job_keeps_right_cluster_fixed_at_1280px(
 #[test]
 fn running_job_shows_title_4px_bar_62_percent_and_cancel_sets_flag_only() {
     let mut h = BarHarness::new_1280();
-    let (id, _) = h.app.download_jobs.add_job(
+    let (id, _handle) = h.app.download_jobs.add_job(
         "DEM",
         DownloadJobState::Running {
             fraction: Some(0.62),

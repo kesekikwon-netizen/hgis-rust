@@ -46,52 +46,38 @@ pub(crate) fn gauge_job_text(job: &DownloadJob, now: f64, max_title_chars: usize
     match &job.state {
         DownloadJobState::Waiting => {
             let full_label = format!("{} 기다리는 중", job.title);
-            GaugeJobText {
-                bar_label: format!("{short_title} 기다리는 중"),
-                tooltip: title_cut.then(|| full_label.clone()),
-                full_label,
-                percent_text: None,
-                warning: false,
-            }
+            let tooltip = title_cut.then(|| full_label.clone());
+            GaugeJobText { bar_label: format!("{short_title} 기다리는 중"), full_label, percent_text: None, tooltip, warning: false }
         }
         DownloadJobState::Running { fraction, stage } => {
             let percent_text = format_gauge_percent(*fraction);
             if let Some(st) = stage.as_deref().filter(|s| !s.trim().is_empty()) {
                 let (short_stage, stage_cut) = cut_with_ellipsis(st, max_title_chars + 2);
                 let full_label = format!("{} · {st}", job.title);
-                GaugeJobText {
-                    bar_label: format!("{short_title} · {short_stage}"),
-                    tooltip: (title_cut || stage_cut).then(|| full_label.clone()),
-                    full_label,
-                    percent_text,
-                    warning: false,
-                }
+                let tooltip = (title_cut || stage_cut).then(|| full_label.clone());
+                GaugeJobText { bar_label: format!("{short_title} · {short_stage}"), full_label, percent_text, tooltip, warning: false }
             } else {
                 let full_label = format!("{} 받는 중", job.title);
-                GaugeJobText {
-                    bar_label: format!("{short_title} 받는 중"),
-                    tooltip: title_cut.then(|| full_label.clone()),
-                    full_label,
-                    percent_text,
-                    warning: false,
-                }
+                let tooltip = title_cut.then(|| full_label.clone());
+                GaugeJobText { bar_label: format!("{short_title} 받는 중"), full_label, percent_text, tooltip, warning: false }
             }
         }
         DownloadJobState::Recovering { attempt, reason, next_attempt_at } => {
             let full_label = format!("{} 다시 받는 중 · {attempt}번째", job.title);
-            let secs = (next_attempt_at - now).max(0.0).ceil() as u64;
-            let retry_tip = if reason.trim().is_empty() {
-                format!("{secs}초 뒤 다시 받습니다.")
-            } else {
-                format!("{reason} {secs}초 뒤 다시 받습니다.")
+            let rem = *next_attempt_at - now;
+            let secs = if rem.is_finite() && rem > 0.0 { (rem.ceil() as u64).max(1) } else { 0 };
+            let body = match (secs > 0, !reason.trim().is_empty()) {
+                (true, true) => format!("{reason} {secs}초 뒤 다시 받습니다."),
+                (true, false) => format!("{secs}초 뒤 다시 받습니다."),
+                (false, true) => reason.clone(),
+                (false, false) => full_label.clone(),
             };
-            GaugeJobText {
-                bar_label: format!("{short_title} 다시 받는 중 · {attempt}번째"),
-                tooltip: Some(if title_cut { format!("{full_label}\n{retry_tip}") } else { retry_tip }),
-                full_label,
-                percent_text: None,
-                warning: false,
-            }
+            let tooltip = Some(if title_cut && !(secs == 0 && reason.trim().is_empty()) {
+                format!("{full_label}\n{body}")
+            } else {
+                body
+            });
+            GaugeJobText { bar_label: format!("{short_title} 다시 받는 중 · {attempt}번째"), full_label, percent_text: None, tooltip, warning: false }
         }
         DownloadJobState::Done { result } => {
             let full_label = format!("{} 받음", job.title);
@@ -101,45 +87,66 @@ pub(crate) fn gauge_job_text(job: &DownloadJob, now: f64, max_title_chars: usize
                 (false, true) => Some(result.clone()),
                 (false, false) => None,
             };
-            GaugeJobText {
-                bar_label: format!("{short_title} 받음"),
-                full_label,
-                percent_text: None,
-                tooltip,
-                warning: false,
-            }
+            GaugeJobText { bar_label: format!("{short_title} 받음"), full_label, percent_text: None, tooltip, warning: false }
         }
         DownloadJobState::Cancelled => {
             let full_label = format!("{} 받기를 취소했습니다.", job.title);
-            GaugeJobText {
-                bar_label: format!("{short_title} 받기를 취소했습니다."),
-                tooltip: title_cut.then(|| full_label.clone()),
-                full_label,
-                percent_text: None,
-                warning: false,
-            }
+            let tooltip = title_cut.then(|| full_label.clone());
+            GaugeJobText { bar_label: format!("{short_title} 받기를 취소했습니다."), full_label, percent_text: None, tooltip, warning: false }
         }
         DownloadJobState::Stopped { code, reason } => {
-            let full_label = format!("{} 받지 못함 · {code}", job.title);
-            let tooltip = Some(if title_cut { format!("{full_label}\n{reason}") } else { reason.clone() });
-            GaugeJobText {
-                bar_label: format!("{short_title} 받지 못함 · {code}"),
-                full_label,
-                percent_text: None,
-                tooltip,
-                warning: !code.is_info(),
-            }
+            let (bar_label, full_label) = if code.is_info() {
+                (format!("{short_title} · 이 범위에는 자료가 없습니다 · {code}"), format!("{} · 이 범위에는 자료가 없습니다 · {code}", job.title))
+            } else {
+                (format!("{short_title} 받지 못함 · {code}"), format!("{} 받지 못함 · {code}", job.title))
+            };
+            let tooltip = match (title_cut, !reason.trim().is_empty()) {
+                (true, true) => Some(format!("{full_label}\n{reason}")),
+                (true, false) => Some(full_label.clone()),
+                (false, true) => Some(reason.clone()),
+                (false, false) => None,
+            };
+            GaugeJobText { bar_label, full_label, percent_text: None, tooltip, warning: !code.is_info() }
         }
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GaugeMultiSummary {
+    pub(crate) normal_prefix: Option<String>,
+    pub(crate) warn_suffix: Option<String>,
+}
+
+impl GaugeMultiSummary {
+    #[must_use]
+    pub(crate) fn full_text(&self) -> String {
+        format!(
+            "{}{}",
+            self.normal_prefix.as_deref().unwrap_or_default(),
+            self.warn_suffix.as_deref().unwrap_or_default()
+        )
+    }
+}
+
 #[must_use]
-pub(crate) fn gauge_multi_summary_text(jobs: &[DownloadJob]) -> Option<String> {
+pub(crate) fn gauge_multi_summary(jobs: &[DownloadJob]) -> Option<GaugeMultiSummary> {
     if jobs.len() < 2 {
         return None;
     }
     let n = jobs.iter().filter(|j| j.is_unfinished()).count();
-    (n > 0).then(|| format!("받는 중 {n}건"))
+    let m = jobs
+        .iter()
+        .filter(|j| matches!(j.state, DownloadJobState::Stopped { code, .. } if !code.is_info()))
+        .count();
+    match (n > 0, m > 0) {
+        (true, true) => Some(GaugeMultiSummary {
+            normal_prefix: Some(format!("받는 중 {n}건 · ")),
+            warn_suffix: Some(format!("멈춤 {m}건")),
+        }),
+        (true, false) => Some(GaugeMultiSummary { normal_prefix: Some(format!("받는 중 {n}건")), warn_suffix: None }),
+        (false, true) => Some(GaugeMultiSummary { normal_prefix: None, warn_suffix: Some(format!("멈춤 {m}건")) }),
+        (false, false) => None,
+    }
 }
 
 /// 96 dpi 화면에서 1 m 의 점 수(QGIS 축척 = 점당 m × 96 / 0.0254).

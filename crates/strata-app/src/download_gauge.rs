@@ -9,10 +9,11 @@ use eframe::egui::{self, Color32, FontId, Pos2, Rect, RichText, Sense, Vec2};
 
 use crate::app_state::StrataAppState;
 use crate::download_jobs::{DownloadJob, DownloadJobState};
-use crate::status_bar_text::{gauge_job_text, gauge_multi_summary_text};
+use crate::status_bar_text::{gauge_job_text, gauge_multi_summary};
 
 #[path = "download_gauge_popup.rs"]
 mod download_gauge_popup;
+use download_gauge_popup::multi_summary_job;
 
 /// Slim download bar dimensions (`KaProgressPlate.cpp:19`).
 pub(crate) const GAUGE_BAR_WIDTH: f32 = 120.0;
@@ -113,12 +114,14 @@ impl StrataAppState {
                 }
                 w += 16.0 + 8.0;
             }
-        } else if let Some(unfin) = jobs.iter().find(|j| j.is_unfinished()) {
-            let summary = gauge_multi_summary_text(jobs).unwrap_or_default();
-            let jt = gauge_job_text(unfin, now, max_title_chars);
-            w += text_w(&summary, 11.5) + 8.0 + GAUGE_BAR_WIDTH + 8.0;
-            if let Some(pct) = &jt.percent_text {
-                w += text_w(pct, 11.0) + 8.0;
+        } else if let Some(summary) = gauge_multi_summary(jobs) {
+            w += text_w(&summary.full_text(), 11.5) + 8.0;
+            if let Some(unfin) = jobs.iter().find(|j| j.is_unfinished()) {
+                let jt = gauge_job_text(unfin, now, max_title_chars);
+                w += GAUGE_BAR_WIDTH + 8.0;
+                if let Some(pct) = &jt.percent_text {
+                    w += text_w(pct, 11.0) + 8.0;
+                }
             }
         } else {
             let pick = jobs
@@ -201,35 +204,40 @@ impl StrataAppState {
                     let _ = self.download_jobs.request_cancel(job.id);
                 }
             }
-        } else if let Some(unfin) = self.download_jobs.jobs().iter().find(|j| j.is_unfinished()).cloned() {
-            let summary = gauge_multi_summary_text(self.download_jobs.jobs()).unwrap_or_default();
-            let jt = gauge_job_text(&unfin, now, max_title_chars);
+        } else if let Some(summary) = gauge_multi_summary(self.download_jobs.jobs()) {
+            let unfin = self.download_jobs.jobs().iter().find(|j| j.is_unfinished()).cloned();
             let mut sum_resp = ui.add(
-                egui::Button::new(RichText::new(&summary).size(11.5).color(Color32::from_rgb(55, 54, 50))).frame(false),
+                egui::Button::new(multi_summary_job(&summary, tok(self.theme.warn))).frame(false),
             );
-            if let Some(tip) = &jt.tooltip {
-                sum_resp = sum_resp.on_hover_text(tip);
-            }
-            toggled |= sum_resp.clicked();
-            gauge_rect = sum_resp.rect;
+            if let Some(unfin) = unfin {
+                let jt = gauge_job_text(&unfin, now, max_title_chars);
+                if let Some(tip) = &jt.tooltip {
+                    sum_resp = sum_resp.on_hover_text(tip);
+                }
+                toggled |= sum_resp.clicked();
+                gauge_rect = sum_resp.rect;
 
-            let bar_resp = paint_slim_bar(
-                ui,
-                GAUGE_BAR_WIDTH,
-                job_fraction(&unfin),
-                now,
-                tok(self.theme.border),
-                tok(self.theme.accent),
-            );
-            toggled |= bar_resp.clicked();
-            gauge_rect = gauge_rect.union(bar_resp.rect);
-
-            if let Some(pct) = &jt.percent_text {
-                let pct_resp = ui.add(
-                    egui::Button::new(RichText::new(pct).size(11.0).color(Color32::from_rgb(75, 74, 70))).frame(false),
+                let bar_resp = paint_slim_bar(
+                    ui,
+                    GAUGE_BAR_WIDTH,
+                    job_fraction(&unfin),
+                    now,
+                    tok(self.theme.border),
+                    tok(self.theme.accent),
                 );
-                toggled |= pct_resp.clicked();
-                gauge_rect = gauge_rect.union(pct_resp.rect);
+                toggled |= bar_resp.clicked();
+                gauge_rect = gauge_rect.union(bar_resp.rect);
+
+                if let Some(pct) = &jt.percent_text {
+                    let pct_resp = ui.add(
+                        egui::Button::new(RichText::new(pct).size(11.0).color(Color32::from_rgb(75, 74, 70))).frame(false),
+                    );
+                    toggled |= pct_resp.clicked();
+                    gauge_rect = gauge_rect.union(pct_resp.rect);
+                }
+            } else {
+                toggled |= sum_resp.clicked();
+                gauge_rect = sum_resp.rect;
             }
         } else {
             let pick = self

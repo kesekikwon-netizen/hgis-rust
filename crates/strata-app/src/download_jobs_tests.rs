@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::*;
 use crate::status_bar_text::{
-    cut_with_ellipsis, format_gauge_percent, gauge_job_text, gauge_multi_summary_text,
+    cut_with_ellipsis, format_gauge_percent, gauge_job_text, gauge_multi_summary,
 };
 
 #[test]
@@ -25,7 +25,9 @@ fn state_transitions_and_expiry_times_follow_rules() {
         (StopCode::Site1, "SITE-1", false),
         (StopCode::Data1, "DATA-1", false),
         (StopCode::None1, "NONE-1", true),
+        (StopCode::App1, "APP-1", false),
     ];
+    assert_eq!(all_codes.len(), StopCode::ALL.len());
     for (code, text, info) in all_codes {
         assert_eq!(code.as_str(), text);
         assert_eq!(code.to_string(), text);
@@ -133,7 +135,7 @@ fn worker_thread_updates_and_cancel_flag_cross_threads_without_app_state() {
         DownloadJobState::Recovering {
             attempt: 3,
             reason: "파일 대신 웹페이지가 돌아왔습니다.".to_owned(),
-            next_attempt_at: 32.0,
+            next_attempt_at: 25.0,
         }
     );
 
@@ -221,36 +223,36 @@ fn every_state_text_percent_rounding_and_long_text_ellipsis() {
     );
     assert_eq!(gauge_job_text(list.get(id).unwrap(), 12.0, 12).bar_label, "DEM 받음");
 
-    list.set_state(id, DownloadJobState::Cancelled, 13.0);
+    let (cid, _) = list.add_job("DEM", DownloadJobState::Cancelled, 13.0);
     assert_eq!(
-        gauge_job_text(list.get(id).unwrap(), 13.0, 12).bar_label,
+        gauge_job_text(list.get(cid).unwrap(), 13.0, 12).bar_label,
         "DEM 받기를 취소했습니다."
     );
 
     let full_reason = "로그인이 되지 않았습니다. 아이디·비밀번호를 확인해 주세요.";
-    list.set_state(
-        id,
+    let (acc_id, _) = list.add_job(
+        "DEM",
         DownloadJobState::Stopped {
             code: StopCode::Acc2,
             reason: full_reason.to_owned(),
         },
         14.0,
     );
-    let t = gauge_job_text(list.get(id).unwrap(), 14.0, 12);
+    let t = gauge_job_text(list.get(acc_id).unwrap(), 14.0, 12);
     assert_eq!(t.bar_label, "DEM 받지 못함 · ACC-2");
     assert!(t.warning);
     assert_eq!(t.tooltip.as_deref(), Some(full_reason));
 
-    list.set_state(
-        id,
+    let (none_id, _) = list.add_job(
+        "DEM",
         DownloadJobState::Stopped {
             code: StopCode::None1,
             reason: "이 범위에는 제공되는 도엽이 없습니다.".to_owned(),
         },
         15.0,
     );
-    let t_info = gauge_job_text(list.get(id).unwrap(), 15.0, 12);
-    assert_eq!(t_info.bar_label, "DEM 받지 못함 · NONE-1");
+    let t_info = gauge_job_text(list.get(none_id).unwrap(), 15.0, 12);
+    assert_eq!(t_info.bar_label, "DEM · 이 범위에는 자료가 없습니다 · NONE-1");
     assert!(!t_info.warning, "NONE-1 is shown as information, not a failure");
 
     // Long title is cut with ellipsis in bar_label and shown in full in tooltip.
@@ -276,5 +278,8 @@ fn every_state_text_percent_rounding_and_long_text_ellipsis() {
 
     // Multi-job summary text counts unfinished jobs.
     list.apply_snap_preset("two", 20.0);
-    assert_eq!(gauge_multi_summary_text(list.jobs()).as_deref(), Some("받는 중 2건"));
+    assert_eq!(
+        gauge_multi_summary(list.jobs()).map(|s| s.full_text()).as_deref(),
+        Some("받는 중 2건")
+    );
 }
