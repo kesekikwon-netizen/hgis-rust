@@ -191,7 +191,7 @@ where
         st.in_flight.insert(key);
         drop(st);
 
-        let mut guard = WorkerGuard {
+        let guard = WorkerGuard {
             inner: Arc::clone(&self.inner),
             total: Arc::clone(&self.in_flight_total),
             clock: Arc::clone(&self.clock),
@@ -203,7 +203,11 @@ where
         std::thread::Builder::new()
             .name("map-tile".to_owned())
             .spawn(move || {
+                // The guard's Drop does the bookkeeping for every way the worker ends. It is moved in and
+                // dropped by name: rustc 1.100 rejects a captured value that is only assigned to.
+                let mut guard = guard;
                 guard.outcome = job();
+                drop(guard);
             })
             .is_ok()
     }
