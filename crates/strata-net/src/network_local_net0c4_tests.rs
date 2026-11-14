@@ -6,7 +6,7 @@ use std::net::{Shutdown, TcpListener};
 use std::process::Command;
 
 use crate::curl_stdin::{curl_url_config, output_with_url_on_stdin};
-use crate::network::{probe_dry_run, run_curl_url_with_stdin};
+use crate::network::{allow_launch_urls, is_local_target, probe_dry_run, run_curl_url_with_stdin};
 
 fn curl_bin() -> &'static str {
     if cfg!(target_os = "windows") {
@@ -247,4 +247,32 @@ fn real_curl_offline_local_launch_proxy_listener_sees_nothing() {
 
     origin_thread.join().expect("origin thread");
     let _ = std::fs::remove_dir_all(&base);
+}
+
+/// Review finding on `NET0c4`: curl decodes a percent-encoded separator in a `file:` path, so
+/// `file:///%5Chost/share/f` opens `\\host\share\f`, a network share. Any `%` after `file://` is not local (`NET0c5`).
+#[test]
+fn file_url_with_a_percent_sign_is_not_local_and_never_launches_offline() {
+    let bad = [
+        "file:///%5Cevil.example/share/f",
+        "file:///%5cevil.example/share/f",
+        "file:///%2Fevil.example/share/f",
+        "file:///%2fevil.example/share/f",
+        "file://localhost/%5Cevil.example/share/f",
+        "FILE:///%5C127.0.0.1/c$/Windows/win.ini",
+        "file:///C:/a%5C..%5C..%5Cb",
+        "file:///C:/tmp/%2e%2e/x",
+        "file:///C:/tmp/a%20b.txt",
+        "file:///%255Cevil.example/f",
+    ];
+    for url in bad {
+        assert!(!is_local_target(url), "expected non-local: {url}");
+        let (launches, recorded) = probe_dry_run(false, || assert!(!allow_launch_urls([url])));
+        assert_eq!(launches, 0, "must not launch offline: {url}");
+        assert!(recorded.is_empty(), "must record nothing: {url}");
+    }
+    // Plain local paths stay local, also with letters outside ASCII and with a space.
+    for url in ["file:///C:/Users/test/tile.txt", "file:///C:/자료/시험 폴더/a b.txt"] {
+        assert!(is_local_target(url), "expected local: {url}");
+    }
 }

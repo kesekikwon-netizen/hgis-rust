@@ -93,7 +93,9 @@ pub fn is_local_target(url: &str) -> bool {
     }
     let Some((scheme, rest)) = url.split_once("://") else { return false };
     if scheme.eq_ignore_ascii_case("file") {
-        let Some((auth, path)) = (!rest.contains('\\')).then(|| rest.split_once('/')).flatten() else {
+        // No `\` and no `%`: curl decodes `%5C` / `%2F` in a file path, and `/\host/share` is a network share (NET0c5).
+        let plain = !rest.contains('\\') && !rest.contains('%');
+        let Some((auth, path)) = plain.then(|| rest.split_once('/')).flatten() else {
             return false;
         };
         return (auth.is_empty() || auth.eq_ignore_ascii_case("localhost"))
