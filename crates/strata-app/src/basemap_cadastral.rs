@@ -206,6 +206,7 @@ pub fn is_png(bytes: &[u8]) -> bool {
 /// 지적 WMS 받기 curl 명령(주소 없이).
 pub(crate) fn cadastral_curl(dest: &Path) -> Command {
     let mut cmd = Command::new("curl");
+    strata_types::process::no_window(&mut cmd);
     cmd.args(["-sS", "-L", "--max-time", "15", "-H", "Referer: https://localhost", "-H", "User-Agent: Mozilla/5.0", "-o"]).arg(dest);
     cmd
 }

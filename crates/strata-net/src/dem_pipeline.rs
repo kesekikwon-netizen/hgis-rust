@@ -13,13 +13,12 @@ use std::process::Stdio;
 /// C++ `GDALBuildVRT` + `GDALTranslate`(:213-281) 를 같은 GDAL 명령줄 도구로 부른다.
 /// 이 PC 의 GDAL 은 `OSGeo4W\apps\gdal-dev\bin` 에 있고 PATH 에는 없을 수 있다.
 fn gdal_tool(name: &str) -> Option<PathBuf> {
-    if Command::new(name)
+    let mut cmd = Command::new(name);
+    strata_types::process::no_window(&mut cmd)
         .arg("--version")
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
-    {
+        .stderr(Stdio::null());
+    if cmd.status().is_ok_and(|status| status.success()) {
         return Some(PathBuf::from(name));
     }
     for root in [r"C:\OSGeo4W\apps\gdal-dev\bin", r"C:\OSGeo4W\bin"] {
@@ -37,11 +36,7 @@ fn run_quiet(tool: &Path, args: &[&std::ffi::OsStr]) -> bool {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
+    strata_types::process::no_window(&mut cmd);
     cmd.status().is_ok_and(|status| status.success())
 }
 

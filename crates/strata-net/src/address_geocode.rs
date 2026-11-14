@@ -29,11 +29,7 @@ pub(crate) fn http_get_bytes(url: &str) -> Result<Vec<u8>, String> {
         "-H",
         "Accept: application/json",
     ]);
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
+    strata_types::process::no_window(&mut cmd);
     // VWorld 검색·행정구역 주소에는 키가 든다 — 명령줄이 아니라 표준입력으로(SEC1).
     let output = crate::curl_stdin::output_with_url_on_stdin(cmd, url)
         .map_err(|e| format!("위치 검색 호출 실패: {e}"))?;

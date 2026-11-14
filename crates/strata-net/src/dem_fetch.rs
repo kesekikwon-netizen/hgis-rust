@@ -61,11 +61,7 @@ pub(crate) fn fetch_tile(tile: DemTile, destination: &Path, progress: &DemProgre
     .stdin(Stdio::null())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
+    strata_types::process::no_window(&mut cmd);
     let spawned = crate::network::run_spawn(&mut cmd);
     let Ok(mut child) = spawned else {
         return TileFetch::Failed;

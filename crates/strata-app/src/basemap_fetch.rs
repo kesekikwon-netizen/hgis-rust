@@ -135,6 +135,7 @@ pub(crate) fn fetch_tile_in(
 /// 타일 받기 curl 명령(주소 없이). VWorld 는 Referer 를 인증에 쓰므로 반드시 보낸다.
 pub(crate) fn tile_curl(dest: &Path) -> Command {
     let mut cmd = Command::new("curl");
+    strata_types::process::no_window(&mut cmd);
     cmd.args(["-sS", "-L", "--max-time", "12", "-H", "Referer: https://localhost", "-H", "User-Agent: Mozilla/5.0", "-o"]).arg(dest);
     cmd
 }

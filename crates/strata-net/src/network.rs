@@ -220,16 +220,17 @@ fn dry_run_err() -> io::Error {
 /// Runs `cmd.output()` when allowed.
 pub fn run_output(cmd: &mut Command) -> io::Result<Output> {
     if check_and_record(cmd, &[])? { return Err(dry_run_err()); }
-    cmd.output()
+    strata_types::process::no_window(cmd).output()
 }
 
 /// Runs `cmd.spawn()` when allowed.
 pub fn run_spawn(cmd: &mut Command) -> io::Result<Child> {
     if check_and_record(cmd, &[])? { return Err(dry_run_err()); }
-    cmd.spawn()
+    strata_types::process::no_window(cmd).spawn()
 }
 
 fn spawn_with_stdin(mut cmd: Command, stdin_bytes: &[u8]) -> io::Result<Output> {
+    strata_types::process::no_window(&mut cmd);
     let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
     if let Some(mut stdin) = child.stdin.take() {
         stdin.write_all(stdin_bytes)?;

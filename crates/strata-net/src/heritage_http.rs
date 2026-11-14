@@ -64,11 +64,7 @@ pub(crate) fn run_curl(url: &str, body: Option<&str>, cookie_jar: Option<&Path>)
         cmd.args(["--data-binary", b]);
     }
     cmd.arg(url);
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
+    strata_types::process::no_window(&mut cmd);
     let output = crate::network::run_output(&mut cmd)
         .map_err(|e| format!("curl 실행 실패: {e}"))?;
     let raw = String::from_utf8_lossy(&output.stdout).into_owned();

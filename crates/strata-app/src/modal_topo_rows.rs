@@ -113,15 +113,12 @@ pub fn default_print_paper_for_printer() -> SheetPaperSize {
 /// 프린터 목록을 훑고, 목록을 못 읽으면 `:352` 대로 지원으로 친다.
 #[cfg(windows)]
 fn windows_a3_printer_supports() -> bool {
-    use std::os::windows::process::CommandExt;
-
     // PowerShell 로 프린터 이름과 용지만 읽는다. 인쇄는 하지 않는다.
     let script = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; \
          Get-Printer | ForEach-Object { $_.Name + '|' + (($_.PrinterPaperNames) -join ',') }";
     let mut cmd = std::process::Command::new("powershell");
     cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
-    // CREATE_NO_WINDOW — 콘솔 창이 깜빡이지 않게 한다.
-    cmd.creation_flags(0x0800_0000);
+    strata_types::process::no_window(&mut cmd);
     let Ok(out) = cmd.output() else {
         return true; // 목록을 못 읽으면 지원으로 본다 (`:352` sizes.isEmpty() 와 같은 뜻)
     };

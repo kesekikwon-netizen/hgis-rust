@@ -52,11 +52,7 @@ pub(crate) fn http_post_form(url: &str, body: &str) -> Result<Vec<u8>, String> {
         body,
         url,
     ]);
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
+    strata_types::process::no_window(&mut cmd);
     let output = crate::network::run_output(&mut cmd)
         .map_err(|_| NgiiTopographicClient::portal_timeout_message().to_owned())?;
     if !output.status.success() || output.stdout.is_empty() {

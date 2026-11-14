@@ -208,11 +208,7 @@ pub(super) fn prepare_offline_local_curl(
     if let Some(dir) = cmd.get_current_dir() {
         rebuilt.current_dir(dir);
     }
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        rebuilt.creation_flags(0x0800_0000);
-    }
+    strata_types::process::no_window(&mut rebuilt);
     Ok(rebuilt)
 }
 

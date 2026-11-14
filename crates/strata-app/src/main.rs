@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(
     unknown_lints,
     float_literal_f32_fallback,

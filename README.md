@@ -42,6 +42,8 @@ cargo run -p strata-app --bin ka-hgis
 `.cargo/config.toml` 이 `STRATA_OFFLINE=1` 을 걸어 두므로 `cargo test`·`cargo run` 과 `--snap`·`--verify-all`·`--smoke-quit`·`--smoke` 실행은 외부 사이트에 요청을 보내지 않는다(`target/release/ka-hgis.exe` 를 직접 켤 때만 온라인).
 화면 캡처 한 번만 실제 타일이 필요할 때는 `--snap <폴더> --snap-online` 을 함께 주며, 다른 실행이나 `STRATA_OFFLINE=1` 아래에서는 열리지 않는다.
 
+릴리스 빌드(`target/release/ka-hgis.exe`)는 `windows_subsystem = "windows"` 로 링크되므로(디버그 빌드는 콘솔 유지) 직접 열어도 검은 콘솔 창이 뜨지 않으며, `scripts/start-strata.vbs` 는 릴리스·디버그 중 더 최근 빌드를 골라 콘솔 없이 띄운다. 단, 터미널에서 릴리스 실행 파일로 `--verify-all`·`--smoke`·`--smoke-quit`·`--snap` 을 파이프나 리디렉션 없이 그냥 실행하면 GUI 서브시스템 특성상 부모 콘솔에 붙지 않아 아무 글자도 나오지 않고 프롬프트가 곧바로 돌아온다. 출력을 보거나 파일로 받으려면 파이프로 넘기거나(`.\target\release\ka-hgis.exe --verify-all | Out-Host`, `2>&1 | Out-File log.txt`, 또는 `cmd /c "target\release\ka-hgis.exe --verify-all > log.txt"`) 디버그 빌드(`cargo run -p strata-app --bin ka-hgis -- --verify-all`)를 사용한다(PowerShell 에서는 파이프 없는 `>` 만 쓰면 GUI 프로세스를 기다리지 않고 바로 반환한다).
+
 ### 제출 SHP 엔진(GDAL) — `strata-engine --features gdal`
 
 앱(`strata-app`)은 아직 이 기능을 켜지 않는다(지시 R2-3c 에서 켠다). `gdal-src` `0.3.0+3.12.1`(`gdal-sys` `bundled`)이 `ESRI Shapefile` 과 `GPKG`/`SQLite` 드라이버만 넣어 GDAL 3.12.1 을 소스에서 정적으로 빌드하므로 OSGeo4W 나 외부 GDAL DLL, `GDAL_HOME`·`GDAL_VERSION` 환경 변수가 필요 없다. 빌드에는 `cmake` 와 `sqlite3` 명령줄 도구만 `PATH` 에 있으면 된다(PROJ 소스 빌드가 `proj.db` 를 만들 때 쓴다):

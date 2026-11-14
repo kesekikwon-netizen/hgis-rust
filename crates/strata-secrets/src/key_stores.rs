@@ -125,10 +125,12 @@ fn registry_api_key(subkey: &str) -> String {
         return v;
     }
     let key = format!("HKCU\\Software\\ka-hgis\\ka-hgis\\{subkey}");
-    let value = Command::new("reg.exe")
+    let mut cmd = Command::new("reg.exe");
+    strata_types::process::no_window(&mut cmd)
         .args(["query", key.as_str(), "/v", "ApiKey"])
         .stdin(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    let value = cmd
         .output()
         .ok()
         .filter(|o| o.status.success())

@@ -23,3 +23,6 @@ third_party/** -text
 *.rs text eol=lf
 *.toml text eol=lf
 *.md text eol=lf
+
+# Windows Script Host (.vbs) 는 CRLF 를 유지한다.
+*.vbs text eol=crlf

@@ -42,11 +42,7 @@ fn escape_quoted(raw: &str) -> String { raw.replace('\\', "\\\\").replace('"', "
 pub(crate) fn build_curl_command(program: &OsStr) -> Command {
     let mut cmd = Command::new(program);
     cmd.args(["--config", "-"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::piped());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
+    strata_types::process::no_window(&mut cmd);
     cmd
 }
 

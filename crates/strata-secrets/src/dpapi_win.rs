@@ -23,6 +23,7 @@ fn cache() -> &'static Mutex<BTreeMap<String, Vec<u8>>> {
 pub(crate) fn dpapi_powershell() -> Command {
     let mut cmd = Command::new("powershell.exe");
     cmd.args(["-NoProfile", "-NonInteractive", "-Command", "-"]);
+    strata_types::process::no_window(&mut cmd);
     cmd
 }
 

@@ -34,11 +34,7 @@ pub fn drive_kinds() -> HashMap<char, String> {
     let script = "[IO.DriveInfo]::GetDrives() | ForEach-Object { $_.Name.Substring(0,1) + '=' + $_.DriveType }";
     let mut cmd = std::process::Command::new("powershell.exe");
     cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
+    strata_types::process::no_window(&mut cmd);
     let Ok(out) = cmd.output() else { return HashMap::new() };
     String::from_utf8_lossy(&out.stdout)
         .lines()

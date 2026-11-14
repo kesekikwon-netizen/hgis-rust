@@ -14,7 +14,8 @@ pub fn vworld_reachable() -> bool {
     }
     let (curl, null) = if cfg!(target_os = "windows") { ("curl.exe", "NUL") } else { ("curl", "/dev/null") };
     let mut cmd = Command::new(curl);
-    cmd.args(["-s", "-I", "-o", null, "-w", "%{http_code}", "--max-time", "6", CHECK_URL])
+    strata_types::process::no_window(&mut cmd)
+        .args(["-s", "-I", "-o", null, "-w", "%{http_code}", "--max-time", "6", CHECK_URL])
         .stdin(Stdio::null())
         .stderr(Stdio::null());
     crate::network::run_output(&mut cmd)
