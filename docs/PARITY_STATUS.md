@@ -3,6 +3,12 @@
 Baseline: branch `ag/par1` at `8c2913bf` (`2026-11-14`), C++ reference `target/cpp-ref/src/` and `target/cpp-ref/tests/`.
 Every row traces a user-facing C++ entry point to its Rust handler and classifies today's behaviour into one of seven states (`same`, `works_unverified`, `partial`, `disabled`, `fake`, `missing`, `rust_only`). `—` in the last column means `docs/RUST_PLAN.md` does not name a plan id for that row.
 
+> Director's notes (2026-11-14). This survey describes the tree at `8c2913bf`. Changed since then: the `시추` button and its
+> windows were removed (order F1f-1); the title-block date, the new-survey name and the control-point fields no longer start
+> with invented values (order F1d-1); the straight-trench plan calculation exists as a library (order TR1a). A row's C++ entry
+> is a claim: an order made from a row confirms it first. Each order candidate is taken on its "build" branch: a control is
+> switched off only when it does harm today.
+
 ## Summary
 
 | Section | `same` | `works_unverified` | `partial` | `disabled` | `fake` | `missing` | `rust_only` | Total |
