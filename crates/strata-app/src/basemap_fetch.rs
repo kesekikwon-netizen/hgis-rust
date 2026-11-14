@@ -47,10 +47,14 @@ fn ext_for(kind: TileKind) -> &'static str {
 }
 
 /// 캐시 경로.
+#[cfg(test)]
 #[must_use]
 pub fn tile_cache_path(kind: TileKind, z: u8, x: u32, y: u32) -> PathBuf {
-    tile_cache_dir()
-        .join(kind_dir(kind))
+    tile_cache_path_in(&tile_cache_dir(), kind, z, x, y)
+}
+
+pub(crate) fn tile_cache_path_in(root: &Path, kind: TileKind, z: u8, x: u32, y: u32) -> PathBuf {
+    root.join(kind_dir(kind))
         .join(z.to_string())
         .join(x.to_string())
         .join(format!("{y}.{}", ext_for(kind)))
@@ -68,9 +72,8 @@ pub fn looks_like_image(bytes: &[u8]) -> bool {
 }
 
 /// 캐시에 이미 있으면 그 경로를, 없으면 `None`.
-#[must_use]
-pub fn cached_tile(kind: TileKind, z: u8, x: u32, y: u32) -> Option<PathBuf> {
-    let p = tile_cache_path(kind, z, x, y);
+pub(crate) fn cached_tile_in(root: &Path, kind: TileKind, z: u8, x: u32, y: u32) -> Option<PathBuf> {
+    let p = tile_cache_path_in(root, kind, z, x, y);
     if p.is_file() {
         // 크기가 0 이거나 XML 오류가 저장돼 있으면 버린다.
         if let Ok(meta) = std::fs::metadata(&p) {
@@ -87,17 +90,31 @@ pub fn cached_tile(kind: TileKind, z: u8, x: u32, y: u32) -> Option<PathBuf> {
 ///
 /// 네트워크가 없거나 키가 만료되면 `None`. 화면은 그 타일만 비고 나머지는 그려진다.
 pub fn fetch_tile(kind: TileKind, key: &str, z: u8, x: u32, y: u32) -> Option<PathBuf> {
+    fetch_tile_in(&tile_cache_dir(), kind, key, z, x, y)
+}
+
+pub(crate) fn fetch_tile_in(
+    root: &Path,
+    kind: TileKind,
+    key: &str,
+    z: u8,
+    x: u32,
+    y: u32,
+) -> Option<PathBuf> {
     if !kind.is_xyz() {
         return None;
     }
-    if let Some(hit) = cached_tile(kind, z, x, y) {
+    if let Some(hit) = cached_tile_in(root, kind, z, x, y) {
         return Some(hit);
+    }
+    if !strata_net::network::is_allowed() {
+        return None;
     }
     let url = tile_url(kind, key, z, x, y);
     if url.is_empty() {
         return None;
     }
-    let dest = tile_cache_path(kind, z, x, y);
+    let dest = tile_cache_path_in(root, kind, z, x, y);
     if let Some(dir) = dest.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -124,6 +141,9 @@ pub(crate) fn tile_curl(dest: &Path) -> Command {
 
 /// curl 로 받아 파일로 쓴다. 키가 든 주소는 명령줄이 아니라 표준입력으로 준다(SEC1).
 fn run_curl(url: &str, dest: &Path) -> bool {
+    if !strata_net::network::is_allowed() {
+        return false;
+    }
     let out = strata_net::curl_stdin::output_with_url_on_stdin(tile_curl(dest), url);
     matches!(out, Ok(o) if o.status.success())
 }

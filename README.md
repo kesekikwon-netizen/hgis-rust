@@ -39,6 +39,9 @@ cargo run -p strata-app --bin ka-hgis -- --verify-all
 cargo run -p strata-app --bin ka-hgis
 ```
 
+`.cargo/config.toml` 이 `STRATA_OFFLINE=1` 을 걸어 두므로 `cargo test`·`cargo run` 과 `--snap`·`--verify-all`·`--smoke-quit`·`--smoke` 실행은 외부 사이트에 요청을 보내지 않는다(`target/release/ka-hgis.exe` 를 직접 켤 때만 온라인).
+화면 캡처 한 번만 실제 타일이 필요할 때는 `--snap <폴더> --snap-online` 을 함께 주며, 다른 실행이나 `STRATA_OFFLINE=1` 아래에서는 열리지 않는다.
+
 ### 제출 SHP 엔진(GDAL) — `strata-engine --features gdal`
 
 앱(`strata-app`)은 아직 이 기능을 켜지 않는다(지시 R2-3c 에서 켠다). `gdal-src` `0.3.0+3.12.1`(`gdal-sys` `bundled`)이 `ESRI Shapefile` 과 `GPKG`/`SQLite` 드라이버만 넣어 GDAL 3.12.1 을 소스에서 정적으로 빌드하므로 OSGeo4W 나 외부 GDAL DLL, `GDAL_HOME`·`GDAL_VERSION` 환경 변수가 필요 없다. 빌드에는 `cmake` 와 `sqlite3` 명령줄 도구만 `PATH` 에 있으면 된다(PROJ 소스 빌드가 `proj.db` 를 만들 때 쓴다):

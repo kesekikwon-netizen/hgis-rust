@@ -33,6 +33,7 @@ fn quotes_and_backslashes_are_escaped() {
 
 /// 실제 curl 이 표준입력의 주소로 받는다 — 내려받기 없이 file:// 로(표준출력·-o 파일 둘 다).
 #[test]
+#[ignore = "starts curl; NET0c runs cargo test with STRATA_OFFLINE=1 and forbids starting curl in tests"]
 fn curl_reads_the_url_from_stdin() {
     let dir = std::env::temp_dir().join(format!("strata-sec1-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("dir");

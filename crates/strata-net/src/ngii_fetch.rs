@@ -26,7 +26,10 @@ pub fn fetch_official_sheets_25k(
 }
 
 /// curl 로 `application/x-www-form-urlencoded` POST (C++ 은 브라우저 fetch 로 같은 본문을 보낸다)
-fn http_post_form(url: &str, body: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn http_post_form(url: &str, body: &str) -> Result<Vec<u8>, String> {
+    if !crate::network::is_allowed() {
+        return Err(NgiiTopographicClient::portal_timeout_message().to_owned());
+    }
     let curl_bin = if cfg!(target_os = "windows") {
         "curl.exe"
     } else {
@@ -54,8 +57,7 @@ fn http_post_form(url: &str, body: &str) -> Result<Vec<u8>, String> {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
-    let output = cmd
-        .output()
+    let output = crate::network::run_output(&mut cmd)
         .map_err(|_| NgiiTopographicClient::portal_timeout_message().to_owned())?;
     if !output.status.success() || output.stdout.is_empty() {
         return Err(NgiiTopographicClient::portal_timeout_message().to_owned());

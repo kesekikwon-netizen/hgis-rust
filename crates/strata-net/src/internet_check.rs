@@ -9,12 +9,15 @@ pub const CHECK_URL: &str = "https://api.vworld.kr/";
 /// 지금 VWorld 서버에 닿는지(한 번 묻는다, 최대 6초 — 화면 밖 실행에서 부른다).
 #[must_use]
 pub fn vworld_reachable() -> bool {
+    if !crate::network::is_allowed() {
+        return false;
+    }
     let (curl, null) = if cfg!(target_os = "windows") { ("curl.exe", "NUL") } else { ("curl", "/dev/null") };
-    Command::new(curl)
-        .args(["-s", "-I", "-o", null, "-w", "%{http_code}", "--max-time", "6", CHECK_URL])
+    let mut cmd = Command::new(curl);
+    cmd.args(["-s", "-I", "-o", null, "-w", "%{http_code}", "--max-time", "6", CHECK_URL])
         .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()
+        .stderr(Stdio::null());
+    crate::network::run_output(&mut cmd)
         .is_ok_and(|o| reached_from_http_code(&String::from_utf8_lossy(&o.stdout)))
 }
 

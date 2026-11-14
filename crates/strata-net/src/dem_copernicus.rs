@@ -15,6 +15,8 @@ mod dem_fetch;
 mod dem_pipeline;
 
 pub use dem_consts::*;
+#[cfg(test)]
+pub(crate) use dem_fetch::{fetch_tile, TileFetch};
 pub use dem_job::*;
 pub use dem_pipeline::prepare;
 pub use dem_tiles::*;

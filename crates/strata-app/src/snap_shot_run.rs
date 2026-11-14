@@ -124,7 +124,11 @@ impl StrataAppState {
             "@close_modal" => self.modals.active = None,
             "@tab_home" => self.active_tab = crate::app_state::MainTab::Home,
             // 홈 「인터넷 확인」을 누른 것처럼 VWorld 서버에 한 번 묻는다(답은 뒤 단계들에서).
-            "@internet_check" => self.home_map.internet = crate::home_connection_model::InternetCheck::start(),
+            "@internet_check" => {
+                if strata_net::network::is_allowed() {
+                    self.home_map.internet = crate::home_connection_model::InternetCheck::start();
+                }
+            }
             "@tab_map" => self.active_tab = crate::app_state::MainTab::Map,
             "@tab_drawing" => self.open_studio_tab(crate::app_state::MainTab::Drawing),
             "@tab_paleo" => self.open_studio_tab(crate::app_state::MainTab::Paleo),

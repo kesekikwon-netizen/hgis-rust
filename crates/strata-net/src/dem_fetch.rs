@@ -23,16 +23,20 @@ pub(super) fn curl_binary() -> &'static str {
 }
 
 /// curl 로 타일 한 장을 파일로 받는다. C++ `GDALOpenEx(/vsicurl/…)` 자리.
-pub(super) enum TileFetch {
+#[derive(Debug)]
+pub(crate) enum TileFetch {
     Saved(PathBuf),
     Missing,
     Cancelled,
     Failed,
 }
 
-pub(super) fn fetch_tile(tile: DemTile, destination: &Path, progress: &DemProgress<'_>) -> TileFetch {
+pub(crate) fn fetch_tile(tile: DemTile, destination: &Path, progress: &DemProgress<'_>) -> TileFetch {
     if progress.cancelled() {
         return TileFetch::Cancelled;
+    }
+    if !crate::network::is_allowed() {
+        return TileFetch::Failed;
     }
     let mut cmd = Command::new(curl_binary());
     cmd.args([
@@ -62,7 +66,7 @@ pub(super) fn fetch_tile(tile: DemTile, destination: &Path, progress: &DemProgre
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
-    let spawned = cmd.spawn();
+    let spawned = crate::network::run_spawn(&mut cmd);
     let Ok(mut child) = spawned else {
         return TileFetch::Failed;
     };

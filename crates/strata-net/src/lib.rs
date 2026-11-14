@@ -13,6 +13,7 @@ pub mod geoinfo_borehole;
 pub mod heritage_intranet;
 pub mod internet_check;
 pub mod kigam_soil_river;
+pub mod network;
 pub mod ngii_topographic;
 pub mod tile_fetcher;
 pub mod topographic_catalog;

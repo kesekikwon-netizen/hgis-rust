@@ -11,6 +11,9 @@ use super::*;
 
 /// curl 로 GET — `vworld_client` 의 지적도·행정구역 다운로드도 같은 방식을 쓴다.
 pub(crate) fn http_get_bytes(url: &str) -> Result<Vec<u8>, String> {
+    if !crate::network::is_allowed() {
+        return Err("network_error".to_owned());
+    }
     let curl_bin = if cfg!(target_os = "windows") {
         "curl.exe"
     } else {

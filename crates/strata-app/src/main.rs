@@ -41,6 +41,7 @@ pub mod verify_harness;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    strata_net::network::apply_startup_args(&args);
     let app = app_state::StrataAppState::new_startup();
     if args.iter().any(|a| a == "--smoke-quit" || a == "--smoke") {
         println!("{}", app.smoke_summary());
@@ -276,3 +277,6 @@ mod basemap_tests;
 #[cfg(test)]
 #[path = "basemap_mesh_tests.rs"]
 mod basemap_mesh_tests;
+#[cfg(test)]
+#[path = "net0c_tests.rs"]
+mod net0c_tests;

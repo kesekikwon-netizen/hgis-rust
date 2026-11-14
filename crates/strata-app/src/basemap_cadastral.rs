@@ -116,20 +116,34 @@ pub fn cadastral_tile_bbox_3857(z: u8, x: u32, y: u32) -> [f64; 4] {
 }
 
 /// 타일 하나의 캐시 경로 `cadastral/<z>/<x>/<y>.png`.
+#[cfg(test)]
 #[must_use]
 pub fn cadastral_tile_path(z: u8, x: u32, y: u32) -> PathBuf {
-    cadastral_cache_dir()
-        .join(z.to_string())
+    cadastral_tile_path_in(&cadastral_cache_dir(), z, x, y)
+}
+
+pub(crate) fn cadastral_tile_path_in(root: &Path, z: u8, x: u32, y: u32) -> PathBuf {
+    root.join(z.to_string())
         .join(x.to_string())
         .join(format!("{y}.png"))
 }
 
 /// 타일 하나를 받아 캐시 경로를 돌려준다(작업 스레드에서 부른다).
 pub fn fetch_cadastral_tile(key: &str, z: u8, x: u32, y: u32) -> Option<PathBuf> {
+    fetch_cadastral_tile_in(&cadastral_cache_dir(), key, z, x, y)
+}
+
+pub(crate) fn fetch_cadastral_tile_in(
+    root: &Path,
+    key: &str,
+    z: u8,
+    x: u32,
+    y: u32,
+) -> Option<PathBuf> {
     if key.trim().is_empty() {
         return None;
     }
-    let dest = cadastral_tile_path(z, x, y);
+    let dest = cadastral_tile_path_in(root, z, x, y);
     if dest.is_file() {
         if let Ok(b) = std::fs::read(&dest) {
             if is_png(&b) {
@@ -137,6 +151,9 @@ pub fn fetch_cadastral_tile(key: &str, z: u8, x: u32, y: u32) -> Option<PathBuf>
             }
         }
         let _ = std::fs::remove_file(&dest);
+    }
+    if !strata_net::network::is_allowed() {
+        return None;
     }
     if let Some(dir) = dest.parent() {
         let _ = std::fs::create_dir_all(dir);
@@ -195,6 +212,9 @@ pub(crate) fn cadastral_curl(dest: &Path) -> Command {
 
 /// 키(KEY=)가 든 GetMap 주소는 명령줄이 아니라 표준입력으로 준다(SEC1).
 fn run_curl(url: &str, dest: &Path) -> bool {
+    if !strata_net::network::is_allowed() {
+        return false;
+    }
     let out = strata_net::curl_stdin::output_with_url_on_stdin(cadastral_curl(dest), url);
     matches!(out, Ok(o) if o.status.success())
 }

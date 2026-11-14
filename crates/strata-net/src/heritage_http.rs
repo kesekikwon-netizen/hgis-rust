@@ -36,7 +36,10 @@ fn curl_binary() -> &'static str {
 
 /// `address_search.rs:758` 의 `http_get_bytes` 와 같은 방식(curl.exe)을 쓰되,
 /// 상태 코드와 쿠키 항아리를 함께 다룬다. 새 크레이트를 넣지 않는다.
-pub(super) fn run_curl(url: &str, body: Option<&str>, cookie_jar: Option<&Path>) -> Result<HeritageHttpResponse, String> {
+pub(crate) fn run_curl(url: &str, body: Option<&str>, cookie_jar: Option<&Path>) -> Result<HeritageHttpResponse, String> {
+    if !crate::network::is_allowed() {
+        return Err("연결 실패(상태 0)".to_owned());
+    }
     let method = if body.is_some() { "POST" } else { "GET" };
     let mut cmd = Command::new(curl_binary());
     cmd.args([
@@ -66,8 +69,7 @@ pub(super) fn run_curl(url: &str, body: Option<&str>, cookie_jar: Option<&Path>)
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
-    let output = cmd
-        .output()
+    let output = crate::network::run_output(&mut cmd)
         .map_err(|e| format!("curl 실행 실패: {e}"))?;
     let raw = String::from_utf8_lossy(&output.stdout).into_owned();
     let (payload, status) = raw
