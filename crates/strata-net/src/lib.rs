@@ -8,6 +8,7 @@
 
 pub mod address_search;
 pub mod curl_batch;
+mod curl_batch_io;
 pub mod curl_stdin;
 pub mod dem_copernicus;
 pub mod geoinfo_borehole;

@@ -219,16 +219,18 @@ fn after_cancel_no_new_request_starts_curl_is_gone_and_no_part_remains() {
 
     let handle = start(&items, &[], Duration::from_secs(10), 1).expect("start cancel batch");
     assert!(gate.wait_entered(1, TEST_TIMEOUT), "first request reached server");
-    assert!(handle.is_process_running(), "curl process must be alive while first request is held");
+    let pid = handle.pid().expect("spawned curl pid");
+    assert!(os_process_exists(pid), "OS must report curl PID {pid} alive while held");
     let before_cancel = server.request_paths().len();
     assert_eq!(before_cancel, 1);
 
     handle.cancel();
-    assert!(!handle.is_process_running(), "curl process must be gone right after cancel");
+    assert_eq!(handle.end_state(), BatchEnd::Cancelled);
+    assert!(wait_process_gone(pid, TEST_TIMEOUT), "OS must report curl PID {pid} gone after cancel");
     assert!(!has_part_files(tmp.path()), "no .part file may remain after cancel");
 
     gate.release();
-    std::thread::sleep(Duration::from_millis(120));
+    assert!(server.wait_idle(TEST_TIMEOUT), "server finished handling held request");
     assert_eq!(server.request_paths().len(), before_cancel, "no new request may start after cancel");
     assert!(!has_part_files(tmp.path()));
 }

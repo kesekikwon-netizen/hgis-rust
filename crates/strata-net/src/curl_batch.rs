@@ -1,15 +1,24 @@
 //! Parallel HTTP/1.1 keep-alive batch file downloader backed by a single `curl` process.
 
 use std::{
-    collections::{HashMap, VecDeque}, ffi::OsStr, fmt::{self, Write as _}, fs,
-    io::{BufRead, BufReader, Write}, path::{Path, PathBuf}, process::{Child, ChildStderr, Command, Stdio},
-    sync::{atomic::{AtomicBool, AtomicUsize, Ordering}, mpsc::{self, Receiver, RecvTimeoutError, Sender}, Arc, Mutex},
-    thread::{self, JoinHandle}, time::Duration,
+    ffi::OsStr, fmt, path::PathBuf, process::Child,
+    sync::{atomic::{AtomicBool, AtomicUsize, Ordering}, mpsc::{Receiver, RecvTimeoutError}, Arc, Mutex},
+    thread::JoinHandle, time::Duration,
+};
+
+use crate::curl_batch_io::{cleanup_parts, finish_child, start_with_program_checked};
+#[cfg(test)]
+pub(crate) use crate::curl_batch_io::{
+    build_batch_config, build_curl_command, normalize_match_path, part_path, run_reader,
 };
 
 /// Maximum number of parallel connections allowed for a batch (`1..=MAX_PARALLEL`).
 pub const MAX_PARALLEL: usize = 6;
-const RECORD_PREFIX: &str = "STRATA_BATCH\t";
+/// Sentinel exit code when `curl` produced no per-item record and no non-zero process exit code.
+pub const EXIT_NO_RECORD: i32 = -1;
+/// Sentinel exit code when HTTP 200 arrived but renaming `<destination>.part` failed.
+pub const EXIT_RENAME_FAILED: i32 = -2;
+pub(crate) const RECORD_PREFIX: &str = "STRATA_BATCH\t";
 
 /// One file transfer in a batch: request URL and final destination path.
 #[derive(Clone, PartialEq, Eq)]
@@ -39,11 +48,29 @@ pub struct BatchResult {
     pub exit_code: i32,
 }
 
+impl BatchResult {
+    /// Returns `true` only when HTTP 200 arrived and `<destination>.part` was renamed into place.
+    #[must_use]
+    pub const fn is_saved(&self) -> bool { self.http_status == 200 && self.exit_code == 0 }
+}
+
+/// Terminal or active state of a [`BatchHandle`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BatchEnd {
+    Running,
+    Normal,
+    Incomplete { missing_records: usize },
+    Cancelled,
+    ReaderPanicked { missing_records: usize },
+}
+
 /// Error returned when a batch cannot be started.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BatchError {
     InvalidParallel(usize),
     InvalidInput(&'static str),
+    DuplicateDestination { index: usize, first_index: usize },
+    LaunchBlocked(String),
     CreateDirFailed(String),
     CurlStartFailed(String),
 }
@@ -53,6 +80,10 @@ impl fmt::Display for BatchError {
         match self {
             Self::InvalidParallel(n) => write!(f, "parallel connections must be in 1..={MAX_PARALLEL}, got {n}"),
             Self::InvalidInput(msg) => f.write_str(msg),
+            Self::DuplicateDestination { index, first_index } => {
+                write!(f, "duplicate destination at item index {index} (same as index {first_index})")
+            }
+            Self::LaunchBlocked(reason) => write!(f, "batch launch blocked: {reason}"),
             Self::CreateDirFailed(err) => write!(f, "failed to create destination folder: {err}"),
             Self::CurlStartFailed(err) => write!(f, "failed to start curl: {err}"),
         }
@@ -65,19 +96,21 @@ impl std::error::Error for BatchError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WaitTimeout;
 
-struct SharedState {
-    cancelled: AtomicBool,
-    worker_done: AtomicBool,
-    pending_results: AtomicUsize,
-    child: Mutex<Option<Child>>,
-    destinations: Vec<PathBuf>,
+pub(crate) struct SharedState {
+    pub(crate) cancelled: AtomicBool,
+    pub(crate) reader_panicked: AtomicBool,
+    pub(crate) worker_done: AtomicBool,
+    pub(crate) missing_records: AtomicUsize,
+    pub(crate) pending_results: AtomicUsize,
+    pub(crate) child: Mutex<Option<Child>>,
+    pub(crate) destinations: Vec<PathBuf>,
 }
 
 impl SharedState {
-    fn new(destinations: Vec<PathBuf>, child: Option<Child>) -> Arc<Self> {
-        let done = child.is_none();
+    pub(crate) fn new(destinations: Vec<PathBuf>, child: Option<Child>, done: bool) -> Arc<Self> {
         Arc::new(Self {
-            cancelled: AtomicBool::new(false), worker_done: AtomicBool::new(done),
+            cancelled: AtomicBool::new(false), reader_panicked: AtomicBool::new(false),
+            worker_done: AtomicBool::new(done), missing_records: AtomicUsize::new(0),
             pending_results: AtomicUsize::new(0), child: Mutex::new(child), destinations,
         })
     }
@@ -85,9 +118,11 @@ impl SharedState {
 
 /// Running batch handle that streams per-file results and cancels on drop.
 pub struct BatchHandle {
-    shared: Arc<SharedState>,
-    rx: Mutex<Receiver<BatchResult>>,
-    worker: Mutex<Option<JoinHandle<()>>>,
+    pub(crate) shared: Arc<SharedState>,
+    pub(crate) rx: Mutex<Receiver<BatchResult>>,
+    pub(crate) worker: Mutex<Option<JoinHandle<()>>>,
+    #[cfg(test)]
+    pub(crate) pid: Option<u32>,
 }
 
 impl fmt::Debug for BatchHandle {
@@ -120,173 +155,61 @@ impl BatchHandle {
         self.shared.worker_done.load(Ordering::Acquire) && self.shared.pending_results.load(Ordering::Acquire) == 0
     }
 
+    /// Returns how the batch ended (or [`BatchEnd::Running`] while still active).
+    #[must_use]
+    pub fn end_state(&self) -> BatchEnd {
+        if self.shared.cancelled.load(Ordering::Acquire) && self.shared.worker_done.load(Ordering::Acquire) {
+            return BatchEnd::Cancelled;
+        }
+        if !self.is_done() {
+            return BatchEnd::Running;
+        }
+        let missing = self.shared.missing_records.load(Ordering::Acquire);
+        if self.shared.reader_panicked.load(Ordering::Acquire) {
+            BatchEnd::ReaderPanicked { missing_records: missing }
+        } else if missing > 0 {
+            BatchEnd::Incomplete { missing_records: missing }
+        } else {
+            BatchEnd::Normal
+        }
+    }
+
+    /// Returns `true` only when all items received `curl` completion records and were drained.
+    #[must_use]
+    pub fn ended_normally(&self) -> bool { self.end_state() == BatchEnd::Normal }
+
     /// Stops the batch immediately, kills `curl`, and deletes any remaining `.part` files.
     pub fn cancel(&self) {
         self.shared.cancelled.store(true, Ordering::Release);
-        reap_child(&self.shared);
-        if let Some(handle) = self.worker.lock().ok().and_then(|mut g| g.take()) {
-            let _ = handle.join();
-        }
+        let _ = finish_child(&self.shared, true);
+        if let Some(handle) = self.worker.lock().ok().and_then(|mut g| g.take()) { let _ = handle.join(); }
         cleanup_parts(&self.shared.destinations);
         if let Ok(rx) = self.rx.lock() {
-            while rx.try_recv().is_ok() {
-                self.shared.pending_results.fetch_sub(1, Ordering::AcqRel);
-            }
+            while rx.try_recv().is_ok() { self.shared.pending_results.fetch_sub(1, Ordering::AcqRel); }
         }
         self.shared.worker_done.store(true, Ordering::Release);
     }
 
     #[cfg(test)]
-    pub(crate) fn is_process_running(&self) -> bool {
-        self.shared.child.lock().ok().and_then(|mut g| g.as_mut().map(|c| matches!(c.try_wait(), Ok(None)))).unwrap_or(false)
-    }
+    pub(crate) fn pid(&self) -> Option<u32> { self.pid }
 }
 
 impl Drop for BatchHandle {
     fn drop(&mut self) { self.cancel(); }
 }
 
-pub(crate) fn part_path(destination: &Path) -> PathBuf {
-    let mut os = destination.as_os_str().to_os_string();
-    os.push(".part");
-    PathBuf::from(os)
-}
+/// Default pre-spawn gate used by [`start`] (one-line connection point for `NET0c3`).
+pub fn default_allow_launch(_urls: &[&str]) -> Result<(), String> { Ok(()) }
 
-fn escape_quoted(raw: &str) -> String { raw.replace('\\', "\\\\").replace('"', "\\\"") }
-
-pub(crate) fn build_curl_command(program: &OsStr) -> Command {
-    let mut cmd = Command::new(program);
-    cmd.args(["--config", "-"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::piped());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
-    cmd
-}
-
-pub(crate) fn build_batch_config(items: &[BatchItem], headers: &[(&str, &str)], timeout_per_file: Duration, parallel: usize) -> Result<String, BatchError> {
-    if !(1..=MAX_PARALLEL).contains(&parallel) {
-        return Err(BatchError::InvalidParallel(parallel));
-    }
-    if timeout_per_file.is_zero() {
-        return Err(BatchError::InvalidInput("timeout_per_file must be positive"));
-    }
-    let (mut cfg, secs) = (String::new(), timeout_per_file.as_secs_f64().max(0.05));
-    let _ = writeln!(cfg, "silent\nlocation\nparallel\nparallel-immediate\nparallel-max = {parallel}\nmax-time = {secs:.3}");
-    for &(name, value) in headers {
-        if name.trim().is_empty() || name.contains(['\r', '\n', '\0']) || value.contains(['\r', '\n', '\0']) {
-            return Err(BatchError::InvalidInput("invalid request header"));
-        }
-        let _ = writeln!(cfg, "header = \"{}\"", escape_quoted(&format!("{name}: {value}")));
-    }
-    let _ = writeln!(cfg, "write-out = \"%{{stderr}}{RECORD_PREFIX}%{{http_code}}\\t%{{exitcode}}\\t%{{filename_effective}}\\n\"");
-    for item in items {
-        if item.url.is_empty() || item.url.contains(['\r', '\n', '\0']) {
-            return Err(BatchError::InvalidInput("invalid item url"));
-        }
-        let part = part_path(&item.destination);
-        let Some(part_str) = part.to_str() else { return Err(BatchError::InvalidInput("destination path is not valid UTF-8")) };
-        if item.destination.as_os_str().is_empty() || part_str.contains(['\r', '\n', '\0']) {
-            return Err(BatchError::InvalidInput("invalid destination path"));
-        }
-        let _ = writeln!(cfg, "url = \"{}\"\noutput = \"{}\"", escape_quoted(&item.url), escape_quoted(part_str));
-    }
-    Ok(cfg)
-}
-
-/// Single launch point for the `curl` batch process (hook point for the crate-wide offline switch).
-fn spawn_curl_process(program: &OsStr, config: Vec<u8>) -> Result<(Child, ChildStderr), BatchError> {
-    let mut child = build_curl_command(program).spawn().map_err(|e| BatchError::CurlStartFailed(e.to_string()))?;
-    let (Some(stderr), Some(mut stdin)) = (child.stderr.take(), child.stdin.take()) else {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(BatchError::CurlStartFailed("missing curl stdio pipe".to_owned()));
-    };
-    thread::spawn(move || { let _ = stdin.write_all(&config); });
-    Ok((child, stderr))
-}
-
-pub(crate) fn start_with_program(program: &OsStr, items: &[BatchItem], headers: &[(&str, &str)], timeout_per_file: Duration, parallel: usize) -> Result<BatchHandle, BatchError> {
-    let config = build_batch_config(items, headers, timeout_per_file, parallel)?;
-    let destinations: Vec<PathBuf> = items.iter().map(|i| i.destination.clone()).collect();
-    let mut by_part: HashMap<String, VecDeque<usize>> = HashMap::with_capacity(destinations.len());
-    for (idx, dest) in destinations.iter().enumerate() {
-        if let Some(parent) = dest.parent().filter(|p| !p.as_os_str().is_empty()) {
-            fs::create_dir_all(parent).map_err(|e| BatchError::CreateDirFailed(e.to_string()))?;
-        }
-        let part = part_path(dest);
-        let _ = fs::remove_file(&part);
-        by_part.entry(part.to_string_lossy().replace('\\', "/")).or_default().push_back(idx);
-    }
-    let (tx, rx) = mpsc::channel();
-    if items.is_empty() {
-        drop(tx);
-        return Ok(BatchHandle { shared: SharedState::new(destinations, None), rx: Mutex::new(rx), worker: Mutex::new(None) });
-    }
-    let (child, stderr) = spawn_curl_process(program, config.into_bytes())?;
-    let shared = SharedState::new(destinations, Some(child));
-    let bg = Arc::clone(&shared);
-    let worker = thread::spawn(move || run_reader(stderr, tx, by_part, &bg));
-    Ok(BatchHandle { shared, rx: Mutex::new(rx), worker: Mutex::new(Some(worker)) })
+/// Starts downloading `items` after asking `allow_launch` whether the batch URLs may be fetched.
+pub fn start_checked<F>(items: &[BatchItem], headers: &[(&str, &str)], timeout_per_file: Duration, parallel: usize, allow_launch: F) -> Result<BatchHandle, BatchError>
+where F: FnOnce(&[&str]) -> Result<(), String> {
+    start_with_program_checked(OsStr::new("curl"), items, headers, timeout_per_file, parallel, allow_launch)
 }
 
 /// Starts downloading `items` with one `curl` process over `1..=6` reused parallel connections.
 pub fn start(items: &[BatchItem], headers: &[(&str, &str)], timeout_per_file: Duration, parallel: usize) -> Result<BatchHandle, BatchError> {
-    start_with_program(OsStr::new("curl"), items, headers, timeout_per_file, parallel)
-}
-
-fn run_reader(stderr: ChildStderr, tx: Sender<BatchResult>, mut by_part: HashMap<String, VecDeque<usize>>, shared: &SharedState) {
-    let mut reader = BufReader::new(stderr);
-    let mut line = String::new();
-    while !shared.cancelled.load(Ordering::Acquire) {
-        line.clear();
-        if matches!(reader.read_line(&mut line), Ok(0) | Err(_)) || shared.cancelled.load(Ordering::Acquire) {
-            break;
-        }
-        if let Some(res) = handle_record(&line, &mut by_part, shared) {
-            shared.pending_results.fetch_add(1, Ordering::AcqRel);
-            if tx.send(res).is_err() {
-                shared.pending_results.fetch_sub(1, Ordering::AcqRel);
-                break;
-            }
-        }
-    }
-    reap_child(shared);
-    cleanup_parts(&shared.destinations);
-    shared.worker_done.store(true, Ordering::Release);
-    drop(tx);
-}
-
-fn handle_record(line: &str, by_part: &mut HashMap<String, VecDeque<usize>>, shared: &SharedState) -> Option<BatchResult> {
-    let rest = line.trim_end_matches(['\r', '\n']).strip_prefix(RECORD_PREFIX)?;
-    let mut fields = rest.splitn(3, '\t');
-    let http_status = fields.next()?.parse::<u16>().unwrap_or(0);
-    let exit_code = fields.next()?.parse::<i32>().unwrap_or(-1);
-    let idx = by_part.get_mut(&fields.next()?.replace('\\', "/"))?.pop_front()?;
-    let dest = shared.destinations.get(idx)?;
-    if shared.cancelled.load(Ordering::Acquire) {
-        return None;
-    }
-    let part = part_path(dest);
-    if exit_code == 0 && http_status == 200 {
-        if !part.exists() { let _ = fs::write(&part, b""); }
-        if fs::rename(&part, dest).is_err() { let _ = fs::remove_file(&part); }
-    } else {
-        let _ = fs::remove_file(&part);
-    }
-    Some(BatchResult { index: idx, http_status, exit_code })
-}
-
-fn reap_child(shared: &SharedState) {
-    if let Some(mut child) = shared.child.lock().ok().and_then(|mut g| g.take()) {
-        let _ = child.kill();
-        let _ = child.wait();
-    }
-}
-
-fn cleanup_parts(destinations: &[PathBuf]) {
-    for dest in destinations { let _ = fs::remove_file(part_path(dest)); }
+    start_checked(items, headers, timeout_per_file, parallel, default_allow_launch)
 }
 
 #[cfg(test)]
@@ -295,3 +218,6 @@ mod tests_a;
 #[cfg(test)]
 #[path = "curl_batch_b_tests.rs"]
 mod tests_b;
+#[cfg(test)]
+#[path = "curl_batch_c_tests.rs"]
+mod tests_c;
