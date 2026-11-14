@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use eframe::egui;
-use strata_net::network::probe_dry_run;
 use strata_types::crs::WorkCrs;
 
 use crate::app_state::{MainTab, StrataAppState};
@@ -242,7 +241,13 @@ pub fn run_perf1_gate() -> GateResult {
 
     let mut skip_reason: Option<String> = None;
     let mut report_out: Option<PerfReport> = None;
-    let _ = probe_dry_run(false, || {
+    // The gate runs inside --verify-all, where the offline switch is already on, so no launch can start (the
+    // test-only probe of strata-net does not exist in a release build). With the network allowed it does not measure.
+    if strata_net::network::is_allowed() {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return evaluate_perf_gate(None, Some("the offline switch is not on"), PERF1_P95_BOUND_MS);
+    }
+    let mut measure = || {
         let ctx = egui::Context::default();
         let mut state = StrataAppState::new_startup();
         crate::gui_theme_fonts::configure_korean_fonts_and_theme(&ctx, &state.theme);
@@ -277,7 +282,8 @@ pub fn run_perf1_gate() -> GateResult {
         set_enabled(prev);
         clear_global();
         report_out = Some(summarize_samples(&samples, [win.width(), win.height()], ctx.pixels_per_point()));
-    });
+    };
+    measure();
     let _ = std::fs::remove_dir_all(&tmp_dir);
     evaluate_perf_gate(report_out.as_ref(), skip_reason.as_deref(), PERF1_P95_BOUND_MS)
 }
