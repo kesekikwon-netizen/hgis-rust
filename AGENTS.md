@@ -23,6 +23,8 @@ not apply here. Where this file and `CLAUDE.md` differ, this file wins. Plan: `d
 - Claim done only after every `verify` command ran and you read its output.
 - After the feature, review your own diff once. Fix real findings in the same change; list the rest in `not_done`.
 - Do not ask the user. For a technical choice take the safest option and record one line in `decisions`.
+- The app keeps evolving (docs/EVOLUTION.md). When you see a way it could do better than the C++ app, do not build it:
+  write one line in `evolve` (what, where, why it is better). The director turns the good ones into orders.
 - Ordinary obstacles (build lock, timeout, compile error, your own failing test) are not stop conditions: find the cause and continue.
 
 ## Code
@@ -85,4 +87,4 @@ The finished app must be distributable without infringing anyone's copyright and
 ## Report
 
 `head {cwd, branch, HEAD}`, `order`, `status: DONE | BLOCKED`, `tests_added [{name, failed_before, now}]`, `ported_from`,
-`changed_tests`, `verify`, `files`, `commit`, `decisions`, `unsure`, `not_done`.
+`changed_tests`, `verify`, `files`, `commit`, `decisions`, `unsure`, `not_done`, `evolve`.
