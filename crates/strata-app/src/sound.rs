@@ -5,6 +5,9 @@
 
 #[path = "sound_frame.rs"]
 mod sound_frame;
+/// The download gauge as the sounds hear it.
+#[path = "sound_jobs.rs"]
+mod sound_jobs;
 #[cfg(test)]
 #[path = "sound_tests_b.rs"]
 mod sound_tests_b;
@@ -73,6 +76,8 @@ pub struct SoundController {
     last_done_at: Option<Duration>,
     last_stopped_at: Option<Duration>,
     jobs: HashMap<u64, JobTrack>,
+    /// The step of its work each running job was seen at last (sound_jobs.rs).
+    steps: HashMap<u64, u64>,
     pub(super) prev_save_sig: Option<(PathBuf, usize)>,
     in_frame: bool,
     frame_tick: Option<(Duration, SoundLevel)>,
@@ -99,6 +104,7 @@ impl SoundController {
             last_done_at: None,
             last_stopped_at: None,
             jobs: HashMap::new(),
+            steps: HashMap::new(),
             prev_save_sig: None,
             in_frame: false,
             frame_tick: None,

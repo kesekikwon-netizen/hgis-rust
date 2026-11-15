@@ -9,32 +9,34 @@ use std::f32::consts::PI;
 use strata_types::theme_display::SoundLevel;
 
 pub const SAMPLE_RATE_HZ: u32 = 44_100;
-/// Maximum allowed peak amplitude (`-24 dBFS` = `10^(-24/20)`).
-pub const MAX_PEAK_DBFS: f32 = -24.0;
-pub const MAX_PEAK_LINEAR: f32 = 0.063_095_73;
+/// Maximum allowed peak amplitude (`-12 dBFS` = `10^(-12/20)`). It was -24 dBFS until the owner said a
+/// press could hardly be noticed (2026-11-15: 「눌리는지 적용되는지 확인이 잘안된다」).
+pub const MAX_PEAK_DBFS: f32 = -12.0;
+pub const MAX_PEAK_LINEAR: f32 = 0.251_188_64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SoundKind {
-    /// Button press: 12 ms tactile paper/wood tick, sine sweep 760 Hz -> 420 Hz,
-    /// 1.5 ms raised-cosine attack, exp(-t / 4.5 ms) body decay, 2.5 ms raised-cosine tail;
-    /// peak -30.0 dBFS (`소리 작게`, default) / -25.0 dBFS (`소리 보통`).
+    /// Button press: 45 ms wooden tock, sine sweep 760 Hz -> 420 Hz,
+    /// 2 ms raised-cosine attack, exp(-t / 14 ms) body decay, 10 ms raised-cosine tail;
+    /// peak -20.0 dBFS (`소리 작게`, default) / -14.0 dBFS (`소리 보통`).
     ButtonPress,
     /// Download progress (25% / 50% / 75%): 40 ms soft step pip, D5 (587.33 Hz) + 0.15 * D6
     /// (1174.66 Hz), 4 ms raised-cosine attack, exp(-t / 18 ms) decay, 8 ms raised-cosine tail;
-    /// peak -32.0 dBFS (`소리 작게`, default) / -27.0 dBFS (`소리 보통`).
+    /// peak -28.0 dBFS (`소리 작게`, default) / -22.0 dBFS (`소리 보통`): the weakest sound, also played
+    /// while the gauge works (sound_jobs.rs).
     DownloadProgress,
     /// Download done: 180 ms (< 250 ms) two rising notes — Note 1 (0..85 ms): C5 (523.25 Hz) plus
     /// 0.12 * C6 (1046.50 Hz); Note 2 (85..180 ms): E5 (659.25 Hz) plus 0.12 * E6 (1318.51 Hz),
     /// each with 6 ms raised-cosine attack, exp(-t / 48 ms) decay, 12 ms raised-cosine tail;
-    /// peak -28.5 dBFS (`소리 작게`, default) / -24.5 dBFS (`소리 보통`).
+    /// peak -18.0 dBFS (`소리 작게`, default) / -13.0 dBFS (`소리 보통`).
     DownloadDone,
     /// Download stopped (needs user): 140 ms single low soft note, D4 (293.66 Hz) + 0.20 * D5
     /// (587.33 Hz), 8 ms raised-cosine attack, exp(-t / 65 ms) decay, 18 ms raised-cosine tail;
-    /// peak -28.5 dBFS (`소리 작게`, default) / -24.5 dBFS (`소리 보통`).
+    /// peak -18.0 dBFS (`소리 작게`, default) / -13.0 dBFS (`소리 보통`).
     DownloadStopped,
     /// Survey saved: 110 ms single warm note, 0.85 * G4 (392.00 Hz) + 0.15 * D5 (587.33 Hz),
     /// 6 ms raised-cosine attack, exp(-t / 52 ms) decay, 15 ms raised-cosine tail;
-    /// peak -29.0 dBFS (`소리 작게`, default) / -24.5 dBFS (`소리 보통`).
+    /// peak -20.0 dBFS (`소리 작게`, default) / -14.0 dBFS (`소리 보통`).
     SurveySaved,
 }
 
@@ -59,29 +61,29 @@ pub struct SoundRecipeSpec {
 pub const fn recipe_spec(kind: SoundKind) -> SoundRecipeSpec {
     match kind {
         SoundKind::ButtonPress => SoundRecipeSpec {
-            duration_ms: 12,
-            quiet_peak_dbfs: -30.0,
-            normal_peak_dbfs: -25.0,
+            duration_ms: 45,
+            quiet_peak_dbfs: -20.0,
+            normal_peak_dbfs: -14.0,
         },
         SoundKind::DownloadProgress => SoundRecipeSpec {
             duration_ms: 40,
-            quiet_peak_dbfs: -32.0,
-            normal_peak_dbfs: -27.0,
+            quiet_peak_dbfs: -28.0,
+            normal_peak_dbfs: -22.0,
         },
         SoundKind::DownloadDone => SoundRecipeSpec {
             duration_ms: 180,
-            quiet_peak_dbfs: -28.5,
-            normal_peak_dbfs: -24.5,
+            quiet_peak_dbfs: -18.0,
+            normal_peak_dbfs: -13.0,
         },
         SoundKind::DownloadStopped => SoundRecipeSpec {
             duration_ms: 140,
-            quiet_peak_dbfs: -28.5,
-            normal_peak_dbfs: -24.5,
+            quiet_peak_dbfs: -18.0,
+            normal_peak_dbfs: -13.0,
         },
         SoundKind::SurveySaved => SoundRecipeSpec {
             duration_ms: 110,
-            quiet_peak_dbfs: -29.0,
-            normal_peak_dbfs: -24.5,
+            quiet_peak_dbfs: -20.0,
+            normal_peak_dbfs: -14.0,
         },
     }
 }
@@ -149,7 +151,7 @@ pub fn synthesize(kind: SoundKind, level: SoundLevel) -> Vec<f32> {
             for (i, slot) in buf.iter_mut().enumerate() {
                 let frac = i as f32 / len.max(1) as f32;
                 let freq = 760.0 + (420.0 - 760.0) * frac;
-                let env = raised_cosine_envelope(i, len, 0.0015, 0.0045, 0.0025);
+                let env = raised_cosine_envelope(i, len, 0.002, 0.014, 0.010);
                 *slot = env * phase.sin();
                 phase += 2.0 * PI * freq / sr;
             }

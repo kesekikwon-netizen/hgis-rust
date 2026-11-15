@@ -112,6 +112,10 @@ pub fn on_frame_end(ctx: &egui::Context, app: &StrataAppState) {
         if clicked {
             ctrl.on_button_click(now, app.display_options.sound_level);
         }
+        // The gauge: its weak sound while it works, and the end of a download.
+        let (jobs, running) = super::sound_jobs::heard(app.download_jobs.jobs());
+        ctrl.observe_jobs(&jobs, now, app.display_options.sound_level);
+        ctrl.observe_running(&running, now, app.display_options.sound_level);
         ctrl.observe_app_save(app, now);
         ctrl.end_frame();
     };

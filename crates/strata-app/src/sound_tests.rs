@@ -41,7 +41,8 @@ fn synthesized_sounds_match_stated_lengths_soft_envelopes_and_peak_ceiling() {
         assert_eq!(normal.len(), expected_len, "{kind:?} normal sample count");
 
         if kind == SoundKind::ButtonPress {
-            assert!((10..=15).contains(&spec.duration_ms));
+            // 12 ms until 2026-11-15; the owner could hardly notice a press.
+            assert!((40..=60).contains(&spec.duration_ms));
         }
         if kind == SoundKind::DownloadDone {
             assert!(spec.duration_ms < 250);
