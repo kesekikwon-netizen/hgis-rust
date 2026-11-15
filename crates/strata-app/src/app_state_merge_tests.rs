@@ -132,3 +132,23 @@ fn differing_values_ask_first() {
     app.merge_selected_polygons_confirmed();
     assert_eq!(count(&app, "feature_poly"), 1);
 }
+
+/// Delete takes every selected shape off, from every layer, as one step (`deleteSelectedFeatures`,
+/// MainWindowUndo.cpp:538-575), with the C++ words; Ctrl+Z brings them all back.
+#[test]
+fn delete_takes_every_selected_shape_off_as_one_step() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = new_survey(dir.path());
+    let area = add(&mut app, "survey_area", &square(200_000.0, 450_000.0, 50.0), &[]);
+    let pit = add(&mut app, "feature_poly", &square(200_010.0, 450_010.0, 10.0), &[]);
+    let other = add(&mut app, "feature_poly", &square(200_030.0, 450_030.0, 10.0), &[]);
+    (app.home_map.also_selected, app.home_map.selected_shape) = (vec![("survey_area".to_owned(), area), ("feature_poly".to_owned(), pit)], Some(("feature_poly".to_owned(), other)));
+    let steps = app.undo_tables.len();
+    app.delete_selected();
+    assert_eq!((count(&app, "survey_area"), count(&app, "feature_poly")), (0, 0));
+    assert_eq!(app.status_left_message(), "도형 3개를 지웠습니다. Ctrl+Z로 복원할 수 있습니다.");
+    assert_eq!(app.undo_tables.len(), steps + 1);
+    assert!(app.all_selected().is_empty());
+    app.undo_map_action();
+    assert_eq!((count(&app, "survey_area"), count(&app, "feature_poly")), (1, 2));
+}

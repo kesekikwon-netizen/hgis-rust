@@ -121,26 +121,43 @@ impl StrataAppState {
             self.sketch_undo_vertex();
             return;
         }
-        if let Some((table, fid)) = self.home_map.selected_shape.clone() {
-            self.delete_shape(&table, fid);
+        if self.home_map.selected_shape.is_some() {
+            let all = self.all_selected();
+            self.delete_shapes(&all);
         } else if let Some((key, _)) = row.filter(|(_, group)| *group != LegendGroup::SurveyData) {
             self.remove_layers(&[key]);
         }
     }
 
-    /// `deleteSelectedFeatures` (`MainWindowUndo.cpp:538-575`): one undo step of that layer; the file changes
-    /// at the next 저장.
-    fn delete_shape(&mut self, table: &str, fid: i64) {
-        let Some(t) = self.survey_tables.iter_mut().find(|t| t.table == table) else { return };
-        if !t.layer.delete_feature(fid) {
+    /// `deleteSelectedFeatures` (`MainWindowUndo.cpp:538-575`): every selected shape, grouped by layer, as one
+    /// undo step; the file changes at the next 저장.
+    fn delete_shapes(&mut self, shapes: &[(String, i64)]) {
+        let mut keys: Vec<&String> = Vec::new();
+        for (key, _) in shapes {
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        let (mut done, mut count): (Vec<String>, usize) = (Vec::new(), 0);
+        for key in keys {
+            let fids: Vec<i64> = shapes.iter().filter(|(table, _)| table == key).map(|(_, fid)| *fid).collect();
+            let table = self.survey_tables.iter_mut().find(|t| t.table == *key);
+            if table.and_then(|t| t.layer.change_add_delete(&[], Vec::new(), &fids)).is_some() {
+                done.push(key.clone());
+                count += fids.len();
+            }
+        }
+        if done.is_empty() {
             return;
         }
         self.redo_tables.clear();
-        self.undo_tables.push(UndoStep::Table(table.to_owned()));
+        for key in &done {
+            self.after_layer_edit(key);
+        }
+        self.undo_tables.push(if done.len() == 1 { UndoStep::Table(done.remove(0)) } else { UndoStep::Linked(done) });
         self.is_dirty = true;
-        self.home_map.selected_shape = None;
-        self.after_layer_edit(table);
-        self.show_status_message("도형 1개를 지웠습니다. Ctrl+Z로 복원할 수 있습니다.");
+        (self.home_map.selected_shape, self.home_map.also_selected) = (None, Vec::new());
+        self.show_status_message(format!("도형 {count}개를 지웠습니다. Ctrl+Z로 복원할 수 있습니다."));
     }
 }
 
