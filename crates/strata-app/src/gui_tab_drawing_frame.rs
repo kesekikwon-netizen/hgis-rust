@@ -81,10 +81,12 @@ pub(crate) fn sheet_px_to_world(mc: Pos2, center: [f64; 2], ppm: f64, pos: Pos2)
 }
 
 impl crate::app_state::StrataAppState {
-    /// 도면 지도의 가운데 — C++ `studioMapExtent`(KaDrawingStudio.cpp:188-195)는 지도 화면 범위를 쓰고,
-    /// 「레이어를 가운데」로 옮긴 뒤에는 그 자리.
-    pub(crate) fn sheet_map_center(&self) -> [f64; 2] {
-        self.drawing.sheet_center.unwrap_or(self.home_map.viewport.center_xy)
+    /// The middle of the sheet's map: the place the user chose (「레이어를 가운데」), else the survey area
+    /// (owner 2026-11-15: 「모든도면은 조사구역이 중심이되게하라」), and without a survey area the middle of
+    /// the map view, as the C++ `studioMapExtent` takes it (KaDrawingStudio.cpp:188-195).
+    pub(crate) fn sheet_map_center(&mut self) -> [f64; 2] {
+        let chosen = self.drawing.sheet_center.or_else(|| self.reference_circle_centre_for_paint());
+        chosen.unwrap_or(self.home_map.viewport.center_xy)
     }
 
     /// 「레이어를 가운데」 — C++ `centerSurveyInMap`(KaDrawingStudio.cpp:3708-3755): 고른 레이어의 범위 가운데,
@@ -96,7 +98,7 @@ impl crate::app_state::StrataAppState {
             .and_then(|k| self.survey_tables.iter().find(|t| t.table == k))
             .and_then(|t| crate::survey_paint_layers::table_extent_in(t, self.work_crs))
             .filter(|b| finite(b) && b[2] - b[0] < 2_000_000.0);
-        let Some(b) = layer_ext.or_else(|| crate::survey_area_setup::survey_area_extent(self).filter(finite)) else {
+        let Some(b) = layer_ext.or_else(|| crate::survey_area_setup::main_survey_area_extent(self).filter(finite)) else {
             self.home_map.draw_guide_message = Some("가운데로 둘 레이어를 왼쪽에서 고르세요.".to_owned());
             return;
         };

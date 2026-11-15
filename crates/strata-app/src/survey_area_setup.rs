@@ -78,6 +78,16 @@ pub(crate) fn survey_area_extent(app: &StrataAppState) -> Option<[f64; 4]> {
         .reduce(|b, e| [b[0].min(e[0]), b[1].min(e[1]), b[2].max(e[2]), b[3].max(e[3])])
 }
 
+/// The survey area the maps are centred on, as its box in the work CRS: of all the survey-area shapes the
+/// one with the largest area (of equal ones the first). With shapes far apart the middle of their common
+/// box is empty land (owner 2026-11-15: 「모든도면은 조사구역이 중심이되게하라」).
+pub(crate) fn main_survey_area_extent(app: &StrataAppState) -> Option<[f64; 4]> {
+    let tables = app.survey_tables.iter().filter(|t| is_survey_area_key(&t.table));
+    let shapes = tables.flat_map(|t| t.layer.features.iter().map(move |shape| (t, shape, strata_engine::wkt_area(&shape.wkt_geom).unwrap_or(0.0))));
+    let (table, shape, _) = shapes.reduce(|largest, next| if next.2 > largest.2 { next } else { largest })?;
+    crate::survey_paint_layers::shapes_extent_in(table, std::slice::from_ref(shape), app.work_crs)
+}
+
 impl StrataAppState {
     /// `layerToContinue` — 이 조사 파일의 조사구역 레이어 가운데 범례에서 고른 것, 아니면 처음 보이는 것.
     pub(crate) fn survey_area_layer_to_continue(&self) -> Option<(String, String)> {

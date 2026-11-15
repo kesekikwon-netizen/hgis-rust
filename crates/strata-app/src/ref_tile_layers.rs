@@ -193,14 +193,14 @@ impl StrataAppState {
         self.left_layers.entries.retain(|e| ref_tile_layer(&e.layer_key).is_none());
     }
 
-    /// Centre of the bounding box of the drawn survey area(s), work CRS metres.
+    /// Centre of the survey area the maps are centred on (its largest shape), work CRS metres.
     pub(crate) fn reference_circle_centre(&self) -> Option<[f64; 2]> {
-        crate::survey_area_setup::survey_area_extent(self).map(|b| [(b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0])
+        crate::survey_area_setup::main_survey_area_extent(self).map(|b| [(b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0])
     }
 
     /// The same centre for the paint pass: from the cache while the work CRS and the survey-area shapes are
     /// what they were. Per frame this is one hash over the WKT of those shapes (a handful of short strings).
-    fn reference_circle_centre_for_paint(&mut self) -> Option<[f64; 2]> {
+    pub(crate) fn reference_circle_centre_for_paint(&mut self) -> Option<[f64; 2]> {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.work_crs.auth_id().hash(&mut hasher);

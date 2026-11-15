@@ -5,6 +5,8 @@
 
 use strata_canvas2d::map_tools::MapToolKind;
 
+use strata_storage::survey_gpkg_read::SurveyFileTable;
+
 use super::*;
 use crate::app_state::MainTab;
 
@@ -87,4 +89,32 @@ fn hidden_area_layer_gets_a_new_table_that_saves() {
     let conn = rusqlite::Connection::open(&path).expect("open");
     let n: i64 = conn.query_row("SELECT count(*) FROM survey_area_2", [], |r| r.get(0)).expect("count");
     assert_eq!(n, 1);
+}
+
+fn area_table(name: &str, shapes: &[&str]) -> SurveyFileTable {
+    let mut layer = LayerEditBuffer::new(DomainLayerKey::SurveyArea);
+    for wkt in shapes {
+        layer.add_unsaved_feature((*wkt).to_owned(), std::collections::BTreeMap::new());
+    }
+    SurveyFileTable { table: name.to_owned(), srs_id: 5187, geometry_type: "POLYGON".to_owned(), columns: Vec::new(), baseline: Vec::new(), layer }
+}
+
+/// The survey area the maps are centred on is the largest shape of all the survey-area layers, as its own
+/// box: the first of two equal ones, the only one when there is one, and none without a shape.
+#[test]
+fn the_main_survey_area_is_the_largest_shape_of_all_survey_area_layers() {
+    let mut app = StrataAppState::new_startup();
+    assert_eq!(main_survey_area_extent(&app), None);
+    app.survey_tables.push(area_table("survey_area", &[
+        "POLYGON ((208000 442000, 208030 442000, 208030 442040, 208000 442000))",
+        "POLYGON ((200000 450000, 200300 450000, 200300 450200, 200000 450200, 200000 450000))",
+    ]));
+    assert_eq!(main_survey_area_extent(&app), Some([200_000.0, 450_000.0, 200_300.0, 450_200.0]));
+    assert_eq!(survey_area_extent(&app), Some([200_000.0, 442_000.0, 208_030.0, 450_200.0]), "every shape still counts where all are asked for");
+
+    app.survey_tables.push(area_table("survey_area_2", &["POLYGON ((190000 460000, 190400 460000, 190400 460400, 190000 460400, 190000 460000))"]));
+    assert_eq!(main_survey_area_extent(&app), Some([190_000.0, 460_000.0, 190_400.0, 460_400.0]), "a larger shape of another survey-area layer");
+
+    app.survey_tables.push(area_table("survey_area_3", &["POLYGON ((180000 470000, 180400 470000, 180400 470400, 180000 470400, 180000 470000))"]));
+    assert_eq!(main_survey_area_extent(&app), Some([190_000.0, 460_000.0, 190_400.0, 460_400.0]), "of two equal shapes the first");
 }

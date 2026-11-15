@@ -6,6 +6,7 @@
 //! 잰 평면 면적이다.
 
 use strata_engine::Transformer;
+use strata_storage::edit_buffer::FeatureRecord;
 use strata_storage::gpkg_wkt::wkt_to_parts;
 use strata_storage::survey_gpkg_read::SurveyFileTable;
 use strata_storage::wkb_codec::WkbGeometry;
@@ -250,11 +251,16 @@ pub(crate) fn outer_box_of(mut f: impl FnMut(f64, f64) -> [f64; 2], r: [f64; 4])
 /// C++ `zoomToLayerMax` 의 레이어 범위 — 표 좌표계에서 도형들의 바깥 상자(QGIS `layer->extent()`)를
 /// 작업 좌표계로 옮긴 바깥 상자. 도형이 없거나 좌표계를 모르면 None.
 pub(crate) fn table_extent_in(t: &SurveyFileTable, work: strata_types::crs::WorkCrs) -> Option<[f64; 4]> {
+    shapes_extent_in(t, &t.layer.features, work)
+}
+
+/// The same box for some shapes of the table.
+pub(crate) fn shapes_extent_in(t: &SurveyFileTable, shapes: &[FeatureRecord], work: strata_types::crs::WorkCrs) -> Option<[f64; 4]> {
     let work_epsg = CrsCode::from(work).epsg_number();
     let tr = transformer(t.srs_id, work_epsg)?;
     let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
     let mut add = |p: &[f64; 2]| b = [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])];
-    for f in &t.layer.features {
+    for f in shapes {
         for part in wkt_to_parts(&f.wkt_geom).unwrap_or_default() {
             match part {
                 WkbGeometry::Point(p) => add(&p),

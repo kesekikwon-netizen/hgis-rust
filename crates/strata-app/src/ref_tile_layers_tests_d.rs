@@ -46,15 +46,16 @@ fn test_f1_the_circle_centre_is_worked_out_once_until_the_survey_area_changes() 
     }
     assert_eq!(app.ref_circle.times_worked_out(), before + 1, "three paints (nine frames), one computation");
 
-    // A second shape 40 km to the east moves the centre 20 km: worked out once more, and the tiles follow.
+    // A second, larger shape 40 km to the east is now the survey area the circle lies around: worked out
+    // once more, and the tiles follow.
     let (x, y) = (centre[0] + 40_000.0, centre[1]);
-    let wkt = format!("POLYGON (({} {}, {} {}, {} {}, {} {}))", x, y, x + 10.0, y, x + 10.0, y + 10.0, x, y);
+    let wkt = format!("POLYGON (({} {}, {} {}, {} {}, {} {}, {} {}))", x, y, x + 200.0, y, x + 200.0, y + 200.0, x, y + 200.0, x, y);
     let table = app.survey_tables.iter_mut().find(|t| t.table == "survey_area").unwrap();
     table.layer.features.push(FeatureRecord { fid: 2, wkt_geom: wkt, attributes: Default::default() });
     app.home_map.viewport.center_xy = [centre[0] + 115_000.0, centre[1]];
     let (asked, _) = paint_at_rest(&mut app, rect, None);
     assert_eq!(app.ref_circle.times_worked_out(), before + 2);
-    assert!(!asked.is_empty(), "115 km east of the first shape is 95 km from the new centre");
+    assert!(!asked.is_empty(), "115 km east of the first shape is 75 km from the new centre");
 }
 
 /// Like the background tiles, reference tiles are asked for only once the view has come to rest.
@@ -103,4 +104,25 @@ fn test_f1_old_map_press_is_the_command_and_claims_nothing_without_an_area() {
     assert!(app.active_tab == crate::app_state::MainTab::Map);
     assert_eq!(app.home_map.draw_guide_message.as_deref(), Some(DAEDONGYEOJIDO.needs_area_text));
     assert!(app.left_layers.entries.iter().all(|e| ref_tile_layer(&e.layer_key).is_none()));
+}
+
+/// With survey-area shapes far apart the circle lies around the survey area itself, which is the largest
+/// shape, and not around the middle of their common box, which is empty land (owner 2026-11-15 with a
+/// picture of it: 「어떤도면이던지 조사구역을 중심으로 반경 10km가 보이게하라」). The order of the shapes
+/// does not matter.
+#[test]
+fn the_circle_lies_around_the_largest_survey_area_shape() {
+    let centre = work_xy(GYEONGJU.0, GYEONGJU.1);
+    let (mut app, _rect) = map_app(centre, 30.0);
+    draw_survey_area(&mut app, centre);
+    let (x, y) = (centre[0] + 6_000.0, centre[1] - 5_000.0);
+    let small = format!("POLYGON (({} {}, {} {}, {} {}, {} {}))", x, y, x + 20.0, y, x + 20.0, y + 30.0, x, y);
+    let table = app.survey_tables.iter_mut().find(|t| t.table == "survey_area").unwrap();
+    table.layer.features.insert(0, FeatureRecord { fid: 2, wkt_geom: small, attributes: Default::default() });
+
+    let found = app.reference_circle_centre().unwrap();
+    assert!((found[0] - centre[0]).abs() < 1e-6 && (found[1] - centre[1]).abs() < 1e-6, "{found:?} for {centre:?}");
+    assert!(app.add_reference_tile_layer(&DAEDONGYEOJIDO));
+    let view = app.home_map.viewport.center_xy;
+    assert!((view[0] - centre[0]).abs() < 1e-6 && (view[1] - centre[1]).abs() < 1e-6, "the view goes to the survey area: {view:?}");
 }
