@@ -196,6 +196,14 @@ Counts in columns `a`–`f` give the number of Part 3 findings affecting each ho
 
 ---
 
+2026-11-15 (order NET-GEO1): the Rust app now sends both requests of this table, in the C++ forms, with the same
+User-Agent and limits (15 s idle, 180 s total, one retry of a dropped piece, quarters for a partial or slow answer,
+5 min in all): `crates/strata-refmap/src/geology_request.rs` (forms), `geology_prepare.rs` (flow),
+`crates/strata-net/src/reference_http.rs` (the one GET, through the gate of `network.rs`). One box is asked for: that
+of the 10 km scope around the survey area (owner 2026-11-15), so a survey means 1 feature request and 1 picture request;
+a map kept for the same area is not fetched again. `GetCapabilities` is not sent (the picture fallback is not built).
+The builder on `/openapi/wfs` in `kigam_soil_river.rs` is still uncalled and goes with order NET-RIV1.
+
 ### 17. `gis.naas.go.kr`
 
 | purpose (Korean UI name) | method + path pattern | auth | headers set (literal) | max parallel | pacing & typical job arithmetic | timeout | retry | on 401 / 403 / 429 / 5xx / empty or XML-error body | cache | C++ `file:line` | Rust `file:line` | difference between the two apps |

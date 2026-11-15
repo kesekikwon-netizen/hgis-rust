@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use strata_engine::{read_table, Cell, Scope, ShapeKind, Shapes, Transformer};
 
 use super::*;
-use crate::transfer::{Request, TransferFailure};
+use crate::transfer::{Request, TransferFailure, Why};
 
 pub(super) fn square_wkt(x: f64, y: f64, side: f64) -> String {
     format!("POLYGON (({x} {y}, {} {y}, {} {}, {x} {}, {x} {y}))", x + side, x + side, y + side, y + side)
@@ -124,7 +124,7 @@ fn an_error_page_is_a_failure_not_an_empty_map() {
         Ok(b"<ServiceExceptionReport>unavailable</ServiceExceptionReport>".to_vec())
     };
     let stopped = prepare(&scope_at(200_000.0, 450_000.0), &dir.path().join(FILE_NAME), &download, &never).expect_err("failed");
-    assert_eq!(stopped, Stopped::Failed("KIGAM 서버 연결 실패: 서버가 GeoJSON 대신 다른 응답을 보냈습니다.".to_owned()));
+    assert_eq!(stopped, Stopped::Failed(Why::Service, "KIGAM 서버 연결 실패: 서버가 GeoJSON 대신 다른 응답을 보냈습니다.".to_owned()));
     assert_eq!(requests.get(), 1);
     assert_eq!(std::fs::read_dir(dir.path()).expect("dir").count(), 0, "the folder of the failed map is gone");
     // An object that is no feature list is said with the other sentence.
@@ -143,7 +143,7 @@ fn no_unit_in_the_box_is_said_and_nothing_is_stored() {
         Ok(answer(Vec::new(), None, None))
     };
     let stopped = prepare(&scope_at(200_000.0, 450_000.0), &dir.path().join(FILE_NAME), &download, &never).expect_err("failed");
-    assert_eq!(stopped, Stopped::Failed(NO_DATA.to_owned()));
+    assert_eq!(stopped, Stopped::Failed(Why::NoData, NO_DATA.to_owned()));
     assert_eq!(std::fs::read_dir(dir.path()).expect("dir").count(), 0);
     // Ulleungdo: east of the mainland layer's box and far from Jeju. Nothing is asked of the service.
     let ulleung = Transformer::new(4326, 5186).expect("transformer").transform([130.86, 37.5]).expect("point");

@@ -30,7 +30,7 @@ fn a_place_that_cannot_hold_a_folder_is_said_with_the_cpp_words() {
     let dir = tempfile::tempdir().expect("tempdir");
     let under_a_file = dir.path().join("a-file");
     std::fs::write(&under_a_file, b"x").expect("file");
-    assert_eq!(new_storage(&under_a_file.join("지질도_KIGAM.gpkg")).expect_err("refused"), Stopped::Failed(NO_FOLDER.to_owned()));
+    assert_eq!(new_storage(&under_a_file.join("지질도_KIGAM.gpkg")).expect_err("refused"), Stopped::Failed(Why::Storage, NO_FOLDER.to_owned()));
     assert_eq!(new_storage(std::path::Path::new("")).expect_err("refused").text(), NO_FOLDER);
 }
 

@@ -16,6 +16,7 @@ pub mod heritage_intranet;
 pub mod internet_check;
 pub mod kigam_soil_river;
 pub mod network;
+pub mod reference_http;
 pub mod ngii_auto;
 pub mod ngii_topographic;
 pub mod tile_fetcher;

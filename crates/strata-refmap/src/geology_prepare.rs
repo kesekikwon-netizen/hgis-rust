@@ -5,7 +5,7 @@
 //! rock units are cut to that scope.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde_json::Value;
 use strata_engine::{point_on_surface, polygons_area, write_new_table, Cell, ColumnKind, PolygonRings, Row, Scope, ShapeKind, Shapes, TableLayout, Transformer};
@@ -16,7 +16,7 @@ use crate::geology_colour::{hex, pick_pixel_color};
 use crate::geology_era::{era_class, unit_fallback_color, UNKNOWN_RGB};
 use crate::geology_request::{features_url, layer_for, picture_pixel, picture_url, MAX_FEATURES, USER_AGENT};
 use crate::tiled_fetch::{fetch, Options, Outcome, Piece, Range};
-use crate::transfer::{new_storage, Download, Request, Stopped, TransferFailure, CANCELLED, NOT_REACHED, NOT_SAVED, NOT_VERIFIED, TOO_SLOW};
+use crate::transfer::{new_storage, Download, Prepared, Request, Stopped, TransferFailure, Why, CANCELLED, NOT_REACHED, NOT_SAVED, NOT_VERIFIED, TOO_SLOW};
 
 #[cfg(test)]
 #[path = "geology_prepare_tests.rs"]
@@ -53,18 +53,8 @@ pub const NO_DATA: &str = "이 범위에는 지질도 데이터가 없습니다.
 /// `:907`.
 pub const NO_OFFICIAL_COLOUR: &str = "공식 지질도 색을 받지 못해 지질시대 기준색으로 표시합니다. 인터넷 연결 후 다시 내려받으면 공식 색을 적용합니다.";
 
-/// A stored map: its own folder in the survey folder, the file in it, how many units it holds, and what
-/// the user should know about it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Prepared {
-    pub folder: PathBuf,
-    pub gpkg: PathBuf,
-    pub rows: u64,
-    pub warnings: Vec<String>,
-}
-
-fn failed(text: impl Into<String>) -> Stopped {
-    Stopped::Failed(text.into())
+fn failed(why: Why, text: impl Into<String>) -> Stopped {
+    Stopped::Failed(why, text.into())
 }
 
 /// One box of rock units (`fetchLithoPiece`, `:226-270`).
@@ -120,14 +110,14 @@ pub fn prepare(scope: &Scope, requested: &Path, download: Download<'_>, cancelle
     if cancelled() {
         return Err(Stopped::Cancelled(CANCELLED.to_owned()));
     }
-    let bbox = scope.bbox().map_err(|_| failed(NO_TRANSFORM))?;
+    let bbox = scope.bbox().map_err(|_| failed(Why::Data, NO_TRANSFORM))?;
     if bbox.iter().any(|v| !v.is_finite()) || bbox[2] - bbox[0] > MAX_SPAN || bbox[3] - bbox[1] > MAX_SPAN {
-        return Err(failed(TOO_WIDE));
+        return Err(failed(Why::TooWide, TOO_WIDE));
     }
-    let to_lonlat = Transformer::new(STORED_EPSG, 4326).map_err(|_| failed(NO_TRANSFORM))?;
-    let range = to_lonlat.transform_box(bbox).map_err(|_| failed(NO_TRANSFORM))?;
+    let to_lonlat = Transformer::new(STORED_EPSG, 4326).map_err(|_| failed(Why::Data, NO_TRANSFORM))?;
+    let range = to_lonlat.transform_box(bbox).map_err(|_| failed(Why::Data, NO_TRANSFORM))?;
     let Some(layer) = layer_for(&range) else {
-        return Err(failed(NO_DATA));
+        return Err(failed(Why::NoData, NO_DATA));
     };
     let (folder, gpkg) = new_storage(requested)?;
     match build(scope, layer, &range, &to_lonlat, &gpkg, download, cancelled) {
@@ -155,16 +145,16 @@ fn build(scope: &Scope, layer: &str, range: &Range, to_lonlat: &Transformer, gpk
         return Err(stop());
     }
     if !fetched.ok {
-        return Err(failed(if fetched.error.is_empty() { NOT_FETCHED.to_owned() } else { format!("KIGAM 서버 연결 실패: {}", fetched.error) }));
+        return Err(failed(Why::Service, if fetched.error.is_empty() { NOT_FETCHED.to_owned() } else { format!("KIGAM 서버 연결 실패: {}", fetched.error) }));
     }
-    let collection = feature_collection(&fetched.body).map_err(failed)?;
+    let collection = feature_collection(&fetched.body).map_err(|text| failed(Why::Service, text))?;
     let features = collection.get("features").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
     if features.is_empty() {
-        return Err(failed(NO_DATA));
+        return Err(failed(Why::NoData, NO_DATA));
     }
     // An answer that names a CRS nobody knows is refused, not read as longitude and latitude (`:795-816`).
-    let source = declared_epsg(&collection).ok_or_else(|| failed(UNKNOWN_CRS))?;
-    let carry = Transformer::new(source, STORED_EPSG).map_err(|_| failed(UNKNOWN_CRS))?;
+    let source = declared_epsg(&collection).ok_or_else(|| failed(Why::Data, UNKNOWN_CRS))?;
+    let carry = Transformer::new(source, STORED_EPSG).map_err(|_| failed(Why::Data, UNKNOWN_CRS))?;
     let columns: Vec<(String, ColumnKind)> = columns_of(features).into_iter().filter(|(name, _)| name != ERA_COLUMN && name != COLOUR_COLUMN).collect();
 
     let mut units = Vec::new();
@@ -174,18 +164,18 @@ fn build(scope: &Scope, layer: &str, range: &Range, to_lonlat: &Transformer, gpk
         if cancelled() {
             return Err(stop());
         }
-        let shapes = feature.get("geometry").and_then(polygons_of).filter(|p| !p.is_empty()).ok_or_else(|| failed(UNREADABLE))?;
+        let shapes = feature.get("geometry").and_then(polygons_of).filter(|p| !p.is_empty()).ok_or_else(|| failed(Why::Data, UNREADABLE))?;
         let mut polygons = Vec::new();
         for rings in shapes {
             let mut carried = Vec::with_capacity(rings.len());
             for ring in rings {
-                let ring = if source == STORED_EPSG { ring } else { carry.transform_all(&ring).map_err(|_| failed(NOT_CARRIED))? };
+                let ring = if source == STORED_EPSG { ring } else { carry.transform_all(&ring).map_err(|_| failed(Why::Data, NOT_CARRIED))? };
                 if ring.iter().flatten().any(|v| !v.is_finite()) {
-                    return Err(failed(NOT_CARRIED));
+                    return Err(failed(Why::Data, NOT_CARRIED));
                 }
                 carried.push(ring);
             }
-            polygons.extend(scope.cut_polygon(&carried).map_err(|_| failed(UNREADABLE))?);
+            polygons.extend(scope.cut_polygon(&carried).map_err(|_| failed(Why::Data, UNREADABLE))?);
         }
         if polygons.is_empty() {
             continue;
@@ -205,7 +195,7 @@ fn build(scope: &Scope, layer: &str, range: &Range, to_lonlat: &Transformer, gpk
         units.push(Unit { polygons, cells, symbol, era_text });
     }
     if units.is_empty() {
-        return Err(failed(NO_DATA));
+        return Err(failed(Why::NoData, NO_DATA));
     }
 
     let official = official_colours(range, &colour_points, to_lonlat, download);
@@ -224,9 +214,9 @@ fn build(scope: &Scope, layer: &str, range: &Range, to_lonlat: &Transformer, gpk
         Row { shapes: Shapes::Polygons(unit.polygons), cells: unit.cells }
     });
     let table = TableLayout { table: TABLE, epsg: STORED_EPSG, kind: ShapeKind::Polygons, columns: &layout };
-    let stored = write_new_table(gpkg, &table, &mut rows).map_err(|_| failed(NOT_SAVED))?;
+    let stored = write_new_table(gpkg, &table, &mut rows).map_err(|_| failed(Why::Storage, NOT_SAVED))?;
     if stored != expected {
-        return Err(failed(NOT_VERIFIED));
+        return Err(failed(Why::Storage, NOT_VERIFIED));
     }
     Ok((stored, warnings))
 }

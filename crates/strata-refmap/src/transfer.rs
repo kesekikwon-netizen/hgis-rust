@@ -51,18 +51,43 @@ pub enum TransferFailure {
 /// real one; tests hand in recorded answers.
 pub type Download<'a> = &'a dyn Fn(&Request) -> Result<Vec<u8>, TransferFailure>;
 
+/// A stored map: its own folder in the survey folder, the file in it, how many rows it holds, and what the
+/// user should know about it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Prepared {
+    pub folder: PathBuf,
+    pub gpkg: PathBuf,
+    pub rows: u64,
+    pub warnings: Vec<String>,
+}
+
+/// What kind of thing stood in the way (the app shows one fixed code for each).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Why {
+    /// The survey folder cannot take the map.
+    Storage,
+    /// The area asked for is wider than the service is asked for.
+    TooWide,
+    /// The service has nothing for this area.
+    NoData,
+    /// The service was not reached or did not answer with map data.
+    Service,
+    /// The answer cannot be read or placed.
+    Data,
+}
+
 /// Why a map was not prepared. The text is what the user is told.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stopped {
     Cancelled(String),
-    Failed(String),
+    Failed(Why, String),
 }
 
 impl Stopped {
     #[must_use]
     pub fn text(&self) -> &str {
         match self {
-            Self::Cancelled(text) | Self::Failed(text) => text,
+            Self::Cancelled(text) | Self::Failed(_, text) => text,
         }
     }
 }
@@ -74,7 +99,7 @@ impl Stopped {
 /// # Errors
 /// `NO_FOLDER` when the folder cannot be made.
 pub fn new_storage(requested: &Path) -> Result<(PathBuf, PathBuf), Stopped> {
-    let failed = || Stopped::Failed(NO_FOLDER.to_owned());
+    let failed = || Stopped::Failed(Why::Storage, NO_FOLDER.to_owned());
     let (parent, name) = (requested.parent().ok_or_else(failed)?, requested.file_name().ok_or_else(failed)?);
     const LETTERS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     for _ in 0..64 {

@@ -38,24 +38,21 @@ fn test_r8_soil_and_river_toggle_with_cpp_layer_names() {
     }
 }
 
-/// R8 — 「지질」은 `MainWindowOverlay.cpp:409,422` 처럼 `지질도(KIGAM 1:5만)` 을
-/// 토글하고 `지질 음영` 을 같은 상태로 맞춘다.
+/// R8 — 「지질」 fetches a real map (ref_map.rs, order NET-GEO1): a press that cannot fetch adds no layer
+/// and says what to do first (`MainWindowDownloads.cpp:93-103`), instead of calling a map "added" that was
+/// never fetched. The hide-and-show of `MainWindowOverlay.cpp:409` is tested on a fetched map in
+/// ref_map_tests.rs; the relief under it (`:422-423`) returns with order NET-GEO1c.
 #[test]
-fn test_r8_geology_toggle_also_sets_relief_layer() {
+fn test_r8_geology_press_without_a_survey_adds_nothing() {
     let mut app = StrataAppState::new_startup();
     app.handle_ribbon_click("지질");
-    assert!(app
-        .home_map
-        .real_survey
-        .is_layer_visible("지질도(KIGAM 1:5만)"));
-    app.handle_ribbon_click("지질");
-    assert!(!app
-        .home_map
-        .real_survey
-        .is_layer_visible("지질도(KIGAM 1:5만)"));
-    assert_eq!(app.status_bar_hint, "지질도(KIGAM 1:5만)를 껐습니다.");
-    // :422-423 — 지질도를 끄면 지형 음영 겹침도 내린다.
-    assert!(!app.home_map.real_survey.is_layer_visible("지질 음영"));
+    assert!(!app.home_map.real_survey.layer_visible.contains_key("지질도(KIGAM 1:5만)"));
+    assert!(app.left_layers.entries.iter().all(|e| e.label_ko != "지질도(KIGAM 1:5만)"));
+    assert_eq!(
+        app.home_map.draw_guide_message.as_deref(),
+        Some("먼저 「새 조사」를 만들거나 조사를 여세요. 받은 자료는 조사 폴더에 저장해 다음에도 인터넷 없이 열 수 있게 합니다.")
+    );
+    assert!(app.download_jobs.is_empty());
 }
 
 /// R8 — 「DEM」은 `MainWindowOverlay.cpp:303-348`. 없으면 받는 창(:344),

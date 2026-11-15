@@ -37,29 +37,10 @@ impl StrataAppState {
                         "토양도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
                 }
             }
-            // C++ MainWindowOverlay.cpp:405-472 downloadGeologyMap — :409 toggleExistingOverlay
-            // (`지질도(KIGAM 1:5만)`, m_actGeology)로 껐다 켰다 하고, 켤 때는 지형 음영
-            // 겹침(GeologyMapService::reliefLayerTitle = `지질 음영`, GeologyMapService.cpp:60)
-            // 도 같은 상태로 맞춘다(:422-423). 없을 때만 내려받는다(:467 → :536,622).
-            "지질" => {
-                self.active_tab = MainTab::Map;
-                if !self.toggle_existing_overlay("지질도(KIGAM 1:5만)") {
-                    self.home_map
-                        .real_survey
-                        .layer_visible
-                        .insert("지질도(KIGAM 1:5만)".to_owned(), true);
-                    self.status_bar_hint =
-                        "지질도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
-                }
-                let now_on = self
-                    .home_map
-                    .real_survey
-                    .is_layer_visible("지질도(KIGAM 1:5만)");
-                self.home_map
-                    .real_survey
-                    .layer_visible
-                    .insert("지질 음영".to_owned(), now_on);
-            }
+            // MainWindowOverlay.cpp:405-472 downloadGeologyMap: with the layer in the legend the button hides and
+            // shows it; without it the map is fetched (ref_map.rs). The relief under it (`지질 음영`,
+            // GeologyMapService.cpp:609-636) is order NET-GEO1c.
+            "지질" => self.press_reference_map(&crate::ref_map::GEOLOGY),
             // C++ MainWindowOverlay.cpp:476-527 downloadRiverMap — :479 toggleExistingOverlay
             // (`수계도(하천망)`, m_actRiver)로 껐다 켰다 하고, 없을 때만 내려받는다
             // (:522 → :536,622 `수계도를 추가했습니다. …`).

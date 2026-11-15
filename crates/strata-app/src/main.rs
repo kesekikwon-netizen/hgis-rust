@@ -203,6 +203,7 @@ mod basemap_fetch;
 mod basemap_mesh;
 mod basemap_paint;
 mod basemap_tiles;
+mod ref_map;
 mod ref_tile_layers;
 mod ref_vector;
 mod ref_vector_clip;

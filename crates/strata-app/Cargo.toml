@@ -23,6 +23,7 @@ strata-check-export = { workspace = true }
 # gdal: reference maps are kept as GeoPackage tables and received sheets are DXF, both through GDAL as in the C++
 # (PreparedReferenceMap.cpp:131-155, TopographicCatalog.cpp:181-209). Built from source by gdal-src (MIT).
 strata-engine = { workspace = true, features = ["gdal"] }
+strata-refmap = { workspace = true }
 eframe = { workspace = true }
 egui = { workspace = true }
 geo = { workspace = true }

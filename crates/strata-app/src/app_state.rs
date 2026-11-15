@@ -111,6 +111,8 @@ pub struct StrataAppState {
     pub(crate) ref_circle: crate::ref_tile_layers::RefCircleCache,
     /// Downloaded reference maps kept as tables in the survey folder (`ref_vector.rs`).
     pub(crate) ref_vectors: crate::ref_vector::RefVectorLayers,
+    /// Reference maps being fetched by a ribbon button (`ref_map.rs`).
+    pub(crate) ref_maps: crate::ref_map::run::RefMapJobs,
     /// 마지막 프레임에 칠한 타일 수(진단·시험용).
     pub basemap_tiles_painted: usize,
     /// 연속지적도 z/x/y 타일별 텍스처(위성 타일과 같은 격자).

@@ -8,7 +8,7 @@ use strata_engine::{polygons_area, Cell, Scope, Shapes, Transformer};
 
 use super::tests::{answer, is_picture, picture, scope_at, square_wkt, stored, unit};
 use super::*;
-use crate::transfer::{Request, TransferFailure, CANCELLED};
+use crate::transfer::{Request, TransferFailure, Why, CANCELLED};
 
 fn never() -> bool {
     false
@@ -55,7 +55,7 @@ fn the_crs_the_answer_declares_decides_where_the_unit_lies() {
         assert_eq!(std::fs::read(&requested).expect("old map"), b"previous-reference", "{row}");
         if !ready {
             let stopped = result.expect_err(&row);
-            assert!(matches!(&stopped, Stopped::Failed(text) if !text.is_empty()), "{row}: {stopped:?}");
+            assert!(matches!(&stopped, Stopped::Failed(Why::Data, text) if !text.is_empty()), "{row}: {stopped:?}");
             assert_eq!(picture_requests.get(), 0, "{row}");
             assert_eq!(std::fs::read_dir(dir.path()).expect("dir").count(), 1, "{row}: only the old map is in the folder");
             continue;
@@ -185,7 +185,7 @@ fn every_stop_says_its_cpp_sentence_and_leaves_nothing() {
     // A survey area 70 km wide: with 10 km on each side the box is 90 km, past the C++ limit of 80.
     let wide = Scope::around(&["POLYGON ((200000 450000, 270000 450000, 270000 450100, 200000 450100, 200000 450000))".to_owned()], 10_000.0).expect("scope").expect("some");
     let download = |_: &Request| -> Result<Vec<u8>, TransferFailure> { panic!("no request for a box that wide") };
-    assert_eq!(prepare(&wide, &requested, &download, &never).expect_err("failed").text(), "범위가 너무 넓습니다. 지도를 조사구역(한 변 80km 이하)으로 확대한 뒤 다시 내려받으세요.");
+    assert_eq!(prepare(&wide, &requested, &download, &never).expect_err("failed"), Stopped::Failed(Why::TooWide, "범위가 너무 넓습니다. 지도를 조사구역(한 변 80km 이하)으로 확대한 뒤 다시 내려받으세요.".to_owned()));
     assert_eq!(left(), 0, "no folder of a stopped map is left");
 }
 
@@ -200,7 +200,7 @@ fn a_crs_named_in_words_is_an_unknown_crs() {
         Ok(answer(features.clone(), Some("Korea 2000 / Central Belt 2010"), None))
     };
     let stopped = prepare(&scope_at(200_000.0, 450_000.0), &dir.path().join(FILE_NAME), &download, &never).expect_err("failed");
-    assert_eq!(stopped, Stopped::Failed(UNKNOWN_CRS.to_owned()));
+    assert_eq!(stopped, Stopped::Failed(Why::Data, UNKNOWN_CRS.to_owned()));
 }
 
 /// The official colour of a symbol is read inside its largest shape (`:877-887`). Here the map picture is

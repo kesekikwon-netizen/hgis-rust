@@ -4013,6 +4013,7 @@ dependencies = [
  "strata-net",
  "strata-ngii-run",
  "strata-paleo",
+ "strata-refmap",
  "strata-secrets",
  "strata-storage",
  "strata-terrain3d",
