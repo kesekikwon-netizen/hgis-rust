@@ -84,24 +84,30 @@ impl StrataAppState {
             egui::StrokeKind::Middle,
         );
 
-        let sheet_p = p.with_clip_rect(sheet_rect);
-        let mm_to_rect = |r: strata_layout::sheet_composer::SheetRectMm| -> Rect {
-            Rect::from_min_size(
-                Pos2::new(
-                    sheet_rect.left() + (r.x_mm as f32) * px_per_mm,
-                    sheet_rect.top() + (r.y_mm as f32) * px_per_mm,
-                ),
-                Vec2::new(
-                    (r.width_mm as f32) * px_per_mm,
-                    (r.height_mm as f32) * px_per_mm,
-                ),
-            )
-        };
         let chrome = self.drawing.sheet.standard_chrome();
-        let map_rect = mm_to_rect(chrome.map);
+        let map_rect = super::gui_tab_drawing_frame::mm_to_rect(sheet_rect, px_per_mm, chrome.map);
         self.adjust_sheet_map(ui, map_rect, px_per_mm);
         self.move_sheet_items(ui, sheet_rect, px_per_mm);
+        // The size the sheet is seen at: its PDF is drawn at this size too, so that it looks as the screen.
+        self.drawing.screen_px_per_mm = Some(px_per_mm);
+        let f = self.sheet_frame_for(rect, sheet_rect, px_per_mm, p, compact_v);
+        // 원문 순서 그대로: 지도 레이어 → 도곽 격자 → 범례 → 장식띠(표제란·축척·방위)
+        //                 → 7버튼 툴바 → 팝업
+        self.paint_sheet_map_layers(&f);
+        self.paint_sheet_grid(&f);
+        self.paint_sheet_legend(&f);
+        self.paint_sheet_chrome(&f);
+        self.paint_sheet_toolbar(ui, &f);
+        self.paint_sheet_popups(ui, &f);
+    }
 
+    /// The values one sheet is painted with: the paper `sheet_rect` at `px_per_mm` points to the millimetre,
+    /// the map frame with its background, the middle and the scale of the map. `rect` is all the room the
+    /// sheet has (the toolbar and the popups place themselves in it).
+    pub(crate) fn sheet_frame_for(&mut self, rect: Rect, sheet_rect: Rect, px_per_mm: f32, p: egui::Painter, compact_v: bool) -> SheetFrame {
+        let sheet_p = p.with_clip_rect(sheet_rect);
+        let chrome = self.drawing.sheet.standard_chrome();
+        let map_rect = super::gui_tab_drawing_frame::mm_to_rect(sheet_rect, px_per_mm, chrome.map);
         let (map_bg, [scx, scy]) = {
             let rs = &self.home_map.real_survey;
             let map_bg = if rs.is_layer_visible("지형 음영")
@@ -122,32 +128,6 @@ impl StrataAppState {
         let ink = Color32::from_rgb(17, 24, 39);
         let mc = map_rect.center();
         let map_p = sheet_p.with_clip_rect(map_rect);
-        let f = SheetFrame {
-            sheet_rect,
-            map_rect,
-            px_per_mm,
-            px_per_meter,
-            scale_denom,
-            mc,
-            scx,
-            scy,
-            half_w_m,
-            half_h_m,
-            chrome,
-            ink,
-            rect,
-            p,
-            sheet_p,
-            map_p,
-            compact_v,
-        };
-        // 원문 순서 그대로: 지도 레이어 → 도곽 격자 → 범례 → 장식띠(표제란·축척·방위)
-        //                 → 7버튼 툴바 → 팝업
-        self.paint_sheet_map_layers(&f);
-        self.paint_sheet_grid(&f);
-        self.paint_sheet_legend(&f);
-        self.paint_sheet_chrome(&f);
-        self.paint_sheet_toolbar(ui, &f);
-        self.paint_sheet_popups(ui, &f);
+        SheetFrame { sheet_rect, map_rect, px_per_mm, px_per_meter, scale_denom, mc, scx, scy, half_w_m, half_h_m, chrome, ink, rect, p, sheet_p, map_p, compact_v }
     }
 }

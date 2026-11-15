@@ -33,6 +33,10 @@ pub struct DrawingTabState {
     /// it was at the last frame, to see new words come.
     pub(crate) status: Option<String>,
     pub(crate) seen_guide: Option<String>,
+    /// How many screen points one millimetre of paper had when the sheet was painted last.
+    pub(crate) screen_px_per_mm: Option<f32>,
+    /// The PDF of the sheet being made (「PDF 내보내기」).
+    pub(crate) pdf: crate::gui_tab_drawing::gui_tab_drawing_print::SheetPdfSlot,
     /// KaDrawingSheetSet.cpp — 보관한 도면 목록
     pub stored_sheets: Vec<StoredSheet>,
     /// KaDrawingSheetSet.cpp:135 팝업 열림 상태
@@ -94,6 +98,8 @@ impl Default for DrawingTabState {
             removed_items: std::collections::BTreeSet::new(),
             status: None,
             seen_guide: None,
+            screen_px_per_mm: None,
+            pdf: crate::gui_tab_drawing::gui_tab_drawing_print::SheetPdfSlot::default(),
             stored_sheets: Vec::new(),
             sheet_set_menu_open: false,
             terrain3d_layout_active: false,

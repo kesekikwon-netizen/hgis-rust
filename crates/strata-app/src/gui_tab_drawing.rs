@@ -30,6 +30,12 @@ mod gui_tab_drawing_legend_flow;
 mod gui_tab_drawing_map_layers;
 #[path = "gui_tab_drawing_popups.rs"]
 mod gui_tab_drawing_popups;
+#[path = "gui_tab_drawing_print.rs"]
+pub(crate) mod gui_tab_drawing_print;
+#[path = "sheet_pdf_file.rs"]
+mod sheet_pdf_file;
+#[path = "sheet_raster.rs"]
+pub(crate) mod sheet_raster;
 #[path = "gui_tab_drawing_put.rs"]
 mod gui_tab_drawing_put;
 #[path = "gui_tab_drawing_refs.rs"]

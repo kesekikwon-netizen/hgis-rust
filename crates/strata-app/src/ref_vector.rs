@@ -25,6 +25,9 @@ pub(crate) mod data;
 pub(crate) mod elevation;
 #[path = "ref_vector_labels.rs"]
 pub(crate) mod labels;
+/// The pictures of a sheet's PDF.
+#[path = "ref_vector_print.rs"]
+pub(crate) mod print;
 /// The ribbon buttons that fetch such layers.
 #[path = "ref_map.rs"]
 pub(crate) mod map;

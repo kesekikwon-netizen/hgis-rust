@@ -93,6 +93,8 @@ impl StrataAppState {
                 self.drawing.item_offsets_mm.insert(crate::tab_drawing::SheetItem::Legend, [-95.0, 150.0]);
                 self.drawing.item_offsets_mm.insert(crate::tab_drawing::SheetItem::TitleBlock, [-60.0, 0.0]);
             }
+            // 「PDF 내보내기」 with the file named here in place of the save dialog (a temp folder only).
+            _ if action.starts_with("@pdf=") => self.start_sheet_pdf(std::path::PathBuf::from(&action["@pdf=".len()..])),
             // The DEM the survey folder has, without an order at the portal.
             "@dem" => self.show_survey_dem(),
             // 「DEM 표현」: the dialog as the menu row opens it, and 적용 with preset;relief;times;per cent.

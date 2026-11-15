@@ -1,6 +1,6 @@
-//! F1c-3 — 「PDF 내보내기」 (R3) and 「나눈 장을 PDF로 저장…」 (W-50) stay disabled with the deferred tooltip
-//! and write nothing. cpp writes real PDFs (KaDrawingStudio.cpp:3819-3851, KaPrintDialog.cpp:592-620); the
-//! Rust writer drew empty rectangles into %TEMP%\조사도면.pdf. Headless egui frames, accesskit tree + click.
+//! F1c-3 — 「나눈 장을 PDF로 저장…」 (W-50) stays disabled with the deferred tooltip and writes nothing; cpp
+//! writes real PDFs (KaPrintDialog.cpp:592-620). 「PDF 내보내기」 is on since the interim picture PDF
+//! (docs/RUST_PLAN.md R3-임시). Headless egui frames, accesskit tree + click.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -66,9 +66,18 @@ fn assert_deferred(paint: Paint, label: &str) {
     assert_eq!(app.home_map.draw_guide_message, None, "no saved message");
 }
 
+/// 「PDF 내보내기」 can be pressed (its press asks where to save; the PDF itself: gui_tab_drawing_print_tests.rs).
 #[test]
-fn drawing_pdf_export_is_deferred_r3() {
-    assert_deferred(|app, ui| app.paint_drawing_right_items_b(ui), "PDF 내보내기");
+fn drawing_pdf_export_is_on() {
+    let mut app = StrataAppState::new_startup();
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    let mut nodes = Vec::new();
+    for _ in 0..3 {
+        nodes = frame(&mut app, &ctx, |app, ui| app.paint_drawing_right_items_b(ui), vec![]);
+    }
+    let (_, disabled, _) = nodes.iter().find(|(l, _, _)| l == "PDF 내보내기").cloned().unwrap_or_else(|| panic!("missing: {nodes:?}"));
+    assert!(!disabled, "PDF 내보내기 can be pressed");
 }
 
 #[test]
