@@ -153,3 +153,25 @@ fn transform_all_keeps_order() {
     }
     assert!(Transformer::new(4326, 999_999).is_err(), "unknown EPSG code");
 }
+
+/// The area of use of the Korean belts as the EPSG data has it (read from the PROJ data of OSGeo4W with
+/// gdalsrsinfo on 2026-11-15: `BBOX[south, west, north, east]`). The Jeju belt 5182 covers the island only,
+/// which is what keeps its 550 km origin off mainland sheets (`TopographicSourceCrs.cpp:279-281`).
+#[test]
+fn the_area_of_use_is_the_one_of_the_epsg_data() {
+    for (epsg, wanted) in [
+        (5187, [128.0, 34.49, 129.65, 38.64]),
+        (5183, [128.0, 34.49, 129.65, 38.64]),
+        (5186, [126.0, 33.14, 128.0, 38.33]),
+        (5181, [126.0, 33.96, 128.0, 38.33]),
+        (5182, [126.09, 33.14, 127.01, 33.61]),
+        (5185, [124.53, 33.99, 126.0, 38.04]),
+        (5188, [130.71, 37.39, 131.01, 37.62]),
+    ] {
+        let area = super::area_of_use(epsg).expect("known").expect("an area");
+        for (got, want) in area.iter().zip(wanted) {
+            assert!((got - want).abs() < 1e-6, "EPSG:{epsg}: {area:?}");
+        }
+    }
+    assert!(super::area_of_use(999_999).is_err());
+}

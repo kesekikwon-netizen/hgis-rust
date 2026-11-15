@@ -46,6 +46,17 @@ impl Transformer {
     }
 }
 
+/// Where a coordinate system is meant to be used, as the EPSG data in PROJ has it: `[west, south, east,
+/// north]` in degrees (QGIS `QgsCoordinateReferenceSystem::bounds`). `None` when the data names no area.
+///
+/// # Errors
+/// PROJ does not know the system.
+pub fn area_of_use(epsg: u32) -> Result<Option<[f64; 4]>, EngineError> {
+    let crs = Proj::new(&format!("EPSG:{epsg}")).map_err(|e| EngineError(e.to_string()))?;
+    let (area, _name) = crs.area_of_use().map_err(|e| EngineError(e.to_string()))?;
+    Ok(area.map(|a| [a.west, a.south, a.east, a.north]))
+}
+
 #[cfg(test)]
 #[path = "crs_tests.rs"]
 mod tests;

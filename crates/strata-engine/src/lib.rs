@@ -25,7 +25,7 @@ mod submit_shp_names;
 #[cfg(feature = "gdal")]
 mod vector_table;
 
-pub use crs::Transformer;
+pub use crs::{area_of_use, Transformer};
 #[cfg(feature = "gdal")]
 pub use dxf_lines::{read_dxf_lines, DxfFacts, DxfLine};
 pub use geom::{make_valid_polygon_parts, normalized_wkt, polygon_area, polygon_is_valid, polygon_perimeter, PolygonRings};
