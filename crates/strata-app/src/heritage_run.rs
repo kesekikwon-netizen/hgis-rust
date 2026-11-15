@@ -13,11 +13,12 @@ use strata_refmap::heritage_load::{DatasetLoad, LoadFailure, Loaded};
 use strata_types::crs::CrsCode;
 
 use crate::app_state::StrataAppState;
-use crate::dialogs_modal::ActiveModalDialog;
 use crate::download_jobs::{DownloadJobHandle, DownloadJobState, StopCode};
 use crate::ref_vector::data::{LabelLook, LoadSpec, Look, PolygonFill};
 use crate::survey_area_setup::is_survey_area_key;
 
+#[path = "heritage_resolve.rs"]
+pub(crate) mod resolve;
 #[path = "heritage_reuse.rs"]
 pub(crate) mod reuse;
 #[cfg(test)]
@@ -52,6 +53,10 @@ pub(crate) struct HeritageRun {
     pub(crate) refused: Option<(StopCode, String)>,
     pub(crate) wanted: Option<reuse::Wanted>,
     pub(crate) running: Option<(Receiver<Step>, DownloadJobHandle)>,
+    /// The question about the city of the survey area, while it is open.
+    pub(crate) resolving: Option<Receiver<Result<Vec<u8>, strata_refmap::transfer::TransferFailure>>>,
+    /// Why no city could be given, for the dialog.
+    pub(crate) region_note: Option<String>,
     /// The city the dialog last asked about, and when its newest usable data was received.
     pub(crate) asked: Option<((String, String), Option<NaiveDateTime>)>,
 }
@@ -72,7 +77,7 @@ impl Clone for HeritageRun {
 impl HeritageRun {
     /// Whether a press is still being worked on (the scripted screenshots wait for its end).
     pub(crate) fn is_busy(&self) -> bool {
-        self.refused.is_some() || self.wanted.is_some() || self.running.is_some()
+        self.refused.is_some() || self.wanted.is_some() || self.running.is_some() || self.resolving.is_some()
     }
 }
 
@@ -102,7 +107,7 @@ impl StrataAppState {
     /// The press: with a survey area in an open survey, the dialog asks for the city.
     pub(crate) fn press_heritage(&mut self) {
         match self.heritage_scope() {
-            Ok(_) => self.modals.active = Some(ActiveModalDialog::HeritageRegionSelect),
+            Ok(_) => self.begin_heritage_region(),
             // The reason stands on the status line at once and on the gauge with its code.
             Err((code, reason)) => {
                 self.show_status_message(reason.clone());
@@ -123,6 +128,7 @@ impl StrataAppState {
 
     /// Every frame: the wishes, and the words of a running worker.
     pub(crate) fn drive_heritage(&mut self, ctx: &eframe::egui::Context, now: f64) {
+        self.drive_heritage_region(ctx);
         self.drive_heritage_wishes(now);
         loop {
             let Some((steps, job)) = self.heritage.running.as_ref() else {
@@ -214,7 +220,7 @@ impl StrataAppState {
     /// A run belongs to the survey it was started for: when another survey takes its place it is told to
     /// stop and its words are not waited for.
     pub(crate) fn drop_heritage_run(&mut self) {
-        (self.heritage.wanted, self.heritage.refused) = (None, None);
+        (self.heritage.wanted, self.heritage.refused, self.heritage.resolving) = (None, None, None);
         if let Some((_, job)) = self.heritage.running.take() {
             self.download_jobs.request_cancel(job.id());
             job.report_cancelled();

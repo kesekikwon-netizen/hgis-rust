@@ -13,6 +13,7 @@ pub mod curl_stdin;
 pub mod dem_copernicus;
 pub mod geoinfo_borehole;
 pub mod heritage_intranet;
+pub mod heritage_region;
 pub mod internet_check;
 pub mod kigam_soil_river;
 pub mod network;

@@ -22,7 +22,7 @@ use crate::survey_area_setup::is_survey_area_key;
 pub(crate) mod run;
 #[cfg(test)]
 #[path = "ref_map_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 #[cfg(test)]
 #[path = "ref_map_tests_b.rs"]
 mod tests_b;
@@ -168,10 +168,16 @@ fn polygon_wkt(rings: &[Vec<[f64; 2]>]) -> String {
     format!("POLYGON ({})", rings.iter().map(ring).collect::<Vec<_>>().join(", "))
 }
 
-/// The drawn survey areas grown by `radius`, in the work CRS: every survey-area shape is carried into the
-/// work CRS first, as `SurveyScopeClip::surveyUnion` does (`SurveyScopeClip.cpp:40-70`). `Ok(None)`: no
-/// survey area is drawn.
+/// The drawn survey areas grown by `radius`, in the work CRS. `Ok(None)`: no survey area is drawn.
 pub(crate) fn survey_scope(app: &StrataAppState, radius: f64) -> Result<Option<Scope>, String> {
+    let shapes: Vec<String> = survey_area_rings(app)?.iter().map(|rings| polygon_wkt(rings)).collect();
+    // What the engine says about a shape it cannot join or grow is not for the status line.
+    Scope::around(&shapes, radius).map_err(|_| AREA_UNREADABLE.to_owned())
+}
+
+/// The shapes of the drawn survey areas in the work CRS: every survey-area shape is carried into the work
+/// CRS first, as `SurveyScopeClip::surveyUnion` does (`SurveyScopeClip.cpp:40-70`).
+pub(crate) fn survey_area_rings(app: &StrataAppState) -> Result<Vec<PolygonRings>, String> {
     let work_epsg = CrsCode::from(app.work_crs).epsg_number();
     let mut shapes = Vec::new();
     for table in app.survey_tables.iter().filter(|t| is_survey_area_key(&t.table)) {
@@ -183,12 +189,11 @@ pub(crate) fn survey_scope(app: &StrataAppState, radius: f64) -> Result<Option<S
                     continue;
                 };
                 let rings = if source == work_epsg { rings } else { rings.iter().map(|r| carry.transform_all(r)).collect::<Result<Vec<_>, _>>().map_err(|_| AREA_CRS_UNKNOWN.to_owned())? };
-                shapes.push(polygon_wkt(&rings));
+                shapes.push(rings);
             }
         }
     }
-    // What the engine says about a shape it cannot join or grow is not for the status line.
-    Scope::around(&shapes, radius).map_err(|_| AREA_UNREADABLE.to_owned())
+    Ok(shapes)
 }
 
 /// What is written beside a stored map: the radius and the shape (stored CRS) of the scope it was fetched

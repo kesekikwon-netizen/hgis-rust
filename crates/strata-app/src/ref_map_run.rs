@@ -76,7 +76,30 @@ impl Clone for RefMapJobs {
     }
 }
 
+/// Why a question to VWorld was not asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NotAsked {
+    NoKey,
+    Offline,
+}
+
 impl RefMapJobs {
+    /// Asks VWorld one question with the user's stored key, off the UI thread. `question` builds the request
+    /// from the key, which goes nowhere else; the answer comes through the receiver.
+    pub(crate) fn ask_vworld(&self, question: impl FnOnce(&str) -> Request + Send + 'static) -> Result<Receiver<Result<Vec<u8>, TransferFailure>>, NotAsked> {
+        let key = (self.vworld_key)().trim().to_owned();
+        if key.is_empty() {
+            return Err(NotAsked::NoKey);
+        }
+        if !(self.online)() {
+            return Err(NotAsked::Offline);
+        }
+        let (send, answer) = channel();
+        let fetch = Arc::clone(&self.fetch);
+        (self.runner)(Box::new(move || drop(send.send(fetch(&question(&key), &|| false)))));
+        Ok(answer)
+    }
+
     /// Whether a press is still being worked on (the scripted screenshots wait for its end).
     pub(crate) fn is_busy(&self) -> bool {
         self.wanted.is_some() || self.refused.is_some() || self.running.is_some()

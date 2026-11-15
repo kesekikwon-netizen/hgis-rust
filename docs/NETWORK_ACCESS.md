@@ -44,7 +44,7 @@ Counts in columns `a`–`f` give the number of Part 3 findings affecting each ho
 - **Uncalled URL builders / dead clients audited**:
   - `crates/strata-net/src/vworld_wms.rs:10-27` (`http://xdworld.vworld.kr:8080/XDServer/requestLayerNode?...&APIKey=<key>` and `https://api.vworld.kr/req/wms` helper): no HTTP caller in `crates/`.
   - `crates/strata-net/src/vworld_tiles.rs:28-46` (`Hybrid` WMTS tile URL builder): `basemap_tiles.rs` builds `Satellite` and `Base` directly; `Hybrid` is uncalled.
-  - `crates/strata-net/src/vworld_heritage.rs:19-44` (`api.vworld.kr/req/address` reverse-geocode URL builder): uncalled in `strata-app`.
+  - `crates/strata-net/src/heritage_region.rs` (`address_url`, the `api.vworld.kr/req/address` reverse-geocode question): called by the 유산 press (`crates/strata-app/src/heritage_resolve.rs`) since 2026-11-15.
   - `crates/strata-net/src/kigam_soil_river.rs:10-79` (`data.kigam.re.kr/openapi/wfs`, `gis.naas.go.kr`, `api.vworld.kr/req/wfs` URL builders): uncalled in `strata-app` (`modal_downloads.rs:83` loads local sample data instead).
   - `crates/strata-app/src/tile_layers.rs:42-92`: tile layer metadata catalogue only; no HTTP calls.
   - `target/cpp-ref/src/core/HeritageHttpClient.cpp:22-201`: instantiated at `KaHeritageBrowser.cpp:231`, but `fetchDownloadPage()` and `searchRegion()` have no callers in C++.
@@ -75,6 +75,14 @@ dropped request once more. The box is that of the 10 km scope around the survey 
 means 1 request as a rule. The key is part of the address, which goes to curl on its standard input; no sentence,
 file name or log line holds it, and the text of a VWorld XML error is not shown. A map kept for the same area is not
 fetched again.
+
+Rust now (order HER1, 2026-11-15): the 유산 press sends one `GET /req/address` (which city one point inside the
+drawn survey area lies in; `service=address&request=getAddress&version=2.0&crs=EPSG:4326&point=<lon>,<lat>&format=json
+&type=both&zipcode=false&simple=false&key=<key>`) through the same `reference_get_from`, with the stored VWorld key,
+`Referer: https://localhost` and the ka-hgis user agent, 15 s. Once per press and never repeated; a press while the
+answer is open sends nothing; without a key or with the network off nothing is sent and the dialog asks to pick the
+city. The key is not written to the status line, the gauge or a log (a refused key is named by its code only). The
+5 km neighbour query (`LT_C_ADSIGG_INFO`) is not built in Rust yet.
 
 ### 2. `xdworld.vworld.kr`
 

@@ -21,9 +21,9 @@ use super::*;
 use crate::download_jobs::{DownloadJobState, StopCode};
 
 /// A survey area of 100 m near Gyeongju, EPSG:5187 (the work CRS of the tests).
-pub(super) const CENTRE: [f64; 2] = [220_000.0, 370_000.0];
+pub(crate) const CENTRE: [f64; 2] = [220_000.0, 370_000.0];
 
-pub(super) fn draw_survey_area(app: &mut StrataAppState, centre: [f64; 2], srs_id: i32) {
+pub(crate) fn draw_survey_area(app: &mut StrataAppState, centre: [f64; 2], srs_id: i32) {
     let (x, y) = (centre[0], centre[1]);
     let wkt = format!("POLYGON (({} {}, {} {}, {} {}, {} {}, {} {}))", x - 50.0, y - 50.0, x + 50.0, y - 50.0, x + 50.0, y + 50.0, x - 50.0, y + 50.0, x - 50.0, y - 50.0);
     let mut layer = LayerEditBuffer::new(DomainLayerKey::SurveyArea);

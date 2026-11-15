@@ -16,7 +16,7 @@ pub(crate) fn render_heritage_region_select(app: &mut StrataAppState, ctx: &egui
         .default_width(480.0)
         .show(ctx, |ui| {
             render_strata_modal_header(ui, "주변유적 받을 시·군 선택 - Strata", open);
-            ui.label(egui::RichText::new("조사구역이 속한 시·군을 확인하세요.\n자료는 선택한 시·군 단위로만 받습니다.").size(14.5).color(Color32::from_rgb(35, 35, 32)));
+            ui.label(egui::RichText::new(app.heritage_region_words()).size(14.5).color(Color32::from_rgb(35, 35, 32)));
             ui.add_space(12.0);
             // KaHeritageSetupDialogs.cpp:99-107,144-166 — 시·도를 고르면 시·군 목록이 그것만 남는다.
             // KoreaRegionCatalog 가 정본이고, 둘 다 골라야 「이 지역 받기」가 열린다(같은 파일 :149-152).
