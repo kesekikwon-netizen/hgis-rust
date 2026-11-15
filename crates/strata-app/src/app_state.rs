@@ -65,6 +65,8 @@ pub struct StrataAppState {
     pub last_drop_message: Option<String>,
     /// 종료 확인 (KaClosePrompt.cpp)
     pub close_prompt_open: bool,
+    /// The user chose 「저장하지 않고 끝내기」: the window closes with its unsaved edits.
+    pub(crate) closing_unsaved: bool,
     /// KaCadImportNotice.cpp — 끌어 놓은 CAD 도면 경로
     pub cad_import_path: String,
     /// `KaStatusBar::showMessage` 대응 — 맞추기 같은 긴 작업의 결과를 상태줄에 남긴다

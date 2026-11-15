@@ -63,10 +63,18 @@ impl StrataAppState {
                 Some("지도에 올릴 수 있는 파일이 아닙니다.".to_owned());
         }
     }
+    /// 「저장하지 않고 끝내기」 of the close prompt.
+    /// The close it asks for arrives while the edits are still unsaved: it is let through, not asked about
+    /// again.
+    pub(crate) fn close_without_saving(&mut self, ctx: &egui::Context) {
+        (self.close_prompt_open, self.closing_unsaved) = (false, true);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
     /// `KaClosePrompt.cpp` — 저장하지 않은 편집이 있으면 닫기 전에 한 번 묻는다.
     pub(crate) fn render_close_prompt(&mut self, ctx: &egui::Context) {
         // A `--snap` run works on temporary copies and ends by itself: nobody is there to answer.
-        if ctx.input(|i| i.viewport().close_requested()) && self.is_dirty && !self.close_prompt_open && self.snap.is_none()
+        if ctx.input(|i| i.viewport().close_requested()) && self.is_dirty && !self.close_prompt_open && !self.closing_unsaved && self.snap.is_none()
         {
             self.close_prompt_open = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -123,8 +131,7 @@ impl StrataAppState {
                         )
                         .clicked()
                     {
-                        self.close_prompt_open = false;
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        self.close_without_saving(ctx);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
@@ -141,3 +148,7 @@ impl StrataAppState {
             });
     }
 }
+
+#[cfg(test)]
+#[path = "shell_dialogs_tests.rs"]
+mod tests;

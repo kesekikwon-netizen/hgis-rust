@@ -43,6 +43,7 @@ impl StrataAppState {
             layer_context_menu_key: None,
             last_drop_message: None,
             close_prompt_open: false,
+            closing_unsaved: false,
             cad_import_path: String::new(),
             status_bar_hint: String::new(),
             align: crate::gui_ribbon_bar::AlignSessionState::default(),
