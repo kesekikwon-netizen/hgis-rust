@@ -80,6 +80,17 @@ impl LayerEditBuffer {
         true
     }
 
+    /// Deletes a shape (`QgsVectorLayer::deleteFeature`, one undo step). `false` when there is no such fid.
+    pub fn delete_feature(&mut self, fid: i64) -> bool {
+        let Some(i) = self.features.iter().position(|f| f.fid == fid) else {
+            return false;
+        };
+        self.undo_stack.push(self.features.clone());
+        self.redo_stack.clear();
+        self.features.remove(i);
+        true
+    }
+
     pub fn undo(&mut self) -> bool {
         if let Some(prev) = self.undo_stack.pop() {
             let current = std::mem::replace(&mut self.features, prev);
@@ -170,6 +181,26 @@ mod change_tests {
         assert_eq!(b.features[0].wkt_geom, "POINT (1 1)");
         assert!(b.redo());
         assert_eq!(b.features[0].wkt_geom, "POINT (2 2)");
+    }
+
+    /// Deleting a shape is one undo step: undo brings it back as it was, redo deletes it again; an fid that
+    /// is not there changes nothing and makes no step.
+    #[test]
+    fn delete_feature_is_one_undo_step() {
+        let mut b = LayerEditBuffer::new(DomainLayerKey::FeaturePoly);
+        let first = b.add_unsaved_feature("POINT (1 1)".to_owned(), BTreeMap::from([("kind".to_owned(), "주거지".to_owned())]));
+        let second = b.add_unsaved_feature("POINT (2 2)".to_owned(), BTreeMap::new());
+        assert!(!b.delete_feature(99));
+        assert!(b.delete_feature(first));
+        assert_eq!(b.features.iter().map(|f| f.fid).collect::<Vec<_>>(), [second]);
+        assert!(b.undo());
+        assert_eq!(b.features.len(), 2);
+        assert_eq!((b.features[0].fid, b.features[0].attributes.get("kind").map(String::as_str)), (first, Some("주거지")));
+        assert!(b.redo());
+        assert_eq!(b.features.len(), 1);
+        // The step before the deletion is still the adding of the second shape.
+        assert!(b.undo() && b.undo());
+        assert_eq!(b.features.len(), 1);
     }
 
     /// 속성 바꾸기(C++ 「속성 편집」 한 명령)는 되돌리기 한 단계 — None 은 값을 지운다(NULL). 없는 fid 는 아무것도 안 한다.

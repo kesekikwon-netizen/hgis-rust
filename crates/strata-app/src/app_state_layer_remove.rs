@@ -3,8 +3,9 @@
 //! 저장하지도 검수에 세지도 않는다. 되돌리면 같은 자리로. C++ 에는 레이어 삭제의 「다시 실행」이 없다.
 
 use strata_storage::survey_gpkg_read::SurveyFileTable;
+use strata_types::schema::LegendGroup;
 
-use crate::app_state::StrataAppState;
+use crate::app_state::{MainTab, StrataAppState};
 use crate::left_layer_panel::LayerTreeEntry;
 
 /// 되돌리기 한 단계 — 그 표의 편집 하나, 또는 레이어 삭제 하나(KaUndoAction::LayersRemoved).
@@ -91,6 +92,50 @@ impl StrataAppState {
     pub(crate) fn remove_group_layers(&mut self, group: strata_types::schema::LegendGroup) -> bool {
         let keys: Vec<String> = self.left_layers.entries.iter().filter(|e| e.group == group).map(|e| e.layer_key.clone()).collect();
         self.remove_layers(&keys)
+    }
+}
+
+impl StrataAppState {
+    /// The Delete key (`MainWindow.cpp:256-268`). On the sheet the key is the sheet's (`:1197-1203`). In the
+    /// legend it takes the selected row off the list (`removeSelectedLayers`). On the map it is
+    /// `deleteFeaturesOrSelectedReferenceLayers` (`MainWindowUndo.cpp:486-536`): while drawing the last point,
+    /// else the selected shape of a survey layer, else a selected reference map or base map. A survey layer
+    /// never leaves the list by a Delete pressed on the map.
+    pub(crate) fn delete_selected(&mut self) {
+        if self.active_tab != MainTab::Map {
+            return;
+        }
+        let selected = self.right_inspector.selected_layer_key.as_deref();
+        let row = selected.and_then(|label| self.left_layers.entries.iter().find(|e| e.label_ko == label)).map(|e| (e.layer_key.clone(), e.group));
+        if self.home_map.legend_focus {
+            let keys: Vec<String> = row.into_iter().map(|(key, _)| key).collect();
+            self.remove_layers(&keys);
+            return;
+        }
+        if self.capture_active() {
+            self.sketch_undo_vertex();
+            return;
+        }
+        if let Some((table, fid)) = self.home_map.selected_shape.clone() {
+            self.delete_shape(&table, fid);
+        } else if let Some((key, _)) = row.filter(|(_, group)| *group != LegendGroup::SurveyData) {
+            self.remove_layers(&[key]);
+        }
+    }
+
+    /// `deleteSelectedFeatures` (`MainWindowUndo.cpp:538-575`): one undo step of that layer; the file changes
+    /// at the next 저장.
+    fn delete_shape(&mut self, table: &str, fid: i64) {
+        let Some(t) = self.survey_tables.iter_mut().find(|t| t.table == table) else { return };
+        if !t.layer.delete_feature(fid) {
+            return;
+        }
+        self.redo_tables.clear();
+        self.undo_tables.push(UndoStep::Table(table.to_owned()));
+        self.is_dirty = true;
+        self.home_map.selected_shape = None;
+        self.after_layer_edit(table);
+        self.show_status_message("도형 1개를 지웠습니다. Ctrl+Z로 복원할 수 있습니다.");
     }
 }
 

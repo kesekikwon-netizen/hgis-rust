@@ -78,6 +78,10 @@ impl StrataAppState {
             ui.allocate_exact_size(avail_sz, egui::Sense::click_and_drag());
         self.home_map.viewport.screen_size_px =
             [f64::from(rect.width()), f64::from(rect.height())];
+        // Qt: a press on the canvas gives it the keyboard focus, so Delete is the map's again.
+        if response.is_pointer_button_down_on() {
+            self.home_map.legend_focus = false;
+        }
 
         // C++ 은 그리기 줄을 열어도 도구가 이동 그대로다 — 그릴 대상을 눌러야 그리기 도구가 켜진다.
         let effective_tool = self.active_tool;

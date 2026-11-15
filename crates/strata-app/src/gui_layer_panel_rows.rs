@@ -179,6 +179,7 @@ impl StrataAppState {
     ) {
         let spec_indent = 0.0_f32;
         let mut newly_selected: Option<String> = None;
+        self.home_map.legend_focus = true;
         if let Some(pos) = resp.interact_pointer_pos() {
             if pos.x < full_r.left() + 42.0 + spec_indent {
                 self.home_map.real_survey.toggle_layer_visible(name);
@@ -210,6 +211,7 @@ impl StrataAppState {
     /// 줄 위 묶음 띠를 누르면 묶음 머리 메뉴(:195-213).
     fn on_layer_row_secondary(&mut self, spec: &LayerRowSpec, full_r: Rect, resp: &egui::Response, band_h: f32) {
         let anchor = resp.interact_pointer_pos().unwrap_or_else(|| full_r.center());
+        self.home_map.legend_focus = true;
         self.layer_context_menu_open = true;
         self.layer_context_menu_pos = [anchor.x, anchor.y];
         if anchor.y < full_r.top() + band_h {

@@ -81,9 +81,12 @@ impl StrataAppState {
             }
             if capture && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
                 self.sketch_undo_vertex();
-            } else if !wants_kb
-                && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
-            {
+            } else if !wants_kb && i.key_pressed(egui::Key::Delete) {
+                // QKeySequence::Delete (MainWindow.cpp:256-268). An open window keeps the key to itself.
+                if self.modals.active.is_none() && !self.modal_window_open() {
+                    self.delete_selected();
+                }
+            } else if !wants_kb && i.key_pressed(egui::Key::Backspace) {
                 self.home_map.cad.on_backspace(&mut self.home_map.scene);
             }
             if !wants_kb && self.active_tab == MainTab::Map {
