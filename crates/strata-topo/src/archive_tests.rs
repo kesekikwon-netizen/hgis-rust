@@ -212,3 +212,39 @@ fn a_link_entry_never_becomes_a_link() {
     }
     assert!(!temp.path().join("outside.dxf").exists());
 }
+
+/// The archives of the 국가유산 intranet name their files in CP949 (`HeritageImport.cpp:173-185`): read so,
+/// 「국가지정유산.shp」 keeps its name; read as the ZIP rule says (code page 437), it would be a row of signs.
+/// A name that is UTF-8 stays what it is either way.
+#[test]
+fn an_archive_with_korean_names_keeps_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("지정유산_1.zip");
+    zip_raw(&source, &[RawEntry::file("AAAAAAAAAAAA.shp", b"shape"), RawEntry::file("가나.dbf", b"table")]);
+    // The first name is written over with the CP949 bytes of 국가지정유산 (two bytes a letter), in the
+    // entry itself and in the list at the end of the archive.
+    let (korean, _, _) = encoding_rs::EUC_KR.encode("국가지정유산");
+    assert_eq!(korean.len(), 12);
+    let mut bytes = fs::read(&source).unwrap();
+    let mut places = Vec::new();
+    for at in 0..bytes.len() - 12 {
+        if &bytes[at..at + 12] == b"AAAAAAAAAAAA" {
+            places.push(at);
+        }
+    }
+    assert_eq!(places.len(), 2);
+    for at in places {
+        bytes[at..at + 12].copy_from_slice(&korean);
+    }
+    fs::write(&source, bytes).unwrap();
+
+    let names = |prepared: &Prepared| prepared.files.iter().map(|f| f.file_name().unwrap().to_string_lossy().into_owned()).collect::<Vec<_>>();
+    let korean_names = prepare(&source, &dir.path().join("korean"), &Limits { korean_names: true, ..Limits::default() }, &|| false);
+    assert_eq!(korean_names.error, "");
+    assert_eq!(names(&korean_names), ["가나.dbf", "국가지정유산.shp"]);
+    assert_eq!(fs::read(&korean_names.files[1]).unwrap(), b"shape");
+
+    // Read as the ZIP rule says, the name is not the Korean one (the signs it becomes are refused as a path).
+    let plain = run(&source, &dir.path().join("plain"));
+    assert!(!names(&plain).contains(&"국가지정유산.shp".to_owned()), "{:?}", names(&plain));
+}

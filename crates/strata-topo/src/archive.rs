@@ -30,11 +30,14 @@ pub struct Limits {
     pub max_file_bytes: u64,
     pub max_entries: usize,
     pub max_archive_depth: u32,
+    /// An entry whose name is no UTF-8 is named in CP949: the 국가유산 intranet names the files of its
+    /// archives so (`HeritageImport.cpp:173-185`, `CPL_ZIP_ENCODING=CP949`).
+    pub korean_names: bool,
 }
 
 impl Default for Limits {
     fn default() -> Self {
-        Self { max_total_bytes: 4 * 1024 * 1024 * 1024, max_file_bytes: 1024 * 1024 * 1024, max_entries: 10000, max_archive_depth: 4 }
+        Self { max_total_bytes: 4 * 1024 * 1024 * 1024, max_file_bytes: 1024 * 1024 * 1024, max_entries: 10000, max_archive_depth: 4, korean_names: false }
     }
 }
 

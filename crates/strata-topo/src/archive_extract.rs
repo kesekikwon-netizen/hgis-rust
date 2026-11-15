@@ -156,6 +156,18 @@ fn left_out_by_the_reader(name: &str) -> bool {
     unified.starts_with('/') || unified.split('/').any(|part| part == "..")
 }
 
+/// The name of an entry. With `korean`, a name that is no UTF-8 is read as CP949 (the 국가유산 intranet
+/// writes such names without marking them; the ZIP rule would read them as code page 437).
+fn entry_name(raw: &[u8], as_the_zip_rule_reads_it: &str, korean: bool) -> String {
+    if korean && std::str::from_utf8(raw).is_err() {
+        let (text, _, broken) = encoding_rs::EUC_KR.decode(raw);
+        if !broken {
+            return text.into_owned();
+        }
+    }
+    as_the_zip_rule_reads_it.to_owned()
+}
+
 /// Unpacks `archive` into `payload` (`extract`, :100-168). `scratch` takes ZIPs found inside.
 pub(super) fn extract(archive: &Path, payload: &Path, scratch: &Path, prefix: &str, depth: u32, work: &mut Work<'_>) -> bool {
     if work.stopped() {
@@ -175,7 +187,8 @@ pub(super) fn extract(archive: &Path, payload: &Path, scratch: &Path, prefix: &s
         let Ok(mut entry) = zip.by_index(index) else {
             return work.fail("ZIP 안의 파일을 읽지 못했습니다.", true);
         };
-        if left_out_by_the_reader(entry.name()) {
+        let full_name = entry_name(entry.name_raw(), entry.name(), work.limits.korean_names);
+        if left_out_by_the_reader(&full_name) {
             continue;
         }
         found = true;
@@ -184,7 +197,7 @@ pub(super) fn extract(archive: &Path, payload: &Path, scratch: &Path, prefix: &s
             return work.fail("압축 자료의 파일 수가 허용 범위를 넘었습니다.", false);
         }
         let is_directory = entry.is_dir();
-        let name = entry.name().strip_suffix('/').filter(|_| is_directory).unwrap_or(entry.name()).to_owned();
+        let name = full_name.strip_suffix('/').filter(|_| is_directory).unwrap_or(&full_name).to_owned();
         if !safe_relative(&name) {
             return work.fail("압축 자료에 안전하지 않은 파일 경로가 있습니다.", false);
         }

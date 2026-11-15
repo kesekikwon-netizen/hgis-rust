@@ -16,6 +16,8 @@ strata-net = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 zip = { workspace = true }
+# The archives of the 국가유산 intranet name their files in CP949.
+encoding_rs = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
