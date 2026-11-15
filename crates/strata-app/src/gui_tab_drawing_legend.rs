@@ -4,7 +4,9 @@
 //! in the order of their numbers; a kind without a numbered site has no row
 //! (`HeritageLayoutNumbers.cpp:1237-1316`). The rows flow into columns (`gui_tab_drawing_legend_flow.rs`).
 
-use eframe::egui::{self, Color32, FontFamily, FontId, Pos2, Rect, Stroke, Vec2};
+use std::sync::Arc;
+
+use eframe::egui::{self, text::LayoutJob, text::TextFormat, Color32, FontFamily, FontId, Galley, Pos2, Rect, Stroke, Vec2};
 
 use crate::app_state::StrataAppState;
 use crate::gui_layer_panel::gui_layer_panel_paint::SwatchKind;
@@ -51,6 +53,15 @@ impl StrataAppState {
     #[cfg(test)]
     pub(crate) fn sheet_legend_layer_names(&self) -> Vec<String> {
         self.sheet_legend_survey_rows().into_iter().filter_map(|row| if let LegendRow::Layer(_, name) = row { Some(name) } else { None }).collect()
+    }
+
+    /// The title of the legend as the C++ sets it (`KaDrawingStudio.cpp:2368-2369, 2372`): bold while 「B」 is
+    /// on, slanted while 「I」 is on. The rows keep their plain letters (`:2375-2376`).
+    fn legend_title_galley(&self, painter: &egui::Painter, size: f32, ink: Color32) -> Arc<Galley> {
+        let bold = FontFamily::Name(LABEL_FONT_FAMILY.into());
+        let family = if self.drawing.sheet.legend_bold && painter.ctx().fonts(|fonts| fonts.families().contains(&bold)) { bold } else { FontFamily::Proportional };
+        let format = TextFormat { font_id: FontId::new(size, family), color: ink, italics: self.drawing.sheet.legend_italic, ..Default::default() };
+        painter.layout_job(LayoutJob::single_section(self.drawing.sheet.legend_title.clone(), format))
     }
 
     /// The rows of the layers that are checked in the legend panel, top to bottom, each by the name and the
@@ -117,7 +128,8 @@ impl StrataAppState {
         sheet_p.rect_filled(leg_r, 1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 245));
         sheet_p.rect_stroke(leg_r, 1.0, Stroke::new(0.9, ink), egui::StrokeKind::Middle);
         let title_pt = (font_pt * s).clamp(4.5, 11.5);
-        sheet_p.text(Pos2::new(leg_r.left() + 5.0 * s, leg_r.top() + 9.0 * s), egui::Align2::LEFT_CENTER, &self.drawing.sheet.legend_title, FontId::proportional(title_pt), ink);
+        let title = self.legend_title_galley(&sheet_p, title_pt, ink);
+        sheet_p.galley(Pos2::new(leg_r.left() + 5.0 * s, leg_r.top() + 9.0 * s - title.size().y * 0.5), title, ink);
         sheet_p.line_segment([Pos2::new(leg_r.left() + 3.5 * s, leg_r.top() + 16.5 * s), Pos2::new(leg_r.right() - 3.5 * s, leg_r.top() + 16.5 * s)], Stroke::new(0.5, Color32::from_rgb(200, 198, 190)));
 
         let label_font = FontId::proportional((title_pt - 1.2 * s).max(4.0));
