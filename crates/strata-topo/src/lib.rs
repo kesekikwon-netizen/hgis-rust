@@ -5,3 +5,4 @@
 #![forbid(unsafe_code)]
 
 pub mod archive;
+pub mod codes;

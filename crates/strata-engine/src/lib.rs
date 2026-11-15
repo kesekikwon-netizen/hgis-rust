@@ -27,7 +27,7 @@ mod vector_table;
 
 pub use crs::{area_of_use, Transformer};
 #[cfg(feature = "gdal")]
-pub use dxf_lines::{read_dxf_lines, DxfFacts, DxfLine};
+pub use dxf_lines::{dxf_layer_extents, read_dxf_lines, DxfFacts, DxfLayerExtent, DxfLine, DxfShape};
 pub use geom::{make_valid_polygon_parts, normalized_wkt, polygon_area, polygon_is_valid, polygon_perimeter, PolygonRings};
 pub use geom_wkt::{union_area, wkt_area, wkt_is_valid, wkt_length, wkt_point_relation, SurveyArea};
 pub use rings::{distance_rings, ring_label_points};

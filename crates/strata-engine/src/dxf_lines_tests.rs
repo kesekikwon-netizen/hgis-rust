@@ -118,3 +118,39 @@ fn reading_stops_when_the_caller_has_enough_and_a_file_that_is_no_drawing_is_sai
     std::fs::write(&other, b"not a drawing").expect("write");
     assert!(read_dxf_lines(&other, &mut |_| true).is_err());
 }
+
+/// The layers of the drawing with what they hold and where: lines, the text and the point each as their
+/// own entry, sorted by layer.
+#[test]
+fn each_layer_has_its_count_and_its_box() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("sheet.dxf");
+    std::fs::write(&path, drawing()).expect("write");
+    let layers = dxf_layer_extents(&path).expect("scan");
+    let got: Vec<(&str, DxfShape, u64, [f64; 4])> = layers.iter().map(|l| (l.layer.as_str(), l.shape, l.count, l.extent)).collect();
+    assert_eq!(
+        got,
+        [
+            ("A0013110", DxfShape::Line, 1, [213_000.0, 366_000.0, 213_050.0, 366_025.0]),
+            ("C0010000", DxfShape::Point, 1, [211_360.0, 364_260.0, 211_360.0, 364_260.0]),
+            ("E0032111", DxfShape::Line, 1, [214_000.0, 367_000.0, 214_100.0, 367_000.0]),
+            ("F0017111", DxfShape::Line, 1, [211_300.0, 364_200.0, 211_400.0, 364_300.5]),
+            ("F0017114", DxfShape::Line, 1, [212_000.0, 365_000.0, 212_100.0, 365_100.0]),
+            ("H0040000", DxfShape::Point, 1, [211_350.0, 364_250.0, 211_350.0, 364_250.0]),
+        ]
+    );
+    assert!(dxf_layer_extents(&dir.path().join("none.dxf")).is_err());
+}
+
+/// Two entities of one layer and kind share an entry whose box holds both.
+#[test]
+fn entities_of_one_layer_and_kind_share_a_box() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("two.dxf");
+    let more = drawing().replace("0\nENDSEC\n0\nEOF\n", "0\nLWPOLYLINE\n8\nF0017111\n38\n130.0\n90\n2\n70\n0\n10\n211000.0\n20\n364500.0\n10\n211350.0\n20\n364100.0\n0\nENDSEC\n0\nEOF\n");
+    assert_ne!(more, drawing());
+    std::fs::write(&path, more).expect("write");
+    let layers = dxf_layer_extents(&path).expect("scan");
+    let contour = layers.iter().find(|l| l.layer == "F0017111").expect("layer");
+    assert_eq!((contour.shape, contour.count, contour.extent), (DxfShape::Line, 2, [211_000.0, 364_100.0, 211_400.0, 364_500.0]));
+}
