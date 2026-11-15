@@ -74,12 +74,30 @@ impl StrataAppState {
             _ if action.starts_with("@ref_vector=") => self.snap_reference_vector(&action["@ref_vector=".len()..]),
             // The DEM the survey folder has, without an order at the portal.
             "@dem" => self.show_survey_dem(),
+            // 「DEM 표현」: the dialog as the menu row opens it, and 적용 with preset;relief;times;per cent.
+            "@dem_dialog" => self.open_dem_look_dialog(),
+            _ if action.starts_with("@dem_look=") => self.snap_dem_look(&action["@dem_look=".len()..]),
             _ if action.starts_with("@layer_menu_path=") => {
                 self.home_map.layer_menu_path = action["@layer_menu_path=".len()..].split(',').filter_map(|s| s.trim().parse().ok()).collect();
             }
             _ => return false,
         }
         true
+    }
+
+    fn snap_dem_look(&mut self, text: &str) {
+        use crate::topo_download::dem::look::{DemLook, DemPreset};
+        let mut parts = text.split(';');
+        let preset = match parts.next() {
+            Some("lowland") => DemPreset::Lowland,
+            Some("viewport") => DemPreset::Viewport,
+            _ => DemPreset::National,
+        };
+        let relief = parts.next() != Some("0");
+        let z_factor = parts.next().and_then(|s| s.parse().ok()).unwrap_or(1.0);
+        let strength_pct = parts.next().and_then(|s| s.parse().ok()).unwrap_or(30);
+        let said = self.apply_dem_look(DemLook { preset, relief, z_factor, strength_pct });
+        eprintln!("[SNAP] DEM 표현 {text}: {said} -> {:?}", self.ref_vectors.look_of(crate::topo_download::dem::DEM_KEY));
     }
 
     /// The looks are those of the layers that use them: sheet lines (`KaTopographicImportDialog.cpp:204-208`),

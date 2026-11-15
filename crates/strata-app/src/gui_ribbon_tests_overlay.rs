@@ -41,7 +41,7 @@ fn test_r8_dem_orders_when_absent_and_toggles_when_present() {
     assert!(app.home_map.real_survey.is_layer_visible("DEM"), "nothing was there to hide");
     assert_ne!(app.status_bar_hint, "DEM 지형을 숨겼습니다.");
 
-    let spec = crate::ref_vector::data::LoadSpec { file: std::path::PathBuf::new(), table: String::new(), work_epsg: 5187, look: crate::ref_vector::data::Look::Heights, label: None };
+    let spec = crate::ref_vector::data::LoadSpec { file: std::path::PathBuf::new(), table: String::new(), work_epsg: 5187, look: crate::ref_vector::data::Look::Heights { ramp: crate::ref_vector::data::HeightRamp::National }, label: None };
     app.show_reference_vector_layer(crate::topo_download::dem::DEM_KEY, "DEM", spec);
     app.handle_ribbon_click("DEM");
     assert!(!app.home_map.real_survey.is_layer_visible("DEM"));

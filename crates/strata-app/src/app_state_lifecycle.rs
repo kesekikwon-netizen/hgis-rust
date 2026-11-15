@@ -78,6 +78,8 @@ impl StrataAppState {
             download_jobs: crate::download_jobs::DownloadJobList::default(),
             topo: crate::topo_download::TopoDownload::default(),
             dem: crate::topo_download::TopoDownload::default(),
+            dem_look: crate::topo_download::dem::look::DemLook::default(),
+            dem_follow: crate::topo_download::dem::look::DemFollow::default(),
             active_tool: MapToolKind::Pan,
             ribbon: KaBeginnerRibbon::default(),
             left_layers: LeftLayerPanel::new_empty(),

@@ -1,0 +1,83 @@
+//! Reference layers and the app: a layer gets its legend row, and the checked rows are painted every frame.
+
+use std::sync::Arc;
+
+use eframe::egui::{self, Rect};
+use strata_types::schema::LegendGroup;
+
+use super::{Layer, OPEN_FAILED};
+use crate::app_state::StrataAppState;
+use crate::gui_tab_map::s2w;
+use crate::left_layer_panel::LayerTreeEntry;
+use crate::ref_vector::data::LoadSpec;
+
+impl StrataAppState {
+    /// Puts the layer on the map: its legend row, checked, above the tile maps and the background. A layer of
+    /// that key that is there already now draws the new file; its row keeps what the user set on it.
+    pub(crate) fn show_reference_vector_layer(&mut self, key: &str, title: &str, spec: LoadSpec) {
+        self.ref_vectors.layers.retain(|l| l.key != key);
+        self.ref_vectors.layers.push(Layer::new(key.to_owned(), spec));
+        if !self.left_layers.entries.iter().any(|e| e.layer_key == key) {
+            let entries = &self.left_layers.entries;
+            let at = entries.iter().position(|e| e.group == LegendGroup::Basemap || crate::ref_tile_layers::ref_tile_layer(&e.layer_key).is_some()).unwrap_or(entries.len());
+            let row = LayerTreeEntry { layer_key: key.to_owned(), label_ko: title.to_owned(), group: LegendGroup::ReferenceMap, visible: true, opacity: 1.0, read_only: true, snap_enabled: false, feature_count: 0 };
+            self.left_layers.entries.insert(at, row);
+        }
+        // The check mark is kept by the row's present name (the user may have renamed the row).
+        if let Some(name) = self.left_layers.entries.iter().find(|e| e.layer_key == key).map(|e| e.label_ko.clone()) {
+            self.home_map.real_survey.layer_visible.insert(name, true);
+        }
+    }
+
+    /// Rows of an earlier survey do not belong to the next one.
+    pub(crate) fn remove_reference_vector_rows(&mut self) {
+        let layers = std::mem::take(&mut self.ref_vectors.layers);
+        self.left_layers.entries.retain(|e| !layers.iter().any(|l| l.key == e.layer_key));
+    }
+
+    /// Paints the checked reference vector rows, the lowest row first.
+    pub(crate) fn paint_reference_vector_layers(&mut self, ctx: &egui::Context, p: &egui::Painter, rect: Rect) {
+        let rows: Vec<&str> = self.left_layers.entries.iter().map(|e| e.layer_key.as_str()).filter(|k| self.ref_vectors.has(k)).collect();
+        let shown: Vec<(String, f32)> = self
+            .left_layers
+            .entries
+            .iter()
+            .rev()
+            .filter(|e| self.ref_vectors.has(&e.layer_key) && self.home_map.real_survey.is_layer_visible(&e.label_ko))
+            .map(|e| (e.layer_key.clone(), e.opacity))
+            .collect();
+        let shown_keys: Vec<&str> = shown.iter().map(|(key, _)| key.as_str()).collect();
+        self.ref_vectors.follow_work_crs(strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
+        self.ref_vectors.release(&rows, &shown_keys);
+        let viewport = self.home_map.viewport;
+        // What follows the view (the colours of 「현재 화면 맞춤」, dem_look.rs) asks for the world box of the map.
+        let (north_west, south_east) = (s2w(rect, &viewport, rect.left_top()), s2w(rect, &viewport, rect.right_bottom()));
+        self.ref_vectors.map_box = Some([north_west[0], south_east[1], south_east[0], north_west[1]]);
+        if self.follow_dem_view(ctx.input(|i| i.time)) {
+            ctx.request_repaint_after(std::time::Duration::from_millis(360));
+        }
+        // Labels go over every reference picture, placed among all layers at once by the map engine.
+        let mut labelled = Vec::new();
+        for (key, opacity) in &shown {
+            let mut painted = self.ref_vectors.paint(key, ctx, p, rect, &viewport, *opacity);
+            labelled.extend(painted.labelled.take());
+            if let Some(rows) = painted.rows {
+                self.left_layers.update_feature_count_badge(key, usize::try_from(rows).unwrap_or(usize::MAX));
+            }
+            if painted.failed_now {
+                self.show_status_message(OPEN_FAILED);
+            }
+            // A scripted run has nobody watching: how long the work took goes to its log.
+            if self.snap.is_some() {
+                if let (Some(rows), Some(secs)) = (painted.rows, painted.read_secs) {
+                    eprintln!("[SNAP] 참조 벡터 {key}: {rows} rows read in {secs:.2} s");
+                }
+                if let Some((width, height, secs)) = painted.drawn {
+                    eprintln!("[SNAP] 참조 벡터 {key}: picture {width} x {height} in {secs:.3} s");
+                }
+            }
+        }
+        let (runner, work_epsg) = (Arc::clone(&self.ref_vectors.runner), strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
+        self.ref_vectors.labels.paint(ctx, p, rect, &viewport, work_epsg, labelled, &runner);
+    }
+}

@@ -82,7 +82,9 @@ impl StrataAppState {
             self.modals.active = Some(ActiveModalDialog::AccountSettings);
         } else if item.contains("DEM 불러오기") {
             self.modals.active = Some(ActiveModalDialog::DemDownload);
-        } else if item.contains("음영 만들기") || item.contains("DEM 표현") {
+        } else if item.contains("DEM 표현") {
+            self.open_dem_look_dialog();
+        } else if item.contains("음영 만들기") {
             self.active_tab = MainTab::Map;
             self.modals.active = Some(ActiveModalDialog::DemClass);
         } else if item.contains("등고선") {

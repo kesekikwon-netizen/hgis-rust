@@ -16,8 +16,11 @@ use strata_types::crs::CrsCode;
 use super::post::TopoPost;
 use crate::app_state::StrataAppState;
 use crate::download_jobs::{DownloadJobHandle, StopCode};
-use crate::ref_vector::data::{LoadSpec, Look};
+use crate::ref_vector::data::{HeightRamp, LoadSpec, Look};
 
+/// 「DEM 표현」: the colour preset, the relief and its strength.
+#[path = "dem_look.rs"]
+pub(crate) mod look;
 #[cfg(test)]
 #[path = "dem_post_tests.rs"]
 mod tests;
@@ -29,8 +32,6 @@ pub(crate) const DEM_KEY: &str = "ref_dem";
 pub(crate) const DEM_TITLE: &str = "DEM";
 pub(crate) const RELIEF_KEY: &str = "ref_dem_relief";
 pub(crate) const RELIEF_TITLE: &str = "지형 음영";
-/// How much of its shadow the relief lays over the map (`BasemapOps.cpp:2084-2086`, default 0.30).
-const RELIEF_OPACITY: f32 = 0.30;
 /// The end words of the run, as the sheet run has them (docs/RUST_PLAN.md 4.3 F4).
 pub(crate) const DEM_READY: &str = "DEM을 준비했습니다.";
 /// This app's own words: the C++ has no order that could end without a file.
@@ -139,11 +140,12 @@ impl StrataAppState {
         let spec = |look| LoadSpec { file: root.to_path_buf(), table: String::new(), work_epsg, look, label: None };
         // The relief first: the next row comes in under it.
         let had_relief = self.left_layers.entries.iter().any(|e| e.layer_key == RELIEF_KEY);
-        self.show_reference_vector_layer(RELIEF_KEY, RELIEF_TITLE, spec(Look::Relief));
+        let (look, ramp) = (self.dem_look, self.dem_ramp(self.dem_look.preset).unwrap_or(HeightRamp::National));
+        self.show_reference_vector_layer(RELIEF_KEY, RELIEF_TITLE, spec(Look::Relief { z_factor: look.z_factor }));
         if let Some(row) = self.left_layers.entries.iter_mut().find(|e| e.layer_key == RELIEF_KEY && !had_relief) {
-            row.opacity = RELIEF_OPACITY;
+            row.opacity = look.relief_opacity();
         }
-        self.show_reference_vector_layer(DEM_KEY, DEM_TITLE, spec(Look::Heights));
+        self.show_reference_vector_layer(DEM_KEY, DEM_TITLE, spec(Look::Heights { ramp }));
     }
 
     /// Whether the DEM is on the map and checked: the ribbon button then looks switched on

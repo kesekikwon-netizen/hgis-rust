@@ -23,7 +23,6 @@ fn test_t6_cpp_dialogs_4_variants_and_defaults() {
     assert_eq!(ctrl.survey_area_color_idx, 1);
     assert!((ctrl.survey_area_width_mm - 1.5).abs() < 1e-4);
     assert_eq!(ctrl.line_color_rgb, [0xEA, 0x58, 0x0C]);
-    assert_eq!(ctrl.dem_mode_idx, 2);
     assert_eq!(ctrl.dem_relief_strength_pct, 30);
 
     for variant in [

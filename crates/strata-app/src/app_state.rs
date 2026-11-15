@@ -129,6 +129,9 @@ pub struct StrataAppState {
     pub(crate) topo: crate::topo_download::TopoDownload,
     /// The run of the 「DEM」 button (the same hidden order for the portal's public DEM).
     pub(crate) dem: crate::topo_download::TopoDownload,
+    /// How the DEM of the open survey is shown (「DEM 표현」), and what following the view remembers.
+    pub(crate) dem_look: crate::topo_download::dem::look::DemLook,
+    pub(crate) dem_follow: crate::topo_download::dem::look::DemFollow,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,

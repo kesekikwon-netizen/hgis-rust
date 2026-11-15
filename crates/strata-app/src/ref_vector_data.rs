@@ -42,9 +42,20 @@ pub(crate) enum Look {
     Lines { stroke: [u8; 4], width_mm: f32 },
     Polygons { stroke: [u8; 4], width_mm: f32, fill: PolygonFill },
     /// The heights of the survey's DEM folder as colours (`ref_vector_elevation.rs`); `file` is that folder.
-    Heights,
-    /// The light on the ground of the same DEM, as shadow.
-    Relief,
+    Heights { ramp: HeightRamp },
+    /// The light on the ground of the same DEM, as shadow; the heights count `z_factor` times for it.
+    Relief { z_factor: f32 },
+}
+
+/// How heights become colours: the presets of 「DEM 표현」 (`DemPresentation.cpp:66-75`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum HeightRamp {
+    /// 「전국 표준 (0–2000m)」.
+    National,
+    /// 「저지대 강조」: half of the colours describe 0 to 100 m.
+    Lowland,
+    /// 「현재 화면 맞춤」: the colours reach from the lowest to the highest height of the view.
+    Range { low: f32, high: f32 },
 }
 
 /// The text written over each polygon row of a layer (`GeologyMapService.cpp:426-455`). The places come
@@ -186,7 +197,7 @@ pub(crate) fn load(spec: &LoadSpec) -> Result<RefVectorData, String> {
         Look::Polygons { fill: PolygonFill::Column { name, .. }, .. } => (ShapeKind::Polygons, vec![name]),
         Look::Polygons { fill: PolygonFill::Columns { fill, line, .. }, .. } => (ShapeKind::Polygons, vec![fill, line]),
         Look::Polygons { fill: PolygonFill::None, .. } => (ShapeKind::Polygons, Vec::new()),
-        Look::Heights | Look::Relief => return Err("an elevation layer is no table".to_owned()),
+        Look::Heights { .. } | Look::Relief { .. } => return Err("an elevation layer is no table".to_owned()),
     };
     if facts.kind != wanted {
         return Err(format!("table {} holds another kind of shape than its layer draws", spec.table));

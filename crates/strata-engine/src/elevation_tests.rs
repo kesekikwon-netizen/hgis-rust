@@ -67,7 +67,7 @@ fn a_dem_is_brought_to_the_work_crs_cell_by_cell() {
     #[allow(clippy::cast_possible_truncation)]
     write_dem(&file, ORIGIN, |x, y| plane(x, y) as f32);
 
-    let grid = read_elevation_grid(&[file], 5187).unwrap();
+    let grid = read_elevation_grid(&[file], 5187, 1.0).unwrap();
     assert!((grid.cell - CELL).abs() < 1e-9, "the cells keep the size of the file's: {}", grid.cell);
     assert_eq!((grid.heights.len(), grid.shade.len()), (grid.width * grid.height, grid.width * grid.height));
     let cells = cells_in_5179(&grid);
@@ -94,7 +94,7 @@ fn empty_cells_stay_empty() {
     let hole = |x: f64, y: f64| (x - ORIGIN[0]) > 20.0 * CELL && (ORIGIN[1] - y) > 15.0 * CELL;
     write_dem(&file, ORIGIN, |x, y| if hole(x, y) { -9999.0 } else { 250.0 });
 
-    let grid = read_elevation_grid(&[file], 5187).unwrap();
+    let grid = read_elevation_grid(&[file], 5187, 1.0).unwrap();
     let cells = cells_in_5179(&grid);
     let deep: Vec<_> = cells.iter().filter(|(p, _, _)| cells_inside(ORIGIN, *p) >= 2.0 && (p[0] - ORIGIN[0]) > 22.0 * CELL && (ORIGIN[1] - p[1]) > 17.0 * CELL).collect();
     assert!(deep.len() > 100 && deep.iter().all(|(_, height, _)| height.is_nan()), "{} cells of the hole", deep.len());
@@ -111,7 +111,7 @@ fn two_sheets_become_one_grid() {
     write_dem(&west, ORIGIN, |_, _| 100.0);
     write_dem(&east, east_origin, |_, _| 300.0);
 
-    let grid = read_elevation_grid(&[west, east], 5187).unwrap();
+    let grid = read_elevation_grid(&[west, east], 5187, 1.0).unwrap();
     assert!(grid.width >= 2 * SIZE.0 && grid.width <= 2 * SIZE.0 + 3, "both sheets side by side: {}", grid.width);
     let cells = cells_in_5179(&grid);
     let of = |origin: [f64; 2]| cells.iter().filter(move |(p, _, _)| cells_inside(origin, *p) >= 1.0).map(|(_, height, _)| *height).collect::<Vec<f32>>();
@@ -132,7 +132,7 @@ fn a_slope_towards_the_light_is_brighter() {
         let file = dir.path().join(name);
         #[allow(clippy::cast_possible_truncation)]
         write_dem(&file, ORIGIN, |x, y| height(x, y) as f32);
-        let grid = read_elevation_grid(&[file], 5187).unwrap();
+        let grid = read_elevation_grid(&[file], 5187, 1.0).unwrap();
         let inside: Vec<f64> = cells_in_5179(&grid).iter().filter(|(p, _, _)| cells_inside(ORIGIN, *p) >= 3.0).map(|(_, _, shade)| f64::from(*shade)).collect();
         #[allow(clippy::cast_precision_loss)]
         let mean = inside.iter().sum::<f64>() / inside.len() as f64;
@@ -152,7 +152,35 @@ fn what_is_no_elevation_raster_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let text = dir.path().join("note.img");
     std::fs::write(&text, "not a raster").unwrap();
-    assert!(read_elevation_grid(&[text], 5187).is_err());
-    assert!(read_elevation_grid(&[], 5187).is_err());
-    assert!(read_elevation_grid(&[dir.path().join("missing.img")], 5187).is_err());
+    assert!(read_elevation_grid(&[text], 5187, 1.0).is_err());
+    assert!(read_elevation_grid(&[], 5187, 1.0).is_err());
+    assert!(read_elevation_grid(&[dir.path().join("missing.img")], 5187, 1.0).is_err());
+}
+
+/// 「수직과장」 (`BasemapOps.cpp:2073-2075`, zFactor 0.1 to 5): heights count that many times for the light,
+/// so a slope away from the light darkens and one towards it brightens; level ground and the heights
+/// themselves stay as they are.
+#[test]
+fn exaggerated_heights_deepen_the_relief() {
+    let dir = tempfile::tempdir().unwrap();
+    let mean_light = |name: &str, z_factor: f64, height: &dyn Fn(f64, f64) -> f64| {
+        let file = dir.path().join(name);
+        #[allow(clippy::cast_possible_truncation)]
+        write_dem(&file, ORIGIN, |x, y| height(x, y) as f32);
+        let grid = read_elevation_grid(&[file], 5187, z_factor).unwrap();
+        let inside: Vec<(f64, f64)> = cells_in_5179(&grid).iter().filter(|(p, _, _)| cells_inside(ORIGIN, *p) >= 3.0).map(|(_, height, shade)| (f64::from(*shade), f64::from(*height))).collect();
+        #[allow(clippy::cast_precision_loss)]
+        let count = inside.len() as f64;
+        (inside.iter().map(|cell| cell.0).sum::<f64>() / count, inside.iter().map(|cell| cell.1).sum::<f64>() / count)
+    };
+    // A gentle slope (1 in 20) that faces away from the light, and the same slope facing it.
+    let away = |x: f64, y: f64| 500.0 - 0.05 * (x - ORIGIN[0]) - 0.05 * (ORIGIN[1] - y);
+    let facing = |x: f64, y: f64| 0.05 * (x - ORIGIN[0]) + 0.05 * (ORIGIN[1] - y);
+    let (plain, tall) = (mean_light("away1.img", 1.0, &away), mean_light("away3.img", 3.0, &away));
+    assert!(tall.0 < plain.0 - 5.0, "away from the light: {plain:?} then {tall:?}");
+    assert!((tall.1 - plain.1).abs() < 1e-6, "the heights are not changed");
+    let (plain, tall) = (mean_light("facing1.img", 1.0, &facing), mean_light("facing3.img", 3.0, &facing));
+    assert!(tall.0 > plain.0 + 5.0, "towards the light: {plain:?} then {tall:?}");
+    let (plain, tall) = (mean_light("level1.img", 1.0, &|_, _| 50.0), mean_light("level3.img", 3.0, &|_, _| 50.0));
+    assert!((tall.0 - plain.0).abs() < 0.5, "level ground: {plain:?} then {tall:?}");
 }

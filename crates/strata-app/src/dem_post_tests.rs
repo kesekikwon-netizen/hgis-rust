@@ -133,7 +133,7 @@ fn a_finished_dem_run_is_listed_and_put_on_the_map() {
     assert_eq!(rows(&app), [("ref_dem_relief".to_owned(), "지형 음영".to_owned(), 0.30, true), ("ref_dem".to_owned(), "DEM".to_owned(), 1.0, true)]);
     let at = |key: &str| app.left_layers.entries.iter().position(|e| e.layer_key == key).unwrap();
     assert_eq!(at("ref_dem"), at("ref_dem_relief") + 1, "the relief lies directly over the DEM");
-    assert_eq!((app.ref_vectors.look_of("ref_dem"), app.ref_vectors.look_of("ref_dem_relief")), (Some(&Look::Heights), Some(&Look::Relief)));
+    assert_eq!((app.ref_vectors.look_of("ref_dem"), app.ref_vectors.look_of("ref_dem_relief")), (Some(&Look::Heights { ramp: crate::ref_vector::data::HeightRamp::National }), Some(&Look::Relief { z_factor: 1.0 })));
     assert!(app.left_layers.entries.iter().filter(|e| e.layer_key.starts_with("ref_dem")).all(|e| e.read_only && e.group == strata_types::schema::LegendGroup::ReferenceMap));
 
     // The button now hides and shows both (`MainWindowOverlay.cpp:315-340`).

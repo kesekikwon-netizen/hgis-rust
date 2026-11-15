@@ -71,12 +71,13 @@ fn opened(file: &Path, target: &SpatialRef) -> Result<(Dataset, [f64; 4], f64), 
 }
 
 /// Reads elevation files into one grid of `EPSG:{target_epsg}`; where files overlap, a later one lies over
-/// an earlier one.
+/// an earlier one. `z_factor` is how many times the heights count for the light (「수직과장」, the C++
+/// keeps it between 0.1 and 5, `BasemapOps.cpp:2073-2075`); the heights of the grid are not changed by it.
 ///
 /// # Errors
 /// No file is given; a file is no raster GDAL can read, has no CRS or stands askew; the grid would be
 /// larger than any DEM of a survey's surroundings.
-pub fn read_elevation_grid(files: &[PathBuf], target_epsg: u32) -> Result<ElevationGrid, EngineError> {
+pub fn read_elevation_grid(files: &[PathBuf], target_epsg: u32, z_factor: f64) -> Result<ElevationGrid, EngineError> {
     let mut target = SpatialRef::from_epsg(target_epsg)?;
     target.set_axis_mapping_strategy(AxisMappingStrategy::TraditionalGisOrder);
     let mut sources = Vec::with_capacity(files.len());
@@ -108,7 +109,7 @@ pub fn read_elevation_grid(files: &[PathBuf], target_epsg: u32) -> Result<Elevat
     }
 
     let mut light = HillshadeOptions::new();
-    light.with_output_format("MEM").with_compute_edges(true).with_shading_mode(ShadingMode::Multidirectional).with_altitude(45.0).with_z_factor(1.0).with_scale(1.0);
+    light.with_output_format("MEM").with_compute_edges(true).with_shading_mode(ShadingMode::Multidirectional).with_altitude(45.0).with_z_factor(z_factor).with_scale(1.0);
     let lit = hillshade(&grid, Path::new(""), &light)?;
     if lit.c_dataset().is_null() {
         return Err(EngineError("GDAL made no hillshade of the elevation grid".to_owned()));

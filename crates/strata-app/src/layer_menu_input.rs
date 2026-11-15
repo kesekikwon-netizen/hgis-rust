@@ -31,7 +31,7 @@ impl StrataAppState {
         let vector = entry.group != LegendGroup::Basemap
             && key != "vworld_cadastral_wms"
             && crate::ref_tile_layers::ref_tile_layer(key).is_none()
-            && !matches!(look, Some(Look::Heights | Look::Relief));
+            && !matches!(look, Some(Look::Heights { .. } | Look::Relief { .. }));
         let geom = match table.map(|t| t.geometry_type.to_ascii_uppercase()) {
             Some(g) if g.contains("POLYGON") => Some(MenuGeom::Polygon),
             Some(g) if g.contains("LINE") => Some(MenuGeom::Line),

@@ -11,6 +11,7 @@ use strata_engine::{write_new_table, Cell, ColumnKind, Row, ShapeKind, Shapes, T
 use strata_types::schema::LegendGroup;
 
 use super::*;
+use crate::app_state::StrataAppState;
 use crate::ref_vector::data::{LabelLook, Look, PolygonFill, RefVectorData};
 
 const KEY: &str = "ref_topographic";
@@ -234,6 +235,8 @@ fn a_labelled_layer_writes_its_symbols_while_its_row_is_checked() {
     assert_eq!(inked(&mut app), 2);
 }
 
+#[path = "ref_vector_tests_c.rs"]
+mod c;
 #[path = "ref_vector_tests_b.rs"]
 mod more;
 
@@ -242,6 +245,11 @@ impl RefVectorLayers {
     /// Work runs inside the call that asks for it.
     pub(crate) fn run_at_once(&mut self) {
         self.runner = Arc::new(|work| work());
+    }
+
+    /// A layer as it stands once its file is read (tests of the elevation layers hand in a grid).
+    pub(crate) fn set_ready(&mut self, key: &str, data: Drawn) {
+        self.layers.iter_mut().filter(|l| l.key == key).for_each(|l| l.shapes = super::Shapes::Ready(data.clone()));
     }
 
     pub(crate) fn pictures_made(&self) -> u32 {

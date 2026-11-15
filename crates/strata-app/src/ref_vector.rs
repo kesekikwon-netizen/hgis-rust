@@ -10,11 +10,8 @@ use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::sync::Arc;
 
 use eframe::egui::{self, Color32, ColorImage, Rect, TextureOptions};
-use strata_types::schema::LegendGroup;
 
-use crate::app_state::StrataAppState;
 use crate::gui_tab_map::w2s;
-use crate::left_layer_panel::LayerTreeEntry;
 use crate::ref_vector::data::{LoadSpec, Look};
 use crate::ref_vector::elevation::{load, render, Drawn};
 use crate::ref_vector::labels::Runner;
@@ -33,6 +30,9 @@ pub(crate) mod labels;
 pub(crate) mod map;
 #[path = "ref_vector_raster.rs"]
 pub(crate) mod raster;
+/// The app's side: legend rows, and the painting of every frame.
+#[path = "ref_vector_show.rs"]
+mod show;
 #[path = "ref_vector_stroke.rs"]
 pub(crate) mod stroke;
 #[path = "ref_vector_view.rs"]
@@ -55,10 +55,12 @@ enum Shapes {
 struct Picture {
     view: RasterView,
     texture: egui::TextureHandle,
+    /// The look it was made in: once the layer has another, it serves only until the next one is there.
+    look: Look,
 }
 
-/// A picture being made: the view it is made for, and where it arrives with the seconds it took.
-type Drawing = (RasterView, Receiver<(Option<Raster>, f32)>);
+/// A picture being made: the view and the look it is made for, and where it arrives with the seconds it took.
+type Drawing = (RasterView, Look, Receiver<(Option<Raster>, f32)>);
 
 struct Layer {
     key: String,
@@ -82,12 +84,14 @@ pub(crate) struct RefVectorLayers {
     runner: Runner,
     pictures_made: u32,
     labels: labels::Labels,
+    /// The world box of the map as it was painted last (`[min x, min y, max x, max y]`, work CRS).
+    pub(crate) map_box: Option<[f64; 4]>,
 }
 
 impl Default for RefVectorLayers {
     fn default() -> Self {
         let runner: Runner = Arc::new(|work| drop(std::thread::spawn(work)));
-        Self { layers: Vec::new(), runner, pictures_made: 0, labels: labels::Labels::default() }
+        Self { layers: Vec::new(), runner, pictures_made: 0, labels: labels::Labels::default(), map_box: None }
     }
 }
 
@@ -101,7 +105,7 @@ impl std::fmt::Debug for RefVectorLayers {
 impl Clone for RefVectorLayers {
     fn clone(&self) -> Self {
         let layers = self.layers.iter().map(|l| Layer::new(l.key.clone(), l.spec.clone())).collect();
-        Self { layers, runner: Arc::clone(&self.runner), pictures_made: 0, labels: labels::Labels::default() }
+        Self { layers, runner: Arc::clone(&self.runner), pictures_made: 0, labels: labels::Labels::default(), map_box: None }
     }
 }
 
@@ -135,6 +139,23 @@ impl RefVectorLayers {
     /// How the layer of this row is drawn (the legend menu offers what fits it).
     pub(crate) fn look_of(&self, key: &str) -> Option<&Look> {
         self.layers.iter().find(|l| l.key == key).map(|l| &l.spec.look)
+    }
+
+    /// Another look for a layer. It keeps what it read and shows its picture until the next one is made; a
+    /// relief is read again (its light is made when it is read).
+    pub(crate) fn set_look(&mut self, key: &str, look: Look) {
+        if let Some(layer) = self.layers.iter_mut().find(|l| l.key == key && l.spec.look != look) {
+            // Only the colours of heights are made for every picture; all else is made when the file is read.
+            if !matches!(look, Look::Heights { .. }) {
+                layer.shapes = Shapes::Wanted;
+            }
+            layer.spec.look = look;
+        }
+    }
+
+    /// The lowest and highest height an elevation layer holds inside a box of the work CRS.
+    pub(crate) fn height_range(&self, key: &str, within: [f64; 4]) -> Option<(f32, f32)> {
+        self.layers.iter().find(|l| l.key == key).and_then(|l| if let Shapes::Ready(data) = &l.shapes { data.height_range(within) } else { None })
     }
 
     /// Layers are kept in the work CRS: when the user changes it they are read again into the new one.
@@ -190,33 +211,34 @@ impl RefVectorLayers {
         // Twice at most: with work that runs at once, the picture asked for below is there in the same frame.
         let scale = ctx.pixels_per_point();
         for _ in 0..2 {
-            match layer.drawing.as_ref().map(|(_, receive)| receive.try_recv()) {
+            match layer.drawing.as_ref().map(|(_, _, receive)| receive.try_recv()) {
                 Some(Ok((Some(raster), secs))) => {
                     painted.drawn = Some((raster.view.width, raster.view.height, secs));
                     let image = ColorImage::from_rgba_premultiplied([raster.view.width as usize, raster.view.height as usize], &raster.rgba);
                     let texture = ctx.load_texture(format!("ref-vector-{key}"), image, TextureOptions::LINEAR);
-                    layer.picture = Some(Picture { view: raster.view, texture });
-                    layer.drawing = None;
+                    let look = layer.drawing.take().map_or_else(|| layer.spec.look.clone(), |(_, look, _)| look);
+                    layer.picture = Some(Picture { view: raster.view, texture, look });
                     self.pictures_made += 1;
                 }
-                Some(Ok((None, _)) | Err(TryRecvError::Disconnected)) => layer.failed = layer.drawing.take().map(|(asked, _)| asked),
+                Some(Ok((None, _)) | Err(TryRecvError::Disconnected)) => layer.failed = layer.drawing.take().map(|(asked, _, _)| asked),
                 Some(Err(TryRecvError::Empty)) | None => {}
             }
             let (wanted, map) = view::wanted_view(rect, vp, scale, ctx.input(|i| i.max_texture_side));
-            let fresh = layer.picture.as_ref().is_some_and(|pic| view::covers(&pic.view, &wanted, &map));
+            let fresh = layer.picture.as_ref().is_some_and(|pic| pic.look == layer.spec.look && view::covers(&pic.view, &wanted, &map));
             let hopeless = layer.failed.as_ref().is_some_and(|failed| failed.same_as(&wanted));
             if fresh || hopeless || layer.drawing.is_some() {
                 break;
             }
             let (send, receive) = channel();
-            let (shapes, wake) = (data.clone(), ctx.clone());
+            let (shapes, look, wake) = (data.clone(), layer.spec.look.clone(), ctx.clone());
+            let made_in = look.clone();
             (self.runner)(Box::new(move || {
                 let started = std::time::Instant::now();
-                let picture = render(&shapes, wanted);
+                let picture = render(&shapes, &look, wanted);
                 let _ = send.send((picture, started.elapsed().as_secs_f32()));
                 wake.request_repaint();
             }));
-            layer.drawing = Some((wanted, receive));
+            layer.drawing = Some((wanted, made_in, receive));
         }
         if let Some(pic) = &layer.picture {
             let world = pic.view.world();
@@ -228,70 +250,5 @@ impl RefVectorLayers {
             painted.labelled = layer.spec.label.as_ref().map(|look| labels::source(key, &layer.spec, look));
         }
         painted
-    }
-}
-
-impl StrataAppState {
-    /// Puts the layer on the map: its legend row, checked, above the tile maps and the background. A layer of
-    /// that key that is there already now draws the new file; its row keeps what the user set on it.
-    pub(crate) fn show_reference_vector_layer(&mut self, key: &str, title: &str, spec: LoadSpec) {
-        self.ref_vectors.layers.retain(|l| l.key != key);
-        self.ref_vectors.layers.push(Layer::new(key.to_owned(), spec));
-        if !self.left_layers.entries.iter().any(|e| e.layer_key == key) {
-            let entries = &self.left_layers.entries;
-            let at = entries.iter().position(|e| e.group == LegendGroup::Basemap || crate::ref_tile_layers::ref_tile_layer(&e.layer_key).is_some()).unwrap_or(entries.len());
-            let row = LayerTreeEntry { layer_key: key.to_owned(), label_ko: title.to_owned(), group: LegendGroup::ReferenceMap, visible: true, opacity: 1.0, read_only: true, snap_enabled: false, feature_count: 0 };
-            self.left_layers.entries.insert(at, row);
-        }
-        // The check mark is kept by the row's present name (the user may have renamed the row).
-        if let Some(name) = self.left_layers.entries.iter().find(|e| e.layer_key == key).map(|e| e.label_ko.clone()) {
-            self.home_map.real_survey.layer_visible.insert(name, true);
-        }
-    }
-
-    /// Rows of an earlier survey do not belong to the next one.
-    pub(crate) fn remove_reference_vector_rows(&mut self) {
-        let layers = std::mem::take(&mut self.ref_vectors.layers);
-        self.left_layers.entries.retain(|e| !layers.iter().any(|l| l.key == e.layer_key));
-    }
-
-    /// Paints the checked reference vector rows, the lowest row first.
-    pub(crate) fn paint_reference_vector_layers(&mut self, ctx: &egui::Context, p: &egui::Painter, rect: Rect) {
-        let rows: Vec<&str> = self.left_layers.entries.iter().map(|e| e.layer_key.as_str()).filter(|k| self.ref_vectors.has(k)).collect();
-        let shown: Vec<(String, f32)> = self
-            .left_layers
-            .entries
-            .iter()
-            .rev()
-            .filter(|e| self.ref_vectors.has(&e.layer_key) && self.home_map.real_survey.is_layer_visible(&e.label_ko))
-            .map(|e| (e.layer_key.clone(), e.opacity))
-            .collect();
-        let shown_keys: Vec<&str> = shown.iter().map(|(key, _)| key.as_str()).collect();
-        self.ref_vectors.follow_work_crs(strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
-        self.ref_vectors.release(&rows, &shown_keys);
-        let viewport = self.home_map.viewport;
-        // Labels go over every reference picture, placed among all layers at once by the map engine.
-        let mut labelled = Vec::new();
-        for (key, opacity) in &shown {
-            let mut painted = self.ref_vectors.paint(key, ctx, p, rect, &viewport, *opacity);
-            labelled.extend(painted.labelled.take());
-            if let Some(rows) = painted.rows {
-                self.left_layers.update_feature_count_badge(key, usize::try_from(rows).unwrap_or(usize::MAX));
-            }
-            if painted.failed_now {
-                self.show_status_message(OPEN_FAILED);
-            }
-            // A scripted run has nobody watching: how long the work took goes to its log.
-            if self.snap.is_some() {
-                if let (Some(rows), Some(secs)) = (painted.rows, painted.read_secs) {
-                    eprintln!("[SNAP] 참조 벡터 {key}: {rows} rows read in {secs:.2} s");
-                }
-                if let Some((width, height, secs)) = painted.drawn {
-                    eprintln!("[SNAP] 참조 벡터 {key}: picture {width} x {height} in {secs:.3} s");
-                }
-            }
-        }
-        let (runner, work_epsg) = (Arc::clone(&self.ref_vectors.runner), strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
-        self.ref_vectors.labels.paint(ctx, p, rect, &viewport, work_epsg, labelled, &runner);
     }
 }

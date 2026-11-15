@@ -117,7 +117,7 @@ impl StrataAppState {
                     // 음영 줄은 이름이 아니라 그 줄 자체로 찾는다(사용자가 이름을 바꿨을 수 있다).
                     let relief_row = self.relief_row_name();
                     let relief = relief_row.clone().unwrap_or_else(|| "지형 음영".to_owned());
-                    if make_visible && relief_row.is_some() {
+                    if make_visible && relief_row.is_some() && self.dem_look.relief {
                         self.home_map
                             .real_survey
                             .layer_visible
