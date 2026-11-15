@@ -172,12 +172,9 @@ fn test_u1_ux_layout_spec_1600x900_skeleton_ribbon_and_3_column_split() {
     );
     assert_eq!(UX_RIBBON_GROUPS.len(), 7);
     assert_eq!(UX_RIBBON_GROUPS[2].0, "자료 받기");
-    assert_eq!(UX_RIBBON_GROUPS[2].1, &["지적", "수치지형", "유산"][..]);
+    assert_eq!(UX_RIBBON_GROUPS[2].1, &["지적", "수치지형", "DEM", "유산"][..]);
     assert_eq!(UX_RIBBON_GROUPS[3].0, "배경 지도");
-    assert_eq!(
-        UX_RIBBON_GROUPS[3].1,
-        &["지형", "DEM", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"][..]
-    );
+    assert_eq!(UX_RIBBON_GROUPS[3].1, &["지형", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"][..]);
     assert_eq!(UX_STATUS_BAR_Y, 839.0);
     assert_eq!(UX_STATUS_BAR_HEIGHT, 32.0);
     assert_eq!(UX_LEFT_PANEL_WIDTH, 351.0);
@@ -226,11 +223,12 @@ fn test_u1_ux_layout_spec_1600x900_skeleton_ribbon_and_3_column_split() {
 }
 
 // Order F1f-1 + RB1a — target/cpp-ref/src/app/MainWindowRibbon.cpp:250,385,472,484,544,550
-// adds three chips to group "fetch" (자료 받기) and has no borehole chip.
+// adds three chips to group "fetch" (자료 받기) and has no borehole chip. DEM joined them by the owner's
+// word of 2026-11-15 (「dem 이것은 자료받기칸으로 이동」): four chips.
 #[test]
-fn fetch_ribbon_group_has_three_chips_without_borehole() {
+fn fetch_ribbon_group_has_its_chips_without_borehole() {
     assert_eq!(UX_RIBBON_GROUPS[2].0, "자료 받기");
-    assert_eq!(UX_RIBBON_GROUPS[2].1, &["지적", "수치지형", "유산"][..]);
+    assert_eq!(UX_RIBBON_GROUPS[2].1, &["지적", "수치지형", "DEM", "유산"][..]);
     assert!(UX_RIBBON_GROUPS.iter().flat_map(|(_, items)| items.iter()).all(|l| *l != "시추"));
     assert_eq!(crate::ribbon_icons::cpp_icon_id("시추"), None);
     assert_eq!(crate::ribbon_icons::cpp_ribbon_tooltip("시추"), "");
@@ -243,11 +241,9 @@ fn fetch_ribbon_group_has_three_chips_without_borehole() {
 fn ribbon_groups_hold_cpp_buttons_in_cpp_order() {
     assert_eq!(UX_RIBBON_GROUPS[0], ("조사", &["새 조사", "열기", "저장", "다른 이름"][..]));
     assert_eq!(UX_RIBBON_GROUPS[1], ("기록", &["선택", "측거", "그리기", "시굴격자", "버퍼"][..]));
-    assert_eq!(UX_RIBBON_GROUPS[2], ("자료 받기", &["지적", "수치지형", "유산"][..]));
-    assert_eq!(
-        UX_RIBBON_GROUPS[3],
-        ("배경 지도", &["지형", "DEM", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"][..])
-    );
+    // DEM is the one chip that does not stand where the C++ has it (owner 2026-11-15).
+    assert_eq!(UX_RIBBON_GROUPS[2], ("자료 받기", &["지적", "수치지형", "DEM", "유산"][..]));
+    assert_eq!(UX_RIBBON_GROUPS[3], ("배경 지도", &["지형", "등고선", "토양", "고지형", "지질", "수계", "옛 지도"][..]));
     assert_eq!(UX_RIBBON_GROUPS[4], ("정합", &["정합"][..]));
     assert_eq!(UX_RIBBON_GROUPS[5], ("내보내기", &["도면", "인쇄", "GeoTIFF", "검수·제출"][..]));
     assert_eq!(UX_RIBBON_GROUPS[6], ("기타", &["더보기"][..]));

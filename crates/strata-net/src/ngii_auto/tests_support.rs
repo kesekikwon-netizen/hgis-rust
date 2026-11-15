@@ -88,6 +88,7 @@ pub fn config(downloads: &Path) -> AutoConfig {
         script: "SCRIPT".to_owned(),
         download_directory: downloads.to_path_buf(),
         account: Account { login_id: "tester".into(), login_password: "pw-for-test".into(), birth_date: " 19800101 ".into(), purpose: " 조사 도면 ".into() },
+        product: super::Product::Sheets,
         test_mode: false,
         diagnostics: false,
     }

@@ -20,19 +20,29 @@ fn test_r8_geology_press_without_a_survey_adds_nothing() {
     assert!(app.download_jobs.is_empty());
 }
 
-/// R8 — 「DEM」은 `MainWindowOverlay.cpp:303-348`. 없으면 받는 창(:344),
-/// 있으면 :337-340 두 문구로 켜고 끈다.
+/// R8 — 「DEM」은 `MainWindowOverlay.cpp:303-348`. 없으면 받고(C++ 은 :344 에서 Copernicus 를 받는
+/// 창을 연다; 여기서는 국토정보플랫폼 공개DEM 을 숨은 주문으로 받는다, 소유자 2026-11-15), 있으면
+/// :337-340 두 문구로 켜고 끈다.
 #[test]
-fn test_r8_dem_opens_download_when_absent_and_toggles_when_present() {
+fn test_r8_dem_orders_when_absent_and_toggles_when_present() {
     let mut app = StrataAppState::new_startup();
     app.handle_ribbon_click("DEM");
-    assert_eq!(app.modals.active, Some(ActiveModalDialog::DemDownload));
+    assert_eq!(app.modals.active, None, "no window: the order runs hidden");
+    assert_eq!(app.home_map.draw_guide_message.as_deref(), Some("먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 DEM 폴더에 저장합니다."));
+    assert!(!app.topographic_download_busy() && app.download_jobs.is_empty());
 
-    app.modals.active = None;
+    // A check mark that an earlier survey left behind is no DEM: the press still goes for the order.
+    // Only the legend row of the DEM makes the button a switch.
     app.home_map
         .real_survey
         .layer_visible
         .insert("DEM".to_owned(), true);
+    app.handle_ribbon_click("DEM");
+    assert!(app.home_map.real_survey.is_layer_visible("DEM"), "nothing was there to hide");
+    assert_ne!(app.status_bar_hint, "DEM 지형을 숨겼습니다.");
+
+    let spec = crate::ref_vector::data::LoadSpec { file: std::path::PathBuf::new(), table: String::new(), work_epsg: 5187, look: crate::ref_vector::data::Look::Heights, label: None };
+    app.show_reference_vector_layer(crate::topo_download::dem::DEM_KEY, "DEM", spec);
     app.handle_ribbon_click("DEM");
     assert!(!app.home_map.real_survey.is_layer_visible("DEM"));
     assert_eq!(app.status_bar_hint, "DEM 지형을 숨겼습니다.");

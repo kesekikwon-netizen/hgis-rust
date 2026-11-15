@@ -11,7 +11,7 @@ use strata_engine::{write_new_table, Cell, ColumnKind, Row, ShapeKind, Shapes, T
 use strata_types::schema::LegendGroup;
 
 use super::*;
-use crate::ref_vector::data::{LabelLook, Look, PolygonFill};
+use crate::ref_vector::data::{LabelLook, Look, PolygonFill, RefVectorData};
 
 const KEY: &str = "ref_topographic";
 const CENTRE: [f64; 2] = [220_000.0, 370_000.0];
@@ -255,7 +255,7 @@ impl RefVectorLayers {
 
     pub(crate) fn shapes_of(&self, key: &str) -> Option<Arc<RefVectorData>> {
         self.layers.iter().find(|l| l.key == key).and_then(|l| match &l.shapes {
-            super::Shapes::Ready(data) => Some(Arc::clone(data)),
+            super::Shapes::Ready(Drawn::Shapes(data)) => Some(Arc::clone(data)),
             _ => None,
         })
     }

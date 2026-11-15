@@ -1,10 +1,12 @@
-//! The 「수치지형」 button: the NGII sheet order for 5 km around the drawn survey area, run in the background
-//! and shown as one line of the bottom gauge (docs/RUST_PLAN.md 2.8, 2.9, 4.3 F4-e). The C++ opens a small
-//! window for the same run (`MainWindowTopographic.cpp:18-72`, `KaTopographicBrowser`); here there is none.
+//! The 「수치지형」 and 「DEM」 buttons: the NGII order for 5 km around the drawn survey area, run in the
+//! background and shown as one line of the bottom gauge (docs/RUST_PLAN.md 2.8, 2.9, 4.3 F4-e). The C++
+//! opens a small window for the sheet run (`MainWindowTopographic.cpp:18-72`, `KaTopographicBrowser`); here
+//! there is none. The DEM run is this app's own (owner 2026-11-15: 「수치지형도와 같은 구역의 dem을 별도로
+//! 받아야한다」): the C++ fetches a Copernicus DEM and takes the NGII one only as a file the user picks.
 
 use std::path::{Path, PathBuf};
 
-use strata_net::ngii_auto::{Account, Scope, Stage, DEFAULT_PURPOSE};
+use strata_net::ngii_auto::{Account, Product, Scope, Stage, DEFAULT_PURPOSE, DEM_PAGE_SCRIPT, PAGE_SCRIPT};
 use strata_net::ngii_topographic::NgiiTopographicClient;
 use strata_secrets::accounts::Credentials;
 use strata_types::crs::WorkCrs;
@@ -13,8 +15,66 @@ use crate::download_jobs::{DownloadJobState, StopCode};
 
 /// 5 km around the survey area (`MainWindowDownloads.cpp:187`; owner 2026-11-15).
 pub(crate) const TOPO_RADIUS_M: f64 = 5000.0;
-/// The name of the job in the gauge.
+/// The name of the sheet job in the gauge.
 pub(crate) const TOPO_JOB_TITLE: &str = "수치지형도";
+
+/// What a hidden order of the NGII portal is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OrderOf {
+    /// 1:25,000 topographic sheets (DXF).
+    Sheets,
+    /// The public DEM of the 1:50,000 sheets that hold the same circle.
+    Dem,
+}
+
+impl OrderOf {
+    /// The name of the job in the gauge.
+    pub(crate) const fn job_title(self) -> &'static str {
+        match self {
+            Self::Sheets => TOPO_JOB_TITLE,
+            Self::Dem => "DEM",
+        }
+    }
+
+    /// The folder of the survey folder the files go to.
+    pub(crate) const fn folder(self) -> &'static str {
+        match self {
+            Self::Sheets => "지형도",
+            Self::Dem => "DEM",
+        }
+    }
+
+    /// What is fetched, as the object of a sentence.
+    pub(crate) const fn object(self) -> &'static str {
+        match self {
+            Self::Sheets => "수치지형도를",
+            Self::Dem => "DEM 을",
+        }
+    }
+
+    /// The name of the run in the log of a scripted run.
+    pub(crate) const fn log_name(self) -> &'static str {
+        match self {
+            Self::Sheets => "수치지형",
+            Self::Dem => "DEM",
+        }
+    }
+
+    pub(crate) const fn product(self) -> Product {
+        match self {
+            Self::Sheets => Product::Sheets,
+            Self::Dem => Product::Dem,
+        }
+    }
+
+    /// The page script that drives the portal for this order.
+    pub(crate) const fn script(self) -> &'static str {
+        match self {
+            Self::Sheets => PAGE_SCRIPT,
+            Self::Dem => DEM_PAGE_SCRIPT,
+        }
+    }
+}
 
 /// What is known when the button is pressed, without asking the site.
 #[derive(Debug, Clone)]
@@ -38,12 +98,12 @@ pub(crate) struct TopoRequest {
 /// Checks a press in the order the C++ does, then what the plan asks to know before the site is touched.
 /// `Err` is why nothing starts: a code for the gauge and the words. The stored account is read last, and
 /// only when nothing else stands in the way.
-pub(crate) fn topo_request(facts: TopoFacts<'_>, stored_account: impl FnOnce() -> Credentials) -> Result<TopoRequest, (StopCode, String)> {
+pub(crate) fn topo_request(of: OrderOf, facts: TopoFacts<'_>, stored_account: impl FnOnce() -> Credentials) -> Result<TopoRequest, (StopCode, String)> {
     // MainWindowTopographic.cpp:20-24
     let Some(folder) = crate::survey_folder::survey_folder(facts.survey_path) else {
-        return Err((StopCode::Dir1, "먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 지형도 폴더에 저장합니다.".to_owned()));
+        return Err((StopCode::Dir1, format!("먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 {} 폴더에 저장합니다.", of.folder())));
     };
-    let needs_area = || (StopCode::Area1, "조사구역을 먼저 그려 주세요. 조사구역에서 반경 5km 안의 수치지형도를 받습니다.".to_owned());
+    let needs_area = || (StopCode::Area1, format!("조사구역을 먼저 그려 주세요. 조사구역에서 반경 5km 안의 {} 받습니다.", of.object()));
     let centre = facts.centre_work.filter(|c| c[0].is_finite() && c[1].is_finite()).ok_or_else(needs_area)?;
     // MainWindowDownloads.cpp:183-186 — the portal is asked in EPSG:5179.
     let portal = crate::ngii_topographic_ui::portal_center(centre, facts.work_crs).ok_or_else(needs_area)?;
@@ -60,16 +120,23 @@ pub(crate) fn topo_request(facts: TopoFacts<'_>, stored_account: impl FnOnce() -
     // (KaTopographicBrowser.cpp:845-849). Degrees for 5 km at this latitude.
     let d_lat = TOPO_RADIUS_M / 111_320.0;
     let d_lon = d_lat / lon_lat[1].to_radians().cos().max(0.2);
-    let mut numbers = NgiiTopographicClient::sheets_for_bbox_25k([lon_lat[0] - d_lon, lon_lat[1] - d_lat, lon_lat[0] + d_lon, lon_lat[1] + d_lat]);
-    if numbers.is_empty() {
+    let mut numbers = match of {
+        OrderOf::Sheets => NgiiTopographicClient::sheets_for_bbox_25k([lon_lat[0] - d_lon, lon_lat[1] - d_lat, lon_lat[0] + d_lon, lon_lat[1] + d_lat]),
+        // The portal's own list says which 1:50,000 sheets hold the circle.
+        OrderOf::Dem => Vec::new(),
+    };
+    if numbers.is_empty() && of == OrderOf::Sheets {
         numbers = crate::ngii_topographic_ui::nearby_sheet_numbers(lon_lat);
     }
-    // The sheets the survey has are named to the portal, which then leaves them out of the order
+    // What the survey has is named to the portal, which then leaves it out of the order
     // (the C++ `received` list, KaTopographicScopePanel.cpp:627-632).
-    let cached_numbers = strata_topo::library::Library::open(&folder.join("지형도")).numbers();
+    let cached_numbers = match of {
+        OrderOf::Sheets => strata_topo::library::Library::open(&folder.join(of.folder())).numbers(),
+        OrderOf::Dem => crate::topo_download::dem::received_numbers(&folder.join(of.folder())),
+    };
     Ok(TopoRequest {
         scope: Scope { x: portal[0], y: portal[1], radius: TOPO_RADIUS_M, numbers, cached_numbers },
-        downloads: folder.join("지형도").join("원본"),
+        downloads: folder.join(of.folder()).join("원본"),
         // The C++ sends no birth date of its own (its field is hidden and emptied, KaTopographicBrowser.cpp:251,
         // 267): the site's form carries the member's, and the page script says so when it does not.
         account: Account { login_id: account.username, login_password: account.password, birth_date: String::new(), purpose: DEFAULT_PURPOSE.to_owned() },
@@ -133,6 +200,8 @@ mod run;
 pub(crate) use run::TopoDownload;
 #[path = "topo_post.rs"]
 mod post;
+#[path = "dem_post.rs"]
+pub(crate) mod dem;
 
 #[cfg(test)]
 #[path = "topo_download_tests.rs"]

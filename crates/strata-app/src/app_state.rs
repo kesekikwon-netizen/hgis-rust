@@ -127,6 +127,8 @@ pub struct StrataAppState {
     pub download_jobs: crate::download_jobs::DownloadJobList,
     /// The run of the 「수치지형」 button (`topo_download`).
     pub(crate) topo: crate::topo_download::TopoDownload,
+    /// The run of the 「DEM」 button (the same hidden order for the portal's public DEM).
+    pub(crate) dem: crate::topo_download::TopoDownload,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,

@@ -22,10 +22,6 @@ fn random_folder_name() -> String {
     format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..])
 }
 
-fn data_file(path: &Path) -> bool {
-    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("dxf") || e.eq_ignore_ascii_case("zip"))
-}
-
 impl NgiiAutomation {
     /// A page offers a file (`:915-956`). `Some` says where it goes; `None` refuses it.
     pub fn download_offered(&mut self, host: &mut dyn PageHost, page: PageId, suggested: &str, now: u64) -> Option<DownloadTarget> {
@@ -54,7 +50,7 @@ impl NgiiAutomation {
             // The engine does not say how large a file will be; the list of the transfer page does.
             announced = Some(listed.bytes as u64);
         }
-        record.insert("source".into(), json!("NGII suchiQuery.do"));
+        record.insert("source".into(), json!(self.config.product.source()));
         if let Some(scope) = &self.scope {
             record.insert("requestScope".into(), json!({"x": scope.x, "y": scope.y, "radius": scope.radius, "numbers": scope.numbers, "cachedNumbers": scope.cached_numbers}));
         }
@@ -129,8 +125,9 @@ impl NgiiAutomation {
         self.status = "내려받기가 완료되었습니다. 받은 자료를 확인해 지도에 불러오세요.".to_owned();
         self.completed_paths.push(path.to_path_buf());
         self.expected_sheet_files -= 1;
+        let product = self.config.product;
         let hand_on = |events: &mut Vec<AutoEvent>, paths: &[PathBuf], only_in: Option<&Path>| {
-            for done in paths.iter().filter(|p| data_file(p) && only_in.is_none_or(|folder| p.parent() == Some(folder))) {
+            for done in paths.iter().filter(|p| product.is_data_file(p) && only_in.is_none_or(|folder| p.parent() == Some(folder))) {
                 events.push(AutoEvent::SheetDownloaded { path: done.clone(), record: record.clone() });
             }
         };
@@ -146,7 +143,7 @@ impl NgiiAutomation {
                 self.stage = Stage::Download;
                 (self.phase_since, self.transfer_since) = (now, Some(now));
             } else {
-                self.order_done(host, now, "선택한 지형도 파일을 모두 받았습니다. 지도 적재 결과를 확인합니다.");
+                self.order_done(host, now, product.words()[3]);
             }
             return;
         }
@@ -165,7 +162,7 @@ impl NgiiAutomation {
             (self.sheet_file_count, self.received_file_count, self.total_bytes, self.received_bytes) = (0, 0, None, 0);
             self.set_phase("로그인", now);
         } else {
-            self.order_done(host, now, "선택한 지형도 파일을 모두 받았습니다. 좌표 정보와 자료를 확인합니다.");
+            self.order_done(host, now, product.words()[4]);
         }
     }
 

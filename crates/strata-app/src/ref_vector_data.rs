@@ -41,6 +41,10 @@ pub(crate) enum PolygonFill {
 pub(crate) enum Look {
     Lines { stroke: [u8; 4], width_mm: f32 },
     Polygons { stroke: [u8; 4], width_mm: f32, fill: PolygonFill },
+    /// The heights of the survey's DEM folder as colours (`ref_vector_elevation.rs`); `file` is that folder.
+    Heights,
+    /// The light on the ground of the same DEM, as shadow.
+    Relief,
 }
 
 /// The text written over each polygon row of a layer (`GeologyMapService.cpp:426-455`). The places come
@@ -182,6 +186,7 @@ pub(crate) fn load(spec: &LoadSpec) -> Result<RefVectorData, String> {
         Look::Polygons { fill: PolygonFill::Column { name, .. }, .. } => (ShapeKind::Polygons, vec![name]),
         Look::Polygons { fill: PolygonFill::Columns { fill, line, .. }, .. } => (ShapeKind::Polygons, vec![fill, line]),
         Look::Polygons { fill: PolygonFill::None, .. } => (ShapeKind::Polygons, Vec::new()),
+        Look::Heights | Look::Relief => return Err("an elevation layer is no table".to_owned()),
     };
     if facts.kind != wanted {
         return Err(format!("table {} holds another kind of shape than its layer draws", spec.table));

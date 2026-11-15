@@ -7,7 +7,7 @@ use strata_net::ngii_auto::{Stage, DEFAULT_PURPOSE};
 use strata_secrets::accounts::Credentials;
 use strata_types::crs::WorkCrs;
 
-use super::{gauge_state, topo_request, RunFacts, TopoFacts, TOPO_RADIUS_M};
+use super::{gauge_state, topo_request, OrderOf, RunFacts, TopoFacts, TOPO_RADIUS_M};
 use crate::app_state::StrataAppState;
 use crate::download_jobs::{DownloadJobState, StopCode};
 
@@ -33,20 +33,20 @@ fn a_press_is_refused_in_order_with_the_reason_and_its_code() {
     let survey = dir.path().join("현장.gpkg");
     std::fs::write(&survey, b"x").unwrap();
 
-    let no_survey = topo_request(facts(None), never_read).unwrap_err();
+    let no_survey = topo_request(OrderOf::Sheets, facts(None), never_read).unwrap_err();
     assert_eq!(no_survey, (StopCode::Dir1, "먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 지형도 폴더에 저장합니다.".to_owned()));
-    assert_eq!(topo_request(facts(Some(&dir.path().join("없음.gpkg"))), never_read).unwrap_err().0, StopCode::Dir1);
+    assert_eq!(topo_request(OrderOf::Sheets, facts(Some(&dir.path().join("없음.gpkg"))), never_read).unwrap_err().0, StopCode::Dir1);
 
-    let no_area = topo_request(TopoFacts { centre_work: None, ..facts(Some(&survey)) }, never_read).unwrap_err();
+    let no_area = topo_request(OrderOf::Sheets, TopoFacts { centre_work: None, ..facts(Some(&survey)) }, never_read).unwrap_err();
     assert_eq!(no_area, (StopCode::Area1, "조사구역을 먼저 그려 주세요. 조사구역에서 반경 5km 안의 수치지형도를 받습니다.".to_owned()));
-    assert_eq!(topo_request(TopoFacts { centre_work: Some([f64::NAN, 1.0]), ..facts(Some(&survey)) }, never_read).unwrap_err().0, StopCode::Area1);
+    assert_eq!(topo_request(OrderOf::Sheets, TopoFacts { centre_work: Some([f64::NAN, 1.0]), ..facts(Some(&survey)) }, never_read).unwrap_err().0, StopCode::Area1);
 
-    let offline = topo_request(TopoFacts { online: false, ..facts(Some(&survey)) }, never_read).unwrap_err();
+    let offline = topo_request(OrderOf::Sheets, TopoFacts { online: false, ..facts(Some(&survey)) }, never_read).unwrap_err();
     assert_eq!(offline.0, StopCode::Site1);
 
     // The words of the C++ page script for a missing account (ngii-topographic.js:196).
     for stored in [Credentials::empty(), Credentials::new("tester", ""), Credentials::new("  ", "pw")] {
-        let refused = topo_request(facts(Some(&survey)), || stored).unwrap_err();
+        let refused = topo_request(OrderOf::Sheets, facts(Some(&survey)), || stored).unwrap_err();
         assert_eq!(refused, (StopCode::Acc1, "더보기의 수치지형도 계정 설정에서 아이디와 비밀번호를 입력해 주세요.".to_owned()));
     }
     assert!(!dir.path().join("지형도").exists(), "a refused press makes no folder");
@@ -60,7 +60,7 @@ fn a_press_asks_for_five_kilometres_around_the_survey_area() {
     let dir = tempfile::tempdir().unwrap();
     let survey = dir.path().join("현장.gpkg");
     std::fs::write(&survey, b"x").unwrap();
-    let request = topo_request(facts(Some(&survey)), account).unwrap();
+    let request = topo_request(OrderOf::Sheets, facts(Some(&survey)), account).unwrap();
     assert_eq!(request.scope.radius, TOPO_RADIUS_M);
     assert_eq!(TOPO_RADIUS_M, 5000.0);
     // The point lies 22 km east of 129°E and 170 km south of 38°N (EPSG:5187: false origin 200 km, 600 km).
@@ -136,6 +136,6 @@ fn sheets_the_survey_has_are_not_ordered_again() {
     library.upsert(entry("359014", "원본/b/359014.dxf"));
     library.save().expect("save");
 
-    let request = topo_request(TopoFacts { centre_work: Some([220_000.0, 370_000.0]), ..facts(Some(&survey)) }, account).expect("request");
+    let request = topo_request(OrderOf::Sheets, TopoFacts { centre_work: Some([220_000.0, 370_000.0]), ..facts(Some(&survey)) }, account).expect("request");
     assert_eq!(request.scope.cached_numbers, ["359012"]);
 }

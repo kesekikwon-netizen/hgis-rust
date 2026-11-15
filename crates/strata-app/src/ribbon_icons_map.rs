@@ -55,7 +55,9 @@ pub fn cpp_ribbon_tooltip(label: &str) -> &'static str {
         "수치지형" => "HGIS 안에서 국토지리정보원에 로그인하고 수치지형도를 받습니다. 우클릭: 받아 둔 폴더 불러오기",
         "유산" => "조사구역이 속한 시·군의 국가유산 자료를 인트라넷에서 받아 참조 지도로 올립니다",
         "지형" => "등고·음영 지형도를 켭니다. 다시 누르면 숨깁니다",
-        "DEM" => "고도를 색으로 보여 줍니다. 받는 자료는 지표모델(DSM) 30m · Copernicus라 나무·건물 높이가 섞여 있습니다.\n미세지형 판독에는 우클릭 → 「국토지리원 DEM 불러오기」를 쓰세요. 다시 누르면 숨깁니다. 우클릭: 상세 메뉴",
+        // The C++ words name the Copernicus surface model it fetches; this button fetches the NGII public DEM
+        // (owner 2026-11-15), so the sentence about the source is this app's own.
+        "DEM" => "고도를 색으로 보여 줍니다. 조사구역에서 반경 5km 안의 국토지리정보원 공개 DEM(90m 격자)을 받아 지도에 올립니다.\n다시 누르면 숨깁니다. 우클릭: 상세 메뉴",
         "등고선" => "측량 DXF·엑셀 좌표로 등고선과 해발 색 구간을 만듭니다",
         "토양" => "흙토람 토양도를 겹칩니다. 다시 누르면 숨깁니다. 우클릭: 상세 메뉴",
         "고지형" => "흙토람 입지 후보를 강조하고 구하도·자연제방 등 가설을 그립니다. 확정이 아닙니다",

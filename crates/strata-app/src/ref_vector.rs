@@ -15,14 +15,17 @@ use strata_types::schema::LegendGroup;
 use crate::app_state::StrataAppState;
 use crate::gui_tab_map::w2s;
 use crate::left_layer_panel::LayerTreeEntry;
-use crate::ref_vector::data::{load, LoadSpec, Look, RefVectorData};
+use crate::ref_vector::data::{LoadSpec, Look};
+use crate::ref_vector::elevation::{load, render, Drawn};
 use crate::ref_vector::labels::Runner;
-use crate::ref_vector::raster::{render, Raster, RasterView};
+use crate::ref_vector::raster::{Raster, RasterView};
 
 #[path = "ref_vector_clip.rs"]
 pub(crate) mod clip;
 #[path = "ref_vector_data.rs"]
 pub(crate) mod data;
+#[path = "ref_vector_elevation.rs"]
+pub(crate) mod elevation;
 #[path = "ref_vector_labels.rs"]
 pub(crate) mod labels;
 /// The ribbon buttons that fetch such layers.
@@ -44,8 +47,8 @@ pub(crate) const OPEN_FAILED: &str = "받은 지도를 열지 못했습니다. �
 
 enum Shapes {
     Wanted,
-    Loading(Receiver<(Result<RefVectorData, String>, f32)>),
-    Ready(Arc<RefVectorData>),
+    Loading(Receiver<(Result<Drawn, String>, f32)>),
+    Ready(Drawn),
     Failed,
 }
 
@@ -124,17 +127,14 @@ impl RefVectorLayers {
         self.labels.is_busy() || self.layers.iter().any(|l| matches!(l.shapes, Shapes::Loading(_)) || l.drawing.is_some())
     }
 
-    /// The box of a layer's shapes in the work CRS, once they are read (「선택한 레이어로 이동」).
+    /// The box of what a layer draws in the work CRS, once it is read (「선택한 레이어로 이동」).
     pub(crate) fn extent_of(&self, key: &str) -> Option<[f64; 4]> {
-        self.layers.iter().find(|l| l.key == key).and_then(|l| match &l.shapes {
-            Shapes::Ready(data) if !data.items.is_empty() => Some(data.bbox),
-            _ => None,
-        })
+        self.layers.iter().find(|l| l.key == key).and_then(|l| if let Shapes::Ready(data) = &l.shapes { data.extent() } else { None })
     }
 
-    /// Whether the layer of this row draws lines (the legend menu offers what fits the shape).
-    pub(crate) fn draws_lines(&self, key: &str) -> Option<bool> {
-        self.layers.iter().find(|l| l.key == key).map(|l| matches!(l.spec.look, Look::Lines { .. }))
+    /// How the layer of this row is drawn (the legend menu offers what fits it).
+    pub(crate) fn look_of(&self, key: &str) -> Option<&Look> {
+        self.layers.iter().find(|l| l.key == key).map(|l| &l.spec.look)
     }
 
     /// Layers are kept in the work CRS: when the user changes it they are read again into the new one.
@@ -174,8 +174,8 @@ impl RefVectorLayers {
         if let Shapes::Loading(receive) = &layer.shapes {
             match receive.try_recv() {
                 Ok((Ok(data), secs)) => {
-                    (painted.rows, painted.read_secs) = (Some(data.rows), Some(secs));
-                    layer.shapes = Shapes::Ready(Arc::new(data));
+                    (painted.rows, painted.read_secs) = (data.rows(), Some(secs));
+                    layer.shapes = Shapes::Ready(data);
                 }
                 Ok((Err(_), _)) | Err(TryRecvError::Disconnected) => {
                     painted.failed_now = true;
@@ -209,7 +209,7 @@ impl RefVectorLayers {
                 break;
             }
             let (send, receive) = channel();
-            let (shapes, wake) = (Arc::clone(data), ctx.clone());
+            let (shapes, wake) = (data.clone(), ctx.clone());
             (self.runner)(Box::new(move || {
                 let started = std::time::Instant::now();
                 let picture = render(&shapes, wanted);

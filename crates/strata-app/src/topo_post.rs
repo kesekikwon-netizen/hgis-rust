@@ -74,12 +74,14 @@ impl StrataAppState {
 
     /// Starts the work on what a run left, in a thread: the sheets go into the survey's 지형도 folder list,
     /// every sheet of the folder is placed, and the lines within 5 km of the survey area are merged.
-    pub(crate) fn begin_topographic_post(&mut self, received: Vec<(std::path::PathBuf, Map<String, Value>)>, portal: Vec<Map<String, Value>>, job: DownloadJobHandle) {
+    pub(crate) fn begin_topographic_post(&mut self, received: Vec<(std::path::PathBuf, Map<String, Value>)>, portal: Vec<Map<String, Value>>, job: DownloadJobHandle) -> Option<TopoPost> {
         let Some(root) = crate::survey_folder::survey_folder(self.survey_path.as_deref()).map(|folder| folder.join("지형도")) else {
-            return job.report_stopped(StopCode::Dir1, "먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 지형도 폴더에 저장합니다.");
+            job.report_stopped(StopCode::Dir1, "먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 지형도 폴더에 저장합니다.");
+            return None;
         };
         let Ok(Some(scope)) = crate::ref_vector::map::survey_scope(self, TOPO_RADIUS_M) else {
-            return job.report_stopped(StopCode::Area1, "조사구역을 먼저 그려 주세요. 조사구역에서 반경 5km 안의 수치지형도를 받습니다.");
+            job.report_stopped(StopCode::Area1, "조사구역을 먼저 그려 주세요. 조사구역에서 반경 5km 안의 수치지형도를 받습니다.");
+            return None;
         };
         let work_epsg = CrsCode::from(self.work_crs).epsg_number();
         let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |since| since.as_millis());
@@ -89,7 +91,7 @@ impl StrataAppState {
         std::thread::spawn(move || {
             let _ = send.send(post_process(&root, &received, &portal, &scope, work_epsg, stamp, &|| worker_job.is_cancelled()));
         });
-        self.topo.post = Some(TopoPost { result, job });
+        Some(TopoPost { result, job })
     }
 
     /// Every frame: takes the outcome of the work when it is there.
@@ -115,10 +117,10 @@ impl StrataAppState {
         }
     }
 
-    /// The work belongs to the survey it was started for: when another survey takes its place it is told
-    /// to stop and its outcome is not waited for.
+    /// An order and the work after it belong to the survey they were started for: when another survey
+    /// takes its place they are told to stop and their outcome is not waited for.
     pub(crate) fn drop_topographic_post(&mut self) {
-        if let Some(post) = self.topo.post.take() {
+        for post in [self.topo.abandon(), self.dem.abandon()].into_iter().flatten() {
             self.download_jobs.request_cancel(post.job.id());
             post.job.report_cancelled();
         }

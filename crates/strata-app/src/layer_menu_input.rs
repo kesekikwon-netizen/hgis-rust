@@ -6,6 +6,7 @@ use strata_types::schema::LegendGroup;
 use crate::app_state::StrataAppState;
 use crate::layer_menu_label::{describe_label, LabelSetting};
 use crate::layer_menu_model::{menu_kind, LayerMenuInput, MenuGeom};
+use crate::ref_vector::data::Look;
 use crate::survey_style::{detect_name_field, label_rule, GeomKind, LabelRule, LABEL_SIZE_PT};
 
 /// 우리 라벨 모양 → QGIS 라벨이 하는 일.
@@ -25,14 +26,17 @@ impl StrataAppState {
         let entry = self.left_layers.entries.iter().find(|e| e.layer_key == key)?;
         let table = self.survey_tables.iter().find(|t| t.table == key);
         // 배경 타일과 VWorld 지적 그림은 래스터(QgsRasterLayer), 나머지(조사 표·주변 거리 고리)는 벡터.
+        let look = self.ref_vectors.look_of(key);
+        // The DEM and its relief are pictures too (`QgsRasterLayer(path, "DEM", "gdal")`, BasemapOps.cpp:2007).
         let vector = entry.group != LegendGroup::Basemap
             && key != "vworld_cadastral_wms"
-            && crate::ref_tile_layers::ref_tile_layer(key).is_none();
+            && crate::ref_tile_layers::ref_tile_layer(key).is_none()
+            && !matches!(look, Some(Look::Heights | Look::Relief));
         let geom = match table.map(|t| t.geometry_type.to_ascii_uppercase()) {
             Some(g) if g.contains("POLYGON") => Some(MenuGeom::Polygon),
             Some(g) if g.contains("LINE") => Some(MenuGeom::Line),
             Some(_) => Some(MenuGeom::Point),
-            None if self.ref_vectors.draws_lines(key) == Some(true) => Some(MenuGeom::Line),
+            None if matches!(look, Some(Look::Lines { .. })) => Some(MenuGeom::Line),
             None if vector => Some(MenuGeom::Polygon),
             None => None,
         };

@@ -22,6 +22,8 @@ mod url;
 #[cfg(test)]
 mod tests_answer;
 #[cfg(test)]
+mod tests_dem;
+#[cfg(test)]
 mod tests_files;
 #[cfg(test)]
 mod tests_poll;
@@ -40,6 +42,75 @@ pub const DEFAULT_PURPOSE: &str = "고고학 발굴조사 현장 도면 작성 �
 /// `target/cpp-ref/data/providers/ngii-topographic.js`. It is a function expression; the poll calls it with
 /// its input (`KaTopographicBrowser.cpp:798`).
 pub const PAGE_SCRIPT: &str = include_str!("../../../../data/providers/ngii-topographic.js");
+
+/// The page script for the portal's public DEM: `ngii-topographic.js` with the DEM's search, order and
+/// file kinds in the place of the sheets' (built by hand from it on 2026-11-15; the C++ has no such run).
+pub const DEM_PAGE_SCRIPT: &str = include_str!("../../../../data/providers/ngii-dem.js");
+
+/// What a run orders.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Product {
+    /// 1:25,000 topographic sheets as DXF (the C++ run).
+    #[default]
+    Sheets,
+    /// The public DEM, by 1:50,000 sheet.
+    Dem,
+}
+
+impl Product {
+    /// Whether this is a sheet number of the product: six digits for a 1:25,000 sheet, five for a
+    /// 1:50,000 one.
+    #[must_use]
+    pub fn is_sheet_number(self, number: &str) -> bool {
+        let digits = match self {
+            Self::Sheets => 6,
+            Self::Dem => 5,
+        };
+        number.len() == digits && number.bytes().all(|b| b.is_ascii_digit())
+    }
+
+    /// The list of the portal a record of this product is from; it is written into the record of every
+    /// file that is handed on.
+    #[must_use]
+    pub const fn source(self) -> &'static str {
+        match self {
+            Self::Sheets => "NGII suchiQuery.do",
+            Self::Dem => "NGII demQuery.do",
+        }
+    }
+
+    /// Whether a received file is the map itself (handed on) and not a note beside it.
+    #[must_use]
+    pub fn is_data_file(self, path: &std::path::Path) -> bool {
+        let kinds: &[&str] = match self {
+            Self::Sheets => &["dxf", "zip"],
+            // What the portal sends a DEM as, and what the app reads: its ZIP and the ERDAS image inside.
+            Self::Dem => &["zip", "img"],
+        };
+        path.extension().and_then(|e| e.to_str()).is_some_and(|e| kinds.iter().any(|kind| e.eq_ignore_ascii_case(kind)))
+    }
+
+    /// The sentences of a run that name what is ordered: no list, nothing offered, everything there,
+    /// everything received (two forms of the last, `KaTopographicBrowser.cpp:1051-1056`, `:1076-1083`).
+    pub(crate) const fn words(self) -> [&'static str; 5] {
+        match self {
+            Self::Sheets => [
+                "자동 선택할 1:25,000 도엽 목록과 반경을 확인하지 못했습니다.",
+                "이 범위에서 제공 중인 1:25,000 DXF 도엽이 없습니다.",
+                "필요한 지형도를 모두 보관하고 있습니다. 다시 신청하지 않습니다.",
+                "선택한 지형도 파일을 모두 받았습니다. 지도 적재 결과를 확인합니다.",
+                "선택한 지형도 파일을 모두 받았습니다. 좌표 정보와 자료를 확인합니다.",
+            ],
+            Self::Dem => [
+                "자동 선택할 공개DEM 도엽 목록과 반경을 확인하지 못했습니다.",
+                "이 범위에서 제공 중인 공개DEM 이 없습니다.",
+                "필요한 DEM 을 모두 보관하고 있습니다. 다시 신청하지 않습니다.",
+                "선택한 DEM 파일을 모두 받았습니다. 지도에 올릴 준비를 합니다.",
+                "선택한 DEM 파일을 모두 받았습니다. 지도에 올릴 준비를 합니다.",
+            ],
+        }
+    }
+}
 
 /// One page of the hidden browser.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -137,6 +208,8 @@ pub struct AutoConfig {
     /// Folder under which every sheet gets a folder of its own (`m_downloadDirectory`).
     pub download_directory: PathBuf,
     pub account: Account,
+    /// What is ordered: it decides the sheet numbers and the kinds of file the run takes, and its words.
+    pub product: Product,
     /// Lets a portal on 127.0.0.1 stand in for the real one (`QStandardPaths::isTestModeEnabled()`).
     pub test_mode: bool,
     /// Asks the page script to say at which of its checks it stopped (`KA_HGIS_NGII_DIAGNOSTICS=1` in the

@@ -101,29 +101,27 @@ impl StrataAppState {
             }
             // C++ MainWindowOverlay.cpp:303-348 toggleDemMap — DEM 겹침이 이미 있으면
             // 보이기/숨기기만 하고(:315-340), 없을 때만 받으러 간다(:344 startDemDownload).
-            // C++ 은 :315 에서 이름 "DEM" 으로 묻지만 이것은 BasemapDsm.h:44-57 이
-            // ka_hgis/reference_kind=dem 태그로 찾는 것과 같은 레이어이고, 그 범례 이름은
-            // BasemapDsm.h:21 `지표모델(DSM) 30m · Copernicus` 다. Rust 범례는 이 이름을
-            // `지표모델(DSM) 30m · Coperni...` 로 줄여 쓰므로 두 키를 같은 값으로 맞춘다.
+            // 있다는 것은 범례에 DEM 줄이 있다는 것이다(:305 findDem): 다른 조사에서 남은 체크 표시는
+            // DEM 이 아니다. 예전 범례 이름 `지표모델(DSM) 30m · Coperni...` 의 표시도 같은 값으로 둔다.
             "DEM" => {
                 self.active_tab = MainTab::Map;
-                let present = self
-                    .home_map
-                    .real_survey
-                    .layer_visible
-                    .contains_key("DEM")
-                    || self
-                        .home_map
-                        .real_survey
-                        .layer_visible
-                        .contains_key(DEM_LEGEND_KEY);
-                if present {
-                    let make_visible = !self.home_map.real_survey.is_layer_visible("DEM");
-                    for key in ["DEM", DEM_LEGEND_KEY] {
+                if let Some(name) = self.dem_row_name() {
+                    let make_visible = !self.home_map.real_survey.is_layer_visible(&name);
+                    for key in [name.as_str(), DEM_LEGEND_KEY] {
                         self.home_map
                             .real_survey
                             .layer_visible
                             .insert(key.to_owned(), make_visible);
+                    }
+                    // MainWindowOverlay.cpp:319-321 — DEM 을 켜면 그 음영도 다시 선다(ensureDemRelief).
+                    // 음영 줄은 이름이 아니라 그 줄 자체로 찾는다(사용자가 이름을 바꿨을 수 있다).
+                    let relief_row = self.relief_row_name();
+                    let relief = relief_row.clone().unwrap_or_else(|| "지형 음영".to_owned());
+                    if make_visible && relief_row.is_some() {
+                        self.home_map
+                            .real_survey
+                            .layer_visible
+                            .insert(relief.clone(), true);
                     }
                     // MainWindowOverlay.cpp:330-332 — DEM 을 끄는데 지질도가 꺼져 있으면
                     // 같이 올라와 있던 「지형 음영」 도 내린다. C++ `LayerOps::isLayerVisible`
@@ -142,7 +140,7 @@ impl StrataAppState {
                         self.home_map
                             .real_survey
                             .layer_visible
-                            .insert("지형 음영".to_owned(), false);
+                            .insert(relief, false);
                     }
                     // MainWindowOverlay.cpp:337-340 문구 그대로
                     self.status_bar_hint = if make_visible {
@@ -151,8 +149,10 @@ impl StrataAppState {
                         "DEM 지형을 숨겼습니다.".to_owned()
                     };
                 } else {
-                    // :344 startDemDownload
-                    self.modals.active = Some(ActiveModalDialog::DemDownload);
+                    // The C++ starts its own DEM download here (:344 startDemDownload, a Copernicus DEM). The
+                    // owner asked for the NGII DEM of the same area as the topographic sheets (2026-11-15):
+                    // the hidden order of the portal's public DEM (topo_download.rs).
+                    self.press_ngii_order(crate::topo_download::OrderOf::Dem);
                 }
             }
             "지적" => {

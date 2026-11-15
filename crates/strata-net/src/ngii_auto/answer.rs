@@ -105,7 +105,7 @@ impl NgiiAutomation {
                 self.stage = Stage::Stopped;
                 self.timer_active = false;
                 self.events.push(AutoEvent::SelectionUpdated { items: Value::Array(Vec::new()), cached: Value::Null, unavailable: field(result, "unavailable") });
-                self.message("이 범위에서 제공 중인 1:25,000 DXF 도엽이 없습니다.");
+                self.message(self.config.product.words()[1]);
             }
             ("select", "selected" | "cached") => self.selected(result),
             ("openForm", "form") => {
@@ -129,7 +129,7 @@ impl NgiiAutomation {
         if self.records.is_empty() {
             self.stage = Stage::Complete;
             self.timer_active = false;
-            self.status = "필요한 지형도를 모두 보관하고 있습니다. 다시 신청하지 않습니다.".to_owned();
+            self.status = self.config.product.words()[2].to_owned();
             self.events.push(update);
             return;
         }

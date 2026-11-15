@@ -72,6 +72,8 @@ impl StrataAppState {
             }
             // A table of a GeoPackage file as a reference row: file;table;title;lines | outlines | coloured.
             _ if action.starts_with("@ref_vector=") => self.snap_reference_vector(&action["@ref_vector=".len()..]),
+            // The DEM the survey folder has, without an order at the portal.
+            "@dem" => self.show_survey_dem(),
             _ if action.starts_with("@layer_menu_path=") => {
                 self.home_map.layer_menu_path = action["@layer_menu_path=".len()..].split(',').filter_map(|s| s.trim().parse().ok()).collect();
             }

@@ -47,6 +47,8 @@ strata-ngii-run = { path = "../strata-ngii-run" }
 [dev-dependencies]
 strata-net = { workspace = true, features = ["test-probe"] }
 tempfile.workspace = true
+# Tests write the ZIP the NGII portal sends a DEM in (the crate is already in the workspace: strata-topo).
+zip = { workspace = true }
 
 [lints]
 workspace = true

@@ -83,9 +83,9 @@ impl NgiiAutomation {
             list
         };
         let (numbers, cached) = (sorted(&scope.numbers), sorted(&scope.cached_numbers));
-        let sheet = |n: &String| n.len() == 6 && n.bytes().all(|b| b.is_ascii_digit());
-        if !(scope.x.is_finite() && scope.y.is_finite() && scope.radius.is_finite() && scope.radius > 0.0) || numbers.len() > 100 || !numbers.iter().chain(&cached).all(sheet) {
-            self.message("자동 선택할 1:25,000 도엽 목록과 반경을 확인하지 못했습니다.");
+        let product = self.config.product;
+        if !(scope.x.is_finite() && scope.y.is_finite() && scope.radius.is_finite() && scope.radius > 0.0) || numbers.len() > 100 || !numbers.iter().chain(&cached).all(|n| product.is_sheet_number(n)) {
+            self.message(product.words()[0]);
             return;
         }
         let scope = Scope { numbers, cached_numbers: cached, ..scope };
