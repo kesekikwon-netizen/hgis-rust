@@ -212,7 +212,7 @@ impl StrataAppState {
                 // MainWindowRibbon.cpp:391-392 — the first row is the button itself, the second opens
                 // sheets that are already on this PC.
                 if item == "국토지리정보원에서 내려받기…" {
-                    self.press_topographic_download();
+                    self.open_topographic_download();
                 } else {
                     self.modals.active = Some(ActiveModalDialog::TopographicImport);
                 }

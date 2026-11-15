@@ -8,6 +8,8 @@ use strata_secrets::accounts::Credentials;
 use strata_types::crs::WorkCrs;
 
 use super::{gauge_state, topo_request, RunFacts, TopoFacts, TOPO_RADIUS_M};
+use crate::app_state::StrataAppState;
+use crate::dialogs_modal::ActiveModalDialog;
 use crate::download_jobs::{DownloadJobState, StopCode};
 
 fn facts<'a>(survey: Option<&'a Path>) -> TopoFacts<'a> {
@@ -104,4 +106,22 @@ fn the_gauge_shows_the_phase_then_the_result_or_the_reason() {
     assert_eq!(gauge_state(&RunFacts { attention: none, ..run(Stage::Stopped, "도엽 확인") }), stopped(StopCode::None1, none));
     assert_eq!(gauge_state(&RunFacts { cancelled: true, attention: late, failure_phase: "신청", ..run(Stage::Stopped, "신청") }), DownloadJobState::Cancelled);
     assert_eq!(gauge_state(&run(Stage::Stopped, "신청")), DownloadJobState::Cancelled, "stopped without a word: the user stopped it");
+}
+
+/// The hidden order works on the real site, but what it receives is not on the map yet and a sheet already
+/// received would be ordered again (order WV-NGII1). Until then a press in the app keeps the window of
+/// before and orders nothing; only a scripted run (`--snap`) starts the order.
+#[test]
+fn outside_a_scripted_run_the_button_keeps_its_window_and_orders_nothing() {
+    let mut app = StrataAppState::new_startup();
+    app.handle_ribbon_click("수치지형");
+    assert_eq!(app.modals.active, Some(ActiveModalDialog::NgiiTopoDownload));
+    assert_eq!(app.home_map.draw_guide_message, None, "the checks of the order did not run");
+    assert!(!app.topographic_download_busy() && app.download_jobs.is_empty());
+
+    let mut scripted = StrataAppState::new_startup();
+    scripted.snap = Some(crate::snap_shot::SnapRequest::default());
+    scripted.handle_ribbon_click("수치지형");
+    assert_eq!(scripted.modals.active, None);
+    assert_eq!(scripted.home_map.draw_guide_message.as_deref(), Some("먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 지형도 폴더에 저장합니다."));
 }

@@ -47,7 +47,20 @@ fn report(job: &DownloadJobHandle, state: &DownloadJobState) {
 }
 
 impl StrataAppState {
-    /// The ribbon button 「수치지형」 (`MainWindowRibbon.cpp:382-398` → `openTopographicDownload`).
+    /// The ribbon button 「수치지형」 and the first row of its menu. The hidden order works on the real site,
+    /// but what it receives is not on the map yet, and a sheet already received would be ordered again on
+    /// the user's account (order WV-NGII1). Until that is done the app keeps the window it had, and only a
+    /// scripted run (`--snap`) starts the order.
+    pub(crate) fn open_topographic_download(&mut self) {
+        if self.snap.is_some() {
+            self.press_topographic_download();
+        } else {
+            self.active_tab = MainTab::Map;
+            self.modals.active = Some(crate::dialogs_modal::ActiveModalDialog::NgiiTopoDownload);
+        }
+    }
+
+    /// The order itself (`MainWindowRibbon.cpp:382-398` → `openTopographicDownload`).
     pub(crate) fn press_topographic_download(&mut self) {
         self.active_tab = MainTab::Map;
         if self.topo.run.is_some() || self.topo.pending.is_some() {
