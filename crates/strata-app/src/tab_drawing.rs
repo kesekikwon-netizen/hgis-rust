@@ -22,6 +22,9 @@ pub struct DrawingTabState {
     /// The items as they were painted last: where the sheet places each (screen points) and how far it is
     /// moved. For the mouse of the next frame.
     pub(crate) item_rects: Vec<(SheetItem, eframe::egui::Rect, eframe::egui::Vec2)>,
+    /// The scale box (KaDrawingStudio.cpp:1061-1082): a number typed and not applied yet, with the sheet's
+    /// scale it was typed against.
+    pub(crate) scale_entry: Option<(u32, u32)>,
     /// KaDrawingSheetSet.cpp — 보관한 도면 목록
     pub stored_sheets: Vec<StoredSheet>,
     /// KaDrawingSheetSet.cpp:135 팝업 열림 상태
@@ -78,6 +81,7 @@ impl Default for DrawingTabState {
             sheet_center: None,
             item_offsets_mm: std::collections::BTreeMap::new(),
             item_rects: Vec::new(),
+            scale_entry: None,
             stored_sheets: Vec::new(),
             sheet_set_menu_open: false,
             terrain3d_layout_active: false,

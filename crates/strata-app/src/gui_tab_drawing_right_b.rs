@@ -17,30 +17,24 @@ impl StrataAppState {
                         .spacing([3.0, 3.0])
                         .show(ui, |ui| {
                             for s in ["20", "30", "50", "100", "200", "250", "300"] {
-                                if ui
-                                    .add_sized(
-                                        [31.0, 20.0],
-                                        egui::Button::new(egui::RichText::new(s).size(10.0)),
-                                    )
-                                    .clicked()
-                                {
-                                    if let Ok(v) = s.parse::<u32>() {
-                                        self.drawing.sheet.scale_denominator = v;
-                                    }
+                                // KaDrawingStudio.cpp:1100-1103, 3016-3026 — a preset applies at once and is
+                                // marked while the sheet has that scale.
+                                let value = s.parse::<u32>().unwrap_or(0);
+                                let on = value == self.drawing.sheet.scale_denominator;
+                                let chip = egui::Button::new(egui::RichText::new(s).size(10.0)).selected(on);
+                                if ui.add_sized([31.0, 20.0], chip).clicked() && value > 0 {
+                                    self.pick_sheet_scale(value);
                                 }
                             }
                             ui.end_row();
                             for s in ["400", "500", "1000", "2000", "5000", "10000", "25000"] {
-                                if ui
-                                    .add_sized(
-                                        [31.0, 20.0],
-                                        egui::Button::new(egui::RichText::new(s).size(10.0)),
-                                    )
-                                    .clicked()
-                                {
-                                    if let Ok(v) = s.parse::<u32>() {
-                                        self.drawing.sheet.scale_denominator = v;
-                                    }
+                                // KaDrawingStudio.cpp:1100-1103, 3016-3026 — a preset applies at once and is
+                                // marked while the sheet has that scale.
+                                let value = s.parse::<u32>().unwrap_or(0);
+                                let on = value == self.drawing.sheet.scale_denominator;
+                                let chip = egui::Button::new(egui::RichText::new(s).size(10.0)).selected(on);
+                                if ui.add_sized([31.0, 20.0], chip).clicked() && value > 0 {
+                                    self.pick_sheet_scale(value);
                                 }
                             }
                             ui.end_row();

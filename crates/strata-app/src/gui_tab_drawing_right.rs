@@ -151,17 +151,16 @@ impl StrataAppState {
                     );
                     ui.horizontal(|ui| {
                         ui.label("1 :");
-                        // KaDrawingStudio.cpp:158-166 — 축척 값을 직접 끌어 바꾼다
-                        ui.add(
-                            egui::DragValue::new(&mut self.drawing.sheet.scale_denominator)
-                                .range(10..=5_000_000)
-                                .speed(50.0),
-                        );
-                        if ui.button("적용").clicked() {
-                            self.home_map.draw_guide_message = Some(format!(
-                                "축척을 1:{} 로 적용했습니다.",
-                                self.drawing.sheet.scale_denominator
-                            ));
+                        // KaDrawingStudio.cpp:1061-1082, 3121-3137 — the box keeps what is typed or dragged
+                        // until 「적용」, Enter or leaving it (keyboardTracking off).
+                        let mut entry = self.sheet_scale_entry();
+                        let response = ui.add(egui::DragValue::new(&mut entry).range(10..=5_000_000).speed(50.0));
+                        if response.changed() {
+                            self.edit_sheet_scale(entry);
+                        }
+                        let finished = response.lost_focus() && !ui.input(|i| i.key_pressed(egui::Key::Escape));
+                        if ui.button("적용").clicked() || finished {
+                            self.apply_sheet_scale_entry();
                         }
                     });
                     ui.add_space(4.0);

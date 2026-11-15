@@ -36,6 +36,8 @@ mod gui_tab_drawing_refs;
 mod gui_tab_drawing_right;
 #[path = "gui_tab_drawing_right_b.rs"]
 mod gui_tab_drawing_right_b;
+#[path = "gui_tab_drawing_scale.rs"]
+mod gui_tab_drawing_scale;
 #[path = "gui_tab_drawing_sheet.rs"]
 mod gui_tab_drawing_sheet;
 #[path = "gui_tab_drawing_toolbar.rs"]
