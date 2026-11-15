@@ -13,12 +13,13 @@ use strata_refmap::cadastral::Ready;
 use strata_types::schema::LegendGroup;
 
 use super::*;
+use crate::ref_vector::data::{Look, PolygonFill};
 use crate::download_jobs::{DownloadJobState, StopCode};
 use crate::dialogs_modal::ActiveModalDialog;
 use crate::ref_vector::map::tests::{draw_survey_area, CENTRE};
 
-struct Bench {
-    app: StrataAppState,
+pub(super) struct Bench {
+    pub(super) app: StrataAppState,
     dir: tempfile::TempDir,
     runs: Arc<AtomicUsize>,
     ctx: egui::Context,
@@ -26,7 +27,7 @@ struct Bench {
 
 /// An app with a saved survey in a temp folder and a drawn survey area, a stored key and account, and a
 /// run that ends as `outcome` says.
-fn bench(outcome: fn(&Wanted) -> Result<Ready, PortalStop>) -> Bench {
+pub(super) fn bench(outcome: fn(&Wanted) -> Result<Ready, PortalStop>) -> Bench {
     let dir = tempfile::tempdir().unwrap();
     let survey = dir.path().join("현장.gpkg");
     std::fs::write(&survey, b"x").unwrap();
@@ -44,11 +45,11 @@ fn bench(outcome: fn(&Wanted) -> Result<Ready, PortalStop>) -> Bench {
 }
 
 impl Bench {
-    fn frame(&mut self, now: f64) {
+    pub(super) fn frame(&mut self, now: f64) {
         self.app.drive_cadastral(&self.ctx, now);
         self.app.download_jobs.tick(now);
     }
-    fn status(&self) -> &str {
+    pub(super) fn status(&self) -> &str {
         self.app.home_map.draw_guide_message.as_deref().unwrap_or_default()
     }
     fn row(&self) -> Option<usize> {
@@ -59,7 +60,7 @@ impl Bench {
     }
 }
 
-fn table(wanted: &Wanted) -> Result<Ready, PortalStop> {
+pub(super) fn table(wanted: &Wanted) -> Result<Ready, PortalStop> {
     let file = wanted.directory.join("표시").join("made.gpkg");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(&file, b"table").unwrap();

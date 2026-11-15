@@ -180,7 +180,7 @@ impl StrataAppState {
                 if item.contains("계정") {
                     self.modals.active = Some(ActiveModalDialog::AccountSettings);
                 } else {
-                    self.modals.active = Some(ActiveModalDialog::CadastralDownload);
+                    self.open_cadastral_style();
                 }
             }
         }

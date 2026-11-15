@@ -20,6 +20,7 @@ pub enum ActiveModalDialog {
     HeritageRegionSelect,
     NgiiTopoDownload,
     CadastralDownload,
+    CadastralStyle,
     PaleoSourceDownload,
     PdfPreparing,
     DrawingPrint,
@@ -91,6 +92,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         ActiveModalDialog::SurveyArea => render_survey_area(app, ctx, &mut open),
         ActiveModalDialog::LineColor => render_line_color(app, ctx, &mut open),
         ActiveModalDialog::DemClass => render_dem_class(app, ctx, &mut open),
+        ActiveModalDialog::CadastralStyle => crate::ref_vector::cadastral::layer::render_cadastral_style(app, ctx, &mut open),
         ActiveModalDialog::ReferenceStatus => render_reference_status(app, ctx, &mut open),
         other => render_download_and_print_dialogs(app, ctx, other, &mut open),
     }

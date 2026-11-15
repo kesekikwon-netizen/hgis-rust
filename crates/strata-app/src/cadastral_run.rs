@@ -3,27 +3,29 @@
 //! legend (`target/cpp-ref/src/app/MainWindowCadastral.cpp:82-175`). The run itself is
 //! `strata_refmap::cadastral::portal::receive`; no window opens (docs/RUST_PLAN.md 2.8, 2.9).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::sync::Arc;
 
 use strata_net::vworld_portal::CurlPortal;
 use strata_refmap::cadastral::portal::{receive, Asked, PortalStop, Why};
-use strata_refmap::cadastral::{Ready, JIBUN_COLUMN, TABLE};
+use strata_refmap::cadastral::Ready;
 use strata_types::crs::CrsCode;
 
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::ActiveModalDialog;
 use crate::download_jobs::{DownloadJobHandle, DownloadJobId, DownloadJobState, StopCode};
-use crate::ref_vector::data::{LabelLook, LoadSpec, Look, PolygonFill};
+
+/// The row, its look and the note of what was made.
+#[path = "cadastral_layer.rs"]
+pub(crate) mod layer;
+pub(crate) use layer::{Style, CADASTRAL_KEY};
+use layer::{kept_table, write_kept};
 
 #[cfg(test)]
 #[path = "cadastral_run_tests.rs"]
 mod tests;
 
-/// `layer_key` and title of the legend row (`CadastralImport.cpp:273`).
-pub(crate) const CADASTRAL_KEY: &str = "cadastral_near";
-pub(crate) const CADASTRAL_TITLE: &str = "지적도 · 조사 주변 5km";
 /// The gauge line (`MainWindowCadastral.cpp:170`) and the distance (`CadastralPortal.h:14`).
 const JOB_TITLE: &str = "조사 주변 지적도";
 const RADIUS_M: f64 = 5000.0;
@@ -39,9 +41,6 @@ const NO_ACCOUNT: &str = "지적도 메뉴에서 VWorld 계정을 설정하세�
 /// This app's own words (the C++ has no offline switch).
 const OFFLINE: &str = "인터넷 접속이 꺼져 있어 VWorld에 연결할 수 없습니다.";
 const NO_SESSION: &str = "VWorld 접속을 준비하지 못했습니다.";
-/// Which table was made for which survey areas, beside the tables (`지적도/strata-kept.json`).
-const KEPT_NOTE: &str = "strata-kept.json";
-
 /// What a run is started with. The key and the account live in this press only.
 pub(crate) struct Wanted {
     pub(crate) areas: Vec<String>,
@@ -51,6 +50,8 @@ pub(crate) struct Wanted {
     pub(crate) password: String,
     /// `<survey folder>/지적도`.
     pub(crate) directory: PathBuf,
+    /// The look of the row at the press: a run keeps it.
+    pub(crate) style: Style,
 }
 
 /// Does the run: asked for a stop through the second argument, it tells its stage through the third.
@@ -76,6 +77,8 @@ pub(crate) struct CadastralJobs {
     vworld_key: fn() -> String,
     /// The stored account of the VWorld site: name and password.
     account: fn() -> (String, String),
+    /// What 「선 색·지번 표시」 shows while it is open.
+    pub(crate) style: Style,
 }
 
 fn stored_account() -> (String, String) {
@@ -91,7 +94,7 @@ impl Default for CadastralJobs {
             let asked = Asked { survey: &wanted.areas, work_epsg: wanted.work_epsg, radius_m: RADIUS_M, api_key: &wanted.key, username: &wanted.username, password: &wanted.password, directory: &wanted.directory };
             receive(&asked, &mut site, stop, stage)
         });
-        Self { wanted: None, refused: None, running: None, run, runner: Arc::new(|work| drop(std::thread::spawn(work))), online: strata_net::network::is_allowed, vworld_key: strata_secrets::vworld::VworldSettings::load_api_key, account: stored_account }
+        Self { wanted: None, refused: None, running: None, run, runner: Arc::new(|work| drop(std::thread::spawn(work))), online: strata_net::network::is_allowed, vworld_key: strata_secrets::vworld::VworldSettings::load_api_key, account: stored_account, style: Style::default() }
     }
 }
 
@@ -104,7 +107,7 @@ impl std::fmt::Debug for CadastralJobs {
 /// A copy of the app state carries no run.
 impl Clone for CadastralJobs {
     fn clone(&self) -> Self {
-        Self { wanted: None, refused: None, running: None, run: Arc::clone(&self.run), runner: Arc::clone(&self.runner), online: self.online, vworld_key: self.vworld_key, account: self.account }
+        Self { wanted: None, refused: None, running: None, run: Arc::clone(&self.run), runner: Arc::clone(&self.runner), online: self.online, vworld_key: self.vworld_key, account: self.account, style: self.style }
     }
 }
 
@@ -130,29 +133,7 @@ fn stop_code(why: Why) -> StopCode {
     }
 }
 
-fn note_of(areas: &[String], work_epsg: u32, file: &Path) -> serde_json::Value {
-    serde_json::json!({"radius_m": RADIUS_M, "work_epsg": work_epsg, "areas": areas, "file": file.file_name().map(|name| name.to_string_lossy().into_owned())})
-}
-
-/// The table an earlier run made for these very survey areas, when it is still in the folder.
-fn kept_table(directory: &Path, areas: &[String], work_epsg: u32) -> Option<PathBuf> {
-    let note: serde_json::Value = serde_json::from_slice(&std::fs::read(directory.join(KEPT_NOTE)).ok()?).ok()?;
-    let file = directory.join("표시").join(note["file"].as_str()?);
-    (note == note_of(areas, work_epsg, &file) && file.is_file()).then_some(file)
-}
-
 impl StrataAppState {
-    /// The row of the received parcels: outlines of 0.2 mm without fill and the lot numbers in Malgun Gothic
-    /// 8 pt from 1:10,000 in, both black (`CadastralImport.cpp:244-267`); a row of its own at the top of
-    /// the legend (`LayerOps.cpp:1091-1101`). A row that is there keeps its look.
-    pub(crate) fn show_cadastral_layer(&mut self, file: PathBuf) {
-        let earlier = self.ref_vectors.spec_of(CADASTRAL_KEY).map(|spec| (spec.look.clone(), spec.label));
-        let label = LabelLook { column: JIBUN_COLUMN, size_pt: 8.0, ink: [0, 0, 0], halo_mm: 0.0, halo: [255, 255, 255, 0], bold: false, closest_scale: Some(10_000.0), inside_only: false };
-        let (look, label) = earlier.unwrap_or((Look::Polygons { stroke: [0, 0, 0, 255], width_mm: 0.2, fill: PolygonFill::None }, Some(label)));
-        let spec = LoadSpec { file, table: TABLE.to_owned(), work_epsg: CrsCode::from(self.work_crs).epsg_number(), look, label };
-        self.show_top_vector_layer(CADASTRAL_KEY, CADASTRAL_TITLE, spec);
-    }
-
     /// The ribbon button 지적 (`MainWindowCadastral.cpp:82-133`). Every press runs, as in the C++: a run
     /// finds what is in the survey folder and receives only what is new. Without the row on the map the
     /// table kept for these very survey areas is put back first, without asking the site.
@@ -171,8 +152,8 @@ impl StrataAppState {
         };
         let (work_epsg, directory) = (CrsCode::from(self.work_crs).epsg_number(), folder.join("지적도"));
         if !self.left_layers.entries.iter().any(|e| e.layer_key == CADASTRAL_KEY) {
-            if let Some(file) = kept_table(&directory, &areas, work_epsg) {
-                self.show_cadastral_layer(file);
+            if let Some((file, style)) = kept_table(&directory, &areas, work_epsg, RADIUS_M) {
+                self.show_cadastral_layer(file, Some(style));
                 return self.show_status_message(KEPT);
             }
         }
@@ -193,7 +174,8 @@ impl StrataAppState {
             return self.show_status_message(OFFLINE);
         }
         self.show_status_message(STARTING);
-        self.cadastral.wanted = Some(Wanted { areas, work_epsg, key, username, password, directory });
+        let style = self.ref_vectors.spec_of(CADASTRAL_KEY).map(Style::of).unwrap_or_default();
+        self.cadastral.wanted = Some(Wanted { areas, work_epsg, key, username, password, directory, style });
     }
 
     /// A run belongs to the survey it was started for: when another survey takes its place it is told to
@@ -218,8 +200,7 @@ impl StrataAppState {
             (self.cadastral.runner)(Box::new(move || {
                 let outcome = run(&wanted, &|| worker_job.is_cancelled(), &mut |value, words| worker_job.report_running(Some(f32::from(value) / 100.0), Some(words.to_owned())));
                 if let Ok(ready) = &outcome {
-                    // Without the note the table is made again by the next run; nothing else is lost.
-                    let _ = std::fs::write(wanted.directory.join(KEPT_NOTE), note_of(&wanted.areas, wanted.work_epsg, &ready.file).to_string());
+                    write_kept(&wanted.directory, &wanted.areas, wanted.work_epsg, RADIUS_M, &ready.file, wanted.style);
                 }
                 let _ = send.send(outcome);
                 wake.request_repaint();
@@ -246,7 +227,7 @@ impl StrataAppState {
         }
         match outcome {
             Ok(ready) => {
-                self.show_cadastral_layer(ready.file);
+                self.show_cadastral_layer(ready.file, None);
                 job.report_done(ADDED);
                 self.show_status_message(ADDED);
             }
@@ -270,7 +251,7 @@ impl CadastralJobs {
     /// The run is `run`, work happens inside the call that asks, the network counts as on, and a key and
     /// an account are there (none is read from the PC).
     pub(crate) fn for_test(run: Run) -> Self {
-        Self { wanted: None, refused: None, running: None, run, runner: Arc::new(|work| work()), online: || true, vworld_key: || "KEY".to_owned(), account: || ("field".to_owned(), "secret".to_owned()) }
+        Self { wanted: None, refused: None, running: None, run, runner: Arc::new(|work| work()), online: || true, vworld_key: || "KEY".to_owned(), account: || ("field".to_owned(), "secret".to_owned()), style: Style::default() }
     }
 
     pub(crate) fn set_key(&mut self, key: fn() -> String) {

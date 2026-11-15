@@ -83,7 +83,9 @@ impl StrataAppState {
                 self.heritage.wanted = Some(crate::heritage_run::reuse::Wanted { sido, city, reuse: true });
             }
             // The received cadastral map from the table named here, without a run at the site.
-            _ if action.starts_with("@cadastral=") => self.show_cadastral_layer(std::path::PathBuf::from(&action["@cadastral=".len()..])),
+            _ if action.starts_with("@cadastral=") => self.show_cadastral_layer(std::path::PathBuf::from(&action["@cadastral=".len()..]), None),
+            // 「선 색·지번 표시」 as the menu row of the 지적 button opens it.
+            "@cadastral_style" => self.open_cadastral_style(),
             // The DEM the survey folder has, without an order at the portal.
             "@dem" => self.show_survey_dem(),
             // 「DEM 표현」: the dialog as the menu row opens it, and 적용 with preset;relief;times;per cent.

@@ -166,6 +166,13 @@ impl RefVectorLayers {
         }
     }
 
+    /// Other letters for a layer, or none: it is read again, with the text the letters need.
+    pub(crate) fn set_label(&mut self, key: &str, label: Option<data::LabelLook>) {
+        if let Some(layer) = self.layers.iter_mut().find(|l| l.key == key && l.spec.label != label) {
+            (layer.shapes, layer.spec.label) = (Shapes::Wanted, label);
+        }
+    }
+
     /// The lowest and highest height an elevation layer holds inside a box of the work CRS.
     pub(crate) fn height_range(&self, key: &str, within: [f64; 4]) -> Option<(f32, f32)> {
         self.layers.iter().find(|l| l.key == key).and_then(|l| if let Shapes::Ready(data) = &l.shapes { data.height_range(within) } else { None })
