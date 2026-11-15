@@ -12,11 +12,11 @@ use strata_types::crs::CrsCode;
 
 use super::{kept_map, survey_scope, write_scope_note, RefMapKind, BUSY};
 use crate::app_state::{MainTab, StrataAppState};
-use crate::download_jobs::{DownloadJobHandle, DownloadJobState, StopCode};
+use crate::download_jobs::{DownloadJobHandle, DownloadJobId, DownloadJobState, StopCode};
 use crate::ref_vector::data::LoadSpec;
 
-/// Sends one request to a map service.
-type Fetch = Arc<dyn Fn(&Request) -> Result<Vec<u8>, TransferFailure> + Send + Sync>;
+/// Sends one request to a map service; the second argument says whether the request is to be given up.
+type Fetch = Arc<dyn Fn(&Request, &dyn Fn() -> bool) -> Result<Vec<u8>, TransferFailure> + Send + Sync>;
 /// Runs work off the UI thread.
 type Runner = Arc<dyn Fn(Box<dyn FnOnce() + Send>) + Send + Sync>;
 
@@ -29,6 +29,7 @@ struct Wanted {
 
 struct Running {
     kind: &'static RefMapKind,
+    id: DownloadJobId,
     job: DownloadJobHandle,
     result: Receiver<Result<Prepared, Stopped>>,
 }
@@ -46,10 +47,11 @@ pub(crate) struct RefMapJobs {
 
 impl Default for RefMapJobs {
     fn default() -> Self {
-        let fetch: Fetch = Arc::new(|request| {
-            strata_net::reference_http::reference_get(&request.url, request.user_agent, request.idle_secs, request.total_secs).map_err(|failure| match failure {
+        let fetch: Fetch = Arc::new(|request, give_up| {
+            strata_net::reference_http::reference_get(&request.url, request.user_agent, request.idle_secs, request.total_secs, give_up).map_err(|failure| match failure {
                 strata_net::reference_http::ReferenceFailure::Timeout => TransferFailure::Timeout,
                 strata_net::reference_http::ReferenceFailure::Network => TransferFailure::Network,
+                strata_net::reference_http::ReferenceFailure::GivenUp => TransferFailure::Cancelled,
             })
         });
         Self { wanted: None, refused: None, running: None, fetch, runner: Arc::new(|work| drop(std::thread::spawn(work))), online: strata_net::network::is_allowed }
@@ -118,11 +120,11 @@ impl StrataAppState {
             Err(reason) => return self.show_status_message(reason),
         };
         let work_epsg = CrsCode::from(self.work_crs).epsg_number();
-        let stored = scope.reprojected(work_epsg, kind.stored_epsg).and_then(|s| Ok((s.bbox()?, s)));
-        let Ok((bbox, scope)) = stored else {
+        let stored = scope.reprojected(work_epsg, kind.stored_epsg).and_then(|s| Ok((s.polygons()?, s)));
+        let Ok((shape, scope)) = stored else {
             return self.show_status_message(super::AREA_CRS_UNKNOWN);
         };
-        if let Some(file) = kept_map(&folder, kind, bbox) {
+        if let Some(file) = kept_map(&folder, kind, &shape) {
             self.show_reference_vector_layer(kind.key, kind.title, self.load_spec(kind, file));
             self.show_status_message(kind.kept);
             return;
@@ -137,6 +139,17 @@ impl StrataAppState {
         self.ref_maps.wanted = Some(Wanted { kind, scope, requested: folder.join(kind.file_name) });
     }
 
+    /// A fetch belongs to the survey it was started for. When another survey takes its place the fetch is
+    /// told to stop (the worker then takes away what it stored) and its result is not waited for; the C++
+    /// drops such a result by its survey generation (`MainWindowOverlay.cpp:614`, `:633`, `:656`).
+    pub(crate) fn drop_reference_map_fetches(&mut self) {
+        (self.ref_maps.wanted, self.ref_maps.refused) = (None, None);
+        if let Some(running) = self.ref_maps.running.take() {
+            self.download_jobs.request_cancel(running.id);
+            running.job.report_cancelled();
+        }
+    }
+
     /// Every frame: starts a wanted fetch, and takes the result of a running one.
     pub(crate) fn drive_reference_maps(&mut self, ctx: &eframe::egui::Context, now: f64) {
         if let Some((title, code, reason)) = self.ref_maps.refused.take() {
@@ -144,19 +157,24 @@ impl StrataAppState {
         }
         if let Some(Wanted { kind, scope, requested }) = self.ref_maps.wanted.take() {
             let first = DownloadJobState::Running { fraction: None, stage: Some(kind.fetching.to_owned()) };
-            let (_, job) = self.download_jobs.add_job(kind.job_title, first, now);
+            let (id, job) = self.download_jobs.add_job(kind.job_title, first, now);
             let (send, result) = channel();
             let (fetch, worker_job, wake) = (Arc::clone(&self.ref_maps.fetch), job.clone(), ctx.clone());
             (self.ref_maps.runner)(Box::new(move || {
-                let outcome = (kind.prepare)(&scope, &requested, &|request| fetch(request), &|| worker_job.is_cancelled()).and_then(|prepared| {
-                    // The note says for which area the map was fetched; without it the map would be fetched again.
-                    let noted = scope.bbox().ok().and_then(|bbox| write_scope_note(&prepared.folder, kind.radius_m, bbox).ok());
+                let stop = || worker_job.is_cancelled();
+                let outcome = (kind.prepare)(&scope, &requested, &|request| fetch(request, &stop), &stop).and_then(|prepared| {
+                    // The note says for which area the map was fetched and whether it is whole. A map without
+                    // it would never be used again, so it is not left in the survey folder.
+                    let noted = scope.polygons().ok().and_then(|shape| write_scope_note(&prepared.folder, kind.radius_m, &shape, prepared.warnings.is_empty()).ok());
+                    if noted.is_none() {
+                        let _ = std::fs::remove_dir_all(&prepared.folder);
+                    }
                     noted.map(|()| prepared).ok_or_else(|| Stopped::Failed(Why::Storage, strata_refmap::transfer::NOT_SAVED.to_owned()))
                 });
                 let _ = send.send(outcome);
                 wake.request_repaint();
             }));
-            self.ref_maps.running = Some(Running { kind, job, result });
+            self.ref_maps.running = Some(Running { kind, id, job, result });
         }
         let Some(running) = self.ref_maps.running.as_ref() else {
             return;

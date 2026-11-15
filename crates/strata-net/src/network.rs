@@ -266,4 +266,7 @@ mod network_tests;
 
 #[path = "network_local.rs"]
 mod network_local;
+#[path = "network_until.rs"]
+mod network_until;
+pub(crate) use network_until::run_curl_url_with_stdin_until;
 pub use network_local::local_curl_guard_args;

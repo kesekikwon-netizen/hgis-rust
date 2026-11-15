@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use strata_engine::{Scope, Transformer};
+use strata_engine::{PolygonRings, Scope, Transformer};
 use strata_refmap::geology_prepare;
 use strata_refmap::transfer::{Download, Prepared, Stopped};
 use strata_storage::gpkg_wkt::wkt_to_parts;
@@ -26,6 +26,9 @@ mod tests;
 #[cfg(test)]
 #[path = "ref_map_tests_b.rs"]
 mod tests_b;
+#[cfg(test)]
+#[path = "ref_map_tests_c.rs"]
+mod tests_c;
 
 /// The function of strata-refmap that fetches and stores one kind of map.
 type Prepare = fn(&Scope, &Path, Download<'_>, &dyn Fn() -> bool) -> Result<Prepared, Stopped>;
@@ -51,7 +54,7 @@ pub(crate) struct RefMapKind {
     pub(crate) needs_survey: &'static str,
     pub(crate) needs_area: &'static str,
     pub(crate) offline: &'static str,
-    /// Gauge line while the map is fetched (`MainWindowDownloads.cpp:22`).
+    /// Gauge line while the map is fetched (`MainWindowDownloads.cpp:24`).
     pub(crate) fetching: &'static str,
     /// `MainWindowOverlay.cpp:672`.
     pub(crate) added: &'static str,
@@ -87,9 +90,12 @@ pub(crate) const GEOLOGY: RefMapKind = RefMapKind {
 
 /// `SurveyScopeClip.cpp:57`.
 pub(crate) const AREA_CRS_UNKNOWN: &str = "조사구역 좌표계를 확인하지 못했습니다.";
+/// The survey-area shapes cannot be joined or grown (the C++ then cuts nothing, `SurveyScopeClip.cpp:22`;
+/// here the area decides what is fetched, so the press says why nothing starts).
+pub(crate) const AREA_UNREADABLE: &str = "조사구역 도형을 확인하지 못했습니다.";
 /// `MainWindowOverlay.cpp:607`.
 pub(crate) const BUSY: &str = "지도 자료를 내려받고 있습니다. 완료를 기다리거나 취소하세요.";
-/// Beside a kept map: the area it was fetched for.
+/// Beside a kept map: the area it was fetched for, and whether it is whole.
 const SCOPE_NOTE: &str = "ka-hgis-scope.json";
 
 fn polygon_wkt(rings: &[Vec<[f64; 2]>]) -> String {
@@ -116,22 +122,35 @@ pub(crate) fn survey_scope(app: &StrataAppState, radius: f64) -> Result<Option<S
             }
         }
     }
-    Scope::around(&shapes, radius).map_err(|e| e.0)
+    // What the engine says about a shape it cannot join or grow is not for the status line.
+    Scope::around(&shapes, radius).map_err(|_| AREA_UNREADABLE.to_owned())
 }
 
-/// What is written beside a stored map: the radius and the box (stored CRS) of the scope it was fetched for.
-pub(crate) fn scope_note(radius: f64, bbox: [f64; 4]) -> String {
-    serde_json::json!({"radius_m": radius, "bbox": bbox}).to_string()
+/// What is written beside a stored map: the radius and the shape (stored CRS) of the scope it was fetched
+/// and cut for, and whether the map is whole (stored without a warning such as missing official colours).
+pub(crate) fn scope_note(radius: f64, scope: &[PolygonRings], complete: bool) -> String {
+    serde_json::json!({"radius_m": radius, "complete": complete, "scope": scope}).to_string()
 }
 
-pub(crate) fn write_scope_note(folder: &Path, radius: f64, bbox: [f64; 4]) -> std::io::Result<()> {
-    std::fs::write(folder.join(SCOPE_NOTE), scope_note(radius, bbox))
+pub(crate) fn write_scope_note(folder: &Path, radius: f64, scope: &[PolygonRings], complete: bool) -> std::io::Result<()> {
+    std::fs::write(folder.join(SCOPE_NOTE), scope_note(radius, scope, complete))
 }
 
-/// The newest map of this kind in the survey folder that was fetched for this very area (same radius, box
-/// within a metre). A map fetched for another area is not it; a map without the note (one the C++ app
-/// stored, whose area is not known and which has no colour column) is not it either.
-pub(crate) fn kept_map(survey_folder: &Path, kind: &RefMapKind, bbox: [f64; 4]) -> Option<PathBuf> {
+/// Whether the shape in a note is this scope: the same polygons, rings and points, each within a metre.
+fn same_scope(noted: &serde_json::Value, scope: &[PolygonRings]) -> bool {
+    let Ok(noted) = serde_json::from_value::<Vec<PolygonRings>>(noted.clone()) else {
+        return false;
+    };
+    let same_ring = |a: &Vec<[f64; 2]>, b: &Vec<[f64; 2]>| a.len() == b.len() && a.iter().zip(b).all(|(p, q)| (p[0] - q[0]).abs() < 1.0 && (p[1] - q[1]).abs() < 1.0);
+    noted.len() == scope.len() && noted.iter().zip(scope).all(|(a, b)| a.len() == b.len() && a.iter().zip(b).all(|(ring, other)| same_ring(ring, other)))
+}
+
+/// The newest map of this kind in the survey folder that is whole, opens, and was fetched for this very
+/// area: the same radius and the same shape of the scope. The box of the scope would not say that (a
+/// survey area added between two others leaves it as it is). A map without such a note is not it: one
+/// fetched for another area, one stored with a warning (it is fetched again), one the C++ app stored (its
+/// area is not known and it has no colour column).
+pub(crate) fn kept_map(survey_folder: &Path, kind: &RefMapKind, scope: &[PolygonRings]) -> Option<PathBuf> {
     let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
     for entry in std::fs::read_dir(survey_folder).ok()?.flatten() {
         let folder = entry.path();
@@ -144,10 +163,11 @@ pub(crate) fn kept_map(survey_folder: &Path, kind: &RefMapKind, bbox: [f64; 4]) 
             continue;
         };
         let same_radius = note["radius_m"].as_f64().is_some_and(|r| (r - kind.radius_m).abs() < 1e-6);
-        let same_box = note["bbox"].as_array().is_some_and(|b| b.len() == 4 && b.iter().zip(bbox).all(|(have, want)| have.as_f64().is_some_and(|v| (v - want).abs() < 1.0)));
+        let whole = note["complete"].as_bool() == Some(true);
         let written = std::fs::metadata(&file).and_then(|m| m.modified()).ok();
-        if let (true, true, Some(written)) = (same_radius, same_box, written) {
-            if newest.as_ref().is_none_or(|(known, _)| written > *known) {
+        if let (true, true, true, Some(written)) = (same_radius, whole, same_scope(&note["scope"], scope), written) {
+            // A file that does not open as the layer's table would end every press in 「열지 못했습니다」.
+            if newest.as_ref().is_none_or(|(known, _)| written > *known) && strata_engine::table_facts(&file, kind.table).is_ok() {
                 newest = Some((written, file));
             }
         }

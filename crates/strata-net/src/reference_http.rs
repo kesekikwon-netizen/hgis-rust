@@ -20,6 +20,8 @@ pub enum ReferenceFailure {
     Timeout,
     /// Not reached, refused, an HTTP error status, or the network is switched off.
     Network,
+    /// The caller gave the request up while it ran.
+    GivenUp,
 }
 
 fn command(user_agent: &str, idle_secs: u64, total_secs: u64) -> Command {
@@ -45,12 +47,17 @@ fn failure_of(exit_code: Option<i32>) -> ReferenceFailure {
     }
 }
 
-/// Fetches `url` and returns the body of a successful answer.
+/// Fetches `url` and returns the body of a successful answer. `give_up` is asked while the request runs;
+/// when it says yes the request is ended at once (the C++ aborts the transfer when the user cancels,
+/// `PreparedReferenceMap.cpp:67-68`, `:81`).
 ///
 /// # Errors
-/// `Timeout` or `Network`, see [`ReferenceFailure`].
-pub fn reference_get(url: &str, user_agent: &str, idle_secs: u64, total_secs: u64) -> Result<Vec<u8>, ReferenceFailure> {
-    let output = crate::curl_stdin::output_with_url_on_stdin(command(user_agent, idle_secs, total_secs), url).map_err(|_| ReferenceFailure::Network)?;
+/// See [`ReferenceFailure`].
+pub fn reference_get(url: &str, user_agent: &str, idle_secs: u64, total_secs: u64, give_up: &dyn Fn() -> bool) -> Result<Vec<u8>, ReferenceFailure> {
+    let output = crate::curl_stdin::output_with_url_on_stdin_until(command(user_agent, idle_secs, total_secs), url, give_up).map_err(|_| ReferenceFailure::Network)?;
+    let Some(output) = output else {
+        return Err(ReferenceFailure::GivenUp);
+    };
     if output.status.success() {
         Ok(output.stdout)
     } else {

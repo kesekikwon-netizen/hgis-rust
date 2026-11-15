@@ -35,7 +35,7 @@ pub(super) fn draw_survey_area(app: &mut StrataAppState, centre: [f64; 2], srs_i
 }
 
 /// An answer of the service: one unit of 200 m at the survey (coordinates in EPSG:5186), or the picture.
-fn kigam(request: &Request) -> Result<Vec<u8>, TransferFailure> {
+pub(super) fn kigam(request: &Request) -> Result<Vec<u8>, TransferFailure> {
     if request.url.contains("request=GetMap") {
         let side = |name: &str| request.url.split('&').find_map(|p| p.strip_prefix(name)).and_then(|v| v.parse::<u32>().ok()).unwrap();
         let mut bytes = std::io::Cursor::new(Vec::new());
@@ -48,15 +48,15 @@ fn kigam(request: &Request) -> Result<Vec<u8>, TransferFailure> {
     Ok(json!({"type": "FeatureCollection", "crs": {"type": "name", "properties": {"name": "EPSG:5186"}}, "features": [unit]}).to_string().into_bytes())
 }
 
-struct Bench {
-    app: StrataAppState,
-    dir: tempfile::TempDir,
-    requests: Arc<AtomicUsize>,
+pub(super) struct Bench {
+    pub(super) app: StrataAppState,
+    pub(super) dir: tempfile::TempDir,
+    pub(super) requests: Arc<AtomicUsize>,
     ctx: egui::Context,
 }
 
 /// An app with a saved survey in a temp folder and a drawn survey area; answers come from `answer`.
-fn bench(answer: fn(&Request) -> Result<Vec<u8>, TransferFailure>, online: fn() -> bool) -> Bench {
+pub(super) fn bench(answer: fn(&Request) -> Result<Vec<u8>, TransferFailure>, online: fn() -> bool) -> Bench {
     let dir = tempfile::tempdir().unwrap();
     let survey = dir.path().join("현장.gpkg");
     std::fs::write(&survey, b"x").unwrap();
@@ -66,7 +66,7 @@ fn bench(answer: fn(&Request) -> Result<Vec<u8>, TransferFailure>, online: fn() 
     let requests = Arc::new(AtomicUsize::new(0));
     let counted = Arc::clone(&requests);
     app.ref_maps = RefMapJobs::for_test(
-        Arc::new(move |request| {
+        Arc::new(move |request, _| {
             counted.fetch_add(1, Ordering::SeqCst);
             answer(request)
         }),
@@ -77,17 +77,17 @@ fn bench(answer: fn(&Request) -> Result<Vec<u8>, TransferFailure>, online: fn() 
 }
 
 impl Bench {
-    fn frame(&mut self, now: f64) {
+    pub(super) fn frame(&mut self, now: f64) {
         self.app.drive_reference_maps(&self.ctx, now);
         self.app.download_jobs.tick(now);
     }
-    fn status(&self) -> &str {
+    pub(super) fn status(&self) -> &str {
         self.app.home_map.draw_guide_message.as_deref().unwrap_or_default()
     }
-    fn has_row(&self) -> bool {
+    pub(super) fn has_row(&self) -> bool {
         self.app.left_layers.entries.iter().any(|e| e.layer_key == GEOLOGY.key)
     }
-    fn stored_maps(&self) -> Vec<PathBuf> {
+    pub(super) fn stored_maps(&self) -> Vec<PathBuf> {
         let mut found = Vec::new();
         for entry in std::fs::read_dir(self.dir.path()).unwrap().flatten() {
             let file = entry.path().join(GEOLOGY.file_name);
@@ -100,7 +100,7 @@ impl Bench {
 }
 
 /// Work that was asked for and not run yet.
-type Held = Arc<Mutex<Vec<Box<dyn FnOnce() + Send>>>>;
+pub(super) type Held = Arc<Mutex<Vec<Box<dyn FnOnce() + Send>>>>;
 
 fn no_answer(_: &Request) -> Result<Vec<u8>, TransferFailure> {
     panic!("no request may be sent here")

@@ -25,6 +25,16 @@ pub fn output_with_url_on_stdin(cmd: Command, url: &str) -> std::io::Result<Outp
     crate::network::run_curl_url_with_stdin(cmd, url, config.as_bytes())
 }
 
+/// As [`output_with_url_on_stdin`]; `give_up` is asked while curl runs, and `Ok(None)` means that curl was
+/// ended because it said yes.
+///
+/// # Errors
+/// curl cannot be started or its standard input cannot be written.
+pub fn output_with_url_on_stdin_until(cmd: Command, url: &str, give_up: &dyn Fn() -> bool) -> std::io::Result<Option<Output>> {
+    let (cmd, config) = with_url_on_stdin(cmd, url);
+    crate::network::run_curl_url_with_stdin_until(cmd, url, config.as_bytes(), give_up)
+}
+
 #[cfg(test)]
 #[path = "curl_stdin_tests.rs"]
 mod tests;

@@ -230,3 +230,26 @@ fn the_colour_of_a_symbol_is_read_in_its_largest_shape() {
     assert_eq!(rows.len(), 2);
     assert!(rows.iter().all(|(_, cells)| cells == &[Cell::Text("#78B4F0".to_owned())]), "{:?}", rows.iter().map(|r| &r.1).collect::<Vec<_>>());
 }
+
+/// A stop that comes while the map is written still counts: the map is not handed on and nothing is left
+/// (the C++ looks once more after the write, `PreparedReferenceMap.cpp:142`).
+#[test]
+fn a_stop_during_the_write_leaves_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let scope = scope_at(200_000.0, 450_000.0);
+    let (picture_sent, looks_since) = (Counter::new(false), Counter::new(0));
+    let download = |request: &Request| -> Result<Vec<u8>, TransferFailure> {
+        if is_picture(request) {
+            picture_sent.set(true);
+            return Ok(picture(&request.url, [250, 244, 180, 255]));
+        }
+        Ok(answer(vec![unit("u1", 200_000.0, 450_200.0, 100.0, "Qa", "제4기")], Some("EPSG:5186"), None))
+    };
+    // The first look after the picture is the one before the write: the user stops after it.
+    let stopped = || {
+        looks_since.set(looks_since.get() + u32::from(picture_sent.get()));
+        looks_since.get() >= 2
+    };
+    assert_eq!(prepare(&scope, &dir.path().join(FILE_NAME), &download, &stopped).expect_err("stopped"), Stopped::Cancelled(CANCELLED.to_owned()));
+    assert_eq!(std::fs::read_dir(dir.path()).expect("dir").count(), 0);
+}

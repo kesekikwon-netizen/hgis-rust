@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use strata_engine::Transformer;
+use strata_engine::{write_new_table, Cell, ColumnKind, PolygonRings, Row, ShapeKind, Shapes, TableLayout, Transformer};
 
 use super::tests::{draw_survey_area, CENTRE};
 use super::*;
@@ -32,33 +32,66 @@ fn the_scope_is_the_survey_area_grown_by_the_radius() {
     assert_eq!(survey_scope(&app, 10_000.0).unwrap_err(), "조사구역 좌표계를 확인하지 못했습니다.");
 }
 
-/// `kept_map`: only a folder of this app's own naming, with the map file and a note for this radius and
-/// this box (to a metre); the newest of several.
+/// An L-shaped scope in the stored CRS; `inner` moves its inner corner, which leaves its box as it is.
+fn l_scope(inner: f64) -> Vec<PolygonRings> {
+    let (x, y, side) = (300_000.0, 250_000.0, 20_100.0);
+    let middle = side / 2.0 + inner;
+    vec![vec![vec![[x, y], [x + side, y], [x + side, y + middle], [x + middle, y + middle], [x + middle, y + side], [x, y + side], [x, y]]]]
+}
+
+/// A map file of this kind with one unit.
+fn store_map(file: &Path) {
+    let layout = TableLayout { table: GEOLOGY.table, epsg: GEOLOGY.stored_epsg, kind: ShapeKind::Polygons, columns: &[("기호", ColumnKind::Text), ("ka_color", ColumnKind::Text)] };
+    let ring = vec![[300_100.0, 250_100.0], [300_200.0, 250_100.0], [300_200.0, 250_200.0], [300_100.0, 250_200.0], [300_100.0, 250_100.0]];
+    let unit = Row { shapes: Shapes::Polygons(vec![vec![ring]]), cells: vec![Cell::Text("Qa".to_owned()), Cell::Text("#FAF4B4".to_owned())] };
+    write_new_table(file, &layout, &mut vec![unit].into_iter()).unwrap();
+}
+
+/// `kept_map`: only a folder of this app's own naming, with a map file that opens and a note saying that
+/// the map is whole and was fetched for this radius and this very shape of the area (every point to a
+/// metre); the newest of several. The box alone does not say that: a survey area added between two others,
+/// or a moved inner corner, changes what was cut out and leaves the box as it is.
 #[test]
 fn a_kept_map_must_carry_the_note_of_this_area() {
     let dir = tempfile::tempdir().unwrap();
-    let bbox = [300_000.0, 250_000.0, 320_100.0, 270_100.0];
+    let scope = l_scope(0.0);
     let store = |folder: &str, note: Option<String>| -> PathBuf {
         let at = dir.path().join(folder);
         std::fs::create_dir_all(&at).unwrap();
-        std::fs::write(at.join(GEOLOGY.file_name), b"map").unwrap();
+        store_map(&at.join(GEOLOGY.file_name));
         if let Some(note) = note {
             std::fs::write(at.join("ka-hgis-scope.json"), note).unwrap();
         }
         at.join(GEOLOGY.file_name)
     };
     store("ka-hgis-reference-noNote", None);
-    store("ka-hgis-reference-radius", Some(scope_note(5_000.0, bbox)));
-    store("ka-hgis-reference-moved1", Some(scope_note(10_000.0, [bbox[0] + 1.5, bbox[1], bbox[2] + 1.5, bbox[3]])));
+    store("ka-hgis-reference-radius", Some(scope_note(5_000.0, &scope, true)));
+    store("ka-hgis-reference-corner", Some(scope_note(10_000.0, &l_scope(1.5), true)));
+    // The same shape a metre and a half to the east, and to the north: each way alone is another area.
+    let moved = |dx: f64, dy: f64| -> Vec<PolygonRings> { scope.iter().map(|rings| rings.iter().map(|ring| ring.iter().map(|p| [p[0] + dx, p[1] + dy]).collect()).collect()).collect() };
+    store("ka-hgis-reference-toEast", Some(scope_note(10_000.0, &moved(1.5, 0.0), true)));
+    store("ka-hgis-reference-toNort", Some(scope_note(10_000.0, &moved(0.0, 1.5), true)));
+    let two_parts = vec![scope[0].clone(), scope[0].clone()];
+    store("ka-hgis-reference-twoPar", Some(scope_note(10_000.0, &two_parts, true)));
+    let (mut longer, mut holed) = (scope.clone(), scope.clone());
+    longer[0][0].push([300_000.0, 250_000.0]);
+    holed[0].push(vec![[300_010.0, 250_010.0], [300_020.0, 250_010.0], [300_020.0, 250_020.0], [300_010.0, 250_010.0]]);
+    store("ka-hgis-reference-longer", Some(scope_note(10_000.0, &longer, true)));
+    store("ka-hgis-reference-aHole1", Some(scope_note(10_000.0, &holed, true)));
     store("ka-hgis-reference-broken", Some("{not json".to_owned()));
-    store("another-folder", Some(scope_note(10_000.0, bbox)));
-    assert_eq!(kept_map(dir.path(), &GEOLOGY, bbox), None);
+    store("ka-hgis-reference-oldBox", Some(r#"{"radius_m":10000.0,"bbox":[300000.0,250000.0,320100.0,270100.0]}"#.to_owned()));
+    store("another-folder", Some(scope_note(10_000.0, &scope, true)));
+    // Stored with a warning (for example without the official colours): to be fetched again.
+    store("ka-hgis-reference-partly", Some(scope_note(10_000.0, &scope, false)));
+    // The right note beside a file that does not open.
+    let unreadable = store("ka-hgis-reference-noFile", Some(scope_note(10_000.0, &scope, true)));
+    std::fs::write(&unreadable, b"not a map").unwrap();
+    assert_eq!(kept_map(dir.path(), &GEOLOGY, &scope), None);
 
-    let first = store("ka-hgis-reference-aaaaaa", Some(scope_note(10_000.0, [bbox[0] + 0.4, bbox[1], bbox[2], bbox[3] - 0.4])));
-    assert_eq!(kept_map(dir.path(), &GEOLOGY, bbox), Some(first.clone()));
+    let first = store("ka-hgis-reference-aaaaaa", Some(scope_note(10_000.0, &l_scope(0.4), true)));
+    assert_eq!(kept_map(dir.path(), &GEOLOGY, &scope), Some(first));
     std::thread::sleep(std::time::Duration::from_millis(30));
-    let second = store("ka-hgis-reference-bbbbbb", Some(scope_note(10_000.0, bbox)));
-    assert_eq!(kept_map(dir.path(), &GEOLOGY, bbox), Some(second), "the newest");
-    assert_eq!(kept_map(Path::new("Z:/no/such/folder"), &GEOLOGY, bbox), None);
-    let _ = first;
+    let second = store("ka-hgis-reference-bbbbbb", Some(scope_note(10_000.0, &scope, true)));
+    assert_eq!(kept_map(dir.path(), &GEOLOGY, &scope), Some(second), "the newest");
+    assert_eq!(kept_map(Path::new("Z:/no/such/folder"), &GEOLOGY, &scope), None);
 }

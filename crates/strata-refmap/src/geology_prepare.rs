@@ -218,5 +218,9 @@ fn build(scope: &Scope, layer: &str, range: &Range, to_lonlat: &Transformer, gpk
     if stored != expected {
         return Err(failed(Why::Storage, NOT_VERIFIED));
     }
+    // A stop during the write counts as well (`PreparedReferenceMap.cpp:142`).
+    if cancelled() {
+        return Err(stop());
+    }
     Ok((stored, warnings))
 }

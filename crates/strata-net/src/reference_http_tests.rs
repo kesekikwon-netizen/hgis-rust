@@ -13,7 +13,7 @@ const AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ka-hgis/0.3";
 fn the_request_carries_the_limits_and_keeps_the_address_off_the_command_line() {
     let url = "https://data.kigam.re.kr/geoserver/ows?service=WFS&request=GetFeature&bbox=35.7,129.1,35.9,129.3";
     let (launches, commands) = probe_dry_run(true, || {
-        let _ = reference_get(url, AGENT, 15, 180);
+        let _ = reference_get(url, AGENT, 15, 180, &|| false);
     });
     assert_eq!(launches, 1);
     let command = &commands[0];
@@ -30,7 +30,7 @@ fn the_request_carries_the_limits_and_keeps_the_address_off_the_command_line() {
 #[test]
 fn nothing_is_sent_while_the_network_is_off() {
     let (launches, commands) = probe_dry_run(false, || {
-        assert_eq!(reference_get("https://data.kigam.re.kr/geoserver/ows?x=1", AGENT, 15, 180), Err(ReferenceFailure::Network));
+        assert_eq!(reference_get("https://data.kigam.re.kr/geoserver/ows?x=1", AGENT, 15, 180, &|| false), Err(ReferenceFailure::Network));
     });
     assert_eq!(launches, 0);
     assert!(commands.is_empty());
@@ -52,7 +52,27 @@ fn the_body_of_a_successful_answer_is_returned() {
     let source = dir.path().join("answer.json");
     std::fs::write(&source, br#"{"type":"FeatureCollection","features":[]}"#).expect("write");
     let url = format!("file:///{}", source.to_string_lossy().replace('\\', "/"));
-    assert_eq!(reference_get(&url, AGENT, 15, 180).expect("body"), br#"{"type":"FeatureCollection","features":[]}"#);
+    assert_eq!(reference_get(&url, AGENT, 15, 180, &|| false).expect("body"), br#"{"type":"FeatureCollection","features":[]}"#);
     let missing = format!("file:///{}", dir.path().join("none.json").to_string_lossy().replace('\\', "/"));
-    assert_eq!(reference_get(&missing, AGENT, 15, 180), Err(ReferenceFailure::Network));
+    assert_eq!(reference_get(&missing, AGENT, 15, 180, &|| false), Err(ReferenceFailure::Network));
+}
+
+/// A request that is given up while curl waits for the answer ends at once. A listener on this PC takes
+/// the connection and says nothing for eight seconds.
+#[test]
+fn a_request_that_is_given_up_ends_at_once() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let url = format!("http://127.0.0.1:{}/slow", listener.local_addr().expect("address").port());
+    let silent = std::thread::spawn(move || {
+        if let Ok((stream, _)) = listener.accept() {
+            std::thread::sleep(std::time::Duration::from_secs(8));
+            drop(stream);
+        }
+    });
+    let started = std::time::Instant::now();
+    let give_up = || started.elapsed() > std::time::Duration::from_millis(400);
+    assert_eq!(reference_get(&url, AGENT, 15, 180, &give_up), Err(ReferenceFailure::GivenUp));
+    let took = started.elapsed();
+    assert!(took >= std::time::Duration::from_millis(400) && took < std::time::Duration::from_secs(4), "{took:?}");
+    drop(silent);
 }
