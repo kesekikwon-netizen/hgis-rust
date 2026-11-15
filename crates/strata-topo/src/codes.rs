@@ -45,6 +45,12 @@ impl Category {
         }
     }
 
+    /// The kinds that are put on the map (`visibleAtScale`, `TopographicCatalog.cpp:351-364`).
+    #[must_use]
+    pub const fn is_shown(self) -> bool {
+        matches!(self, Self::Contour | Self::Road | Self::Building | Self::Water | Self::Boundary)
+    }
+
     /// The kinds whose extent says where a sheet lies (`primary`, `TopographicSourceCrs.cpp:20-27`): the
     /// frame and the texts around it reach past the sheet, these do not.
     #[must_use]

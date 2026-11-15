@@ -6,4 +6,6 @@
 
 pub mod archive;
 pub mod codes;
+pub mod merge;
+pub mod sheet;
 pub mod source_crs;
