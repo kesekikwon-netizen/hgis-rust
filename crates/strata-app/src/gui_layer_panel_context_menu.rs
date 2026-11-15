@@ -60,7 +60,9 @@ impl StrataAppState {
         }
         let label = entry.as_ref().map_or_else(String::new, |e| e.label_ko.clone());
         match pick.id {
-            // editCurrentLayerStyle — 지금 있는 선 색 창(C++ 창은 CM2a-3).
+            // editCurrentLayerStyle — 지금 있는 선 색 창(C++ 창은 CM2a-3). The received cadastral map has its own
+            // dialog: its lot numbers take the colour too (`MainWindowEditing.cpp:443-444`).
+            "layer.style" if entry.as_ref().is_some_and(|e| e.layer_key == crate::ref_vector::cadastral::CADASTRAL_KEY) => self.open_cadastral_style(),
             "layer.style" => self.modals.active = Some(crate::dialogs_modal::ActiveModalDialog::LineColor),
             // beginEdit(vector) — 그 레이어를 편집 레이어로.
             "layer.draw" => {

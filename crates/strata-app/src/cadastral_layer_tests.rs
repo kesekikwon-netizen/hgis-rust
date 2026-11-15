@@ -66,3 +66,16 @@ fn without_the_parcels_there_is_nothing_to_choose() {
     assert_eq!(bench.status(), "지적도를 먼저 받아 주세요.");
     assert!(bench.app.modals.active.is_none());
 }
+
+/// 「면·외곽선 색」 of the legend's menu on the cadastral row opens this dialog, not the plain line-colour
+/// one, because the lot numbers take the colour too (`MainWindowEditing.cpp:443-444`).
+#[test]
+fn the_legend_menu_opens_the_same_dialog_for_the_cadastral_row() {
+    let mut bench = bench(table);
+    bench.app.press_cadastral();
+    bench.frame(1.0);
+    bench.frame(1.1);
+    bench.app.run_layer_menu_action(Some(CADASTRAL_KEY), &crate::menu_popup::MenuPick { id: "layer.style", value: String::new() });
+    assert_eq!(bench.app.modals.active, Some(ActiveModalDialog::CadastralStyle));
+    assert_eq!(bench.app.cadastral.style, Style::default());
+}
