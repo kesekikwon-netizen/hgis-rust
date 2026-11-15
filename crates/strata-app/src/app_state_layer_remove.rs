@@ -15,6 +15,9 @@ pub(crate) enum UndoStep {
     LayersRemoved(Vec<RemovedLayer>),
     /// A row of the legend was dragged: the keys of the rows in the order they had (KaUndoAction::LayerTreeChanged).
     RowsMoved(Vec<String>),
+    /// One edit that changed several tables at once (겹친 곳 지우기 across layers): they go back together
+    /// (`undoLinkedEdit`, MainWindowUndo.cpp:343-344).
+    Linked(Vec<String>),
 }
 
 /// 뺀 레이어 하나와 그 자리.

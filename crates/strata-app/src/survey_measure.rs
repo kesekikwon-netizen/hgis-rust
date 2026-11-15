@@ -21,7 +21,7 @@ fn layer_area_m2(t: &SurveyFileTable) -> f64 {
 }
 
 /// QLocale(한국어) `%L1` 의 소수 둘 — 천 단위 쉼표.
-fn grouped2(v: f64) -> String {
+pub(crate) fn grouped2(v: f64) -> String {
     let s = format!("{:.2}", v.abs());
     let (int, frac) = s.split_once('.').unwrap_or((s.as_str(), "00"));
     let mut out = String::new();

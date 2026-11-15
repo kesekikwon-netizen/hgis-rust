@@ -35,6 +35,18 @@ impl StrataAppState {
         while let Some(step) = self.undo_tables.pop() {
             let key = match step {
                 crate::app_state_layer_remove::UndoStep::Table(key) => key,
+                crate::app_state_layer_remove::UndoStep::Linked(keys) => {
+                    for table in self.survey_tables.iter_mut().filter(|t| keys.contains(&t.table)) {
+                        table.layer.undo();
+                    }
+                    for key in &keys {
+                        self.after_layer_edit(key);
+                    }
+                    self.redo_tables.push(keys);
+                    self.is_dirty = true;
+                    self.show_status_message("이전 상태로 되돌렸습니다.".to_owned());
+                    return;
+                }
                 crate::app_state_layer_remove::UndoStep::LayersRemoved(removed) => {
                     self.restore_removed_layers(removed);
                     self.show_status_message("이전 상태로 되돌렸습니다.".to_owned());
@@ -48,7 +60,7 @@ impl StrataAppState {
             };
             let undone = self.survey_tables.iter_mut().find(|t| t.table == key).is_some_and(|t| t.layer.undo());
             if undone {
-                self.redo_tables.push(key.clone());
+                self.redo_tables.push(vec![key.clone()]);
                 self.is_dirty = true;
                 self.after_layer_edit(&key);
                 self.show_status_message("이전 상태로 되돌렸습니다.".to_owned());
@@ -60,12 +72,15 @@ impl StrataAppState {
 
     /// Ctrl+Y — 가장 최근에 되돌린 레이어 편집을 다시(MainWindowUndo.cpp:469-484 redoMapAction).
     pub(crate) fn redo_map_action(&mut self) {
-        while let Some(key) = self.redo_tables.pop() {
-            let redone = self.survey_tables.iter_mut().find(|t| t.table == key).is_some_and(|t| t.layer.redo());
-            if redone {
-                self.undo_tables.push(crate::app_state_layer_remove::UndoStep::Table(key.clone()));
+        while let Some(mut keys) = self.redo_tables.pop() {
+            keys.retain(|key| self.survey_tables.iter_mut().find(|t| t.table == *key).is_some_and(|t| t.layer.redo()));
+            if !keys.is_empty() {
+                for key in &keys {
+                    self.after_layer_edit(key);
+                }
+                use crate::app_state_layer_remove::UndoStep;
+                self.undo_tables.push(if keys.len() == 1 { UndoStep::Table(keys.remove(0)) } else { UndoStep::Linked(keys) });
                 self.is_dirty = true;
-                self.after_layer_edit(&key);
                 self.show_status_message("다시 실행했습니다.".to_owned());
                 return;
             }

@@ -32,6 +32,8 @@ mod app_state_draw_commit;
 mod app_state_draw_row;
 #[path = "app_state_buffer.rs"]
 mod app_state_buffer;
+#[path = "app_state_erase.rs"]
+mod app_state_erase;
 #[path = "app_state_snap_lines.rs"]
 mod app_state_snap_lines;
 #[path = "app_state_recent.rs"]
@@ -97,7 +99,7 @@ pub struct StrataAppState {
     pub(crate) draw_sketch: crate::draw_sketch::DrawSketch,
     /// 되돌리기·다시 실행 차례(표 이름, 최근 것이 끝) — C++ newestUndoLayer·newestRedoLayer.
     pub(crate) undo_tables: Vec<crate::app_state_layer_remove::UndoStep>,
-    pub(crate) redo_tables: Vec<String>,
+    pub(crate) redo_tables: Vec<Vec<String>>,
     /// 지도 우클릭 메뉴의 「조사 도형 그리기」 하위 메뉴가 펼쳐져 있는가.
     pub map_menu_sub_open: bool,
     pub paper_look: bool,

@@ -211,8 +211,10 @@ impl StrataAppState {
             ("겹친 곳 지우기", "위에 그린 도형 모양대로 아래 도형에서 그 자리만 지웁니다(클립).\n쓰는 법: 같은 레이어의 도형 위에 겹쳐 그리고 우클릭으로 마치면 선택창에서 고를 수 있습니다.\n이미 그린 도형은 [도형선택](A)으로 고른 뒤 이 단추를 누릅니다.\n아래 도형에 구멍이 나고 위에 그린 도형은 없어집니다. Ctrl+Z로 되돌립니다.", 1879.0, 172.0),
         ];
         for (label, tip, x, w) in edits {
-            // 가짜로 「*」만 켜던 동작은 뺐다 — 진짜 묶기·나누기는 지시 4.
-            let _ = text_button(ui, at(base, x + shift, 12.0, w, 50.0), label, Look::Plain, tip);
+            // 묶기·나누기·구간 분리는 아직 누르지 못한다(EDIT0 6-8). 「겹친 곳 지우기」는 한다.
+            if text_button(ui, at(base, x + shift, 12.0, w, 50.0), label, Look::Plain, tip).clicked() && label == "겹친 곳 지우기" {
+                self.erase_overlap_with_shape();
+            }
         }
         if text_button(ui, at(base, 2056.0 + shift, 12.0, 79.0, 50.0), "닫기", Look::Plain, "그리기 도구 모음을 닫고 지도 이동으로 돌아갑니다").clicked() {
             self.hide_sub_tools();

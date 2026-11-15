@@ -91,6 +91,31 @@ impl LayerEditBuffer {
         true
     }
 
+    /// Several changes as one undo step (one QGIS edit command): new geometries for some shapes, new shapes
+    /// with temporary ids, and shapes to delete. `None`, and nothing changed, when a shape to change or to
+    /// delete is not there; else the ids of the new shapes.
+    pub fn change_add_delete(&mut self, changes: &[(i64, String)], additions: Vec<(String, BTreeMap<String, String>)>, deletions: &[i64]) -> Option<Vec<i64>> {
+        let there = |fid: &i64| self.features.iter().any(|f| f.fid == *fid);
+        if !changes.iter().all(|(fid, _)| there(fid)) || !deletions.iter().all(there) {
+            return None;
+        }
+        self.undo_stack.push(self.features.clone());
+        self.redo_stack.clear();
+        for f in &mut self.features {
+            if let Some((_, wkt)) = changes.iter().find(|(fid, _)| *fid == f.fid) {
+                f.wkt_geom.clone_from(wkt);
+            }
+        }
+        let mut added = Vec::with_capacity(additions.len());
+        for (wkt_geom, attributes) in additions {
+            added.push(self.next_temp_id);
+            self.features.push(FeatureRecord { fid: self.next_temp_id, wkt_geom, attributes });
+            self.next_temp_id -= 1;
+        }
+        self.features.retain(|f| !deletions.contains(&f.fid));
+        Some(added)
+    }
+
     pub fn undo(&mut self) -> bool {
         if let Some(prev) = self.undo_stack.pop() {
             let current = std::mem::replace(&mut self.features, prev);
@@ -181,6 +206,29 @@ mod change_tests {
         assert_eq!(b.features[0].wkt_geom, "POINT (1 1)");
         assert!(b.redo());
         assert_eq!(b.features[0].wkt_geom, "POINT (2 2)");
+    }
+
+    /// 「겹친 곳 지우기」 changes a shape, adds its loose pieces and deletes the cutter as ONE step
+    /// (PolygonErase.cpp:318-333, one edit command): one undo brings all of it back. A shape that is not
+    /// there stops everything.
+    #[test]
+    fn several_changes_are_one_undo_step() {
+        let mut b = LayerEditBuffer::new(DomainLayerKey::SurveyArea);
+        let outer = b.add_unsaved_feature("POINT (1 1)".to_owned(), BTreeMap::from([("name".to_owned(), "바깥".to_owned())]));
+        let cutter = b.add_unsaved_feature("POINT (2 2)".to_owned(), BTreeMap::new());
+        let before = b.features.clone();
+        assert_eq!(b.change_add_delete(&[(99, "POINT (0 0)".to_owned())], Vec::new(), &[cutter]), None);
+        assert_eq!(b.change_add_delete(&[(outer, "POINT (0 0)".to_owned())], Vec::new(), &[99]), None);
+        assert_eq!(b.features, before, "nothing changed");
+
+        let piece = ("POINT (5 5)".to_owned(), BTreeMap::from([("name".to_owned(), "바깥".to_owned())]));
+        let added = b.change_add_delete(&[(outer, "POINT (9 9)".to_owned())], vec![piece], &[cutter]).expect("one step");
+        assert_eq!(added, [-3]);
+        assert_eq!(b.features.iter().map(|f| (f.fid, f.wkt_geom.as_str())).collect::<Vec<_>>(), [(outer, "POINT (9 9)"), (-3, "POINT (5 5)")]);
+        assert!(b.undo());
+        assert_eq!(b.features, before);
+        assert!(b.redo());
+        assert_eq!(b.features.len(), 2);
     }
 
     /// Deleting a shape is one undo step: undo brings it back as it was, redo deletes it again; an fid that
