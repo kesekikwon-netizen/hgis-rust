@@ -45,10 +45,32 @@ fn paint_site_names(f: &SheetFrame, badges: &[Badge]) {
 }
 
 impl StrataAppState {
-    /// Draws what is checked on the map into the map frame: the reference rows, and over them the survey's
+    /// Runs `paint` with `view` in the place of the map's view: the painters of the map then paint a map
+    /// frame of a sheet, which the screen shows `paper_zoom` times enlarged.
+    pub(crate) fn with_map_view(&mut self, view: ViewportTransform, paper_zoom: f32, paint: impl FnOnce(&mut Self)) {
+        let of_the_map = std::mem::replace(&mut self.home_map.viewport, view);
+        self.home_map.sheet_zoom = Some(paper_zoom);
+        paint(self);
+        self.home_map.sheet_zoom = None;
+        self.home_map.viewport = of_the_map;
+    }
+
+    /// The base map, the tile maps and the cadastral picture that are checked on the map, in the order of
+    /// the map (`gui_tab_map_canvas.rs`), under everything else of the frame.
+    fn paint_sheet_tile_layers(&mut self, f: &SheetFrame, view: ViewportTransform, paper_zoom: f32) {
+        let ctx = f.map_p.ctx().clone();
+        self.with_map_view(view, paper_zoom, |app| {
+            app.paint_basemap_layer(&ctx, &f.map_p, f.map_rect);
+            app.paint_reference_tile_layers(&ctx, &f.map_p, f.map_rect);
+            app.paint_cadastral_layer(&ctx, &f.map_p, f.map_rect);
+        });
+    }
+
+    /// Draws what is checked on the map into the map frame: the tile maps, the reference rows, and over them the survey's
     /// own layers (survey area, trenches, features, the distance rings), as the map draws them.
     pub(crate) fn paint_sheet_reference_layers(&mut self, f: &SheetFrame) {
         let (view, paper_zoom) = sheet_reference_view(f.map_rect, f.m2w(f.map_rect.center()), f.px_per_meter, f.px_per_mm);
+        self.paint_sheet_tile_layers(f, view, paper_zoom);
         let ctx = f.map_p.ctx().clone();
         self.paint_reference_vector_layers_in(&ctx, &f.map_p, f.map_rect, &view, paper_zoom, sheet_writes_labels_of);
         self.paint_survey_tables_in(&ctx, &f.map_p, f.map_rect, &view, paper_zoom);

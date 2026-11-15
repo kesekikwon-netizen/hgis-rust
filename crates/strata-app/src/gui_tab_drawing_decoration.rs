@@ -5,7 +5,6 @@
 
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 
-use strata_canvas2d::viewport::format_scale_denominator;
 use strata_layout::sheet_composer::{nice_scale_bar_segment_meters, NorthArrowStyle, ScaleBarStyle};
 
 use crate::app_state::StrataAppState;
@@ -136,10 +135,7 @@ impl StrataAppState {
                 chrome_lbl_r.center().y.max(bar_y0 + bar_h + 4.5 * px_per_mm),
             ),
             egui::Align2::CENTER_CENTER,
-            format!(
-                "축척 1 : {}",
-                format_scale_denominator(f64::from(self.drawing.sheet.scale_denominator))
-            ),
+            scale_text(self.drawing.sheet.scale_denominator),
             egui::FontId::proportional(scale_font_sz),
             ink,
         );
@@ -248,4 +244,9 @@ impl StrataAppState {
             }
         }
     }
+}
+
+/// The scale under the scale bar (`KaDrawingStudio.cpp:2915`).
+pub(crate) fn scale_text(denominator: u32) -> String {
+    format!("축척 1 : {denominator}")
 }

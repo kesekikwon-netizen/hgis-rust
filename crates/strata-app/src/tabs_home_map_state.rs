@@ -71,6 +71,9 @@ pub struct HomeMapTabState {
     pub viewport: ViewportTransform,
     /// 다음 지도 화면에서 한반도 전체 보기를 한 번 다시 맞출지(지도 칸 크기가 그때 정해진다).
     pub korea_view_pending: bool,
+    /// While the painters of the map paint the map frame of a sheet: how many times the screen shows the
+    /// paper enlarged. `None` on the map.
+    pub sheet_zoom: Option<f32>,
     /// A survey was opened: its shapes come into view once the size of the map frame is known.
     pub survey_view_pending: bool,
     /// QGIS 지도 범위 이력(「이전·다음 지도 범위」).
@@ -134,6 +137,7 @@ impl Default for HomeMapTabState {
             cursor_seen: false,
             viewport: ViewportTransform::new(center, 2.55, [1060.0, 680.0]),
             korea_view_pending: false,
+            sheet_zoom: None,
             survey_view_pending: false,
             extent_history: crate::extent_history::ExtentHistory::default(),
             draw_guide_message: None,

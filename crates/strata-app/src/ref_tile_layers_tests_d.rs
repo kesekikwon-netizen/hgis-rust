@@ -8,6 +8,7 @@ use eframe::egui::{self, Color32, ColorImage};
 use strata_storage::edit_buffer::FeatureRecord;
 
 use super::tests::{add_old_map_and_look_at, draw_survey_area, install_clock, map_app, paint_at_rest, run_frame, work_xy, GYEONGJU};
+use crate::app_state::StrataAppState;
 use super::{ref_tile_layer, DAEDONGYEOJIDO};
 use crate::basemap_cadastral_jobs::TexKey;
 use crate::basemap_tiles::TileKind;
@@ -125,4 +126,102 @@ fn the_circle_lies_around_the_largest_survey_area_shape() {
     assert!(app.add_reference_tile_layer(&DAEDONGYEOJIDO));
     let view = app.home_map.viewport.center_xy;
     assert!((view[0] - centre[0]).abs() < 1e-6 && (view[1] - centre[1]).abs() < 1e-6, "the view goes to the survey area: {view:?}");
+}
+
+/// The tiles asked for by `paint`, once the view it paints has been still long enough.
+fn tiles_asked_at_rest(app: &mut StrataAppState, rect: egui::Rect, mut paint: impl FnMut(&mut StrataAppState, &egui::Context, &egui::Painter, Arc<Mutex<Vec<TexKey>>>)) -> Vec<TexKey> {
+    let ctx = egui::Context::default();
+    let now = install_clock(app);
+    let asked: Arc<Mutex<Vec<TexKey>>> = Arc::default();
+    let _ = run_frame(&ctx, rect, |ctx, p| paint(app, ctx, p, Arc::default()));
+    let later = *now.lock().unwrap() + crate::basemap_tile_key::VIEW_REST_TIME;
+    *now.lock().unwrap() = later;
+    let _ = run_frame(&ctx, rect, |ctx, p| paint(app, ctx, p, Arc::clone(&asked)));
+    app.basemap_fetch.wait_for_idle();
+    let mut tiles = asked.lock().unwrap().clone();
+    tiles.sort_unstable_by_key(|(_, z, x, y)| (*z, *x, *y));
+    tiles
+}
+
+fn paint_base_map(app: &mut StrataAppState, ctx: &egui::Context, p: &egui::Painter, rect: egui::Rect, sink: Arc<Mutex<Vec<TexKey>>>) {
+    app.paint_basemap_layer_with(ctx, p, rect, move |kind, _key, z, x, y| {
+        sink.lock().unwrap().push((kind, z, x, y));
+        || None
+    });
+}
+
+/// The base map inside a sheet is asked for where the map frame of the sheet is, not where the map is
+/// looking: the very tiles the map asks for when it shows that place. The map's own view is as it was
+/// afterwards. (The C++ sheet renders the checked layers of the map, KaDrawingStudio.cpp:2121-2131; owner
+/// 2026-11-16: 「도면 용지만 만들어있지 적용이 거의안된다 확실하게 되게하라」.)
+#[test]
+fn the_tiles_of_a_sheet_frame_are_those_of_its_own_view() {
+    let centre = work_xy(GYEONGJU.0, GYEONGJU.1);
+    let frame_view = |rect: egui::Rect| strata_canvas2d::viewport::ViewportTransform::new(centre, 2.0, [f64::from(rect.width()), f64::from(rect.height())]);
+
+    let (mut map, rect) = map_app(centre, 2.0);
+    let on_the_map = tiles_asked_at_rest(&mut map, rect, |app, ctx, p, sink| paint_base_map(app, ctx, p, rect, sink));
+    assert!(!on_the_map.is_empty());
+
+    let (mut app, rect) = map_app([centre[0] + 40_000.0, centre[1]], 30.0);
+    let on_the_sheet = tiles_asked_at_rest(&mut app, rect, |app, ctx, p, sink| {
+        app.with_map_view(frame_view(rect), 1.0, |app| paint_base_map(app, ctx, p, rect, sink));
+    });
+    assert_eq!(on_the_sheet, on_the_map);
+    assert_eq!((app.home_map.viewport.center_xy, app.home_map.viewport.meters_per_pixel), ([centre[0] + 40_000.0, centre[1]], 30.0));
+}
+
+/// The cadastral picture of a sheet is asked for as the paper shows it at 96 dpi, whatever the size of the
+/// paper on the screen (C++ kPreviewDpi, KaDrawingStudio.cpp:172): a sheet of 1:5,000 drawn at half its size
+/// has 2.6 m to the screen point, too coarse for the map itself (the service answers with an empty picture
+/// beyond 2 m), but 1.3 m to the point of the paper.
+#[test]
+fn the_cadastral_picture_of_a_sheet_is_asked_for_at_the_resolution_of_the_paper() {
+    let centre = work_xy(GYEONGJU.0, GYEONGJU.1);
+    let cadastral_tiles = |app: &mut StrataAppState, rect: egui::Rect, paper_zoom: Option<f32>| {
+        app.left_layers.entries.push(crate::left_layer_panel::LayerTreeEntry {
+            layer_key: "vworld_cadastral_wms".to_owned(),
+            label_ko: "연속지적도 (VWorld WMS)".to_owned(),
+            group: strata_types::schema::LegendGroup::Cadastral,
+            visible: true,
+            opacity: 1.0,
+            read_only: true,
+            snap_enabled: false,
+            feature_count: 0,
+        });
+        let ctx = egui::Context::default();
+        let now = install_clock(app);
+        let asked: Arc<Mutex<Vec<(u8, u32, u32)>>> = Arc::default();
+        for pass in 0..2 {
+            let sink = Arc::clone(&asked);
+            let view = app.home_map.viewport;
+            let _ = run_frame(&ctx, rect, |ctx, p| {
+                let paint = |app: &mut StrataAppState| {
+                    app.paint_cadastral_layer_with(ctx, p, rect, move |_key, z, x, y| {
+                        sink.lock().unwrap().push((z, x, y));
+                        || None
+                    });
+                };
+                match paper_zoom {
+                    Some(zoom) => app.with_map_view(view, zoom, paint),
+                    None => paint(app),
+                }
+            });
+            if pass == 0 {
+                let later = *now.lock().unwrap() + crate::basemap_tile_key::VIEW_REST_TIME;
+                *now.lock().unwrap() = later;
+            }
+        }
+        app.cadastral_fetch.wait_for_idle();
+        let tiles = asked.lock().unwrap().clone();
+        tiles
+    };
+
+    let (mut map, rect) = map_app(centre, 2.6);
+    assert!(cadastral_tiles(&mut map, rect, None).is_empty(), "on the map 2.6 m to the point is too coarse");
+
+    let (mut sheet, rect) = map_app(centre, 2.6);
+    let asked = cadastral_tiles(&mut sheet, rect, Some(0.5));
+    assert!(!asked.is_empty(), "the paper itself has 1.3 m to its point");
+    assert_eq!(sheet.home_map.sheet_zoom, None, "the map is the map again afterwards");
 }

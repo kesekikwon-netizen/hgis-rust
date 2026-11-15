@@ -156,3 +156,10 @@ fn toolbar_paper_orientation_button_opens_paper_setup_dialog_and_preserves_sheet
         Some("용지 전환 완료: 317×220 mm — 기존 지도 범위와 배치가 유지되었습니다.")
     );
 }
+
+/// The scale under the scale bar reads 「축척 1 : 5000」 (`KaDrawingStudio.cpp:2915`); it read 「축척 1 : 1:5000」.
+#[test]
+fn the_scale_under_the_scale_bar_names_the_scale_once() {
+    assert_eq!(super::gui_tab_drawing_decoration::scale_text(5000), "축척 1 : 5000");
+    assert_eq!(super::gui_tab_drawing_decoration::scale_text(250), "축척 1 : 250");
+}

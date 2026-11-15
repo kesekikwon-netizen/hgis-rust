@@ -138,7 +138,10 @@ impl StrataAppState {
         {
             return;
         }
-        let scale_denom = self.home_map.viewport.meters_per_pixel * crate::status_bar_text::POINTS_PER_METER;
+        // On a sheet the scale is the paper's, and the picture is asked for as the paper shows it at 96 dpi,
+        // whatever the size of the paper on the screen (C++ kPreviewDpi, KaDrawingStudio.cpp:172).
+        let paper = self.home_map.sheet_zoom.map(f64::from);
+        let scale_denom = self.home_map.viewport.meters_per_pixel * crate::status_bar_text::POINTS_PER_METER * paper.unwrap_or(1.0);
         if !crate::basemap_cadastral::cadastral_visible_at_scale(scale_denom) {
             return;
         }
@@ -151,7 +154,7 @@ impl StrataAppState {
         };
         let view = TileView::from_viewport(&self.home_map.viewport, rect, self.work_crs);
         let ppp = f64::from(ctx.pixels_per_point().max(0.5));
-        let ground_mpp = self.home_map.viewport.meters_per_pixel / ppp;
+        let ground_mpp = paper.map_or(self.home_map.viewport.meters_per_pixel / ppp, |zoom| self.home_map.viewport.meters_per_pixel * zoom);
         let lat = screen_center_lat(&view, &params, rect);
         let Some(z) = crate::basemap_cadastral::cadastral_zoom_for(ground_mpp, lat) else {
             return;
