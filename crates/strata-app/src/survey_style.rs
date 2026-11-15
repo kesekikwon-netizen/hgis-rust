@@ -48,6 +48,14 @@ pub(crate) struct DomainStyle {
     pub(crate) casing: Option<([u8; 4], f32)>,
 }
 
+impl DomainStyle {
+    /// The same style for a view that shows paper `zoom` times as large (the map frame of a sheet): its
+    /// millimetres are those of the paper.
+    pub(crate) fn on_paper(self, zoom: f32) -> Self {
+        Self { stroke_width_mm: self.stroke_width_mm * zoom, marker_size_mm: self.marker_size_mm * zoom, casing: self.casing.map(|(colour, width)| (colour, width * zoom)), ..self }
+    }
+}
+
 /// 도형 형식.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GeomKind {

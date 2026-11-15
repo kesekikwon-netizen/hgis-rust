@@ -121,3 +121,16 @@ fn translucent_colours_premultiply_like_qt() {
     assert_eq!(qt_premultiplied([146, 64, 14, 255]), [146, 64, 14, 255]);
     assert_eq!(qt_premultiplied([220, 38, 38, 0]), [0, 0, 0, 0]);
 }
+
+/// On a sheet the millimetres of a style are those of the paper: widths and sizes grow with the paper, the
+/// colours stay. On the map (1) nothing changes.
+#[test]
+fn a_style_on_paper_grows_with_the_paper() {
+    let style = DomainStyle { fill: [1, 2, 3, 4], stroke: [5, 6, 7, 8], stroke_width_mm: 1.6, marker_size_mm: 4.0, casing: Some(([255, 255, 255, 255], 3.0)) };
+    assert_eq!(style.on_paper(1.0), style);
+    let paper = style.on_paper(2.5);
+    assert_eq!((paper.fill, paper.stroke), (style.fill, style.stroke));
+    assert!((paper.stroke_width_mm - 4.0).abs() < 1e-6 && (paper.marker_size_mm - 10.0).abs() < 1e-6);
+    assert_eq!(paper.casing.map(|(colour, _)| colour), Some([255, 255, 255, 255]));
+    assert!((paper.casing.map_or(0.0, |(_, width)| width) - 7.5).abs() < 1e-6);
+}

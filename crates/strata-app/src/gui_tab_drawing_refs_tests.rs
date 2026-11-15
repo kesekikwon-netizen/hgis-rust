@@ -2,10 +2,12 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use eframe::egui::{pos2, vec2, Rect};
+use eframe::egui::{self, epaint::Shape, pos2, vec2, RawInput, Rect};
 
 use super::*;
+use crate::app_state::StrataAppState;
 use crate::gui_tab_map::w2s;
+use crate::ref_vector::map::tests::{draw_survey_area, CENTRE};
 use crate::survey_style::mm_to_points;
 
 /// A frame at 1:5,000 shown at 4 points for a millimetre of paper: 0.8 points for a metre. The middle of the
@@ -46,4 +48,34 @@ fn a_sheet_writes_no_names_for_the_heritage_rows() {
     assert!(!sheet_writes_labels_of("ref_heritage:excavation_survey_area:발굴유적위치도"));
     assert!(sheet_writes_labels_of("ref_soil"));
     assert!(sheet_writes_labels_of("ref_geology"));
+}
+
+/// The survey's own layers are drawn in the map frame as they are on the map, at the scale of the sheet: a
+/// survey area of 100 m at 1:5,000, shown at 4 points for a millimetre of paper, is 80 points wide in the
+/// middle of the frame, and its outline has its millimetres of paper.
+#[test]
+fn the_survey_area_is_drawn_in_the_map_frame_at_the_size_of_the_paper() {
+    let mut app = StrataAppState::new_startup();
+    draw_survey_area(&mut app, CENTRE, 5187);
+    let rect = Rect::from_min_size(pos2(300.0, 120.0), vec2(640.0, 480.0));
+    let (px_per_mm, scale) = (4.0_f32, 5000.0_f64);
+    let (view, zoom) = sheet_reference_view(rect, CENTRE, f64::from(px_per_mm) * 1000.0 / scale, px_per_mm);
+    let ctx = egui::Context::default();
+    let out = ctx.run(RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1200.0, 800.0))), ..RawInput::default() }, |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| app.paint_survey_tables_in(ctx, &ui.painter_at(rect), rect, &view, zoom));
+    });
+    let outlines: Vec<(Rect, f32)> = out
+        .shapes
+        .iter()
+        .filter_map(|clipped| match &clipped.shape {
+            Shape::Path(path) if path.closed => Some((Rect::from_points(&path.points), path.stroke.width)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(outlines.len(), 1, "the outline of the survey area");
+    let (outline, width) = outlines[0];
+    assert!((outline.width() - 80.0).abs() < 0.01 && (outline.height() - 80.0).abs() < 0.01, "{outline:?}");
+    assert!((outline.center() - rect.center()).length() < 0.01, "{outline:?}");
+    let on_map = mm_to_points(crate::survey_paint_layers::base_style_for_table("survey_area").stroke_width_mm);
+    assert!((width - on_map * zoom).abs() < 1e-3, "{width} against {on_map} times {zoom}");
 }

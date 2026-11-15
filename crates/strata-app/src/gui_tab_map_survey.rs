@@ -86,7 +86,8 @@ pub(super) fn fill_mesh(rings: &[Vec<Pos2>], fill: Color32) -> Shape {
     Shape::mesh(mesh)
 }
 
-fn paint_feature(p: &egui::Painter, rect: Rect, vp: &ViewportTransform, s: &DomainStyle, f: &PaintFeature) {
+/// `zoom`: how many times the view shows paper enlarged (1 on the map); `s` has its millimetres already.
+fn paint_feature(p: &egui::Painter, rect: Rect, vp: &ViewportTransform, s: &DomainStyle, f: &PaintFeature, zoom: f32) {
     let to = |xy: &[f64; 2]| w2s(rect, vp, *xy);
     for part in &f.parts {
         match part {
@@ -113,7 +114,7 @@ fn paint_feature(p: &egui::Painter, rect: Rect, vp: &ViewportTransform, s: &Doma
             }
             PaintPart::Point(pt) => {
                 // 기호 크기는 원 지름, 테두리 0.6 mm 는 그 둘레 가운데에 걸친다(실측 26 px = 4.6 mm × 1.5).
-                let stroke = Stroke::new(mm_to_points(MARKER_OUTLINE_MM), rgba(s.stroke));
+                let stroke = Stroke::new(mm_to_points(MARKER_OUTLINE_MM * zoom), rgba(s.stroke));
                 p.circle(to(pt), mm_to_points(s.marker_size_mm) * 0.5, rgba(s.fill), stroke);
             }
         }
@@ -149,7 +150,7 @@ fn point_in_ring(pt: Pos2, ring: &[Pos2]) -> bool {
 }
 
 /// 라벨 하나의 후보 자리와 그릴 글. 자리가 화면 밖이면 없다.
-fn label_for(ctx: &egui::Context, font: &FontId, rect: Rect, vp: &ViewportTransform, layer: &PaintLayer, f: &PaintFeature) -> Option<(LabelReq, LabelDraw)> {
+fn label_for(ctx: &egui::Context, font: &FontId, rect: Rect, vp: &ViewportTransform, layer: &PaintLayer, f: &PaintFeature, zoom: f32) -> Option<(LabelReq, LabelDraw)> {
     let (text, anchor) = (f.label.as_ref()?, f.anchor?);
     let a = w2s(rect, vp, anchor.xy);
     if !rect.contains(a) {
@@ -197,7 +198,7 @@ fn label_for(ctx: &egui::Context, font: &FontId, rect: Rect, vp: &ViewportTransf
         GeomKind::Point => {
             // QGIS 둘레 놓기(pal feature.cpp createCandidatesAroundPoint)의 값싼 차례:
             // 오른쪽 위 → 오른쪽 → 위 → 오른쪽 아래 → 왼쪽 위 → 아래 → 왼쪽 → 왼쪽 아래.
-            let rad = mm_to_points(layer.style.marker_size_mm + MARKER_OUTLINE_MM) * 0.5;
+            let rad = mm_to_points((layer.style.marker_size_mm + MARKER_OUTLINE_MM) * zoom) * 0.5;
             let k = rad * std::f32::consts::FRAC_1_SQRT_2;
             let offs = [
                 Vec2::new(k, -k - h),
@@ -217,8 +218,13 @@ fn label_for(ctx: &egui::Context, font: &FontId, rect: Rect, vp: &ViewportTransf
 }
 
 impl StrataAppState {
-    /// 열린 조사 파일의 표를 범례 차례·표시·라벨 체크대로 그린다.
+    /// 열린 조사 파일의 표를 범례 차례·표시·라벨 체크대로 지도에 그린다.
     pub(crate) fn paint_survey_tables(&self, ctx: &egui::Context, p: &egui::Painter, rect: Rect) {
+        self.paint_survey_tables_in(ctx, p, rect, &self.home_map.viewport, 1.0);
+    }
+
+    /// The same into a view: the map, or the map frame of a sheet, which shows paper `zoom` times as large.
+    pub(crate) fn paint_survey_tables_in(&self, ctx: &egui::Context, p: &egui::Painter, rect: Rect, view: &ViewportTransform, zoom: f32) {
         if self.survey_tables.is_empty() {
             return;
         }
@@ -227,12 +233,14 @@ impl StrataAppState {
         let cached = cached_layers(ctx, &self.survey_tables, self.work_crs.into(), &self.home_map.real_survey.label_views);
         let layers = &cached.1;
         let rs = &self.home_map.real_survey;
-        let vp = &self.home_map.viewport;
+        let vp = view;
         let order = paint_order(&self.left_layers.entries, layers);
         drop(perf_layers);
         let perf_lbl_init =
             crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::Labels);
+        // Letters and lines are those of the paper, enlarged with it.
         let font = label_font(ctx);
+        let font = FontId::new(font.size * zoom, font.family);
         drop(perf_lbl_init);
         let (mut reqs, mut draws) = (Vec::new(), Vec::new());
         for i in order {
@@ -246,7 +254,7 @@ impl StrataAppState {
                 let _perf_feat =
                     crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::SurveyLayers);
                 // 레이어마다 정한 모양(조사구역 그리기 설정의 선 색·채움·굵기)이 있으면 그것.
-                let mut style = *rs.layer_styles.get(&layer.table).unwrap_or(&layer.style);
+                let mut style = rs.layer_styles.get(&layer.table).unwrap_or(&layer.style).on_paper(zoom);
                 // 레이어 투명도(applyLayerOpacity) — 도형만 흐리게(라벨은 라벨 엔진이 따로 그린다).
                 let opacity = self.left_layers.entries.iter().find(|e| e.layer_key == layer.table).map_or(1.0, |e| e.opacity.clamp(0.0, 1.0));
                 if opacity < 1.0 {
@@ -256,7 +264,7 @@ impl StrataAppState {
                     style.casing = style.casing.map(|(c, w)| (fade(c), w));
                 }
                 for f in &layer.features {
-                    paint_feature(p, rect, vp, &style, f);
+                    paint_feature(p, rect, vp, &style, f, zoom);
                 }
             }
             // 레이어마다 고른 글자 크기(setLabelFontSize), 없으면 8 pt.
@@ -264,8 +272,8 @@ impl StrataAppState {
                 let _perf_lbl =
                     crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::Labels);
                 let size = rs.label_views.get(&layer.table).and_then(|v| v.size_tenths);
-                let font = size.map_or_else(|| font.clone(), |t| FontId::new(label_font_size_points(f32::from(t) / 10.0), font.family.clone()));
-                for (req, draw) in layer.features.iter().filter_map(|f| label_for(ctx, &font, rect, vp, layer, f)) {
+                let font = size.map_or_else(|| font.clone(), |t| FontId::new(label_font_size_points(f32::from(t) / 10.0) * zoom, font.family.clone()));
+                for (req, draw) in layer.features.iter().filter_map(|f| label_for(ctx, &font, rect, vp, layer, f, zoom)) {
                     reqs.push(req);
                     draws.push(draw);
                 }
@@ -274,6 +282,6 @@ impl StrataAppState {
         let _perf_lbl_end =
             crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::Labels);
         let chosen = place_labels(&reqs);
-        paint_placed_labels(p, &draws, &chosen, mm_to_points(LABEL_HALO_MM), rgba(LABEL_HALO_RGBA));
+        paint_placed_labels(p, &draws, &chosen, mm_to_points(LABEL_HALO_MM) * zoom, rgba(LABEL_HALO_RGBA));
     }
 }

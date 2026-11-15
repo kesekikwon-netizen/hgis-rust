@@ -26,10 +26,12 @@ pub(crate) fn sheet_writes_labels_of(key: &str) -> bool {
 }
 
 impl StrataAppState {
-    /// Draws the rows checked on the map into the map frame, under the survey layers.
+    /// Draws what is checked on the map into the map frame: the reference rows, and over them the survey's
+    /// own layers (survey area, trenches, features, the distance rings), as the map draws them.
     pub(crate) fn paint_sheet_reference_layers(&mut self, f: &SheetFrame) {
         let (view, paper_zoom) = sheet_reference_view(f.map_rect, f.m2w(f.map_rect.center()), f.px_per_meter, f.px_per_mm);
         let ctx = f.map_p.ctx().clone();
         self.paint_reference_vector_layers_in(&ctx, &f.map_p, f.map_rect, &view, paper_zoom, sheet_writes_labels_of);
+        self.paint_survey_tables_in(&ctx, &f.map_p, f.map_rect, &view, paper_zoom);
     }
 }
