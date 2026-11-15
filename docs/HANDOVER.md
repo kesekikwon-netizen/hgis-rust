@@ -1,0 +1,114 @@
+# Strata Rust 판 인수인계 (2026-11-16 기준)
+
+이 문서 하나로, 다른 컴퓨터에서 어떤 AI(Claude, Codex, Gemini 등)가 와도 이어서 개발할 수 있게 정리했다.
+처음 오는 에이전트는 이 문서 → `AGENTS.md` → `docs/RUST_PLAN.md` → `docs/RESULTS.md` 의 마지막 절 순서로 읽는다.
+`CLAUDE.md` 는 C++ 저장소에서 복사해 온 것이라 제품 규칙(조사 레이어, 좌표계, 키, 정해 둔 동작)만 유효하고, 빌드·시험·git 부분은 이 저장소에 맞지 않는다.
+
+## 1. 무엇을 만드는가
+
+- **Strata**: 고고학 현장 조사용 데스크톱 GIS. 원래 C++20/Qt 6/QGIS 앱이고, 이 저장소는 그것을 **Rust + egui** 로 옮기는 중이다.
+- 목표(사용자 결정 2026-11-14): C++ 앱의 **모든 기능을 C++ 과 같게**(단추 하나, 문구 하나까지) 옮기고, 그 위에서 다듬는다. 끝에는 GPL 같은 복사 좌파 부품 없이 배포한다(QGIS 는 쓰지 않는다).
+- 사용자는 **개발자가 아닌 고고학 현장 전문가**다. 요청은 짧은 한국어와 스크린샷으로 온다. 대답·보고는 한국어로 짧게, 결과부터 쓴다. 코드 식별자·명령은 영어 그대로.
+- 작업 좌표계 EPSG:5187(기본) 또는 5186, 제출 좌표계 EPSG:5179, 타일 EPSG:3857.
+
+## 2. 저장소와 환경
+
+| 항목 | 내용 |
+|---|---|
+| 이 저장소 | `https://github.com/kesekikwon-netizen/hgis-rust` (공개), 브랜치 `main` 하나로 개발 |
+| C++ 원본(기준) | `https://github.com/kesekikwon-netizen/gogohak1`. 문서의 `target/cpp-ref/src/...` 인용은 이 저장소를 `target/cpp-ref` 에 clone 한 자리다(이 PC 의 참조 판: 커밋 `b036c09`). 다른 PC 에서는 `git clone https://github.com/kesekikwon-netizen/gogohak1 target/cpp-ref` 후 `git -C target/cpp-ref checkout b036c09` |
+| OS·도구 | Windows 11, Visual Studio 2022 Build Tools(MSVC), CMake, Git. Rust 는 `rust-toolchain.toml` 이 `1.99.1` 로 고정 |
+| GDAL·PROJ | 외부 설치 없음. `gdal-src 0.3.0`(GDAL 3.12) 과 `proj-sys`(PROJ 9.6.2)를 소스에서 함께 빌드해 실행 파일 안에 넣는다. 켠 GDAL 드라이버: shape, gpkg, dxf, hfa, gtiff, jpeg, png (`crates/strata-engine/Cargo.toml`). 첫 빌드는 오래 걸린다(수십 분) |
+| C++ 앱 실행 | Rust 개발에는 필요 없다. C++ 동작을 화면으로 볼 때만 OSGeo4W `qgis-dev` 가 필요하다(`docs/other-pc-setup.md`, C++ 시절 문서) |
+
+## 3. 빌드·시험·실행
+
+```bash
+cargo build -j 3 -p strata-app                    # 디버그: target/debug/ka-hgis.exe
+cargo build --release -j 3 -p strata-app          # 배포용: target/release/ka-hgis.exe
+cargo test -j 3 -p strata-app                     # 앱 시험 (2026-11-16: 794개)
+cargo test -j 3 -p strata-engine --features gdal  # GDAL 이 필요한 엔진 시험
+cargo test -j 3 -p strata-geo                     # 기하 계산 시험
+cargo clippy -j 3 -p strata-app -p strata-engine -p strata-geo --all-targets -- -D warnings
+target/release/ka-hgis.exe --smoke-quit           # 켜졌다 바로 꺼짐, 종료 코드 0 이면 정상
+```
+
+- 이 PC 는 빌드를 여러 개 동시에 돌리다 전원이 나간 적이 있다. `-j 3` 을 지킨다.
+- GitHub Actions(`.github/workflows/ci.yml`)는 `cargo clippy --workspace`, `cargo test --workspace`, `ka-hgis --verify-all`, GDAL 기능 시험을 돈다.
+- 증분 빌드가 꼬여 링크 오류(LLVM `anon.*` 기호 없음, LNK1120)가 나면 `cargo clean -p strata-app` 뒤 다시 빌드한다.
+- **화면 확인(사진 실행)**: `ka-hgis.exe --snap <출력 폴더> --snap-steps "<단계들>"`. 단계는 쉼표로 잇고 각 단계는 `@동작:사진이름` 이다. 단계마다 그 이름의 PNG 를 찍는다(이름이 없으면 그 단계는 실행되지 않는다). 동작 목록은 `crates/strata-app/src/snap_shot_steps.rs` 에 있다. 자주 쓰는 것: `@open=<조사.gpkg>`, `@wait`, `@tab_drawing`, `@drop=<파일;파일>`, `@pdf=<경로>`, `@heritage=<보관 폴더;시도;시군>`, `@coord=dx;dy`, `@dem`. **반드시 사용자 조사 파일의 임시 사본으로** 한다. 마우스·키보드 흉내 입력은 쓰지 않는다.
+
+## 4. 코드 지도
+
+| 크레이트 | 하는 일 |
+|---|---|
+| `strata-app` | 앱 전체(egui 화면, 리본, 지도, 도면, 받기 작업). 진입은 `src/main.rs`, 상태는 `app_state.rs`(필드), 모듈은 파일 하나에 기능 하나 |
+| `strata-engine` | GDAL·PROJ 를 쓰는 일: 좌표 변환 `Transformer`, SHP/GPKG 표 읽고 쓰기, DXF 선, DEM, 그림 파일 `picture.rs`, 제출 SHP |
+| `strata-geo` | 순수 기하 계산(버퍼, 분할, 붙이기, 시굴격자, 정합 변환 `align_fit.rs`) |
+| `strata-storage` | 조사 파일(GPKG) 열기·저장(C++ 과 같은 구조), 최근 조사 |
+| `strata-refmap` | 받은 참조 지도(지적, 유산, 지질, 토양 등) 가공 |
+| `strata-net`, `strata-webview`, `strata-ngii-run` | 사이트 접속, 숨긴 브라우저(WebView2)로 사이트 화면을 조작하는 주문(수치지형도·DEM) |
+| `strata-layout` | 도면 PDF(지금은 그림 PDF) |
+| `strata-secrets` | 키·계정 저장(Windows DPAPI) |
+| `strata-types`, `strata-canvas2d`, `strata-mapengine`, `strata-topo`, `strata-paleo`, `strata-terrain3d`, `strata-check-export` | 공용 타입, 지도 보기 변환, 라벨, 수치지형도 묶음, 고지형, 3D, 검수·내보내기 |
+
+앱 안의 주요 기능 파일: 받은 지도 `ref_vector*.rs`·`ref_map*.rs`·`cadastral_*.rs`·`topo_*.rs`·`dem_*.rs`·`heritage_*.rs`, 사용자 파일 `user_files.rs`, 그림 레이어 `picture_layers.rs`, 받은 지도 다시 열기 `survey_map_list.rs`, 도면 `gui_tab_drawing*.rs`·`sheet_*.rs`, 편집 `app_state_*.rs`, 정합(아직 껍데기) `gui_ribbon_align*.rs`.
+
+## 5. 일하는 방식 (사용자가 정한 것)
+
+1. **C++ 과 정확히 같게.** 바꾸기 전에 C++ 소스의 해당 줄을 직접 연다. 문구는 C++ 문자열 그대로, 근거는 커밋·주석에 `파일:줄` 로 남긴다. C++ 에 없는 문구를 쓸 때는 「이 앱의 말」이라고 주석에 적는다.
+2. **시험 먼저.** 실패하는 시험을 먼저 쓰고 실패를 본 뒤 고친다. C++ 시험(`target/cpp-ref/tests/*.cpp`)이 있으면 옮긴다. 다 된 뒤에는 핵심 줄을 일부러 틀리게 바꿔(변이) 시험이 잡는지 확인한다(스크립트: 원본을 보관했다가 시험 뒤 되돌리는 방식. 중간에 멈추면 원본이 남지 않게 주의).
+3. **실제 화면으로 확인.** 화면이 바뀌는 기능은 위의 사진 실행으로 임시 사본에서 찍어 본다.
+4. **다 되면 바로 올린다.** 커밋 → `git push origin main` → release 빌드 → 사용자 바탕화면 바로가기가 여는 `target/release/ka-hgis.exe`(원래 저장소 폴더 안)를 새 판으로 바꾼다. 기존 exe 는 지우지 않고 `ka-hgis.old-<시각>.exe` 로 이름만 바꾼다(앱이 열려 있어도 안전). 바꾼 뒤 `--smoke-quit` 확인.
+5. **커밋 메시지**: 영어 제목 `type(scope): ...`, 본문에 무엇이 왜 바뀌었는지와 C++ 근거, 시험 결과 줄, 끝에 `Co-Authored-By:`. 기존 시험의 기대값을 바꾸거나 지웠으면 `시험 변경: <이유>` 줄을 반드시 쓴다.
+6. **코드 규칙**: 파일당 300줄 이하(넘으면 새 파일), `unsafe` 금지, clippy 경고 0, 새 외부 크레이트는 라이선스(복사 좌파 금지)와 판을 확인하고 커밋에 적는다. 좌표 변환은 반드시 PROJ(`strata_engine::Transformer`)로.
+7. **사용자에게는** 진행 보고를 길게 하지 않는다. 물으면 한국어로 짧게 답하고, 사용자만 정할 수 있는 것만 추천 답과 함께 묻는다. 기술 결정은 가장 안전한 쪽으로 하고 기록한다.
+
+## 6. 안전 규칙 (어기면 안 되는 것)
+
+- 키·계정 값(VWorld 키, 국토정보플랫폼 계정, 국가유산 인트라넷 계정, 역사GIS 키)을 출력·파일·커밋·메시지에 넣지 않는다. 저장 위치는 이름만 안다: VWorld 키 `%LOCALAPPDATA%\ka-hgis\ka-hgis-vworld.ini` → `HKCU\Software\ka-hgis` → 환경변수 `VWORLD_API_KEY` → `config/secrets.ini`(git 무시). 계정은 `%LOCALAPPDATA%\ka-hgis\ka-hgis\` 아래(예: `heritage-account.ini`)와 Windows 비밀 저장소. 새 PC 에서는 사용자가 앱의 「더보기」 계정 창에서 직접 넣는다.
+- 저장소는 **공개**다. 올리기 전에 커밋 전체에서 키·계정·개인정보·조사 좌표를 훑는다.
+- 사용자 원본 조사 자료(조사 GPKG, 받은 자료)를 고치지 않는다. 시험·사진은 임시 사본으로만 한다.
+- 실제 사이트에 주문·로그인하는 실행은 사용자 허락 뒤에만 한다. 거절된 로그인은 다시 시도하지 않는다. 「수치지형」 주문 단추를 사진 실행 단계에 넣지 않는다(실제 신청이 들어간다).
+- **국가유산 인트라넷(「유산」) 실제 실행은 허락 대기 중**이다(2026-11-16 사용자에게 「경주시 한 곳 시험 실행」을 물었고 답이 아직 없다). 허락 전에는 코드를 만들되 실제 접속하지 않고, 그 기능을 바로가기 앱에 넣지 않는다.
+
+## 7. 지금까지 된 것
+
+판별 결과와 확인 방법은 `docs/RESULTS.md` 에 날짜별로 있다. 2026-11-16 하루 동안 된 것(커밋 순):
+좌표점이 땅을 기억함, 도면 목록, 새 용지, Shift 여러 개 고르기·폴리곤 묶기·나누기, Delete 여러 개, 고르기 상자, 화살표 키 오동작 제거, 새 조사·열기 전 저장 질문, 받아 둔 수치지형·DEM 먼저 쓰기, 받은 지도 다시 열면 돌아옴(`<조사 이름>.strata-maps.json`), PDF 진행 창 모달, SHP 끌어 놓기·파일함·「벡터·도면 불러오기」(33b52fb), 그림 레이어(JPG·PNG·TIFF, 월드 파일, 6361e82), 정합 변환 계산(5c04460, 아직 화면에 연결 안 됨).
+
+## 8. 다음 할 일 (우선순위 순)
+
+1. **정합(맞추기) 나머지** — 사용자가 직접 「안 된다」고 한 기능. 설계와 C++ 근거는 `docs/research/align/ALIGN0.md`(끝의 「Port order」 18단계). 된 것: 그림 레이어(Port order 4·8), 변환 계산·품질 문구(1·2, `strata-geo/src/align_fit.rs`). 남은 순서: 월드 파일·`.prj` 쓰기(3) → 정합백업·되돌리기(5) → 그림에 좌표 붙이기(6) → 붙인 그림 표시 방식(7) → 진입과 「맞출 도면」 파일 창(9) → 왼쪽 그림 창과 점 짝 찍기(10) → 표시(번호·화살표·목록, 11) → 끌어 고치기(12) → 이동(13) → 되돌리기·맞추기 저장(14) → 벡터·CAD 정합(15·16, DXF 불러오기 뒤) → 큰 그림 미리보기(17) → 가짜 코드 정리(18: `strata-geo` 의 `helmert_solve.rs`·`georef_quality.rs`·`gcp_solve.rs` 는 C++ 에 없는 이름을 인용한 가짜 이식이고, `gui_ribbon_align*.rs` 의 상태 문구 일부도 가짜다).
+2. **유산 인트라넷 받기** — `docs/research/heritage/HER-NET0.md` §3.4 의 단계(가짜 사이트 고정물 → 실행 틀 → 시·군 조건이 안 걸리면 멈추기, 종류마다 전체다운로드 1회 → `recent.json` 쓰기·서약서 영수증 → 허락받은 뒤 한 번 실제 실행). C++ 흐름 요약은 `docs/research/post/heritage-plate.md`. 지금 Rust 는 C++ 앱이 30일 안에 받아 둔 압축 파일 다시 쓰기만 된다.
+3. **받은 지도 목록 후속**(검수 지적): 범례 체크 끄기와 투명도 막대가 「저장 안 됨」을 켜지 않음, 이름 바꾸기도 그렇다, 1919 키가 없는 PC 에서 열고 저장하면 그 줄이 목록에서 사라짐, 유산 줄은 아직 목록에 안 남음.
+4. **메뉴 감사표의 남은 것** — `docs/research/more/MORE0.md` 끝의 「To build」 목록: 제출 꾸러미·5179 변환(#5), 시굴격자 배치(#6), 등고선(#7), 인쇄 창(#9), CSV 기준점(#10), OSM·Google 배경(#14), 주소 검색이 화면을 멈춤(#18), F9/F11(#19), 표시 설정(#21), 스타일 색 저장(#22).
+5. **파일 불러오기 나머지**: 점 SHP(엔진 `ShapeKind` 와 그리기에 점이 없다), GPKG 표, GeoJSON(GDAL `driver_geojson` 을 켜야 함), DXF(CAD 공지 창 → 좌표계 확인; GDAL DXF 드라이버는 이미 있음), DWG(C++ 은 GPL 인 LibreDWG 를 따로 부른다: 쓰지 않는다. GDAL CAD 드라이버는 DWG R2000 만), 이름 글자, 범례의 「레이어 불러오기」 줄(C++ 은 새 빈 레이어 만들기 창).
+6. **도면·편집**: 구간 분리, 트렌치 이동 도구, 도면 오른쪽 패널 디자인, 도면 항목 이동의 되돌리기, 표제란 이름 질문, 도면 목록을 조사 파일에 저장(작업공간 2D, 계획 표의 2D 행), 인쇄. 도면 조사는 `docs/research/sheet/SHEET0.md`, 편집은 `docs/research/edit/EDIT0.md`.
+
+## 9. 정해 둔 것 (사용자가 물으면 알릴 것)
+
+- 조사구역 도형이 여러 개면 가장 큰 도형을 지도·도면의 가운데로 쓴다. 대동여지도·지형은 반경 100 km, 나머지 참조 지도는 10 km.
+- 지도에서 Delete 는 조사 레이어 자체를 지우지 않는다(범례에서만). 「도형선택」에서 끌면 고르기 상자(가운데·오른쪽 단추로 끌면 지도 이동).
+- 시작 화면의 「rust」 는 사용자가 쓴 대로 소문자. 도면 PDF 는 마지막 화면 배율로 그린 300 DPI 그림 PDF(임시, 계획 표 「R3-임시」).
+- 받은 지도·타일 지도·사용자 파일을 올리면 「저장 안 됨」이 된다(끌 때 묻는다). 받은 지도 목록은 조사 파일 옆 파일(`<이름>.strata-maps.json`)이다(작업공간 2D 가 생기면 그리로 옮긴다).
+- 같은 이름의 파일 두 개는 「이름 (2)」 로 구분한다. 사용자 SHP 는 「조사 데이터」 줄, 그림은 「주변·참조」 줄. 그림은 배경 위·지적선 아래에 그린다.
+
+## 10. 문서 지도
+
+| 문서 | 내용 |
+|---|---|
+| `docs/RUST_PLAN.md` | 계획 표. 행마다 C++ 근거·통과 조건·라이선스·상태. 새 일은 행을 먼저 쓴다 |
+| `docs/RESULTS.md` | 무엇이 달라졌고 어떻게 확인했는지(날짜별), 운영에서 배운 것 |
+| `docs/research/` | C++ 기능 조사 보고서(이 PC 의 지시자 폴더에서 옮김): 메뉴 감사 `more/MORE0.md`·`menus/MENU0.md`, 정합 `align/ALIGN0.md`, 유산 `heritage/HER-NET0.md`·`post/heritage-plate.md`, 도면 `sheet/SHEET0.md`, 편집 `edit/EDIT0.md`, 지적 `cadastral/*`, 참조 지도 `post/*`, RustGIS 조사 `rustgis/RG-SURVEY1.md` |
+| `AGENTS.md` | 에이전트 공통 규칙(역할, 좌표, 시험, 커밋) |
+| `docs/RUST_PARITY_CHECKLIST.md` | C++ 기능 대조표(오래됨: MORE0 이 더 새롭다) |
+| `CLAUDE.md`, `docs/HANDOFF.md`, `docs/other-pc-setup.md` | C++ 시절 문서. 제품 규칙만 참고 |
+
+## 11. 다른 PC 에서 처음 할 일
+
+1. Git, VS 2022 Build Tools(C++ 데스크톱), CMake, rustup 설치. `git clone https://github.com/kesekikwon-netizen/hgis-rust`.
+2. `cargo build -j 3 -p strata-app`(첫 빌드에 GDAL·PROJ 소스 빌드가 들어 있어 오래 걸린다), `cargo test -j 3 -p strata-app` 이 모두 통과하는지 본다.
+3. C++ 근거를 열 수 있게 `target/cpp-ref` 에 gogohak1 을 clone 하고 `b036c09` 로 맞춘다.
+4. 사용자에게 키·계정은 앱 화면에서 직접 넣어 달라고 한다(값을 받아 파일에 쓰지 않는다).
+5. 이 문서의 8절 1번(정합)부터 이어서 한다. 한 기능이 끝날 때마다 `docs/RESULTS.md` 에 행을 쓰고, 이 문서의 7·8절을 고친다.

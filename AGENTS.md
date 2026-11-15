@@ -1,3 +1,5 @@
+> **처음 오는 에이전트(어떤 AI 든)는 [`docs/HANDOVER.md`](docs/HANDOVER.md) 부터 읽는다** — 지금 상태, 빌드·시험, 일하는 방식, 다음 할 일(2026-11-16).
+
 # AGENTS.md — rules for every coding agent in this repository
 
 This repository (origin `kesekikwon-netizen/hgis-rust`) is the Rust/egui port of the C++ app Strata.

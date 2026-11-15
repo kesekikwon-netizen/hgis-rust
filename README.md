@@ -1,3 +1,5 @@
+> **처음 오는 에이전트(어떤 AI 든)는 [`docs/HANDOVER.md`](docs/HANDOVER.md) 부터 읽는다** — 지금 상태, 빌드·시험, 일하는 방식, 다음 할 일(2026-11-16).
+
 # 고고학 전용 HGIS (ka-hgis, 앱 이름 Strata) — Pure Rust Edition
 
 100% 순수 Rust(`eframe`/`egui` + `rusqlite` + `geo` + `proj4rs` + `reqwest`) 독립 실행형 필드고고학 HGIS 데스크톱 애플리케이션.
