@@ -215,6 +215,14 @@ The builder on `/openapi/wfs` in `kigam_soil_river.rs` is still uncalled and goe
 
 ---
 
+Rust now (order NET-SOIL1, 2026-11-15): the 토양 button sends the WFS requests of the first row through
+`strata-net::reference_http::reference_get` (`crates/strata-refmap/src/soil_request.rs`, `soil_prepare.rs`): for each of
+`SOIL_1..3` one `resultType=hits` request (15 s) and, unless it counted nothing, one feature request with
+`propertyName=soil_type_geo,geom` (15 s idle, 180 s in all), one after the other, 6 at most for a survey, `User-Agent`
+`ka-hgis/0.3`, no retry and no quarters, as the C++. The box is that of the 10 km scope around the survey area (owner
+2026-11-15), not the map view; a map kept for the same area is not fetched again; a cancel or another survey ends the
+request in flight. The picture tiles of the second row are not asked for yet (order NET-SOIL1b).
+
 ### 18. `soil.rda.go.kr`
 
 | purpose (Korean UI name) | method + path pattern | auth | headers set (literal) | max parallel | pacing & typical job arithmetic | timeout | retry | on 401 / 403 / 429 / 5xx / empty or XML-error body | cache | C++ `file:line` | Rust `file:line` | difference between the two apps |
