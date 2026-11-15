@@ -6,6 +6,8 @@
 
 pub mod archive;
 pub mod codes;
+pub mod library;
 pub mod merge;
+pub mod post;
 pub mod sheet;
 pub mod source_crs;
