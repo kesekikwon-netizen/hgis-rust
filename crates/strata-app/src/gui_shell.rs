@@ -31,6 +31,8 @@ impl StrataAppState {
         ctx.input(|i| {
             if capture && i.key_pressed(egui::Key::Escape) {
                 self.sketch_cancel();
+            } else if i.key_pressed(egui::Key::Escape) && self.home_map.active_vertex.take().is_some() {
+                // KaFeatureSelectTool.cpp:164-170: Esc lets go of the picked vertex and keeps the tool.
             } else if i.key_pressed(egui::Key::Escape) && self.home_map.inline_rename.is_none() {
                 self.home_map.cad.on_escape(&mut self.home_map.scene);
                 self.modals.active = None;
@@ -83,10 +85,11 @@ impl StrataAppState {
                 self.sketch_undo_vertex();
             } else if !wants_kb && i.key_pressed(egui::Key::Delete) {
                 // QKeySequence::Delete (MainWindow.cpp:256-268). An open window keeps the key to itself.
-                if self.modals.active.is_none() && !self.modal_window_open() {
+                // A picked vertex is what Delete removes, not the whole shape (MainWindowUndo.cpp:497-500).
+                if self.modals.active.is_none() && !self.modal_window_open() && !self.delete_active_vertex() {
                     self.delete_selected();
                 }
-            } else if !wants_kb && i.key_pressed(egui::Key::Backspace) {
+            } else if !wants_kb && i.key_pressed(egui::Key::Backspace) && !self.delete_active_vertex() {
                 self.home_map.cad.on_backspace(&mut self.home_map.scene);
             }
             if !wants_kb && self.active_tab == MainTab::Map {

@@ -36,6 +36,10 @@ mod app_state_buffer;
 mod app_state_erase;
 #[path = "app_state_snap_lines.rs"]
 mod app_state_snap_lines;
+#[path = "vertex_edit_geom.rs"]
+pub(crate) mod vertex_edit_geom;
+#[path = "app_state_vertex_edit.rs"]
+pub(crate) mod vertex_edit;
 #[path = "app_state_recent.rs"]
 mod app_state_recent;
 #[path = "app_state_status_bar.rs"]

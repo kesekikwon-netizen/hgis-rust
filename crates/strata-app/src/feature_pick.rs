@@ -90,10 +90,14 @@ impl StrataAppState {
             _ => 0,
         };
         self.home_map.selected_shape = candidates.get(pick).cloned();
+        self.home_map.active_vertex = None;
         self.home_map.pick_cycle = (!candidates.is_empty()).then(|| (candidates.clone(), pick, screen));
         // canvas selectionChanged → syncFeatureCard(MainWindowFeatureCard.cpp:32).
         self.sync_card_with_selection();
-        if candidates.is_empty() {
+        if candidates.len() == 1 && self.vertex_target().is_some() {
+            // KaFeatureSelectPick.cpp:206 without its 「(Ctrl=자석)」: the magnet of a held handle is not there yet.
+            self.show_status_message("수정점이 나왔습니다. 점을 끌어 옮기세요. 점 우클릭은 삭제, 선 우클릭은 추가입니다.");
+        } else if candidates.is_empty() {
             self.show_status_message("선택된 도형 없음");
         } else if candidates.len() > 1 {
             self.show_status_message(format!("겹친 도형 {}/{} — 같은 자리를 다시 누르면 다음 도형을 고릅니다.", pick + 1, candidates.len()));

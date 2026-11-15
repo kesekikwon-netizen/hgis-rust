@@ -34,6 +34,11 @@ pub struct HomeMapTabState {
     pub selected_feature_idx: Option<usize>,
     /// 도형선택으로 고른 조사 도형(표 이름, fid) — C++ layer->selectedFeatureIds.
     pub selected_shape: Option<(String, i64)>,
+    /// The vertex of the selected shape that was clicked (its handle is red): Delete removes it.
+    pub active_vertex: Option<usize>,
+    /// A handle that is held with the mouse, and the menu of a right click on a handle or a side.
+    pub(crate) held_vertex: Option<crate::gui_tab_map::gui_tab_map_vertex::HeldVertex>,
+    pub(crate) vertex_menu: Option<crate::gui_tab_map::gui_tab_map_vertex::VertexMenu>,
     /// A legend row was clicked after the map (Qt: the layer tree has the keyboard focus): Delete is the legend's.
     pub legend_focus: bool,
     /// The row of the legend that is held with the mouse (drag and drop of the layer list).
@@ -117,6 +122,9 @@ impl Default for HomeMapTabState {
             layer_filter: String::new(),
             selected_feature_idx: None,
             selected_shape: None,
+            active_vertex: None,
+            held_vertex: None,
+            vertex_menu: None,
             legend_focus: false,
             legend_drag: None,
             last_drawn_shape: None,

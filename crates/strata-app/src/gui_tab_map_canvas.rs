@@ -86,6 +86,8 @@ impl StrataAppState {
         // C++ 은 그리기 줄을 열어도 도구가 이동 그대로다 — 그릴 대상을 눌러야 그리기 도구가 켜진다.
         let effective_tool = self.active_tool;
         let capture = self.handle_polygon_capture_input(ui, &response, rect);
+        // A held handle of the selected shape: the map does not pan and the click selects nothing new.
+        let capture = capture || self.handle_vertex_handles(ui, &response, rect);
 
         if let Some(hp) = response.hover_pos() {
             self.home_map.cursor_world_xy = s2w(rect, &self.home_map.viewport, hp);
@@ -227,7 +229,7 @@ impl StrataAppState {
                 if effective_tool == MapToolKind::Measure {
                     let _ = self.home_map.cad.on_right_click(effective_tool, &mut self.home_map.scene);
                 }
-            } else if let Some(pos) = response.interact_pointer_pos() {
+            } else if let Some(pos) = response.interact_pointer_pos().filter(|pos| !self.open_vertex_menu(*pos, s2w(rect, &self.home_map.viewport, *pos))) {
                 // MainWindowContextMenus.cpp:112-161 mapContextMenu
                 let wxy = s2w(rect, &self.home_map.viewport, pos);
                 self.map_context_menu_open = true;
@@ -274,6 +276,8 @@ impl StrataAppState {
         );
         self.paint_map_overlays(ctx, ui, &p, rect);
         self.paint_selected_shape(&p, rect);
+        self.paint_vertex_handles(&p, rect);
+        self.render_vertex_menu(ctx);
         self.paint_polygon_sketch(&p, rect, response.hover_pos());
     }
 }
