@@ -71,6 +71,9 @@ fn polygons_with_their_cells_come_back_as_written() {
     let names: Vec<(&str, ColumnKind)> = facts.columns.iter().map(|(n, k)| (n.as_str(), *k)).collect();
     assert_eq!(names, geology_layout().columns);
     assert_eq!(rows, geology_rows());
+    // The same facts without reading a row.
+    assert_eq!(table_facts(&path, "geology_map").expect("facts"), facts);
+    assert!(table_facts(&path, "topo").is_err());
 }
 
 #[test]

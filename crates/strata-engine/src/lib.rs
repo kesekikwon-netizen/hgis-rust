@@ -10,10 +10,12 @@
 #![forbid(unsafe_code)]
 
 mod crs;
+mod crs_box;
 mod geom;
 mod geom_wkt;
 mod rings;
 mod scope;
+mod surface;
 #[cfg(feature = "gdal")]
 mod submit_shp;
 #[cfg(feature = "gdal")]
@@ -26,8 +28,9 @@ pub use geom::{make_valid_polygon_parts, normalized_wkt, polygon_area, polygon_i
 pub use geom_wkt::{union_area, wkt_area, wkt_is_valid, wkt_length, wkt_point_relation, SurveyArea};
 pub use rings::{distance_rings, ring_label_points};
 pub use scope::{Scope, ScopeTest};
+pub use surface::{point_on_surface, polygons_area};
 #[cfg(feature = "gdal")]
-pub use vector_table::{append_to_table, read_table, write_new_table, Cell, ColumnKind, Row, ShapeKind, Shapes, TableFacts, TableLayout};
+pub use vector_table::{append_to_table, read_table, table_facts, write_new_table, Cell, ColumnKind, Row, ShapeKind, Shapes, TableFacts, TableLayout};
 #[cfg(feature = "gdal")]
 pub use submit_shp::{
     install_submit_proj_db, set_gdal_proj_search_paths, write_submit_shapefiles, ShpLayerReport, SubmitEncoding,

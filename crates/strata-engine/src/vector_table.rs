@@ -19,7 +19,7 @@ mod read;
 #[path = "vector_table_tests.rs"]
 mod tests;
 
-pub use read::read_table;
+pub use read::{read_table, table_facts};
 
 /// What a column holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

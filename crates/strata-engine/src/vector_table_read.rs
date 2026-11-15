@@ -59,19 +59,31 @@ fn cell(value: Option<FieldValue>) -> Result<Cell, EngineError> {
 pub fn read_table(path: &Path, table: &str, columns: &[&str], each: &mut dyn FnMut(Row) -> bool) -> Result<TableFacts, EngineError> {
     let dataset = open(path, false)?;
     let mut layer = dataset.layer_by_name(table).map_err(|e| named(path, e))?;
-    let kind = kind_of(&layer)?;
-    let all = columns_of(&layer)?;
+    let facts = facts_of(&layer)?;
     let mut wanted = Vec::new();
     for name in columns {
-        wanted.push(all.iter().position(|(n, _)| n == name).ok_or_else(|| named(path, format!("table {table} has no column {name}")))?);
+        wanted.push(facts.columns.iter().position(|(n, _)| n == name).ok_or_else(|| named(path, format!("table {table} has no column {name}")))?);
     }
-    let epsg = layer.spatial_ref().filter(|s| s.auth_name().as_deref() == Some("EPSG")).and_then(|s| s.auth_code().ok()).and_then(|code| u32::try_from(code).ok());
-    let facts = TableFacts { epsg, kind, columns: all, rows: layer.feature_count() };
     for feature in layer.features() {
         let cells = wanted.iter().map(|i| cell(feature.field(*i)?)).collect::<Result<Vec<_>, _>>()?;
-        if !each(Row { shapes: shapes(feature.geometry(), kind)?, cells }) {
+        if !each(Row { shapes: shapes(feature.geometry(), facts.kind)?, cells }) {
             break;
         }
     }
     Ok(facts)
+}
+
+fn facts_of(layer: &Layer<'_>) -> Result<TableFacts, EngineError> {
+    let epsg = layer.spatial_ref().filter(|s| s.auth_name().as_deref() == Some("EPSG")).and_then(|s| s.auth_code().ok()).and_then(|code| u32::try_from(code).ok());
+    Ok(TableFacts { epsg, kind: kind_of(layer)?, columns: columns_of(layer)?, rows: layer.feature_count() })
+}
+
+/// What a table is, without reading its rows (a reader needs the CRS before the first row).
+///
+/// # Errors
+/// The file or the table is missing, or the table is not one of these tables.
+pub fn table_facts(path: &Path, table: &str) -> Result<TableFacts, EngineError> {
+    let dataset = open(path, false)?;
+    let layer = dataset.layer_by_name(table).map_err(|e| named(path, e))?;
+    facts_of(&layer)
 }
