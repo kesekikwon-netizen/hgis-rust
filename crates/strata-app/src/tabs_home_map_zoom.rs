@@ -55,6 +55,33 @@ impl HomeMapTabState {
         self.clamp_to_korea(work_crs);
     }
 
+    /// The second half of C++ `zoomToProjectDataLayers` (`BasemapOps.cpp:663-715`): the common box of the
+    /// layers' boxes (a layer as wide as the country says nothing about where the survey is, `:680-682`),
+    /// at least 100 m each way, with a fifth of room; a view smaller than 1:80,000 becomes 1:5,000 around
+    /// the same middle. `false`, and the view as it was, without a box.
+    pub(crate) fn zoom_to_data_extents(&mut self, layers: impl Iterator<Item = [f64; 4]>, work_crs: WorkCrs) -> bool {
+        const MIN_W: f64 = 100.0;
+        let korea = korea_outer_extent(work_crs);
+        let country_wide = |e: &[f64; 4]| korea.is_some_and(|k| e[2] - e[0] > (k[2] - k[0]) * 0.95 || e[3] - e[1] > (k[3] - k[1]) * 0.95);
+        let boxes = layers.filter(|e| !country_wide(e));
+        let Some(mut e) = boxes.reduce(|a, b| [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])]) else {
+            return false;
+        };
+        // Only a short side is widened. The C++ puts a square of 100 m in place of the whole box when one
+        // side is short (`:701-706`), which takes a long and narrow survey out of the view.
+        let (cx, cy) = ((e[0] + e[2]) * 0.5, (e[1] + e[3]) * 0.5);
+        let (hw, hh) = ((e[2] - e[0]).max(MIN_W) * 0.5, (e[3] - e[1]).max(MIN_W) * 0.5);
+        e = scaled([cx - hw, cy - hh, cx + hw, cy + hh], 1.2);
+        self.set_view_extent(e);
+        self.set_view_extent(scaled(e, 1.05));
+        self.clamp_to_korea(work_crs);
+        if self.viewport.meters_per_pixel / METERS_PER_PIXEL_AT_1 > 80_000.0 {
+            self.viewport.meters_per_pixel = 5_000.0 * METERS_PER_PIXEL_AT_1;
+            self.note_view();
+        }
+        true
+    }
+
     /// C++ `LayerOps::zoomToLayerMax` — `ext` 는 작업 좌표계로 옮긴 레이어 범위(없으면 None),
     /// `is_raster` 는 래스터(배경지도·지적 그림) 레이어. 옮기지 못하면 false.
     pub(crate) fn zoom_to_layer_max(&mut self, ext: Option<[f64; 4]>, is_raster: bool, work_crs: WorkCrs) -> bool {

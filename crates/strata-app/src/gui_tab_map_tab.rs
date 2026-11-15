@@ -71,5 +71,6 @@ impl StrataAppState {
             });
         // 방금 그린 지도 칸 크기로 한반도 전체 보기를 한 번 맞춘다(C++ ensureStartupViewReady).
         self.home_map.apply_pending_korea_view(self.work_crs);
+        self.apply_pending_survey_view();
     }
 }

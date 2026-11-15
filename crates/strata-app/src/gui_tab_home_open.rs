@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use strata_storage::survey_gpkg_read::{read_survey_tables, validate_survey_for_open};
+use strata_storage::survey_gpkg_read::{read_survey_tables, validate_survey_for_open, SurveyFileTable};
 use strata_types::schema::{DomainLayerKey, LegendGroup};
 
 use crate::app_state::{MainTab, StrataAppState};
@@ -65,16 +65,42 @@ impl StrataAppState {
         self.survey_tables = tables;
         self.left_layers.apply_default_basemaps();
         self.survey_path = Some(target.clone());
-        // C++ :400-401 applyStartupMap -> ensureStartupViewReady — 데이터 범위가 아니라 한반도 전체.
-        // 지도 칸 크기는 다음 지도 화면에서 정해지므로 그때 한 번 더 맞춘다.
+        // The survey area comes into view, as in the C++ open with its workspace (`MainWindowSession.cpp:
+        // 186-188` zoomToProjectDataLayers, else all of Korea); owner 2026-11-15: 「모든도면은 조사구역이
+        // 중심이되게하라」. The size of the map frame is known at the next map frame: the view is set there.
         self.home_map.zoom_to_korea(self.work_crs);
         self.home_map.korea_view_pending = true;
+        self.home_map.survey_view_pending = true;
         // C++ :412-419 rememberSurvey · showMapWorkspace · rememberSurveyDir · markSurveySaved.
         self.remember_survey(&target, &strata_storage::recent_surveys::complete_base_name(&target.to_string_lossy()));
         self.active_tab = MainTab::Map;
         self.remember_survey_dir(&target);
         self.is_dirty = false;
         true
+    }
+}
+
+impl StrataAppState {
+    /// The view of an opened survey, set at the first map frame after the opening: there the size of the
+    /// map frame is known.
+    pub(crate) fn apply_pending_survey_view(&mut self) {
+        if std::mem::take(&mut self.home_map.survey_view_pending) {
+            self.zoom_to_project_data_layers();
+        }
+    }
+
+    /// C++ `zoomToProjectDataLayers` (`BasemapOps.cpp:653-716`): the first survey-area layer that has shapes
+    /// (`zoomToLayerMax`), else what the other layers of the survey cover. `false`, and the view as it was,
+    /// when the survey has no shape to show.
+    pub(crate) fn zoom_to_project_data_layers(&mut self) -> bool {
+        let work = self.work_crs;
+        let extent = |t: &SurveyFileTable| crate::survey_paint_layers::table_extent_in(t, work);
+        let areas: Vec<[f64; 4]> = self.survey_tables.iter().filter(|t| crate::survey_area_setup::is_survey_area_key(&t.table)).filter_map(extent).collect();
+        if areas.into_iter().any(|area| self.home_map.zoom_to_layer_max(Some(area), false, work)) {
+            return true;
+        }
+        let all: Vec<[f64; 4]> = self.survey_tables.iter().filter_map(extent).collect();
+        self.home_map.zoom_to_data_extents(all.into_iter(), work)
     }
 }
 

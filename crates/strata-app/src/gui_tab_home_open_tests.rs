@@ -179,3 +179,86 @@ fn same_titled_user_polygon_tables_keep_their_own_counts() {
     assert_eq!(rows[0], ("면".to_owned(), 2, Some("면적")), "user_poly_2 is on top");
     assert_eq!(rows[1], ("면".to_owned(), 1, Some("면적")));
 }
+
+/// A survey with these tables, in the work CRS, on a map frame of 900 x 600.
+fn survey_of(tables: &[(&str, &[&str])]) -> StrataAppState {
+    use strata_storage::edit_buffer::LayerEditBuffer;
+    let mut app = StrataAppState::new_startup();
+    for (name, shapes) in tables {
+        let mut layer = LayerEditBuffer::default();
+        for wkt in *shapes {
+            layer.add_unsaved_feature((*wkt).to_owned(), std::collections::BTreeMap::new());
+        }
+        app.survey_tables.push(strata_storage::survey_gpkg_read::SurveyFileTable {
+            table: (*name).to_owned(),
+            srs_id: 5187,
+            geometry_type: "POLYGON".to_owned(),
+            columns: Vec::new(),
+            baseline: Vec::new(),
+            layer,
+        });
+    }
+    app.home_map.viewport.screen_size_px = [900.0, 600.0];
+    app
+}
+
+fn close(found: f64, wanted: f64) -> bool {
+    (found - wanted).abs() < 1e-6
+}
+
+/// Opening a survey brings its survey area into the map, as the C++ open does (`MainWindowSession.cpp:186-188`,
+/// `BasemapOps.cpp:653-661`: `zoomToLayerMax` on the survey-area layer), once the size of the map frame is
+/// known, and once only. Owner 2026-11-15: 「모든도면은 조사구역이 중심이되게하라」.
+#[test]
+fn opening_a_survey_shows_its_survey_area() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = StrataAppState::new_startup();
+    assert!(app.open_survey_gpkg(&demo_copy(dir.path(), "demo.gpkg")));
+    app.home_map.viewport.screen_size_px = [900.0, 600.0];
+    app.apply_pending_survey_view();
+
+    let area = app.survey_tables.iter().find(|t| t.table == "survey_area").unwrap();
+    let extent = crate::survey_paint_layers::table_extent_in(area, app.work_crs).unwrap();
+    let (width, height) = (extent[2] - extent[0], extent[3] - extent[1]);
+    assert!(width > 80.0 && height > 80.0, "the demo's survey area is wider than the smallest view");
+    let view = &app.home_map.viewport;
+    assert!(close(view.center_xy[0], (extent[0] + extent[2]) * 0.5) && close(view.center_xy[1], (extent[1] + extent[3]) * 0.5), "{:?}", view.center_xy);
+    // The layer with 15 % of room, and 5 % more of zoomToFeatureExtent.
+    assert!(close(view.meters_per_pixel, (width * 1.15 * 1.05 / 900.0).max(height * 1.15 * 1.05 / 600.0)), "{}", view.meters_per_pixel);
+
+    app.home_map.viewport.center_xy = [1.0, 2.0];
+    app.apply_pending_survey_view();
+    assert_eq!(app.home_map.viewport.center_xy, [1.0, 2.0], "a later map frame leaves the user's view alone");
+}
+
+/// Without a survey area the view takes what the other layers cover (`BasemapOps.cpp:663-715`): their common
+/// box, at least 100 m each way, with 20 % of room and the 5 % of zoomToFeatureExtent.
+#[test]
+fn a_survey_without_a_survey_area_shows_its_other_shapes() {
+    let mut app = survey_of(&[
+        ("trial_trench", &["POLYGON ((200000 450000, 200010 450000, 200010 450020, 200000 450020, 200000 450000))"]),
+        ("feature_poly", &["POLYGON ((200030 450000, 200040 450000, 200040 450010, 200030 450000))"]),
+    ]);
+    assert!(app.zoom_to_project_data_layers());
+    let view = &app.home_map.viewport;
+    assert!(close(view.center_xy[0], 200_020.0) && close(view.center_xy[1], 450_010.0), "{:?}", view.center_xy);
+    assert!(close(view.meters_per_pixel, 100.0 * 1.2 * 1.05 / 600.0), "{}", view.meters_per_pixel);
+}
+
+/// Shapes too far apart for one view (smaller than 1:80,000) are shown at 1:5,000 around their middle
+/// (`BasemapOps.cpp:711-712`), and a survey without a shape leaves the view as it is.
+#[test]
+fn far_apart_shapes_are_shown_at_1_to_5000_and_no_shape_changes_nothing() {
+    let mut app = survey_of(&[
+        ("trial_trench", &["POLYGON ((200000 450000, 200010 450000, 200010 450020, 200000 450000))"]),
+        ("feature_poly", &["POLYGON ((260000 450000, 260010 450000, 260010 450020, 260000 450000))"]),
+    ]);
+    assert!(app.zoom_to_project_data_layers());
+    assert!(close(app.home_map.viewport.center_xy[0], 230_005.0), "{:?}", app.home_map.viewport.center_xy);
+    assert!(close(app.home_map.viewport.meters_per_pixel, 5_000.0 * 0.0254 / 96.0), "{}", app.home_map.viewport.meters_per_pixel);
+
+    let mut empty = survey_of(&[("survey_area", &[])]);
+    let before = (empty.home_map.viewport.center_xy, empty.home_map.viewport.meters_per_pixel);
+    assert!(!empty.zoom_to_project_data_layers());
+    assert_eq!((empty.home_map.viewport.center_xy, empty.home_map.viewport.meters_per_pixel), before);
+}
