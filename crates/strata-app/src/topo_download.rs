@@ -64,8 +64,11 @@ pub(crate) fn topo_request(facts: TopoFacts<'_>, stored_account: impl FnOnce() -
     if numbers.is_empty() {
         numbers = crate::ngii_topographic_ui::nearby_sheet_numbers(lon_lat);
     }
+    // The sheets the survey has are named to the portal, which then leaves them out of the order
+    // (the C++ `received` list, KaTopographicScopePanel.cpp:627-632).
+    let cached_numbers = strata_topo::library::Library::open(&folder.join("지형도")).numbers();
     Ok(TopoRequest {
-        scope: Scope { x: portal[0], y: portal[1], radius: TOPO_RADIUS_M, numbers, cached_numbers: Vec::new() },
+        scope: Scope { x: portal[0], y: portal[1], radius: TOPO_RADIUS_M, numbers, cached_numbers },
         downloads: folder.join("지형도").join("원본"),
         // The C++ sends no birth date of its own (its field is hidden and emptied, KaTopographicBrowser.cpp:251,
         // 267): the site's form carries the member's, and the page script says so when it does not.
@@ -128,6 +131,8 @@ pub(crate) fn gauge_state(run: &RunFacts<'_>) -> DownloadJobState {
 #[path = "topo_download_run.rs"]
 mod run;
 pub(crate) use run::TopoDownload;
+#[path = "topo_post.rs"]
+mod post;
 
 #[cfg(test)]
 #[path = "topo_download_tests.rs"]

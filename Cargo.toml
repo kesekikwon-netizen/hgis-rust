@@ -66,6 +66,7 @@ strata-secrets = { path = "crates/strata-secrets" }
 strata-storage = { path = "crates/strata-storage" }
 strata-geo = { path = "crates/strata-geo" }
 strata-net = { path = "crates/strata-net" }
+strata-topo = { path = "crates/strata-topo" }
 strata-paleo = { path = "crates/strata-paleo" }
 strata-canvas2d = { path = "crates/strata-canvas2d" }
 strata-terrain3d = { path = "crates/strata-terrain3d" }

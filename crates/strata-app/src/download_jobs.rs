@@ -187,6 +187,12 @@ pub struct DownloadJobHandle {
 }
 
 impl DownloadJobHandle {
+    /// The job this handle reports for (the list cancels a job by it).
+    #[must_use]
+    pub fn id(&self) -> DownloadJobId {
+        self.id
+    }
+
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
         self.cancel.load(Ordering::SeqCst)

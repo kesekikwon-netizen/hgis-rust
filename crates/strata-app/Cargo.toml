@@ -25,6 +25,7 @@ strata-check-export = { workspace = true }
 strata-engine = { workspace = true, features = ["gdal"] }
 strata-refmap = { workspace = true }
 strata-mapengine = { workspace = true }
+strata-topo = { workspace = true }
 eframe = { workspace = true }
 egui = { workspace = true }
 geo = { workspace = true }

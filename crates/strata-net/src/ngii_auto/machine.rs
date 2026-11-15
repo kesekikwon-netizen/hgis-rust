@@ -208,6 +208,12 @@ impl NgiiAutomation {
         &self.last_diagnostic
     }
 
+    /// The portal's records of the sheets it listed for this run (number, name, datum, rectangle).
+    #[must_use]
+    pub fn portal_records(&self) -> &[Value] {
+        &self.records
+    }
+
     /// The course of the run: `p<page> <command>><state>`, consecutive repeats left out, the last 200.
     #[must_use]
     pub fn answer_trace(&self) -> &[String] {

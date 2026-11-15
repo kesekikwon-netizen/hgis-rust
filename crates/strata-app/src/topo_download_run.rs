@@ -8,6 +8,7 @@ use strata_net::ngii_auto::{AutoConfig, AutoEvent, Stage, PAGE_SCRIPT, PORTAL_HO
 use strata_ngii_run::{NgiiRun, RunOptions};
 use strata_secrets::accounts::{AccountKind, AccountSettings};
 
+use super::post::TopoPost;
 use super::{gauge_state, topo_request, RunFacts, TopoFacts, TopoRequest, TOPO_JOB_TITLE};
 use crate::app_state::{MainTab, StrataAppState};
 use crate::download_jobs::{DownloadJobHandle, DownloadJobState, StopCode};
@@ -23,6 +24,8 @@ pub(crate) struct TopoDownload {
     cancelled: bool,
     /// Data files of sheets the run has handed on, with the portal's record of each (for the map, F4-d).
     pub(crate) received: Vec<(PathBuf, serde_json::Map<String, serde_json::Value>)>,
+    /// The work on what the run left: listing, placing, merging (topo_post.rs).
+    pub(crate) post: Option<TopoPost>,
 }
 
 impl Clone for TopoDownload {
@@ -47,23 +50,16 @@ fn report(job: &DownloadJobHandle, state: &DownloadJobState) {
 }
 
 impl StrataAppState {
-    /// The ribbon button 「수치지형」 and the first row of its menu. The hidden order works on the real site,
-    /// but what it receives is not on the map yet, and a sheet already received would be ordered again on
-    /// the user's account (order WV-NGII1). Until that is done the app keeps the window it had, and only a
-    /// scripted run (`--snap`) starts the order.
+    /// The ribbon button 「수치지형」 and the first row of its menu: the order runs hidden, and what it
+    /// receives goes on the map (topo_post.rs). A sheet the survey has is not ordered again.
     pub(crate) fn open_topographic_download(&mut self) {
-        if self.snap.is_some() {
-            self.press_topographic_download();
-        } else {
-            self.active_tab = MainTab::Map;
-            self.modals.active = Some(crate::dialogs_modal::ActiveModalDialog::NgiiTopoDownload);
-        }
+        self.press_topographic_download();
     }
 
     /// The order itself (`MainWindowRibbon.cpp:382-398` → `openTopographicDownload`).
     pub(crate) fn press_topographic_download(&mut self) {
         self.active_tab = MainTab::Map;
-        if self.topo.run.is_some() || self.topo.pending.is_some() {
+        if self.topographic_download_busy() {
             self.show_status_message("수치지형도를 받고 있습니다. 아래 게이지에서 진행을 볼 수 있습니다.");
             return;
         }
@@ -86,7 +82,7 @@ impl StrataAppState {
 
     /// Whether a press is still being worked on (the scripted screenshots wait for its end).
     pub(crate) fn topographic_download_busy(&self) -> bool {
-        self.topo.run.is_some() || self.topo.pending.is_some()
+        self.topo.run.is_some() || self.topo.pending.is_some() || self.topo.post.is_some()
     }
 
     fn begin_topographic_run(&mut self, frame: &eframe::Frame, request: TopoRequest, now: f64) {
@@ -134,6 +130,9 @@ impl StrataAppState {
             let (_, received, total) = m.current_file();
             gauge_state(&RunFacts { stage: m.stage(), phase: m.phase(), attention: m.attention(), failure_phase: m.failure_phase(), status: m.status(), received, total, sheets, cancelled })
         });
+        // A run that came to its end goes on to its sixth phase: the sheets are put on the map.
+        let goes_on = run.stage() == Stage::Complete && !cancelled;
+        let state = if goes_on { DownloadJobState::Running { fraction: None, stage: Some("[6/6] 지도에 올리기".to_owned()) } } else { state };
         let over = matches!(run.stage(), Stage::Complete | Stage::Stopped);
         if self.topo.shown.as_ref() != Some(&state) {
             if let Some(job) = &self.topo.job {
@@ -154,8 +153,12 @@ impl StrataAppState {
                 eprintln!("[SNAP] 수치지형 경과: {}", run.with_state(|m| m.answer_trace().join(" | ")));
                 eprintln!("[SNAP] 수치지형 브라우저: {}", run.reported().join(" | "));
             }
+            let portal: Vec<_> = run.with_state(|m| m.portal_records().iter().filter_map(serde_json::Value::as_object).cloned().collect());
             self.topo.run = None;
-            self.topo.job = None;
+            let (job, received) = (self.topo.job.take(), std::mem::take(&mut self.topo.received));
+            if let (true, Some(job)) = (goes_on, job) {
+                self.begin_topographic_post(received, portal, job);
+            }
         }
     }
 }

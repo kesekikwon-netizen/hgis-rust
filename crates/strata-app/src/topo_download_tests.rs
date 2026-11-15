@@ -9,7 +9,6 @@ use strata_types::crs::WorkCrs;
 
 use super::{gauge_state, topo_request, RunFacts, TopoFacts, TOPO_RADIUS_M};
 use crate::app_state::StrataAppState;
-use crate::dialogs_modal::ActiveModalDialog;
 use crate::download_jobs::{DownloadJobState, StopCode};
 
 fn facts<'a>(survey: Option<&'a Path>) -> TopoFacts<'a> {
@@ -108,20 +107,35 @@ fn the_gauge_shows_the_phase_then_the_result_or_the_reason() {
     assert_eq!(gauge_state(&run(Stage::Stopped, "신청")), DownloadJobState::Cancelled, "stopped without a word: the user stopped it");
 }
 
-/// The hidden order works on the real site, but what it receives is not on the map yet and a sheet already
-/// received would be ordered again (order WV-NGII1). Until then a press in the app keeps the window of
-/// before and orders nothing; only a scripted run (`--snap`) starts the order.
+/// The button starts the order in the app as in a scripted run: its checks run, and the window of before is
+/// not opened. (Until the received sheets went on the map the app kept that window, order WV-NGII1.)
 #[test]
-fn outside_a_scripted_run_the_button_keeps_its_window_and_orders_nothing() {
+fn a_press_in_the_app_runs_the_checks_of_the_order() {
     let mut app = StrataAppState::new_startup();
     app.handle_ribbon_click("수치지형");
-    assert_eq!(app.modals.active, Some(ActiveModalDialog::NgiiTopoDownload));
-    assert_eq!(app.home_map.draw_guide_message, None, "the checks of the order did not run");
+    assert_eq!(app.modals.active, None);
+    assert_eq!(app.home_map.draw_guide_message.as_deref(), Some("먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 지형도 폴더에 저장합니다."));
     assert!(!app.topographic_download_busy() && app.download_jobs.is_empty());
+}
 
-    let mut scripted = StrataAppState::new_startup();
-    scripted.snap = Some(crate::snap_shot::SnapRequest::default());
-    scripted.handle_ribbon_click("수치지형");
-    assert_eq!(scripted.modals.active, None);
-    assert_eq!(scripted.home_map.draw_guide_message.as_deref(), Some("먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 지형도 폴더에 저장합니다."));
+/// A sheet that lies in the survey's 지형도 folder is named to the portal as one the survey has: it is not
+/// ordered again (the C++ hands its `received` list to prepareSheets, KaTopographicScopePanel.cpp:627-632).
+#[test]
+fn sheets_the_survey_has_are_not_ordered_again() {
+    use strata_topo::library::{Library, SheetEntry, SheetState};
+    let dir = tempfile::tempdir().expect("tempdir");
+    let survey = dir.path().join("현장.gpkg");
+    std::fs::write(&survey, b"x").expect("survey");
+    let root = dir.path().join("지형도");
+    std::fs::create_dir_all(root.join("원본/a")).expect("folder");
+    std::fs::write(root.join("원본/a/359012.dxf"), b"x").expect("sheet");
+    let mut library = Library::open(&root);
+    let entry = |num: &str, dxf: &str| SheetEntry { num: num.to_owned(), name: String::new(), projection: "GRS80".to_owned(), official: None, dxf: dxf.into(), state: SheetState::Placed { epsg: 5187 } };
+    library.upsert(entry("359012", "원본/a/359012.dxf"));
+    // Listed, but its file is gone: asked for again.
+    library.upsert(entry("359014", "원본/b/359014.dxf"));
+    library.save().expect("save");
+
+    let request = topo_request(TopoFacts { centre_work: Some([220_000.0, 370_000.0]), ..facts(Some(&survey)) }, account).expect("request");
+    assert_eq!(request.scope.cached_numbers, ["359012"]);
 }
