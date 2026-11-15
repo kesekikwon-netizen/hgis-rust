@@ -20,8 +20,8 @@ impl StrataAppState {
         self.ribbon.more_menu_open = false;
         self.ribbon.context_menu_anchor = Pos2::new(anchor.left(), anchor.bottom() + 2.0);
         match label {
-            "고지형" => self.ribbon.paleo_menu_open = true,
-            "지질" => self.ribbon.geology_menu_open = true,
+            // 고지형 and 지질 are plain buttons in the C++ (MainWindowRibbon.cpp:462-470, 501-507): no menu.
+            // The menus this app had offered downloads that were not there (survey MENU0, 2026-11-15).
             "DEM" => self.ribbon.dem_menu_open = true,
             "토양" => self.ribbon.soil_menu_open = true,
             "지적" => self.ribbon.cadastral_menu_open = true,

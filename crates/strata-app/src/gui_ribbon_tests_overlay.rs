@@ -71,3 +71,34 @@ fn test_r8_contour_opens_dialog_without_creating_a_domain_layer() {
         app.left_layers.entries.len()
     );
 }
+
+/// 지질 and 고지형 are plain buttons in the C++ (`MainWindowRibbon.cpp:462-470`, `:501-507`): a right click
+/// opens nothing. The menus this app had offered downloads that were not there (survey MENU0, 2026-11-15:
+/// rows 8-BX2, 8-BX3, 9-BX1, 9-BX2). 토양 keeps its two rows (`:447-452`).
+#[test]
+fn geology_and_paleo_have_no_menu() {
+    let mut app = StrataAppState::new_startup();
+    let chip = eframe::egui::Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(60.0, 80.0));
+    for label in ["지질", "고지형"] {
+        app.open_ribbon_context_menu(label, chip);
+        assert!(!app.ribbon.geology_menu_open && !app.ribbon.paleo_menu_open, "{label}");
+    }
+    app.open_ribbon_context_menu("토양", chip);
+    assert!(app.ribbon.soil_menu_open);
+}
+
+/// The checkable buttons 토양, 지질 and 수계 look pressed while their map is shown
+/// (`MainWindowOverlay.cpp:669-673` syncThematicButtons).
+#[test]
+fn a_reference_map_button_looks_pressed_while_its_map_is_shown() {
+    use crate::ref_vector::map::{GEOLOGY, RIVER, SOIL};
+    let mut app = StrataAppState::new_startup();
+    for kind in [&GEOLOGY, &SOIL, &RIVER] {
+        assert!(!app.reference_map_shown(kind), "{}", kind.title);
+        let spec = crate::ref_vector::data::LoadSpec { file: std::path::PathBuf::new(), table: kind.table.to_owned(), work_epsg: 5187, look: kind.look.clone(), label: None };
+        app.show_reference_vector_layer(kind.key, kind.title, spec);
+        assert!(app.reference_map_shown(kind), "{}", kind.title);
+        app.press_reference_map(kind);
+        assert!(!app.reference_map_shown(kind), "hidden by its button: {}", kind.title);
+    }
+}

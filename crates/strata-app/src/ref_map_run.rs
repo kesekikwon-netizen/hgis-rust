@@ -101,6 +101,11 @@ impl StrataAppState {
         LoadSpec { file, table: kind.table.to_owned(), work_epsg: CrsCode::from(self.work_crs).epsg_number(), look: kind.look.clone(), label: kind.label }
     }
 
+    /// Whether the map has its legend row and that row is checked: its ribbon button then looks pressed.
+    pub(crate) fn reference_map_shown(&self, kind: &RefMapKind) -> bool {
+        self.left_layers.entries.iter().any(|e| e.layer_key == kind.key && self.home_map.real_survey.is_layer_visible(&e.label_ko))
+    }
+
     /// The ribbon button of a reference map. With its row in the legend the press hides and shows the row
     /// (`toggleExistingOverlay`, `MainWindowOverlay.cpp:221-236`); without it the map is fetched, or a map
     /// kept for this very area is put on the map.
