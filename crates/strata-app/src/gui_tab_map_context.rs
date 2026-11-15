@@ -57,7 +57,9 @@ impl StrataAppState {
             .survey_tables
             .iter()
             .find(|t| t.table == entry.layer_key)
-            .and_then(|t| crate::survey_paint_layers::table_extent_in(t, self.work_crs));
+            .and_then(|t| crate::survey_paint_layers::table_extent_in(t, self.work_crs))
+            // 받은 참조 벡터 지도(수치지형도·지질도)는 읽어 둔 도형 범위로 — C++ 은 벡터 레이어를 범위로 옮긴다.
+            .or_else(|| self.ref_vectors.extent_of(&entry.layer_key));
         self.home_map.zoom_to_layer_max(ext, is_raster, self.work_crs);
     }
 

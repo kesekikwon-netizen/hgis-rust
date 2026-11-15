@@ -2,8 +2,10 @@
 //!
 //! C++ hands such a file to QGIS as a layer (`target/cpp-ref/src/core/GeologyMapService.cpp:924`,
 //! `src/app/KaTopographicImportDialog.cpp:186`), which reprojects it on the fly. Here every point is carried
-//! into the work CRS once, through PROJ, and kept as a single-precision offset from an origin near the data:
-//! half the memory of f64, and at most 2 mm off over 30 km (one unit in the last place of an f32 below 32768).
+//! into the work CRS once, through PROJ, and kept as a single-precision offset from an origin near the data
+//! (its first point): half the memory of f64. An f32 is exact to half a unit of its last place, which is
+//! 2 mm within 32 km of the origin, 4 mm within 65 km and 8 mm within 131 km (a layer for 100 km around a
+//! survey reaches that far): far below a pixel at every scale the map is used at.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -131,6 +133,10 @@ impl Build {
     /// Adds one shape made of these runs; a run too short to draw is left out. Returns the shape's place in
     /// `items`, or `None` when nothing of it can be drawn.
     fn item(&mut self, runs: &[Vec<[f64; 2]>], least: usize, paint: PaintOf) -> Result<Option<u32>, String> {
+        // Without its first run a shape is nothing: the hole of a polygon is not a shape of its own.
+        if runs.first().is_none_or(|first| first.len() < least) {
+            return Ok(None);
+        }
         let first_run = u32::try_from(self.data.runs.len()).map_err(|_| "too many lines".to_owned())?;
         let mut bbox = [f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY];
         for run in runs.iter().filter(|r| r.len() >= least) {

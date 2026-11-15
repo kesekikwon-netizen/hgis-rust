@@ -38,6 +38,12 @@ pub(crate) struct RasterView {
 }
 
 impl RasterView {
+    /// The very same view, also when it is one no picture can be made for (a scale that is no number).
+    pub(crate) fn same_as(&self, other: &Self) -> bool {
+        let bits = |v: &Self| (v.left.to_bits(), v.top.to_bits(), v.metres_per_pixel.to_bits(), v.width, v.height, v.pixels_per_mm.to_bits());
+        bits(self) == bits(other)
+    }
+
     /// `[min x, min y, max x, max y]` of the world the picture covers.
     pub(crate) fn world(&self) -> [f64; 4] {
         let (w, h) = (f64::from(self.width) * self.metres_per_pixel, f64::from(self.height) * self.metres_per_pixel);

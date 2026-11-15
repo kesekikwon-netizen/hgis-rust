@@ -167,3 +167,22 @@ fn a_label_column_gives_every_row_with_text_one_label_for_its_polygons() {
     let data = load(&spec(geology_look(), Some(other))).expect("a table without the label column is drawn without labels");
     assert!(data.labels.is_empty() && data.items.len() == 5);
 }
+
+/// A polygon whose outer ring is no ring (a broken download) is left out as a whole: its hole is not drawn
+/// as a filled shape of its own.
+#[test]
+fn a_polygon_without_a_drawable_outer_ring_is_left_out() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("broken.gpkg");
+    let layout = TableLayout { table: "geology_map", epsg: 5187, kind: ShapeKind::Polygons, columns: &[("기호", ColumnKind::Text)] };
+    let no_ring = vec![[220_000.0, 370_000.0], [220_100.0, 370_000.0], [220_000.0, 370_000.0]];
+    let rows = vec![
+        Row { shapes: Shapes::Polygons(vec![vec![no_ring, square(220_010.0, 370_010.0, 20.0)]]), cells: vec![Cell::Text("Kqp".to_owned())] },
+        Row { shapes: Shapes::Polygons(vec![vec![square(221_000.0, 371_000.0, 50.0)]]), cells: vec![Cell::Text("Qa".to_owned())] },
+    ];
+    write_new_table(&path, &layout, &mut rows.into_iter()).expect("write");
+    let look = Look::Polygons { stroke: [0, 0, 0, 255], width_mm: 0.1, fill: PolygonFill::None };
+    let data = load(&LoadSpec { file: path, table: "geology_map".to_owned(), work_epsg: 5187, look, label: Some(SYMBOLS) }).expect("load");
+    assert_eq!((data.items.len(), data.runs.len()), (1, 1), "only the second row is drawn");
+    assert_eq!(data.labels, [Label { text: "Qa".to_owned(), first_item: 0, items: 1 }]);
+}

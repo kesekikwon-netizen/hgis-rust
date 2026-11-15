@@ -13,7 +13,7 @@ use eframe::egui::{self, Color32, ColorImage, Rect, TextureOptions};
 use strata_types::schema::LegendGroup;
 
 use crate::app_state::StrataAppState;
-use crate::gui_tab_map::{s2w, w2s};
+use crate::gui_tab_map::w2s;
 use crate::left_layer_panel::LayerTreeEntry;
 use crate::ref_vector::data::{load, LoadSpec, Look, RefVectorData};
 use crate::ref_vector::raster::{render, Raster, RasterView};
@@ -31,6 +31,8 @@ pub(crate) mod map;
 pub(crate) mod raster;
 #[path = "ref_vector_stroke.rs"]
 pub(crate) mod stroke;
+#[path = "ref_vector_view.rs"]
+mod view;
 #[cfg(test)]
 #[path = "ref_vector_tests.rs"]
 mod tests;
@@ -38,9 +40,6 @@ mod tests;
 /// What the status line says when the file of a layer cannot be read (`MainWindowOverlay.cpp`, 「지질도 표시
 /// 실패」 default text; docs/senior/research/post/geology.md rule 41).
 pub(crate) const OPEN_FAILED: &str = "받은 지도를 열지 못했습니다. 기존 지도는 유지됩니다. 다시 내려받으세요.";
-
-/// The picture reaches this many pixels beyond the map on every side: a small pan needs no new picture.
-const MARGIN: f32 = 256.0;
 
 /// Runs work off the UI thread.
 type Runner = Arc<dyn Fn(Box<dyn FnOnce() + Send>) + Send + Sync>;
@@ -57,12 +56,23 @@ struct Picture {
     texture: egui::TextureHandle,
 }
 
+/// A picture being made: the view it is made for, and where it arrives with the seconds it took.
+type Drawing = (RasterView, Receiver<(Option<Raster>, f32)>);
+
 struct Layer {
     key: String,
     spec: LoadSpec,
     shapes: Shapes,
     picture: Option<Picture>,
-    drawing: Option<Receiver<(Option<Raster>, f32)>>,
+    drawing: Option<Drawing>,
+    /// A view no picture could be made for: it is not asked for again in every frame.
+    failed: Option<RasterView>,
+}
+
+impl Layer {
+    fn new(key: String, spec: LoadSpec) -> Self {
+        Self { key, spec, shapes: Shapes::Wanted, picture: None, drawing: None, failed: None }
+    }
 }
 
 /// The reference vector layers of the open survey.
@@ -88,7 +98,7 @@ impl std::fmt::Debug for RefVectorLayers {
 /// A copy of the app state knows which layers there are; shapes and pictures stay with the original.
 impl Clone for RefVectorLayers {
     fn clone(&self) -> Self {
-        let layers = self.layers.iter().map(|l| Layer { key: l.key.clone(), spec: l.spec.clone(), shapes: Shapes::Wanted, picture: None, drawing: None }).collect();
+        let layers = self.layers.iter().map(|l| Layer::new(l.key.clone(), l.spec.clone())).collect();
         Self { layers, runner: Arc::clone(&self.runner), pictures_made: 0 }
     }
 }
@@ -113,6 +123,14 @@ impl RefVectorLayers {
     /// Whether a layer is still being read or drawn (the scripted screenshots wait for it).
     pub(crate) fn is_busy(&self) -> bool {
         self.layers.iter().any(|l| matches!(l.shapes, Shapes::Loading(_)) || l.drawing.is_some())
+    }
+
+    /// The box of a layer's shapes in the work CRS, once they are read (「선택한 레이어로 이동」).
+    pub(crate) fn extent_of(&self, key: &str) -> Option<[f64; 4]> {
+        self.layers.iter().find(|l| l.key == key).and_then(|l| match &l.shapes {
+            Shapes::Ready(data) if !data.items.is_empty() => Some(data.bbox),
+            _ => None,
+        })
     }
 
     /// Whether the layer of this row draws lines (the legend menu offers what fits the shape).
@@ -166,7 +184,7 @@ impl RefVectorLayers {
         // Twice at most: with work that runs at once, the picture asked for below is there in the same frame.
         let scale = ctx.pixels_per_point();
         for _ in 0..2 {
-            match layer.drawing.as_ref().map(Receiver::try_recv) {
+            match layer.drawing.as_ref().map(|(_, receive)| receive.try_recv()) {
                 Some(Ok((Some(raster), secs))) => {
                     painted.drawn = Some((raster.view.width, raster.view.height, secs));
                     let image = ColorImage::from_rgba_premultiplied([raster.view.width as usize, raster.view.height as usize], &raster.rgba);
@@ -175,12 +193,13 @@ impl RefVectorLayers {
                     layer.drawing = None;
                     self.pictures_made += 1;
                 }
-                Some(Ok((None, _)) | Err(TryRecvError::Disconnected)) => layer.drawing = None,
+                Some(Ok((None, _)) | Err(TryRecvError::Disconnected)) => layer.failed = layer.drawing.take().map(|(asked, _)| asked),
                 Some(Err(TryRecvError::Empty)) | None => {}
             }
-            let wanted = wanted_view(rect, vp, scale, ctx.input(|i| i.max_texture_side));
-            let fresh = layer.picture.as_ref().is_some_and(|pic| covers(&pic.view, &wanted));
-            if fresh || layer.drawing.is_some() {
+            let (wanted, map) = view::wanted_view(rect, vp, scale, ctx.input(|i| i.max_texture_side));
+            let fresh = layer.picture.as_ref().is_some_and(|pic| view::covers(&pic.view, &wanted, &map));
+            let hopeless = layer.failed.as_ref().is_some_and(|failed| failed.same_as(&wanted));
+            if fresh || hopeless || layer.drawing.is_some() {
                 break;
             }
             let (send, receive) = channel();
@@ -191,7 +210,7 @@ impl RefVectorLayers {
                 let _ = send.send((picture, started.elapsed().as_secs_f32()));
                 wake.request_repaint();
             }));
-            layer.drawing = Some(receive);
+            layer.drawing = Some((wanted, receive));
         }
         if let Some(pic) = &layer.picture {
             let world = pic.view.world();
@@ -206,38 +225,12 @@ impl RefVectorLayers {
     }
 }
 
-/// The picture to make for this view of the map: the map's own pixels plus the margin on every side.
-fn wanted_view(rect: Rect, vp: &strata_canvas2d::viewport::ViewportTransform, scale: f32, max_side: usize) -> RasterView {
-    let metres_per_pixel = vp.meters_per_pixel / f64::from(scale);
-    let top_left = s2w(rect, vp, rect.left_top());
-    // Whole pixels, and never more than the graphics card takes as one picture.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let side = |points: f32| ((points * scale).ceil() + 2.0 * MARGIN).min(max_side as f32).max(1.0) as u32;
-    RasterView {
-        left: top_left[0] - f64::from(MARGIN) * metres_per_pixel,
-        top: top_left[1] + f64::from(MARGIN) * metres_per_pixel,
-        metres_per_pixel,
-        width: side(rect.width()),
-        height: side(rect.height()),
-        pixels_per_mm: crate::survey_style::mm_to_points(1.0) * scale,
-    }
-}
-
-/// Whether a picture still serves: the same scale (to a thousandth), and the map itself (the wanted picture
-/// without its margin) lies inside it.
-fn covers(have: &RasterView, wanted: &RasterView) -> bool {
-    let same_scale = (have.metres_per_pixel / wanted.metres_per_pixel - 1.0).abs() < 1e-3;
-    let (have, want) = (have.world(), wanted.world());
-    let margin = f64::from(MARGIN) * wanted.metres_per_pixel;
-    same_scale && want[0] + margin >= have[0] && want[1] + margin >= have[1] && want[2] - margin <= have[2] && want[3] - margin <= have[3]
-}
-
 impl StrataAppState {
     /// Puts the layer on the map: its legend row, checked, above the tile maps and the background. A layer of
     /// that key that is there already now draws the new file; its row keeps what the user set on it.
     pub(crate) fn show_reference_vector_layer(&mut self, key: &str, title: &str, spec: LoadSpec) {
         self.ref_vectors.layers.retain(|l| l.key != key);
-        self.ref_vectors.layers.push(Layer { key: key.to_owned(), spec, shapes: Shapes::Wanted, picture: None, drawing: None });
+        self.ref_vectors.layers.push(Layer::new(key.to_owned(), spec));
         if !self.left_layers.entries.iter().any(|e| e.layer_key == key) {
             let entries = &self.left_layers.entries;
             let at = entries.iter().position(|e| e.group == LegendGroup::Basemap || crate::ref_tile_layers::ref_tile_layer(&e.layer_key).is_some()).unwrap_or(entries.len());

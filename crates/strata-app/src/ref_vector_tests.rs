@@ -38,7 +38,11 @@ fn map_app() -> (StrataAppState, Rect) {
 
 /// Paints one frame; returns the picture rectangles drawn (screen points) with their tint.
 fn frame(app: &mut StrataAppState, ctx: &egui::Context, rect: Rect) -> Vec<(Rect, Color32)> {
-    let out = ctx.run(RawInput { screen_rect: Some(rect), ..RawInput::default() }, |ctx| {
+    frame_with(app, ctx, rect, RawInput { screen_rect: Some(rect), ..RawInput::default() })
+}
+
+fn frame_with(app: &mut StrataAppState, ctx: &egui::Context, rect: Rect, input: RawInput) -> Vec<(Rect, Color32)> {
+    let out = ctx.run(input, |ctx| {
         egui::CentralPanel::default().show(ctx, |ui| app.paint_reference_vector_layers(ctx, &ui.painter_at(rect), rect));
     });
     let mut pictures = Vec::new();
@@ -230,6 +234,9 @@ fn a_labelled_layer_writes_its_symbols_while_its_row_is_checked() {
     assert_eq!(inked(&mut app), 2);
 }
 
+#[path = "ref_vector_tests_b.rs"]
+mod more;
+
 /// What the tests of this and of other modules look at.
 impl RefVectorLayers {
     /// Work runs inside the call that asks for it.
@@ -239,6 +246,11 @@ impl RefVectorLayers {
 
     pub(crate) fn pictures_made(&self) -> u32 {
         self.pictures_made
+    }
+
+    /// The view the picture of a layer was made for.
+    pub(crate) fn picture_view(&self, key: &str) -> Option<crate::ref_vector::raster::RasterView> {
+        self.layers.iter().find(|l| l.key == key).and_then(|l| l.picture.as_ref()).map(|p| p.view)
     }
 
     pub(crate) fn shapes_of(&self, key: &str) -> Option<Arc<RefVectorData>> {

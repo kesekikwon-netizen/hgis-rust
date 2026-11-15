@@ -157,8 +157,9 @@ impl Scope {
     }
 
     /// The same scope in another CRS: every corner point goes through PROJ. The straight pieces between them
-    /// are at most a few hundred metres long, so that they stay straight to well under a millimetre between
-    /// the Korean belts and UTM-K.
+    /// are about 650 m long for a scope of 10 km and then bend by about a quarter of a millimetre between two
+    /// Korean belts; pieces ten times as long (a scope of 100 km) bend a hundred times as much, a few
+    /// centimetres.
     ///
     /// # Errors
     /// PROJ does not know one of the CRSs or cannot carry a point over.
