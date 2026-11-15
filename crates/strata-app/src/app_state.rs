@@ -132,6 +132,8 @@ pub struct StrataAppState {
     /// How the DEM of the open survey is shown (「DEM 표현」), and what following the view remembers.
     pub(crate) dem_look: crate::topo_download::dem::look::DemLook,
     pub(crate) dem_follow: crate::topo_download::dem::look::DemFollow,
+    /// A DEM file was imported: once it is read the map goes to it, if it is a small one (dem_import.rs).
+    pub(crate) dem_zoom_wanted: bool,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,

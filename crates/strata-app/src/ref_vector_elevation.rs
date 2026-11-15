@@ -163,7 +163,8 @@ pub(crate) fn load(spec: &LoadSpec) -> Result<Drawn, String> {
         Look::Relief { z_factor } => f64::from(z_factor),
         Look::Lines { .. } | Look::Polygons { .. } => return crate::ref_vector::data::load(spec).map(|shapes| Drawn::Shapes(Arc::new(shapes))),
     };
-    let files = crate::topo_download::dem::files_of(&spec.file);
+    // One DEM file of the user, or the files the list of a survey's DEM folder names.
+    let files = if spec.file.is_file() { vec![spec.file.clone()] } else { crate::topo_download::dem::files_of(&spec.file) };
     strata_engine::read_elevation_grid(&files, spec.work_epsg, z_factor).map(|grid| Drawn::Heights(Arc::new(grid))).map_err(|e| e.0)
 }
 

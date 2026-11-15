@@ -80,6 +80,7 @@ impl StrataAppState {
             dem: crate::topo_download::TopoDownload::default(),
             dem_look: crate::topo_download::dem::look::DemLook::default(),
             dem_follow: crate::topo_download::dem::look::DemFollow::default(),
+            dem_zoom_wanted: false,
             active_tool: MapToolKind::Pan,
             ribbon: KaBeginnerRibbon::default(),
             left_layers: LeftLayerPanel::new_empty(),

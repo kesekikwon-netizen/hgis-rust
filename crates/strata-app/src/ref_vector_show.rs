@@ -77,6 +77,7 @@ impl StrataAppState {
                 }
             }
         }
+        self.zoom_to_new_dem();
         let (runner, work_epsg) = (Arc::clone(&self.ref_vectors.runner), strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
         self.ref_vectors.labels.paint(ctx, p, rect, &viewport, work_epsg, labelled, &runner);
     }

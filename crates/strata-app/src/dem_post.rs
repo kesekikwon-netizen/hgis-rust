@@ -24,6 +24,9 @@ pub(crate) mod look;
 /// The colour bar under the DEM's legend row.
 #[path = "dem_legend.rs"]
 pub(crate) mod legend;
+/// 「국토지리원 DEM 불러오기(.img)…」.
+#[path = "dem_import.rs"]
+pub(crate) mod import;
 #[cfg(test)]
 #[path = "dem_post_tests.rs"]
 mod tests;
@@ -137,7 +140,8 @@ pub(crate) fn entries_of(root: &Path, received: &[(PathBuf, Map<String, Value>)]
 }
 
 impl StrataAppState {
-    /// The two rows of the survey's DEM folder: 「지형 음영」 over 「DEM」, both read from the folder's list.
+    /// The two rows of a DEM: 「지형 음영」 over 「DEM」. `root` is the survey's DEM folder (the layers read
+    /// the files of its list) or one DEM file of the user.
     fn show_dem_layers(&mut self, root: &Path) {
         let work_epsg = CrsCode::from(self.work_crs).epsg_number();
         let spec = |look| LoadSpec { file: root.to_path_buf(), table: String::new(), work_epsg, look, label: None };
@@ -149,6 +153,10 @@ impl StrataAppState {
             row.opacity = look.relief_opacity();
         }
         self.show_reference_vector_layer(DEM_KEY, DEM_TITLE, spec(Look::Heights { ramp }));
+        // A relief that 「DEM 표현」 switched off stays off under a new DEM.
+        if let (false, Some(name)) = (look.relief, self.relief_row_name()) {
+            self.home_map.real_survey.layer_visible.insert(name, false);
+        }
     }
 
     /// Whether the DEM is on the map and checked: the ribbon button then looks switched on

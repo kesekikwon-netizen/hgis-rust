@@ -76,6 +76,11 @@ impl StrataAppState {
             "@dem" => self.show_survey_dem(),
             // 「DEM 표현」: the dialog as the menu row opens it, and 적용 with preset;relief;times;per cent.
             "@dem_dialog" => self.open_dem_look_dialog(),
+            // 「국토지리원 DEM 불러오기」 with the file named here in place of the file dialog.
+            _ if action.starts_with("@dem_import=") => {
+                self.import_dem_file(std::path::Path::new(&action["@dem_import=".len()..]), |file| strata_engine::check_elevation_file(file).map_err(|e| e.0));
+                eprintln!("[SNAP] DEM 불러오기: {:?}", self.home_map.draw_guide_message);
+            }
             _ if action.starts_with("@dem_look=") => self.snap_dem_look(&action["@dem_look=".len()..]),
             _ if action.starts_with("@layer_menu_path=") => {
                 self.home_map.layer_menu_path = action["@layer_menu_path=".len()..].split(',').filter_map(|s| s.trim().parse().ok()).collect();

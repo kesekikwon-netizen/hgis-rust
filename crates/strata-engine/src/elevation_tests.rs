@@ -9,7 +9,7 @@ use gdal::raster::Buffer;
 use gdal::spatial_ref::SpatialRef;
 use gdal::DriverManager;
 
-use super::{read_elevation_grid, ElevationGrid};
+use super::{check_elevation_file, read_elevation_grid, ElevationGrid};
 use crate::Transformer;
 
 const CELL: f64 = 90.0;
@@ -17,12 +17,19 @@ const CELL: f64 = 90.0;
 const ORIGIN: [f64; 2] = [1_135_080.0, 1_779_480.0];
 const SIZE: (usize, usize) = (40, 30);
 
-#[allow(clippy::cast_precision_loss)]
 fn write_dem(path: &Path, origin: [f64; 2], height: impl Fn(f64, f64) -> f32) {
-    let driver = DriverManager::get_driver_by_name("HFA").expect("the HFA driver is in the build");
+    write_raster(path, "HFA", Some(5179), origin, height);
+}
+
+/// A raster of heights written through a GDAL driver, with or without a CRS.
+#[allow(clippy::cast_precision_loss)]
+fn write_raster(path: &Path, driver: &str, epsg: Option<u32>, origin: [f64; 2], height: impl Fn(f64, f64) -> f32) {
+    let driver = DriverManager::get_driver_by_name(driver).expect("the driver is in the build");
     let mut file = driver.create_with_band_type::<f32, _>(path, SIZE.0, SIZE.1, 1).unwrap();
     file.set_geo_transform(&[origin[0], CELL, 0.0, origin[1], 0.0, -CELL]).unwrap();
-    file.set_spatial_ref(&SpatialRef::from_epsg(5179).unwrap()).unwrap();
+    if let Some(epsg) = epsg {
+        file.set_spatial_ref(&SpatialRef::from_epsg(epsg).unwrap()).unwrap();
+    }
     let mut cells = Vec::with_capacity(SIZE.0 * SIZE.1);
     for row in 0..SIZE.1 {
         for col in 0..SIZE.0 {
@@ -183,4 +190,40 @@ fn exaggerated_heights_deepen_the_relief() {
     assert!(tall.0 > plain.0 + 5.0, "towards the light: {plain:?} then {tall:?}");
     let (plain, tall) = (mean_light("level1.img", 1.0, &|_, _| 50.0), mean_light("level3.img", 3.0, &|_, _| 50.0));
     assert!((tall.0 - plain.0).abs() < 0.5, "level ground: {plain:?} then {tall:?}");
+}
+
+/// The C++ takes a DEM file of the user as an ERDAS image or a GeoTIFF (`MainWindow.cpp:1691`,
+/// 「국토지리원 DEM (*.img *.tif *.tiff)」): a GeoTIFF is read into the same grid as the image.
+#[test]
+fn a_geotiff_dem_is_read_as_an_image_is() {
+    let dir = tempfile::tempdir().unwrap();
+    let (image, tiff) = (dir.path().join("dem.img"), dir.path().join("dem.tif"));
+    let slope = |x: f64, y: f64| 100.0 + 0.02 * (x - ORIGIN[0]) + 0.01 * (ORIGIN[1] - y);
+    #[allow(clippy::cast_possible_truncation)]
+    for (path, driver) in [(&image, "HFA"), (&tiff, "GTiff")] {
+        write_raster(path, driver, Some(5179), ORIGIN, |x, y| slope(x, y) as f32);
+    }
+    let (from_image, from_tiff) = (read_elevation_grid(&[image], 5187, 1.0).unwrap(), read_elevation_grid(&[tiff], 5187, 1.0).unwrap());
+    assert_eq!((from_tiff.left, from_tiff.top, from_tiff.width, from_tiff.height), (from_image.left, from_image.top, from_image.width, from_image.height));
+    assert_eq!(from_tiff.shade, from_image.shade);
+    assert!(from_tiff.heights.iter().zip(&from_image.heights).all(|(a, b)| (a.is_nan() && b.is_nan()) || a == b));
+}
+
+/// Before a file of the user becomes the DEM of the map it is looked at, without reading its heights
+/// (`BasemapOps.cpp:2001-2014`: the file is there, GDAL opens it, it has a band). A raster without a
+/// CRS cannot be brought to the work CRS and is refused here with the reason.
+#[test]
+fn a_file_is_looked_at_before_it_becomes_the_dem() {
+    let dir = tempfile::tempdir().unwrap();
+    let good = dir.path().join("good.img");
+    write_dem(&good, ORIGIN, |_, _| 10.0);
+    assert!(check_elevation_file(&good).is_ok());
+
+    let no_crs = dir.path().join("no-crs.img");
+    write_raster(&no_crs, "HFA", None, ORIGIN, |_, _| 10.0);
+    assert!(check_elevation_file(&no_crs).is_err(), "no CRS");
+    let text = dir.path().join("note.img");
+    std::fs::write(&text, "not a raster").unwrap();
+    assert!(check_elevation_file(&text).is_err());
+    assert!(check_elevation_file(&dir.path().join("missing.img")).is_err());
 }

@@ -81,7 +81,7 @@ impl StrataAppState {
         if item.contains("계정 설정") {
             self.modals.active = Some(ActiveModalDialog::AccountSettings);
         } else if item.contains("DEM 불러오기") {
-            self.modals.active = Some(ActiveModalDialog::DemDownload);
+            self.pick_dem_file();
         } else if item.contains("DEM 표현") {
             self.open_dem_look_dialog();
         } else if item.contains("음영 만들기") {

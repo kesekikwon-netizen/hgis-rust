@@ -53,21 +53,40 @@ fn named(file: &Path, e: &dyn std::fmt::Display) -> EngineError {
     EngineError(format!("{}: {e}", file.display()))
 }
 
-/// A file with its box in the target CRS and the side of its cells.
-fn opened(file: &Path, target: &SpatialRef) -> Result<(Dataset, [f64; 4], f64), EngineError> {
+/// A file GDAL opens as a north-up raster with a band and a CRS: the raster, where its cells lie, its CRS.
+fn north_up(file: &Path) -> Result<(Dataset, [f64; 6], SpatialRef), EngineError> {
     let source = Dataset::open(file).map_err(|e| named(file, &e))?;
     let gt = source.geo_transform().map_err(|e| named(file, &e))?;
     if source.raster_count() == 0 || gt[2] != 0.0 || gt[4] != 0.0 || gt[1] <= 0.0 || gt[5] >= 0.0 {
         return Err(named(file, &"no north-up elevation raster"));
     }
     let mut crs = source.spatial_ref().map_err(|e| named(file, &e))?;
+    // A file without a CRS answers with an empty one: it cannot be brought to the work CRS.
+    if crs.to_wkt().map_or(true, |wkt| wkt.is_empty()) {
+        return Err(named(file, &"no coordinate reference system"));
+    }
     crs.set_axis_mapping_strategy(AxisMappingStrategy::TraditionalGisOrder);
+    Ok((source, gt, crs))
+}
+
+/// A file with its box in the target CRS and the side of its cells.
+fn opened(file: &Path, target: &SpatialRef) -> Result<(Dataset, [f64; 4], f64), EngineError> {
+    let (source, gt, crs) = north_up(file)?;
     let (across, down) = source.raster_size();
     // Sizes of a raster file are far below 2^53.
     #[allow(clippy::cast_precision_loss)]
     let own = [gt[0], gt[3] + gt[5] * down as f64, gt[0] + gt[1] * across as f64, gt[3]];
     let carried = CoordTransform::new(&crs, target).and_then(|to| to.transform_bounds(&own, EDGE_POINTS)).map_err(|e| named(file, &e))?;
     Ok((source, carried, gt[1].min(-gt[5])))
+}
+
+/// Whether a file can be the DEM of the map: GDAL opens it as a north-up raster with a band and a CRS.
+/// Its heights are not read.
+///
+/// # Errors
+/// What is wrong with the file, in GDAL's words or these.
+pub fn check_elevation_file(file: &Path) -> Result<(), EngineError> {
+    north_up(file).map(drop)
 }
 
 /// Reads elevation files into one grid of `EPSG:{target_epsg}`; where files overlap, a later one lies over
