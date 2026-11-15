@@ -42,6 +42,8 @@ pub struct HomeMapTabState {
     pub(crate) merge_ask: Option<String>,
     /// The polygon layer a line is drawn across while 「폴리곤 나누기」 is on (C++ `m_isSplittingPolygon`).
     pub(crate) splitting: Option<String>,
+    /// The selection box being drawn in 「도형선택」.
+    pub(crate) select_box: Option<crate::gui_tab_map::gui_tab_map_select_box::SelectBox>,
     /// A handle that is held with the mouse, and the menu of a right click on a handle or a side.
     pub(crate) held_vertex: Option<crate::gui_tab_map::gui_tab_map_vertex::HeldVertex>,
     pub(crate) vertex_menu: Option<crate::gui_tab_map::gui_tab_map_vertex::VertexMenu>,
@@ -132,6 +134,7 @@ impl Default for HomeMapTabState {
             also_selected: Vec::new(),
             merge_ask: None,
             splitting: None,
+            select_box: None,
             held_vertex: None,
             vertex_menu: None,
             legend_focus: false,

@@ -2,7 +2,7 @@
 //! `LayerOps::splitPolygonWithLine` (QgsGeometry::splitGeometry, core/LayerOps.cpp:800-874) and
 //! `LayerOps::splitTwoOverlappingFeatures` (the intersection, :876-1019).
 
-use geo::{Area, BooleanOps, LineString, MultiPolygon, Polygon};
+use geo::{Area, BooleanOps, Intersects, LineString, MultiPolygon, Polygon};
 use i_overlay::core::fill_rule::FillRule;
 use i_overlay::float::slice::FloatSlice;
 
@@ -60,6 +60,15 @@ pub fn overlap(a: &[Rings], b: &[Rings]) -> Vec<Rings> {
     largest_first(pieces.collect())
 }
 
+/// Whether a shape (its polygons, lines and points) meets the box `min`..`max` — touches, crosses, holds it or
+/// lies in it (`f.geometry().intersects(rect)`, KaFeatureSelectTool.cpp:417-484).
+#[must_use]
+pub fn meets_box(polygons: &[Rings], lines: &[Vec<[f64; 2]>], points: &[[f64; 2]], min: [f64; 2], max: [f64; 2]) -> bool {
+    let area = geo::Rect::new(geo::coord! { x: min[0], y: min[1] }, geo::coord! { x: max[0], y: max[1] });
+    let line = |points: &[[f64; 2]]| LineString::from(points.iter().map(|p| (p[0], p[1])).collect::<Vec<_>>());
+    multi(polygons).intersects(&area) || lines.iter().any(|points| line(points).intersects(&area)) || points.iter().any(|p| area.intersects(&geo::Point::new(p[0], p[1])))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,5 +99,17 @@ mod tests {
         assert_eq!(shared.len(), 1);
         assert!((area(&shared[0]) - 200.0).abs() < 0.5);
         assert!(overlap(&rect(0.0, 0.0, 20.0, 20.0), &rect(100.0, 100.0, 110.0, 110.0)).is_empty());
+    }
+
+    /// A box selects what it touches, crosses, holds or lies in, and not what lies apart.
+    #[test]
+    fn a_box_meets_what_it_touches_holds_or_lies_in() {
+        let square = rect(0.0, 0.0, 10.0, 10.0);
+        assert!(meets_box(&square, &[], &[], [2.0, 2.0], [3.0, 3.0]), "inside the square");
+        assert!(meets_box(&square, &[], &[], [-5.0, -5.0], [20.0, 20.0]), "around the square");
+        assert!(meets_box(&square, &[], &[], [8.0, 8.0], [12.0, 12.0]), "across a corner");
+        assert!(!meets_box(&square, &[], &[], [20.0, 20.0], [30.0, 30.0]), "apart");
+        assert!(meets_box(&[], &[vec![[-5.0, 5.0], [15.0, 5.0]]], &[], [2.0, 0.0], [3.0, 10.0]), "a line across");
+        assert!(meets_box(&[], &[], &[[2.5, 2.5]], [2.0, 2.0], [3.0, 3.0]) && !meets_box(&[], &[], &[[9.0, 9.0]], [2.0, 2.0], [3.0, 3.0]));
     }
 }

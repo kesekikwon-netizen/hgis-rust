@@ -45,6 +45,8 @@ pub(crate) use gui_tab_map_survey_labels::{paint_placed_labels, LabelDraw};
 mod gui_tab_map_tab;
 #[path = "gui_tab_map_vertex.rs"]
 pub(crate) mod gui_tab_map_vertex;
+#[path = "gui_tab_map_select_box.rs"]
+pub(crate) mod gui_tab_map_select_box;
 #[path = "gui_tab_map_undo.rs"]
 mod gui_tab_map_undo;
 

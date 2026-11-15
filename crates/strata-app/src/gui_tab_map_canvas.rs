@@ -88,6 +88,8 @@ impl StrataAppState {
         let capture = self.handle_polygon_capture_input(ui, &response, rect);
         // A held handle of the selected shape: the map does not pan and the click selects nothing new.
         let capture = capture || self.handle_vertex_handles(ui, &response, rect);
+        // A drag on bare map in 「도형선택」 draws the selection box.
+        let capture = capture || self.handle_select_box(ui, &response, rect);
 
         if let Some(hp) = response.hover_pos() {
             self.home_map.cursor_world_xy = s2w(rect, &self.home_map.viewport, hp);
@@ -277,6 +279,7 @@ impl StrataAppState {
         self.paint_map_overlays(ctx, ui, &p, rect);
         self.paint_selected_shape(&p, rect);
         self.paint_vertex_handles(&p, rect);
+        self.paint_select_box(&p);
         self.render_vertex_menu(ctx);
         self.render_merge_ask(ctx);
         self.paint_polygon_sketch(&p, rect, response.hover_pos());
