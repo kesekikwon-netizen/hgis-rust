@@ -201,7 +201,9 @@ User-Agent and limits (15 s idle, 180 s total, one retry of a dropped piece, qua
 5 min in all): `crates/strata-refmap/src/geology_request.rs` (forms), `geology_prepare.rs` (flow),
 `crates/strata-net/src/reference_http.rs` (the one GET, through the gate of `network.rs`). One box is asked for: that
 of the 10 km scope around the survey area (owner 2026-11-15), so a survey means 1 feature request and 1 picture request;
-a map kept for the same area is not fetched again. `GetCapabilities` is not sent (the picture fallback is not built).
+a map kept for the same area is not fetched again. `GetCapabilities` is not sent (the picture fallback is not built). A request in flight is ended at once when the
+user cancels the job or opens another survey (`crates/strata-net/src/network_until.rs`, order NET-GEO1d); a map stored
+with a warning (no official colours) is asked for again at the next press, a whole one is not.
 The builder on `/openapi/wfs` in `kigam_soil_river.rs` is still uncalled and goes with order NET-RIV1.
 
 ### 17. `gis.naas.go.kr`
