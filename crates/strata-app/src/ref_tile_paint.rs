@@ -10,7 +10,8 @@ use eframe::egui::{self, Color32, Pos2, Rect};
 
 use crate::basemap_cadastral_jobs::{BasemapFetcher, RestDecision, TexKey, MAX_UPLOADS_PER_FRAME};
 use crate::basemap_fetch::tile_filename_key;
-use crate::basemap_mesh::{paint_tile_mesh, screen_tile_range, tile_grid_points, tile_mesh_points};
+use crate::basemap_mesh::{paint_tile_mesh, screen_tile_range_in, tile_grid_points_in, TILE_MESH_STEPS};
+use crate::basemap_tiles::TileGrid;
 use crate::basemap_paint::{
     paint_tile_stand_in, tm_params_for, TileTextureCache, TileView, BASEMAP_MAX_ZOOM, BASEMAP_TEXTURE_LIMIT, FULL_UV,
 };
@@ -138,7 +139,8 @@ where
     let Some(params) = tm_params_for(view.work_crs) else {
         return 0;
     };
-    let Some((x0, y0, x1, y1)) = screen_tile_range(view, &params, rect, z) else {
+    let grid = kind.grid();
+    let Some((x0, y0, x1, y1)) = screen_tile_range_in(grid, view, &params, rect, z) else {
         return 0;
     };
     let count = u64::from(x1.saturating_sub(x0) + 1) * u64::from(y1.saturating_sub(y0) + 1);
@@ -161,7 +163,7 @@ where
     let center = rect.center();
     for ty in y0..=y1 {
         for tx in x0..=x1 {
-            let Some(pts) = tile_mesh_points(view, &params, rect, z, tx, ty) else {
+            let Some(pts) = tile_grid_points_in(grid, view, &params, rect, (z, tx, ty), TILE_MESH_STEPS) else {
                 continue;
             };
             let bounds = Rect::from_points(&pts);
@@ -176,15 +178,16 @@ where
             if let Some(h) = textures.get(&k) {
                 if cover == TileCover::Inside {
                     paint_tile_mesh(painter, h.id(), &pts, FULL_UV, tint);
-                } else if let Some(grid) = tile_grid_points(view, &params, rect, z, tx, ty, EDGE_MESH_STEPS) {
-                    painter.add(egui::Shape::mesh(edge_mesh(h.id(), &grid, circle, tint)));
+                } else if let Some(fine) = tile_grid_points_in(grid, view, &params, rect, (z, tx, ty), EDGE_MESH_STEPS) {
+                    painter.add(egui::Shape::mesh(edge_mesh(h.id(), &fine, circle, tint)));
                 }
                 used.insert(k);
                 painted += 1;
                 continue;
             }
-            // A stand-in from another zoom fills a whole tile: only where the whole tile is inside.
-            if cover == TileCover::Inside {
+            // A stand-in from another zoom fills a whole tile: only where the whole tile is inside. (The
+            // stand-in painter knows the web-mercator grid only; a tile of another grid waits for its own.)
+            if cover == TileCover::Inside && grid == TileGrid::WebMercator {
                 paint_tile_stand_in(painter, view, &params, rect, (z, tx, ty), &pts, BASEMAP_MAX_ZOOM, tint, |sz, sx, sy| {
                     let sk = (kind, sz, sx, sy);
                     textures.get(&sk).map(|h| {

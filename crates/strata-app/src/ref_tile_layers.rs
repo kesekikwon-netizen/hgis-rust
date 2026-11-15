@@ -95,7 +95,7 @@ pub(crate) const TERRAIN_MAP: RefTileLayer = RefTileLayer {
     on_add: ViewOnAdd::Keep,
 };
 
-const REF_TILE_LAYERS: [&RefTileLayer; 2] = [&DAEDONGYEOJIDO, &TERRAIN_MAP];
+const REF_TILE_LAYERS: [&RefTileLayer; 3] = [&DAEDONGYEOJIDO, &TERRAIN_MAP, &history::MAP_1919];
 
 /// The reference tile layer whose legend row has this `layer_key`.
 pub(crate) fn ref_tile_layer(key: &str) -> Option<&'static RefTileLayer> {
@@ -220,8 +220,10 @@ impl StrataAppState {
 
     /// Paints the checked reference tile rows over the background tiles.
     pub(crate) fn paint_reference_tile_layers(&mut self, ctx: &egui::Context, p: &egui::Painter, rect: egui::Rect) {
-        self.paint_reference_tile_layers_with(ctx, p, rect, |kind, z, x, y| {
-            move || crate::basemap_cadastral_jobs::load_basemap_image(kind, "", z, x, y)
+        let history_key = self.tile_key_for(TileKind::History1919);
+        self.paint_reference_tile_layers_with(ctx, p, rect, move |kind, z, x, y| {
+            let key = if kind == TileKind::History1919 { history_key.clone() } else { String::new() };
+            move || crate::basemap_cadastral_jobs::load_basemap_image(kind, &key, z, x, y)
         });
     }
 
@@ -260,7 +262,6 @@ impl StrataAppState {
         };
         let mpp = self.home_map.viewport.meters_per_pixel.max(1e-6);
         let view = TileView::from_viewport(&self.home_map.viewport, rect, self.work_crs);
-        let zoom = crate::basemap_tiles::basemap_zoom_for(mpp, rect);
         for (layer, opacity) in rows {
             let circle = ScreenCircle { center: view.meters_to_screen(rect, centre), radius: (layer.radius_m / mpp) as f32 };
             paint_circle_tiles_with(
@@ -268,7 +269,7 @@ impl StrataAppState {
                 p,
                 rect,
                 layer.kind,
-                zoom.min(layer.max_zoom),
+                crate::basemap_tiles::level_for(layer.kind.grid(), mpp, rect).min(layer.max_zoom),
                 &view,
                 &circle,
                 &mut self.basemap_textures,
@@ -280,6 +281,8 @@ impl StrataAppState {
     }
 }
 
+#[path = "ref_tile_history.rs"]
+pub(crate) mod history;
 #[cfg(test)]
 #[path = "ref_tile_layers_tests.rs"]
 mod tests;

@@ -92,13 +92,15 @@ fn test_f1_textures_of_a_removed_row_are_dropped() {
     assert_eq!(held(&app), 0);
 }
 
-/// The ribbon label itself opens the menu (the chip does: gui_ribbon_top.rs); it never claims a map was applied.
+/// A press on the ribbon button is the command itself since the owner's word of 2026-11-15 (「이것은 위의
+/// ui버튼이 눌려야 나오게하라」; until then it opened the menu, as the C++ button does). Without a drawn
+/// survey area it says what to do first, opens no menu, and still claims no map.
 #[test]
-fn test_f1_old_map_label_opens_its_menu_and_claims_nothing() {
+fn test_f1_old_map_press_is_the_command_and_claims_nothing_without_an_area() {
     let mut app = crate::app_state::StrataAppState::new_startup();
     app.handle_ribbon_click("옛 지도");
-    assert!(app.ribbon.old_map_menu_open);
+    assert!(!app.ribbon.old_map_menu_open);
     assert!(app.active_tab == crate::app_state::MainTab::Map);
-    assert_eq!(app.home_map.draw_guide_message, None);
+    assert_eq!(app.home_map.draw_guide_message.as_deref(), Some(DAEDONGYEOJIDO.needs_area_text));
     assert!(app.left_layers.entries.iter().all(|e| ref_tile_layer(&e.layer_key).is_none()));
 }

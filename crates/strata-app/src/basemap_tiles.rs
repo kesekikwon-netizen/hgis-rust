@@ -18,12 +18,89 @@ pub enum TileKind {
     Daedongyeojido,
     /// 지형맵 — OpenTopoMap XYZ tiles (`BasemapOps.cpp:1583-1586`).
     Terrain,
+    /// 1919 조선지형도 1:5만 — WMTS of the history-GIS server, in its own grid (`BasemapOps.cpp:1486-1511`).
+    History1919,
+}
+
+/// How a tile source cuts the ground into levels, columns and rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TileGrid {
+    /// The XYZ scheme: the EPSG:3857 world square, 2^z by 2^z tiles.
+    WebMercator,
+    /// The grid of the history-GIS server (its WMTS capabilities, read 2026-11-15): EPSG:5179, north-west
+    /// corner x -200 000 m, y 4 000 000 m, 256-pixel tiles, level 0 one tile, each level twice as fine
+    /// (levels 0 to 16).
+    Korea5179,
 }
 
 impl TileKind {
+    /// Kinds that are fetched tile by tile (level, column, row).
     #[must_use]
     pub const fn is_xyz(self) -> bool {
-        matches!(self, Self::Satellite | Self::Base | Self::Daedongyeojido | Self::Terrain)
+        matches!(self, Self::Satellite | Self::Base | Self::Daedongyeojido | Self::Terrain | Self::History1919)
+    }
+
+    #[must_use]
+    pub const fn grid(self) -> TileGrid {
+        match self {
+            Self::History1919 => TileGrid::Korea5179,
+            _ => TileGrid::WebMercator,
+        }
+    }
+}
+
+/// The grid `Korea5179`: its north-west corner (x, y), the side of a tile of level 0 (256 pixels of
+/// 55 845 639.682136305 * 0.28 mm) and its finest level.
+const KOREA_CORNER: [f64; 2] = [-200_000.0, 4_000_000.0];
+const KOREA_TILE_0: f64 = 256.0 * 55_845_639.682_136_305 * 0.000_28;
+const KOREA_FINEST: u8 = 16;
+const KOREA_TM: strata_geo::crs_transform::TmParams = match strata_geo::crs_transform::TmParams::for_crs(strata_types::crs::CrsCode::Epsg5179) {
+    Some(params) => params,
+    None => panic!("EPSG:5179 is a known TM system"),
+};
+
+fn korea_tile_side(z: u8) -> f64 {
+    KOREA_TILE_0 / f64::from(1_u32 << u32::from(z.min(KOREA_FINEST)))
+}
+
+/// A point of a grid (level, column and row with fractions) as longitude and latitude.
+#[must_use]
+pub fn grid_point_lon_lat(grid: TileGrid, z: u8, fx: f64, fy: f64) -> (f64, f64) {
+    match grid {
+        TileGrid::WebMercator => tile_point_lon_lat(z, fx, fy),
+        TileGrid::Korea5179 => {
+            let side = korea_tile_side(z);
+            let [lon, lat] = strata_geo::crs_transform::tm_to_lonlat(KOREA_CORNER[0] + fx * side, KOREA_CORNER[1] - fy * side, &KOREA_TM);
+            (lon, lat)
+        }
+    }
+}
+
+/// The tile of a grid that holds a longitude and latitude at a level.
+#[must_use]
+pub fn grid_tile_of(grid: TileGrid, lon: f64, lat: f64, z: u8) -> (u32, u32) {
+    match grid {
+        TileGrid::WebMercator => lon_lat_to_tile(lon, lat, z),
+        TileGrid::Korea5179 => {
+            let (side, [x, y]) = (korea_tile_side(z), strata_geo::crs_transform::lonlat_to_tm(lon, lat, &KOREA_TM));
+            let last = f64::from((1_u32 << u32::from(z.min(KOREA_FINEST))) - 1);
+            // A whole number between 0 and the last column or row of the level.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let place = |along: f64| if along.is_finite() { (along / side).floor().clamp(0.0, last) as u32 } else { 0 };
+            (place(x - KOREA_CORNER[0]), place(KOREA_CORNER[1] - y))
+        }
+    }
+}
+
+/// The level of a grid whose pixel is nearest to the map's (metres per pixel).
+#[must_use]
+pub fn level_for(grid: TileGrid, meters_per_px: f64, rect: egui::Rect) -> u8 {
+    match grid {
+        TileGrid::WebMercator => basemap_zoom_for(meters_per_px, rect),
+        TileGrid::Korea5179 if !meters_per_px.is_finite() || meters_per_px <= 0.0 => 11,
+        TileGrid::Korea5179 => (0..=KOREA_FINEST)
+            .min_by(|a, b| (korea_tile_side(*a) / 256.0 - meters_per_px).abs().total_cmp(&(korea_tile_side(*b) / 256.0 - meters_per_px).abs()))
+            .unwrap_or(KOREA_FINEST),
     }
 }
 
@@ -67,6 +144,12 @@ pub fn tile_url(kind: TileKind, key: &str, z: u8, x: u32, y: u32) -> String {
         }
         // `BasemapOps.cpp:1585`: the first of the two addresses; zmin 5 and zmax 17 are kept by the layer.
         TileKind::Terrain => format!("https://tile.opentopomap.org/{z}/{x}/{y}.png"),
+        // `BasemapOps.cpp:1486-1511`: the server's WMTS, asked for tile by tile (KVP). No key, no request.
+        TileKind::History1919 if key.is_empty() => String::new(),
+        TileKind::History1919 => format!(
+            "https://hgis.history.go.kr/openapi/get.do?Service=WMTS&Request=GetTile&Version=1.0.0&Layer=history:map1919&Style=\
+             &Format=image/png&TileMatrixSet=EPSG:5179&TileMatrix=EPSG:5179:{z}&TileRow={y}&TileCol={x}&apiKey={key}"
+        ),
         TileKind::Cadastral => String::new(),
     }
 }

@@ -226,26 +226,25 @@ impl StrataAppState {
                 .resizable(false)
                 .fixed_pos(anchor)
                 .show(ctx, |ui| {
-                    // The 1919 map is not connected yet (it said 「배경을 적용했습니다」 without adding anything).
-                    for (item, connected) in [("▤  대동여지도", true), ("▤  1919 조선지형도 1:5만", false)] {
-                        let row = ui.add_enabled_ui(connected, |ui| {
-                            ui.add_sized(
-                                [196.0, 26.0],
-                                egui::Button::new(egui::RichText::new(item).size(12.5))
-                                    .fill(Color32::TRANSPARENT)
-                                    .stroke(Stroke::NONE),
-                            )
-                        });
-                        if row.inner.on_disabled_hover_text("아직 Rust 판에서 연결하지 않았습니다 (지시 F7)").clicked() {
+                    for item in ["▤  대동여지도", "▤  1919 조선지형도 1:5만"] {
+                        let row = ui.add_sized([196.0, 26.0], egui::Button::new(egui::RichText::new(item).size(12.5)).fill(Color32::TRANSPARENT).stroke(Stroke::NONE));
+                        // MainWindow.cpp:1425-1436 updateHistoricalMapButtons: what the 1919 row is.
+                        let row = if item.contains("1919") { row.on_hover_text("1919년 조선지형도 1:5만 (국사편찬위원회 WMTS, EPSG:5179)") } else { row };
+                        if row.clicked() {
                             picked = Some(item);
                         }
                     }
                 });
-            if picked.is_some() {
+            if let Some(item) = picked {
                 self.ribbon.old_map_menu_open = false;
                 self.active_tab = MainTab::Map;
-                // MainWindowRibbon.cpp:493-494 → MainWindow::addDaedongyeojidoMap (MainWindowOffline.cpp:456-465).
-                self.add_reference_tile_layer(&crate::ref_tile_layers::DAEDONGYEOJIDO);
+                if item.contains("1919") {
+                    // MainWindowRibbon.cpp:496-498 → MainWindow::addHistoryGisMap1919 (MainWindowOffline.cpp:467-477).
+                    self.add_history_map_1919();
+                } else {
+                    // MainWindowRibbon.cpp:493-494 → MainWindow::addDaedongyeojidoMap (MainWindowOffline.cpp:456-465).
+                    self.add_reference_tile_layer(&crate::ref_tile_layers::DAEDONGYEOJIDO);
+                }
             }
         }
         self.render_ribbon_context_menus_b(ctx, anchor);

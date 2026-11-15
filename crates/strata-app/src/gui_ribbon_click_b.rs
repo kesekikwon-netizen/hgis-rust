@@ -34,10 +34,12 @@ impl StrataAppState {
             // MainWindowOverlay.cpp:550-596 downloadRiverMap: with the layer in the legend the button hides and
             // shows it; without it the river network is fetched with the user's VWorld key (ref_map.rs).
             "수계" => self.press_reference_map(&crate::ref_vector::map::RIVER),
-            // The chip opens this menu itself (gui_ribbon_top.rs); a click that arrives by the label does the same.
+            // A press shows the 대동여지도, and hides and shows it again (owner 2026-11-15: 「이것은 위의 ui버튼이
+            // 눌려야 나오게하라」). The C++ button only opens its menu (MainWindowRibbon.cpp:486-500): the menu
+            // with both old maps stays on the right click.
             "옛 지도" => {
                 self.active_tab = MainTab::Map;
-                self.ribbon.old_map_menu_open = true;
+                self.toggle_reference_tile_layer(&crate::ref_tile_layers::DAEDONGYEOJIDO);
             }
             "고지형" => self.open_studio_tab(MainTab::Paleo),
             // C++ MainWindowRibbon.cpp:522-523 — 「정합」 단추는 setCheckable 없이

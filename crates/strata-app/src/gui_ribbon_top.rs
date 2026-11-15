@@ -151,7 +151,8 @@ impl StrataAppState {
                         && self.ribbon.sub_mode == SubToolsMode::Align);
                 // MainWindowOverlay.cpp:245-247 — the checkable 「지형」 button follows the layer's check mark.
                 let dark_active = dark_active
-                    || (label == "지형" && self.reference_tile_layer_shown(&crate::ref_tile_layers::TERRAIN_MAP));
+                    || (label == "지형" && self.reference_tile_layer_shown(&crate::ref_tile_layers::TERRAIN_MAP))
+                    || (label == "옛 지도" && self.old_map_shown());
                 let warm_active = label == "DEM" && !is_home && self.dem_shown();
                 let mut chip_ui = ui.new_child(egui::UiBuilder::new().max_rect(btn_rect));
                 let (chip_clicked, chip_secondary) = self.draw_ribbon_chip(
@@ -163,7 +164,7 @@ impl StrataAppState {
                     warm_active,
                 );
                 if chip_clicked {
-                    if label == "옛 지도" || label == "더보기" {
+                    if label == "더보기" {
                         self.open_ribbon_context_menu(label, btn_rect);
                     } else {
                         self.handle_ribbon_click(label);

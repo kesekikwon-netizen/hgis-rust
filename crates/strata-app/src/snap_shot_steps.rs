@@ -70,6 +70,8 @@ impl StrataAppState {
             "@old_map_daedong" => {
                 self.add_reference_tile_layer(&crate::ref_tile_layers::DAEDONGYEOJIDO);
             }
+            // 옛 지도 → 1919 조선지형도 1:5만, with the stored history-GIS key.
+            "@old_map_1919" => self.add_history_map_1919(),
             // A table of a GeoPackage file as a reference row: file;table;title;lines | outlines | coloured.
             _ if action.starts_with("@ref_vector=") => self.snap_reference_vector(&action["@ref_vector=".len()..]),
             // The DEM the survey folder has, without an order at the portal.

@@ -39,13 +39,14 @@ fn kind_dir(kind: TileKind) -> &'static str {
         // Not `opentopomap`: that folder of the first builds holds notice pictures ("Generic referrer
         // detected") the service sent before the request named the program honestly (`tile_curl_for`).
         TileKind::Terrain => "opentopomap-2",
+        TileKind::History1919 => "history-1919",
     }
 }
 
 fn ext_for(kind: TileKind) -> &'static str {
     match kind {
         TileKind::Satellite => "jpeg",
-        TileKind::Base | TileKind::Cadastral | TileKind::Daedongyeojido | TileKind::Terrain => "png",
+        TileKind::Base | TileKind::Cadastral | TileKind::Daedongyeojido | TileKind::Terrain | TileKind::History1919 => "png",
     }
 }
 
@@ -146,7 +147,7 @@ pub(crate) fn tile_curl(dest: &Path) -> Command {
 /// The fetch command of one tile kind. The terrain tiles come from a volunteer-run service: it is told which
 /// program asks, and gets no made-up Referer (docs/RUST_PLAN.md 2.8). Every other kind keeps `tile_curl`.
 pub(crate) fn tile_curl_for(kind: TileKind, dest: &Path) -> Command {
-    if kind != TileKind::Terrain {
+    if !matches!(kind, TileKind::Terrain | TileKind::History1919) {
         return tile_curl(dest);
     }
     let mut cmd = Command::new("curl");

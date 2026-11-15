@@ -12,7 +12,7 @@ use eframe::egui::{self, Color32, Pos2, Rect};
 use strata_geo::crs_transform::{lonlat_to_tm, tm_to_lonlat, TmParams};
 
 use crate::basemap_paint::TileView;
-use crate::basemap_tiles::{lon_lat_to_tile, tile_point_lon_lat};
+use crate::basemap_tiles::{grid_point_lon_lat, grid_tile_of, TileGrid};
 
 /// 타일 한 변을 나누는 칸 수. 넓은 타일(낮은 줌)에서도 TM 곡률을 따라가게 한다.
 pub const TILE_MESH_STEPS: usize = 4;
@@ -41,12 +41,19 @@ pub fn tile_grid_points(
     ty: u32,
     n: usize,
 ) -> Option<Vec<Pos2>> {
+    tile_grid_points_in(TileGrid::WebMercator, view, params, rect, (z, tx, ty), n)
+}
+
+/// The mesh of a tile of any grid (`tile`: level, column, row), `n` cells along a side.
+#[must_use]
+pub fn tile_grid_points_in(grid: TileGrid, view: &TileView, params: &TmParams, rect: Rect, tile: (u8, u32, u32), n: usize) -> Option<Vec<Pos2>> {
+    let (z, tx, ty) = tile;
     let mut pts = Vec::with_capacity((n + 1) * (n + 1));
     for j in 0..=n {
         for i in 0..=n {
             let fx = f64::from(tx) + i as f64 / n as f64;
             let fy = f64::from(ty) + j as f64 / n as f64;
-            let (lon, lat) = tile_point_lon_lat(z, fx, fy);
+            let (lon, lat) = grid_point_lon_lat(grid, z, fx, fy);
             let m = lonlat_to_tm(lon, lat, params);
             if !m[0].is_finite() || !m[1].is_finite() {
                 return None;
@@ -104,6 +111,13 @@ pub fn screen_tile_range(
     rect: Rect,
     z: u8,
 ) -> Option<(u32, u32, u32, u32)> {
+    screen_tile_range_in(TileGrid::WebMercator, view, params, rect, z)
+}
+
+/// The same for any grid. A grid that stands askew to longitude and latitude (EPSG:5179) is asked at all
+/// four corners of the box, so that no tile of the screen is left out.
+#[must_use]
+pub fn screen_tile_range_in(grid: TileGrid, view: &TileView, params: &TmParams, rect: Rect, z: u8) -> Option<(u32, u32, u32, u32)> {
     let corners = [
         view.screen_to_meters(rect, rect.left_top()),
         view.screen_to_meters(rect, rect.right_top()),
@@ -124,9 +138,9 @@ pub fn screen_tile_range(
         lat_min = lat_min.min(lat);
         lat_max = lat_max.max(lat);
     }
-    let (x0, y0) = lon_lat_to_tile(lon_min, lat_max, z);
-    let (x1, y1) = lon_lat_to_tile(lon_max, lat_min, z);
-    Some((x0, y0, x1, y1))
+    let tiles = [(lon_min, lat_max), (lon_max, lat_max), (lon_min, lat_min), (lon_max, lat_min)].map(|(lon, lat)| grid_tile_of(grid, lon, lat, z));
+    let (xs, ys) = (tiles.map(|tile| tile.0), tiles.map(|tile| tile.1));
+    Some((xs.into_iter().min()?, ys.into_iter().min()?, xs.into_iter().max()?, ys.into_iter().max()?))
 }
 
 /// 화면 가운데의 위도(지적 줌 고르기에 쓴다).
