@@ -18,12 +18,16 @@ mod scope;
 mod submit_shp;
 #[cfg(feature = "gdal")]
 mod submit_shp_names;
+#[cfg(feature = "gdal")]
+mod vector_table;
 
 pub use crs::Transformer;
 pub use geom::{make_valid_polygon_parts, normalized_wkt, polygon_area, polygon_is_valid, polygon_perimeter, PolygonRings};
 pub use geom_wkt::{union_area, wkt_area, wkt_is_valid, wkt_length, wkt_point_relation, SurveyArea};
 pub use rings::{distance_rings, ring_label_points};
 pub use scope::{Scope, ScopeTest};
+#[cfg(feature = "gdal")]
+pub use vector_table::{append_to_table, read_table, write_new_table, Cell, ColumnKind, Row, ShapeKind, Shapes, TableFacts, TableLayout};
 #[cfg(feature = "gdal")]
 pub use submit_shp::{
     install_submit_proj_db, set_gdal_proj_search_paths, write_submit_shapefiles, ShpLayerReport, SubmitEncoding,
