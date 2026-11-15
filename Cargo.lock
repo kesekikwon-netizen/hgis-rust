@@ -4018,6 +4018,7 @@ dependencies = [
  "strata-terrain3d",
  "strata-types",
  "tempfile",
+ "tiny-skia",
  "uuid",
 ]
 

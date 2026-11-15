@@ -70,11 +70,28 @@ impl StrataAppState {
             "@old_map_daedong" => {
                 self.add_reference_tile_layer(&crate::ref_tile_layers::DAEDONGYEOJIDO);
             }
+            // A table of a GeoPackage file as a reference row: file;table;title;lines | outlines | coloured.
+            _ if action.starts_with("@ref_vector=") => self.snap_reference_vector(&action["@ref_vector=".len()..]),
             _ if action.starts_with("@layer_menu_path=") => {
                 self.home_map.layer_menu_path = action["@layer_menu_path=".len()..].split(',').filter_map(|s| s.trim().parse().ok()).collect();
             }
             _ => return false,
         }
         true
+    }
+
+    /// The looks are those of the layers that use them: sheet lines (`KaTopographicImportDialog.cpp:204-208`),
+    /// parcels, and polygons coloured by their `ka_color` column (`GeologyMapService.cpp:382-458`).
+    fn snap_reference_vector(&mut self, text: &str) {
+        use crate::ref_vector_data::{LoadSpec, Look, PolygonFill};
+        let mut parts = text.splitn(4, ';');
+        let (file, table, title) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
+        let look = match parts.next() {
+            Some("coloured") => Look::Polygons { stroke: [80, 80, 80, 130], width_mm: 0.12, fill: PolygonFill::Column { name: "ka_color", alpha: 220, missing: [200, 200, 200] } },
+            Some("outlines") => Look::Polygons { stroke: [80, 80, 80, 255], width_mm: 0.2, fill: PolygonFill::None },
+            _ => Look::Lines { stroke: [128, 128, 128, 255], width_mm: 0.2 },
+        };
+        let spec = LoadSpec { file: file.into(), table: table.to_owned(), work_epsg: self.work_crs.epsg_code(), look };
+        self.show_reference_vector_layer(&format!("ref_snap_{table}"), title, spec);
     }
 }

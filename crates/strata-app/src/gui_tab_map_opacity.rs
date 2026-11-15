@@ -9,12 +9,14 @@ use super::gui_tab_map_geom::{brightness_row_text, is_raster_image_layer};
 /// `KaLayerOpacityRail.cpp:18-177` — 좌상단 투명도(0~100) · 밝기(-255~255) 레일
 impl StrataAppState {
     /// The legend row called `title` whose picture is faded by the row's own opacity: the background tiles
-    /// (`gui_tab_map_basemap.rs` basemap_opacity) and the reference tiles (`ref_tile_layers.rs`).
+    /// (`gui_tab_map_basemap.rs` basemap_opacity), the reference tiles (`ref_tile_layers.rs`) and the
+    /// reference vector layers (`ref_vector.rs`).
     fn picture_row_index(&self, title: &str) -> Option<usize> {
         self.left_layers.entries.iter().position(|e| {
             e.label_ko == title
                 && (e.group == strata_types::schema::LegendGroup::Basemap
-                    || crate::ref_tile_layers::ref_tile_layer(&e.layer_key).is_some())
+                    || crate::ref_tile_layers::ref_tile_layer(&e.layer_key).is_some()
+                    || self.ref_vectors.has(&e.layer_key))
         })
     }
 

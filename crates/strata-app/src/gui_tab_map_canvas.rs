@@ -250,6 +250,7 @@ impl StrataAppState {
                 crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::CadastralTiles);
             self.paint_cadastral_layer(ctx, &p, rect);
         }
+        self.paint_reference_vector_layers(ctx, &p, rect);
 
         self.paint_gyeongju_heritage_canvas(ctx, &p, rect, is_trench || is_measure || is_style);
         self.paint_map_hud(

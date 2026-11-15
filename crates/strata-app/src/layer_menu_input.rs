@@ -32,6 +32,7 @@ impl StrataAppState {
             Some(g) if g.contains("POLYGON") => Some(MenuGeom::Polygon),
             Some(g) if g.contains("LINE") => Some(MenuGeom::Line),
             Some(_) => Some(MenuGeom::Point),
+            None if self.ref_vectors.draws_lines(key) == Some(true) => Some(MenuGeom::Line),
             None if vector => Some(MenuGeom::Polygon),
             None => None,
         };
