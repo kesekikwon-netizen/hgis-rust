@@ -100,7 +100,7 @@ impl StrataAppState {
             if i.modifiers.ctrl {
                 if i.key_pressed(egui::Key::N) {
                     // `MainWindowRibbon.cpp:280` QKeySequence::New → newSurvey(「새 조사」 창).
-                    self.modals.active = Some(ActiveModalDialog::NewSurvey);
+                    self.request_new_survey();
                 } else if i.key_pressed(egui::Key::O) {
                     // :282 QKeySequence::Open → openProject. 파일 창은 입력 잠금 밖에서 연다.
                     open_requested = true;

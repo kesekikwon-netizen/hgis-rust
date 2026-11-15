@@ -45,7 +45,7 @@ impl StrataAppState {
     /// 앞쪽 라벨들.
     fn handle_ribbon_click_a(&mut self, label: &str) {
         match label {
-            "새 조사" => self.modals.active = Some(ActiveModalDialog::NewSurvey),
+            "새 조사" => self.request_new_survey(),
             // C++ MainWindowSession.cpp:1634 openProject — 파일 대화상자로 조사 파일을 고른다
             "열기" => self.open_survey_file_dialog(),
             // C++ MainWindowSession.cpp:1409 saveProject / :1420 saveProjectAs

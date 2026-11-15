@@ -130,6 +130,7 @@ impl StrataAppState {
         self.render_layer_context_menu(ctx);
         self.handle_dropped_files(ctx);
         self.render_close_prompt(ctx);
+        self.render_save_before(ctx);
         render_active_modal_dialogs(self, ctx);
         self.render_survey_area_setup(ctx);
         self.render_feature_form(ctx);

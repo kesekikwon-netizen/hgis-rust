@@ -38,6 +38,8 @@ mod app_state_erase;
 mod app_state_merge;
 #[path = "app_state_split.rs"]
 mod app_state_split;
+#[path = "app_state_save_before.rs"]
+pub(crate) mod app_state_save_before;
 #[path = "app_state_snap_lines.rs"]
 mod app_state_snap_lines;
 #[path = "vertex_edit_geom.rs"]
@@ -75,6 +77,8 @@ pub struct StrataAppState {
     pub last_drop_message: Option<String>,
     /// 종료 확인 (KaClosePrompt.cpp)
     pub close_prompt_open: bool,
+    /// What waits for the answer to 「저장할까요?」 before unsaved work is left (새 조사, 열기).
+    pub(crate) save_before: Option<app_state_save_before::SaveBefore>,
     /// The startup notice, while it is read (`KaStartupSplash`); `None` in tests and scripted runs.
     pub(crate) startup_notice: Option<crate::gui_shell::startup_notice::StartupNotice>,
     /// The user chose 「저장하지 않고 끝내기」: the window closes with its unsaved edits.

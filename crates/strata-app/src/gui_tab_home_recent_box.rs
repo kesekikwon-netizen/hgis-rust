@@ -154,7 +154,7 @@ impl StrataAppState {
             self.forget_recent_survey(&path);
         }
         if let Some(path) = open {
-            self.open_recent_survey(&path);
+            self.request_open_recent(path.clone());
         }
     }
 }

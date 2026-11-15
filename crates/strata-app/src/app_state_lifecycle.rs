@@ -43,6 +43,7 @@ impl StrataAppState {
             layer_context_menu_key: None,
             last_drop_message: None,
             close_prompt_open: false,
+            save_before: None,
             startup_notice: None,
             closing_unsaved: false,
             cad_import_path: String::new(),

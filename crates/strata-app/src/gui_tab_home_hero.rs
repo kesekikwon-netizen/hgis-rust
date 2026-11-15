@@ -9,7 +9,6 @@ use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 use strata_storage::recent_surveys::RecentSurvey;
 
 use crate::app_state::StrataAppState;
-use crate::dialogs_modal::ActiveModalDialog;
 use crate::ribbon_icons::paint_strata_logo;
 
 impl StrataAppState {
@@ -79,7 +78,7 @@ impl StrataAppState {
                                 );
                             }
                             if b1_resp.clicked() {
-                                self.modals.active = Some(ActiveModalDialog::NewSurvey);
+                                self.request_new_survey();
                             }
                             let (b2_r, b2_resp) =
                                 ui.allocate_exact_size(Vec2::new(112.0, 36.0), egui::Sense::click());
@@ -192,7 +191,7 @@ impl StrataAppState {
             )
             .clicked()
         {
-            self.open_recent_survey(&target.path);
+            self.request_open_recent(target.path.clone());
         }
 
         // KaHomeTitleBlock.cpp:139-158 setSurvey — 작업 좌표계·구역·유구·검수는 그 조사의 기록(SurveyFacts)에서:

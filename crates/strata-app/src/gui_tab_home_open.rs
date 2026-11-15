@@ -1,6 +1,6 @@
 //! 「열기」 — C++ `MainWindow::openProject`(`MainWindowSession.cpp:1634-1650`)와, 작업공간(.qgz·
 //! 내장 프로젝트) 없이 조사 데이터만 여는 `openSurveyGpkg` 길(:242-420, `loadSurveyLayers`
-//! :762-790). 작업공간 복원(2D)·지도에 도형 그리기(지시 3)·열기 전 저장 확인은 아직 없다.
+//! :762-790). 열기 전 저장 확인은 app_state_save_before.rs. 작업공간 복원(2D)은 아직 없다.
 
 use std::path::Path;
 
@@ -23,7 +23,7 @@ impl StrataAppState {
             // 사용자가 취소했다 — C++ 은 아무 것도 하지 않는다.
             return;
         };
-        self.open_survey_gpkg(&path);
+        self.request_open_survey(path);
     }
 
     /// C++ openSurveyGpkg 의 조사 데이터만 여는 길. 열 수 없으면 알리고 지금 조사는 그대로 둔다(false).

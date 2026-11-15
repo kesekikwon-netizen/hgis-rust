@@ -132,7 +132,7 @@ impl StrataAppState {
                                     ui.horizontal(|ui| {
                                         if ui.link(egui::RichText::new(title).strong().size(13.0)).clicked() {
                                             match step_id {
-                                                1 => self.modals.active = Some(ActiveModalDialog::NewSurvey),
+                                                1 => self.request_new_survey(),
                                                 2 => self.trigger_map_ribbon_tool(MapToolKind::DrawPolygon),
                                                 _ => self.modals.active = Some(ActiveModalDialog::PaperSetup),
                                             }
