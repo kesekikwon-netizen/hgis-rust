@@ -178,3 +178,23 @@ fn the_sheet_tab_status_line_shows_the_sheets_words() {
     app.sync_sheet_status();
     assert_eq!(app.status_left_message(), "축척을 1 : 2000 로 맞췄습니다.");
 }
+
+/// A change of paper (C++ `resetPaper`, KaDrawingStudio.cpp:456-560) ends 「지도 조정」 and puts the four items
+/// of the bottom band (north arrow, scale bar, scale words, coordinate system) at the new paper's own places;
+/// the legend and the title block keep the way the user moved them.
+#[test]
+fn a_new_paper_puts_the_bottom_band_in_place_and_keeps_the_rest() {
+    let mut app = StrataAppState::new_startup();
+    for item in ALL {
+        app.drawing.item_offsets_mm.insert(item, [5.0, -3.0]);
+    }
+    app.drawing.map_adjust_active = true;
+    app.sheet_paper_changed();
+    assert!(!app.drawing.map_adjust_active);
+    for item in [SheetItem::NorthArrow, SheetItem::ScaleBar, SheetItem::ScaleText, SheetItem::CrsLabel] {
+        assert!(!app.drawing.item_offsets_mm.contains_key(&item), "{item:?}");
+    }
+    for item in [SheetItem::Legend, SheetItem::TitleBlock] {
+        assert_eq!(app.drawing.item_offsets_mm.get(&item), Some(&[5.0, -3.0]), "{item:?}");
+    }
+}

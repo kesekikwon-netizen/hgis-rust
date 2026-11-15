@@ -123,6 +123,9 @@ pub(crate) fn render_paper_setup(app: &mut StrataAppState, ctx: &egui::Context, 
                             app.drawing.last_findings = ChecklistEngine::evaluate_sheet(&app.drawing.sheet, SubmitCrs::Epsg5179, true);
                         }
                     }
+                    if was_open {
+                        app.sheet_paper_changed();
+                    }
                     app.open_studio_tab(MainTab::Drawing);
                     app.hide_sub_tools();
                     app.home_map.draw_guide_message = Some(if was_open {

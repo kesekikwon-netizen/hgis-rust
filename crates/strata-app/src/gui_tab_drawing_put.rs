@@ -32,6 +32,16 @@ impl StrataAppState {
         self.show_status_message("선택한 항목 1개를 지웠습니다.");
     }
 
+    /// After a change of paper (`resetPaper`, KaDrawingStudio.cpp:456-560): 「지도 조정」 ends and the four items
+    /// of the bottom band go to the new paper's own places (`:511-521`); the legend and the title block keep
+    /// the way the user moved them, as their own places follow the paper.
+    pub(crate) fn sheet_paper_changed(&mut self) {
+        self.end_sheet_map_adjust();
+        for item in [SheetItem::NorthArrow, SheetItem::ScaleBar, SheetItem::ScaleText, SheetItem::CrsLabel] {
+            self.drawing.item_offsets_mm.remove(&item);
+        }
+    }
+
     /// The last coordinate point goes.
     pub(crate) fn undo_last_coord_callout(&mut self) {
         if self.drawing.coord_callouts.pop().is_none() {
