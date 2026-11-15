@@ -111,22 +111,19 @@ fn main() {
     // 화면(1920×1080)을 넘고, 리본 오른쪽 절반이 화면 밖으로 나간다.
     // 최대화로 시작해 화면 안에 항상 들어오게 한다.
     let start_maximized = std::env::var("KA_HGIS_WINDOWED").is_err();
-    let mut viewport = eframe::egui::ViewportBuilder::default()
+    let main_window = eframe::egui::ViewportBuilder::default()
         .with_title("Strata")
         .with_icon(icon_data)
         .with_position([16.0, 16.0])
         .with_inner_size([1280.0, 900.0])
         .with_min_inner_size([960.0, 600.0])
         .with_active(true)
-        .with_visible(true);
-    if start_maximized {
-        viewport = viewport.with_maximized(true);
-    }
-    let options = eframe::NativeOptions {
-        viewport,
-        renderer: eframe::Renderer::Glow,
-        ..Default::default()
-    };
+        .with_visible(true)
+        .with_maximized(start_maximized);
+    // The startup notice comes first (KaApplication.cpp:764-771), not in a scripted run.
+    let notice = snap_dir.is_none();
+    let (viewport, centered) = gui_shell::startup_notice::first_window(notice, main_window);
+    let options = eframe::NativeOptions { viewport, centered, renderer: eframe::Renderer::Glow, ..Default::default() };
     if let Err(err) = eframe::run_native(
         "Strata",
         options,
@@ -141,6 +138,8 @@ fn main() {
             } else {
                 state.attach_user_settings(ini);
                 state.load_rust_startup_settings();
+                cc.egui_ctx.set_fonts(gui_shell::startup_notice::paint::notice_fonts());
+                state.startup_notice = Some(gui_shell::startup_notice::StartupNotice::new(gui_shell::startup_notice::reduced_motion_requested()));
             }
             Ok(Box::new(state))
         }),

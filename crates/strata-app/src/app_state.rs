@@ -65,6 +65,8 @@ pub struct StrataAppState {
     pub last_drop_message: Option<String>,
     /// 종료 확인 (KaClosePrompt.cpp)
     pub close_prompt_open: bool,
+    /// The startup notice, while it is read (`KaStartupSplash`); `None` in tests and scripted runs.
+    pub(crate) startup_notice: Option<crate::gui_shell::startup_notice::StartupNotice>,
     /// The user chose 「저장하지 않고 끝내기」: the window closes with its unsaved edits.
     pub(crate) closing_unsaved: bool,
     /// KaCadImportNotice.cpp — 끌어 놓은 CAD 도면 경로

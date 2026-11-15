@@ -6,7 +6,12 @@ pub fn configure_korean_fonts_and_theme(ctx: &egui::Context, tokens: &ThemeToken
     // 제목 표시줄(Title Bar)도 C++ 앱과 동일하게 밝은(Light) 테마로 고정한다.
     ctx.set_theme(egui::Theme::Light);
     ctx.send_viewport_cmd(egui::ViewportCommand::SetTheme(egui::SystemTheme::Light));
-    let _ = tokens;
+    ctx.set_fonts(font_definitions());
+    apply_theme_tokens(ctx, tokens);
+}
+
+/// The fonts of the app: Malgun Gothic first, and its bold face for the letters on the map.
+pub fn font_definitions() -> egui::FontDefinitions {
     let mut fonts = egui::FontDefinitions::default();
     let candidate_paths = [
         r"C:\Windows\Fonts\malgun.ttf",
@@ -36,8 +41,7 @@ pub fn configure_korean_fonts_and_theme(ctx: &egui::Context, tokens: &ThemeToken
         family.extend(fonts.families.get(&egui::FontFamily::Proportional).cloned().unwrap_or_default());
         fonts.families.insert(egui::FontFamily::Name(crate::gui_tab_map::LABEL_FONT_FAMILY.into()), family);
     }
-    ctx.set_fonts(fonts);
-    apply_theme_tokens(ctx, tokens);
+    fonts
 }
 
 pub fn apply_theme_tokens(ctx: &egui::Context, tokens: &ThemeTokens) {

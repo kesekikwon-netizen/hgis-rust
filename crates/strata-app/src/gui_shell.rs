@@ -173,8 +173,19 @@ impl StrataAppState {
     }
 }
 
+#[path = "startup_notice.rs"]
+pub(crate) mod startup_notice;
+
 impl eframe::App for StrataAppState {
+    /// See-through around the card of the startup notice.
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        if self.startup_notice.is_some() { [0.0; 4] } else { visuals.panel_fill.to_normalized_gamma_f32() }
+    }
+
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        if self.show_startup_notice(ctx) {
+            return;
+        }
         self.drive_topographic_download(frame, ctx.input(|i| i.time));
         self.drive_topographic_post(ctx);
         self.drive_reference_maps(ctx, ctx.input(|i| i.time));
