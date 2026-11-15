@@ -79,3 +79,25 @@ fn zooming_to_a_reference_vector_row_shows_its_shapes() {
     assert!((centre[0] - 220_050.0).abs() < 1.0 && (centre[1] - 370_000.0).abs() < 1.0, "{centre:?}");
     assert!(scale > 0.3 && scale < 0.5, "300 m and a margin across 900 points: {scale}");
 }
+
+/// QGIS carries every layer into the project CRS as it draws (C++ `ensureOtfEnabled`). Here a layer is
+/// kept in the work CRS, so when the user changes the work CRS it is read again into the new one, and
+/// stands at the same place on the ground.
+#[test]
+fn a_layer_follows_a_change_of_the_work_crs() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut app, rect) = map_app();
+    app.show_reference_vector_layer(KEY, "수치지형도", spec(topo_file(dir.path())));
+    let ctx = egui::Context::default();
+    frame(&mut app, &ctx, rect);
+    let before = app.ref_vectors.shapes_of(KEY).unwrap();
+    assert!((before.bbox[0] - 219_900.0).abs() < 0.01, "{:?}", before.bbox);
+
+    app.work_crs = strata_types::crs::WorkCrs::Epsg5186;
+    let moved = strata_engine::Transformer::new(5187, 5186).unwrap().transform([219_900.0, 369_900.0]).unwrap();
+    app.home_map.viewport.center_xy = moved;
+    assert_eq!(frame(&mut app, &ctx, rect).len(), 1, "drawn at its place in the new CRS");
+    let after = app.ref_vectors.shapes_of(KEY).unwrap();
+    assert!((after.bbox[0] - moved[0]).abs() < 0.5 && (after.bbox[1] - moved[1]).abs() < 0.5, "{:?} against {moved:?}", after.bbox);
+    assert_eq!(app.ref_vectors.spec_of(KEY).unwrap().work_epsg, 5186);
+}

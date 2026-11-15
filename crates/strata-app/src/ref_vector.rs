@@ -138,6 +138,13 @@ impl RefVectorLayers {
         self.layers.iter().find(|l| l.key == key).map(|l| matches!(l.spec.look, Look::Lines { .. }))
     }
 
+    /// Layers are kept in the work CRS: when the user changes it they are read again into the new one.
+    fn follow_work_crs(&mut self, work_epsg: u32) {
+        for layer in self.layers.iter_mut().filter(|l| l.spec.work_epsg != work_epsg) {
+            *layer = Layer::new(layer.key.clone(), LoadSpec { work_epsg, ..layer.spec.clone() });
+        }
+    }
+
     /// Lets go of what is in memory for layers without a row (`rows`) and of the pictures of unchecked ones.
     fn release(&mut self, rows: &[&str], shown: &[&str]) {
         for layer in &mut self.layers {
@@ -261,6 +268,7 @@ impl StrataAppState {
             .map(|e| (e.layer_key.clone(), e.opacity))
             .collect();
         let shown_keys: Vec<&str> = shown.iter().map(|(key, _)| key.as_str()).collect();
+        self.ref_vectors.follow_work_crs(strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
         self.ref_vectors.release(&rows, &shown_keys);
         let viewport = self.home_map.viewport;
         // Labels go over every reference picture, chosen among all layers at once.
