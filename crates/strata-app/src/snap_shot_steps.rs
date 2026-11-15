@@ -86,6 +86,8 @@ impl StrataAppState {
             _ if action.starts_with("@cadastral=") => self.show_cadastral_layer(std::path::PathBuf::from(&action["@cadastral=".len()..]), None),
             // 「선 색·지번 표시」 as the menu row of the 지적 button opens it.
             "@cadastral_style" => self.open_cadastral_style(),
+            // The check of the sheet: names of the sites in place of their numbers at 1:5,000 and larger.
+            "@sheet_names" => self.drawing.sheet.show_site_names_under_5000 = true,
             // The DEM the survey folder has, without an order at the portal.
             "@dem" => self.show_survey_dem(),
             // 「DEM 표현」: the dialog as the menu row opens it, and 적용 with preset;relief;times;per cent.

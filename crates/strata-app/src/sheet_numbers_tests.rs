@@ -80,7 +80,56 @@ fn a_badge_has_the_colour_of_its_kind_and_grows_with_its_digits() {
 /// A sheet at 1:5,000 whose paper of 300 x 200 mm has the survey area's middle at (100, 100) mm.
 fn paper_at_5000(blocks: Vec<[f64; 4]>) -> SheetPaper {
     let (scale, per_metre) = (5000.0, 1000.0 / 5000.0);
-    SheetPaper { to_paper: strata_layout::badge_rings::ToPaper { scale: [per_metre, -per_metre], shift: [100.0 - CENTRE[0] * per_metre, 100.0 + CENTRE[1] * per_metre] }, frame: [0.0, 0.0, 300.0, 200.0], blocks, scale }
+    SheetPaper { to_paper: strata_layout::badge_rings::ToPaper { scale: [per_metre, -per_metre], shift: [100.0 - CENTRE[0] * per_metre, 100.0 + CENTRE[1] * per_metre] }, frame: [0.0, 0.0, 300.0, 200.0], blocks, scale, names: None }
+}
+
+/// Names take the place of the numbers when the sheet asks for them and its scale is 1:5,000 or larger; a
+/// shown 1:5,000 may be 5000.3 in the map (`HeritageLayoutNumbers.h:66`, `.cpp:630-632`).
+#[test]
+fn names_are_written_at_5000_and_larger_when_the_sheet_asks() {
+    for (scale, wanted, names) in [(5000.0, true, true), (5000.3, true, true), (1000.0, true, true), (5000.6, true, false), (25_000.0, true, false), (1000.0, false, false), (0.0, true, false)] {
+        assert_eq!(names_shown(scale, wanted), names, "{scale} {wanted}");
+    }
+}
+
+/// The paper a name takes is its letters of 2.2 mm and their white edge of 0.5 mm (`nameBoxMm`, `:112-123`).
+#[test]
+fn a_name_takes_its_letters_and_their_edge() {
+    let [wide, tall] = name_box_mm(10.0);
+    assert!((wide - 10.5).abs() < 1e-6 && (tall - (2.2 * 1.15 + 0.5)).abs() < 1e-6, "{wide} {tall}");
+}
+
+/// Names that would cover each other are moved apart by their own boxes (and the gap of 0.3 mm), the first
+/// staying on its site; the step is the height of a name, not the widest badge (`:972-981, 992-995`).
+#[test]
+fn names_on_one_spot_keep_off_each_other_by_their_boxes() {
+    let lone = [CENTRE[0] + 500.0, CENTRE[1]];
+    let letters = vec![20.0, 12.0, 8.0];
+    let mut badges = vec![badge_at(1, CENTRE, Vec::new()), badge_at(2, CENTRE, Vec::new()), badge_at(3, lone, Vec::new())];
+    let paper = SheetPaper { names: Some(letters.clone()), ..paper_at_5000(Vec::new()) };
+    place_badges(&mut badges, &paper);
+
+    assert_eq!((badges[0].placed, badges[2].placed), (CENTRE, lone));
+    let on_paper = |at: [f64; 2]| [at[0] * paper.to_paper.scale[0] + paper.to_paper.shift[0], at[1] * paper.to_paper.scale[1] + paper.to_paper.shift[1]];
+    let paper_box = |index: usize| {
+        let ([x, y], [wide, tall]) = (on_paper(badges[index].placed), name_box_mm(letters[index]));
+        [x - (wide + 0.3) / 2.0, y - (tall + 0.3) / 2.0, x + (wide + 0.3) / 2.0, y + (tall + 0.3) / 2.0]
+    };
+    let (first, second) = (paper_box(0), paper_box(1));
+    assert!(first[0] >= second[2] - 1e-9 || second[0] >= first[2] - 1e-9 || first[1] >= second[3] - 1e-9 || second[1] >= first[3] - 1e-9, "{first:?} {second:?}");
+    // One step of a name's height away: 3.33 mm of paper are 16.65 m at 1:5,000.
+    let apart = (badges[1].placed[0] - CENTRE[0]).hypot(badges[1].placed[1] - CENTRE[1]);
+    assert!(apart > 0.0 && apart < 16.65 * 8.0, "{apart}");
+}
+
+/// With names on the map the legend lists each kind once, by its name and colour, and no site
+/// (`:1207, 1281-1293`; the check says 「범례에는 유적 종류만 남깁니다」).
+#[test]
+fn the_legend_of_names_lists_each_kind_once() {
+    let other = Badge { kind: "매장유산유존지역", colour: [0x2E, 0x86, 0xC1], ..badge_at(1, CENTRE, Vec::new()) };
+    let badges = vec![badge_at(1, CENTRE, Vec::new()), badge_at(2, CENTRE, Vec::new()), other];
+    assert_eq!(legend_kinds(&badges), [("지정유산", [0x8E, 0x44, 0xAD]), ("매장유산유존지역", [0x2E, 0x86, 0xC1])]);
+    assert_eq!((legend_site_rows(&badges, true), legend_site_rows(&badges, false)), (2, 3));
 }
 
 fn badge_at(number: u32, at: [f64; 2], ground: Vec<strata_layout::badge_rings::Rings>) -> Badge {

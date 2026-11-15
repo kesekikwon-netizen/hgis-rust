@@ -8,7 +8,8 @@ use strata_canvas2d::viewport::ViewportTransform;
 use super::gui_tab_drawing_frame::SheetFrame;
 use crate::app_state::StrataAppState;
 use crate::gui_tab_map::LABEL_FONT_FAMILY;
-use crate::sheet_numbers::{badge_look, SheetPaper};
+use crate::gui_tab_map::{paint_placed_labels, LabelDraw};
+use crate::sheet_numbers::{badge_look, legend_site_rows, names_shown, Badge, SheetPaper, NAME_HALO_MM, NAME_MM};
 use crate::survey_style::mm_to_points;
 
 #[cfg(test)]
@@ -27,6 +28,22 @@ pub(crate) fn sheet_writes_labels_of(key: &str) -> bool {
     !key.starts_with(crate::heritage_run::KEY_PREFIX)
 }
 
+/// The names of the sites in place of their numbers: black letters of 2.2 mm with a white edge and no box,
+/// each centred on its place (`HeritageLayoutNumbers.cpp:1066-1083`).
+fn paint_site_names(f: &SheetFrame, badges: &[Badge]) {
+    let font = FontId::new(NAME_MM * f.px_per_mm, FontFamily::Proportional);
+    let draws: Vec<LabelDraw> = badges
+        .iter()
+        .map(|badge| {
+            let galley = f.map_p.layout_no_wrap(badge.name.clone(), font.clone(), Color32::BLACK);
+            let corner = f.w2m(badge.placed) - galley.size() * 0.5;
+            LabelDraw { galley, ink: Color32::BLACK, angle: 0.0, origins: vec![corner] }
+        })
+        .collect();
+    // The edge is a stroke of 0.5 mm along the letters: half of it lies outside them.
+    paint_placed_labels(&f.map_p, &draws, &vec![Some(0); draws.len()], NAME_HALO_MM * 0.5 * f.px_per_mm, Color32::WHITE);
+}
+
 impl StrataAppState {
     /// Draws what is checked on the map into the map frame: the reference rows, and over them the survey's
     /// own layers (survey area, trenches, features, the distance rings), as the map draws them.
@@ -43,15 +60,25 @@ impl StrataAppState {
     fn paint_sheet_heritage_badges(&mut self, f: &SheetFrame) {
         let (north_west, south_east) = (f.m2w(f.map_rect.left_top()), f.m2w(f.map_rect.right_bottom()));
         let sheet_box = [north_west[0], south_east[1], south_east[0], north_west[1]];
+        // At 1:5,000 and larger a sheet that asks for it writes the names in place of the numbers (`:630-632`).
+        let names = names_shown(f.scale_denom, self.drawing.sheet.show_site_names_under_5000);
+        let numbered = self.sheet_heritage_badges(sheet_box);
+        let ctx = f.map_p.ctx().clone();
+        // The letters of a name, measured at a size of 100 and carried to 2.2 mm (`nameBoxMm`, `:117-123`).
+        let letters_mm = |name: &str| f64::from(ctx.fonts(|fonts| fonts.layout_no_wrap(name.to_owned(), FontId::new(100.0, FontFamily::Proportional), Color32::BLACK)).size().x / 100.0 * NAME_MM);
+        let letters: Option<Vec<f64>> = names.then(|| numbered.iter().map(|badge| letters_mm(&badge.name)).collect());
         // The paper in millimetres from the sheet's corner: the map frame, and the legend card over it.
-        let numbered = self.sheet_heritage_badges(sheet_box).len();
+        let numbered = legend_site_rows(&numbered, names);
         let (per_mm, corner) = (f64::from(f.px_per_mm), f.sheet_rect.min);
         let mm = |rect: Rect| [f64::from(rect.left() - corner.x) / per_mm, f64::from(rect.top() - corner.y) / per_mm, f64::from(rect.right() - corner.x) / per_mm, f64::from(rect.bottom() - corner.y) / per_mm];
         let per_metre = f.px_per_meter / per_mm;
         let to_paper = strata_layout::badge_rings::ToPaper { scale: [per_metre, -per_metre], shift: [f64::from(f.mc.x - corner.x) / per_mm - f.scx * per_metre, f64::from(f.mc.y - corner.y) / per_mm + f.scy * per_metre] };
         let card = self.sheet_legend_card(f, numbered).map(|card| card.rect).filter(|card| card.intersects(f.map_rect));
-        let paper = SheetPaper { to_paper, frame: mm(f.map_rect), blocks: card.map(mm).into_iter().collect(), scale: f.scale_denom };
+        let paper = SheetPaper { to_paper, frame: mm(f.map_rect), blocks: card.map(mm).into_iter().collect(), scale: f.scale_denom, names: letters };
         let badges = self.sheet_heritage_badges_placed(sheet_box, paper);
+        if names {
+            return paint_site_names(f, &badges);
+        }
         let bold = FontFamily::Name(LABEL_FONT_FAMILY.into());
         let family = if f.map_p.ctx().fonts(|fonts| fonts.families().contains(&bold)) { bold } else { FontFamily::Proportional };
         for badge in &badges {

@@ -8,7 +8,7 @@ use eframe::egui::{self, Color32, FontFamily, FontId, Pos2, Rect, Stroke, Vec2};
 
 use crate::app_state::StrataAppState;
 use crate::gui_tab_map::LABEL_FONT_FAMILY;
-use crate::sheet_numbers::{badge_look, Badge};
+use crate::sheet_numbers::{badge_look, legend_kinds, legend_site_rows, names_shown, Badge};
 
 use super::gui_tab_drawing_frame::SheetFrame;
 use super::gui_tab_drawing_legend_flow::{legend_cell, legend_column_rows, legend_columns};
@@ -22,7 +22,12 @@ enum LegendRow {
     Swatch(Color32, Color32, &'static str),
     /// A numbered heritage site.
     Site(Badge),
+    /// A kind of heritage data, when the names of its sites stand on the map: its colour and its name.
+    Kind([u8; 3], &'static str),
 }
+
+/// The square of a kind in the legend, in millimetres of paper (`HeritageLayoutNumbers.cpp:1283-1291`).
+const KIND_SQUARE_MM: f32 = 3.0;
 
 /// The frame of the legend on the screen, its columns, and the scale of its rows.
 pub(crate) struct LegendCard {
@@ -81,12 +86,18 @@ impl StrataAppState {
         // The sites the map of this sheet numbers (the same view as the badges: nothing is counted twice).
         let (north_west, south_east) = (f.m2w(map_rect.left_top()), f.m2w(map_rect.right_bottom()));
         let badges = self.sheet_heritage_badges([north_west[0], south_east[1], south_east[0], north_west[1]]);
-        let Some(LegendCard { rect: leg_r, columns, s, leg_w, row_h }) = self.sheet_legend_card(f, badges.len()) else {
+        // With the names on the map the legend lists the kinds only (`:1207, 1281-1293`).
+        let names = names_shown(f.scale_denom, self.drawing.sheet.show_site_names_under_5000);
+        let Some(LegendCard { rect: leg_r, columns, s, leg_w, row_h }) = self.sheet_legend_card(f, legend_site_rows(&badges, names)) else {
             return;
         };
         // 3. 용지 내 4요소 실물 조판: (1) 범례, (2) 표제란, (3) 축척막대·축척글·좌표계, (4) 방위표(도북 화살)
         let mut rows = self.sheet_legend_survey_rows();
-        rows.extend(badges.into_iter().map(LegendRow::Site));
+        if names {
+            rows.extend(legend_kinds(&badges).into_iter().map(|(name, colour)| LegendRow::Kind(colour, name)));
+        } else {
+            rows.extend(badges.into_iter().map(LegendRow::Site));
+        }
         let font_pt = self.drawing.sheet.legend_font_pt as f32;
         sheet_p.rect_filled(leg_r, 1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 245));
         sheet_p.rect_stroke(leg_r, 1.0, Stroke::new(0.9, ink), egui::StrokeKind::Middle);
@@ -114,6 +125,13 @@ impl StrataAppState {
                     }
                     p.rect_stroke(swatch, 1.0, Stroke::new(1.0, stroke), egui::StrokeKind::Middle);
                     (swatch.width(), name.to_owned())
+                }
+                LegendRow::Kind([red, green, blue], name) => {
+                    let side = KIND_SQUARE_MM * px_per_mm;
+                    let swatch = Rect::from_center_size(Pos2::new(left + side * 0.5, ry), Vec2::splat(side));
+                    p.rect_filled(swatch, 0.0, Color32::from_rgb(red, green, blue));
+                    p.rect_stroke(swatch, 0.0, Stroke::new(BADGE_EDGE_MM * px_per_mm, Color32::BLACK), egui::StrokeKind::Middle);
+                    (side, name.to_owned())
                 }
                 LegendRow::Site(badge) => {
                     let look = badge_look(badge.number, badge.colour, px_per_mm);
