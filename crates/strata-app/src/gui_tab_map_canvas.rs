@@ -159,7 +159,7 @@ impl StrataAppState {
                     }
                     // 도형선택은 열어 둔 조사 표에서 C++ FeaturePick 차례로 고른다(feature_pick.rs). 못 고르면 Rust 의
                     // 메모리 시굴격자(아직 표가 아님)를 본다.
-                    MapToolKind::Select if self.select_at(wxy, [cp.x, cp.y]) => {}
+                    MapToolKind::Select if self.select_at_with(wxy, [cp.x, cp.y], ui.input(|i| i.modifiers.shift)) => {}
                     MapToolKind::Select | MapToolKind::Pan => {
                         let mpp = self.home_map.viewport.meters_per_pixel;
                         if let Some((idx, tr)) = self
@@ -278,6 +278,7 @@ impl StrataAppState {
         self.paint_selected_shape(&p, rect);
         self.paint_vertex_handles(&p, rect);
         self.render_vertex_menu(ctx);
+        self.render_merge_ask(ctx);
         self.paint_polygon_sketch(&p, rect, response.hover_pos());
     }
 }

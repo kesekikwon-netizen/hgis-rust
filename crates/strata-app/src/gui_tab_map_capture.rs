@@ -76,10 +76,17 @@ impl StrataAppState {
 
 impl StrataAppState {
     /// 고른 조사 도형 — QGIS 선택 색(255,235,59, 알파 45, MainWindowChrome.cpp setSelectionColor)으로 면은 채움만, 선·점은 그 색.
+    /// Every selected shape (with Shift several).
     pub(crate) fn paint_selected_shape(&self, p: &egui::Painter, rect: Rect) {
+        for (table, fid) in self.all_selected() {
+            self.paint_one_selected_shape(p, rect, &table, fid);
+        }
+    }
+
+    fn paint_one_selected_shape(&self, p: &egui::Painter, rect: Rect, table: &str, fid: i64) {
         use strata_storage::wkb_codec::WkbGeometry;
-        let Some((table, fid)) = &self.home_map.selected_shape else { return };
-        let Some(t) = self.survey_tables.iter().find(|t| &t.table == table) else { return };
+        let fid = &fid;
+        let Some(t) = self.survey_tables.iter().find(|t| t.table == table) else { return };
         let Some(f) = t.layer.features.iter().find(|f| f.fid == *fid) else { return };
         let Ok(parts) = strata_storage::gpkg_wkt::wkt_to_parts(&f.wkt_geom) else { return };
         let work = strata_types::crs::CrsCode::from(self.work_crs).epsg_number();

@@ -34,6 +34,8 @@ mod app_state_draw_row;
 mod app_state_buffer;
 #[path = "app_state_erase.rs"]
 mod app_state_erase;
+#[path = "app_state_merge.rs"]
+mod app_state_merge;
 #[path = "app_state_snap_lines.rs"]
 mod app_state_snap_lines;
 #[path = "vertex_edit_geom.rs"]

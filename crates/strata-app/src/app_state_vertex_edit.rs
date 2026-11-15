@@ -28,6 +28,10 @@ pub(crate) struct VertexTarget {
 impl StrataAppState {
     /// `syncVertexTarget`: the selected shape, when it is a line or a polygon of an editable survey layer.
     pub(crate) fn vertex_target(&self) -> Option<VertexTarget> {
+        // Handles belong to one selected shape only (`syncVertexTarget`, KaFeatureSelectTool.cpp:111-119).
+        if !self.home_map.also_selected.is_empty() {
+            return None;
+        }
         let (table, fid) = self.home_map.selected_shape.as_ref()?;
         let editable = self.left_layers.entries.iter().any(|e| e.layer_key == *table && e.group == LegendGroup::SurveyData && !e.read_only);
         let t = self.survey_tables.iter().find(|t| t.table == *table).filter(|_| editable)?;

@@ -1,6 +1,7 @@
 //! 도형선택 — C++ `FeaturePick::candidates`(core/FeaturePick.cpp)와 `KaFeatureSelectTool::selectAtPoint`
 //! (KaFeatureSelectPick.cpp:129-211). 열어 둔 조사 표(저장 안 한 도형 포함)를 범례 차례(위가 먼저)로 본다.
-//! 아직 없는 것: 안쪽 조각(구멍) 고르기, Shift 여러 개, 수정점(꼭짓점 편집), 지적·참조 레이어.
+//! Shift 를 누르고 누르면 고른 도형에 더하거나 뺀다(KaFeatureSelectPick.cpp:134-143, 170-175). 아직 없는 것: 안쪽 조각(구멍)
+//! 고르기, 끌어서 고르는 상자, 지적·참조 레이어.
 
 use crate::app_state::StrataAppState;
 
@@ -76,9 +77,42 @@ impl StrataAppState {
         ranked_hits(layers.iter().map(|(l, p, t)| (l, *p, *t)))
     }
 
-    /// selectAtPoint — 같은 자리(4 px 안, 같은 후보)를 다시 누르면 다음 겹친 도형. 상태줄에 C++ 글.
+    /// selectAtPoint — 같은 자리(4 px 안, 같은 후보)를 다시 누르면 다음 겹친 도형. 상태줄에 C++ 글. The map clicks with
+    /// `select_at_with` (it knows Shift).
+    #[cfg(test)]
     pub(crate) fn select_at(&mut self, xy: [f64; 2], screen: [f32; 2]) -> bool {
+        self.select_at_with(xy, screen, false)
+    }
+
+    /// selectAtPoint with Shift (`add`): the shape under the pointer is added to the selection, or taken off
+    /// when it is selected; no cycling (:156, :183). The words then count the shapes (:203-209).
+    pub(crate) fn select_at_with(&mut self, xy: [f64; 2], screen: [f32; 2], add: bool) -> bool {
         let candidates = self.pick_at_work_xy(xy);
+        if add {
+            let mut all = self.all_selected();
+            if let Some(hit) = candidates.first() {
+                match all.iter().position(|shape| shape == hit) {
+                    Some(at) => drop(all.remove(at)),
+                    None => all.push(hit.clone()),
+                }
+            }
+            self.home_map.selected_shape = all.pop();
+            (self.home_map.also_selected, self.home_map.active_vertex, self.home_map.pick_cycle) = (all, None, None);
+            self.sync_card_with_selection();
+            let all = self.all_selected();
+            match all.len() {
+                0 => self.show_status_message("선택된 도형 없음"),
+                1 if self.vertex_target().is_some() => self.show_status_message("수정점이 나왔습니다. 점을 끌어 옮기세요. 점 우클릭은 삭제, 선 우클릭은 추가입니다."),
+                1 => {}
+                2 => {
+                    let (first, second) = (self.layer_label_of(&all[0].0), self.layer_label_of(&all[1].0));
+                    self.show_status_message(format!("도형 2개 선택됨 ({first}, {second}) — [겹친 곳 지우기](우클릭)는 큰 도형에서 작은 도형 자리를 지우고, [폴리곤 나누기]는 겹친 자리를 새 도형으로 나눕니다."));
+                }
+                n => self.show_status_message(format!("도형 {n}개 선택됨")),
+            }
+            return !candidates.is_empty();
+        }
+        self.home_map.also_selected.clear();
         let pick = match &self.home_map.pick_cycle {
             Some((last, idx, pos))
                 if !candidates.is_empty()
@@ -104,6 +138,13 @@ impl StrataAppState {
         }
         // 한 개만 골랐을 때 C++ 은 「수정점이 나왔습니다…」라고 하지만 꼭짓점 편집이 아직 없어 말하지 않는다.
         !candidates.is_empty()
+    }
+}
+
+impl StrataAppState {
+    /// The name of a layer as the legend shows it.
+    pub(crate) fn layer_label_of(&self, key: &str) -> String {
+        self.left_layers.entries.iter().find(|e| e.layer_key == key).map_or_else(|| key.to_owned(), |e| e.label_ko.clone())
     }
 }
 

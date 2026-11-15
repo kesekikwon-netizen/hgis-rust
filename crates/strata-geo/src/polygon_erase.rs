@@ -39,6 +39,19 @@ pub fn erased(target: &[Rings], cutter: &[Rings]) -> Vec<Rings> {
     pieces.into_iter().map(rings_of).collect()
 }
 
+/// The shapes taken together as one (`QgsGeometry::unaryUnion`, GeometryEditMerge.cpp:126-136): the pieces
+/// of the union, the largest first. Shapes that touch or overlap become one piece; shapes apart stay apart.
+#[must_use]
+pub fn merged(shapes: &[Vec<Rings>]) -> Vec<Rings> {
+    let mut whole = MultiPolygon::<f64>(Vec::new());
+    for one in shapes {
+        whole = whole.union(&shape(one));
+    }
+    let mut pieces: Vec<&Polygon<f64>> = whole.0.iter().filter(|piece| piece.unsigned_area() > 0.0).collect();
+    pieces.sort_by(|a, b| b.unsigned_area().total_cmp(&a.unsigned_area()));
+    pieces.into_iter().map(rings_of).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,5 +99,17 @@ mod tests {
         assert!(!overlap_with_area(&outer, &rect(100.0, 0.0, 200.0, 100.0)), "a shared edge");
         assert!(!overlap_with_area(&outer, &rect(100.0, 100.0, 200.0, 200.0)), "a shared corner");
         assert!(!overlap_with_area(&outer, &rect(300.0, 0.0, 400.0, 100.0)));
+    }
+
+    /// ported from tests/test_layer_edits.cpp:54-106: two touching squares become one piece of their summed
+    /// area; squares apart stay two pieces, the larger first.
+    #[test]
+    fn touching_shapes_merge_into_one_and_shapes_apart_stay_apart() {
+        let one = merged(&[rect(0.0, 0.0, 10.0, 10.0), rect(10.0, 0.0, 20.0, 10.0)]);
+        assert_eq!(one.len(), 1);
+        assert!((area(&one[0]) - 200.0).abs() < 1e-6, "{one:?}");
+        let apart = merged(&[rect(0.0, 0.0, 10.0, 10.0), rect(100.0, 100.0, 120.0, 120.0)]);
+        assert_eq!(apart.len(), 2);
+        assert!((area(&apart[0]) - 400.0).abs() < 1e-6 && (area(&apart[1]) - 100.0).abs() < 1e-6);
     }
 }
