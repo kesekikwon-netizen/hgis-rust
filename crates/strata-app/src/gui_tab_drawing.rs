@@ -50,6 +50,8 @@ mod gui_tab_drawing_right;
 mod gui_tab_drawing_right_b;
 #[path = "gui_tab_drawing_scale.rs"]
 mod gui_tab_drawing_scale;
+#[path = "gui_tab_drawing_sheets.rs"]
+pub(crate) mod gui_tab_drawing_sheets;
 #[path = "gui_tab_drawing_sheet.rs"]
 mod gui_tab_drawing_sheet;
 #[path = "gui_tab_drawing_toolbar.rs"]

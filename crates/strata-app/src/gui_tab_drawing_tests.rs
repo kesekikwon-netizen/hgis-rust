@@ -22,17 +22,11 @@ fn test_d20_map_adjust_callouts_and_sheet_set() {
     assert_eq!(crate::gui_tab_drawing::sheet_coord_points::tag_for(0), 'A');
 
     // KaDrawingSheetSet.cpp — 보관/열기
-    st.stored_sheets.push(crate::tab_drawing::StoredSheet {
-        title: "조사도면".to_owned(),
-        scale_denominator: 5_000,
-        paper_w_mm: 210.0,
-        paper_h_mm: 297.0,
-        legend_visible: true,
-        title_block_visible: true,
-    });
-    assert_eq!(st.stored_sheets.len(), 1);
-    let back = st.stored_sheets[0].clone();
-    assert_eq!(back.scale_denominator, 5_000);
+    let mut app = crate::app_state::StrataAppState::new_startup();
+    app.store_sheet("조사도면");
+    assert_eq!(app.drawing.stored_sheets.len(), 1);
+    let back = app.drawing.stored_sheets[0].clone();
+    assert_eq!(back.sheet.scale_denominator, app.drawing.sheet.scale_denominator);
     assert_eq!(back.title, "조사도면");
     st.sheet_set_menu_open = true;
     assert!(st.sheet_set_menu_open);

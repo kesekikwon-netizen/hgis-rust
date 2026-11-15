@@ -37,6 +37,8 @@ pub struct DrawingTabState {
     pub(crate) screen_px_per_mm: Option<f32>,
     /// The paper and its map frame on the screen when the sheet was painted last.
     pub(crate) paper_on_screen: Option<[eframe::egui::Rect; 2]>,
+    /// What 「도면 목록」 asks now: a name, or whether to replace, open or take out a kept sheet.
+    pub(crate) sheet_ask: Option<crate::gui_tab_drawing::gui_tab_drawing_sheets::SheetAsk>,
     /// The PDF of the sheet being made (「PDF 내보내기」).
     pub(crate) pdf: crate::gui_tab_drawing::gui_tab_drawing_print::SheetPdfSlot,
     /// KaDrawingSheetSet.cpp — 보관한 도면 목록
@@ -66,15 +68,19 @@ pub struct CoordCallout {
     pub ground: [f64; 2],
 }
 
-/// KaDrawingSheetSet.cpp — 보관한 도면 한 벌
+/// A kept sheet of 「도면 목록」 (KaDrawingSheetSet.cpp:51-129): the whole working sheet as it was — paper, scale,
+/// items, the middle of its map, its coordinate points, its title — with the layer set of the same name
+/// (KaDrawingLayerSets.cpp:42-60: which rows of the legend were checked).
 #[derive(Debug, Clone)]
 pub struct StoredSheet {
     pub title: String,
-    pub scale_denominator: u32,
-    pub paper_w_mm: f64,
-    pub paper_h_mm: f64,
-    pub legend_visible: bool,
-    pub title_block_visible: bool,
+    pub sheet: DrawingSheet,
+    pub drawing_title: String,
+    pub sheet_center: Option<[f64; 2]>,
+    pub item_offsets_mm: std::collections::BTreeMap<SheetItem, [f32; 2]>,
+    pub removed_items: std::collections::BTreeSet<SheetItem>,
+    pub coord_callouts: Vec<CoordCallout>,
+    pub layers_checked: std::collections::BTreeMap<String, bool>,
 }
 
 impl Default for DrawingTabState {
@@ -99,6 +105,7 @@ impl Default for DrawingTabState {
             seen_guide: None,
             screen_px_per_mm: None,
             paper_on_screen: None,
+            sheet_ask: None,
             pdf: crate::gui_tab_drawing::gui_tab_drawing_print::SheetPdfSlot::default(),
             stored_sheets: Vec::new(),
             sheet_set_menu_open: false,
