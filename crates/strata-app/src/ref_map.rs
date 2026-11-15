@@ -170,9 +170,13 @@ fn polygon_wkt(rings: &[Vec<[f64; 2]>]) -> String {
 
 /// The drawn survey areas grown by `radius`, in the work CRS. `Ok(None)`: no survey area is drawn.
 pub(crate) fn survey_scope(app: &StrataAppState, radius: f64) -> Result<Option<Scope>, String> {
-    let shapes: Vec<String> = survey_area_rings(app)?.iter().map(|rings| polygon_wkt(rings)).collect();
     // What the engine says about a shape it cannot join or grow is not for the status line.
-    Scope::around(&shapes, radius).map_err(|_| AREA_UNREADABLE.to_owned())
+    Scope::around(&survey_area_wkts(app)?, radius).map_err(|_| AREA_UNREADABLE.to_owned())
+}
+
+/// The drawn survey areas as WKT polygons of the work CRS.
+pub(crate) fn survey_area_wkts(app: &StrataAppState) -> Result<Vec<String>, String> {
+    Ok(survey_area_rings(app)?.iter().map(|rings| polygon_wkt(rings)).collect())
 }
 
 /// The shapes of the drawn survey areas in the work CRS: every survey-area shape is carried into the work

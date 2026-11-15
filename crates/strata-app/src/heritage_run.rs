@@ -81,10 +81,15 @@ impl HeritageRun {
     }
 }
 
+/// The kind a row of the button belongs to.
+pub(crate) fn dataset_of_key(key: &str) -> Option<&'static HeritageDataset> {
+    let kind = key.strip_prefix(KEY_PREFIX)?.split(':').next()?;
+    DATASETS.iter().find(|dataset| dataset.key == kind)
+}
+
 /// The colour of the kind a row of the button belongs to.
 pub(crate) fn colour_of_key(key: &str) -> Option<[u8; 3]> {
-    let kind = key.strip_prefix(KEY_PREFIX)?.split(':').next()?;
-    DATASETS.iter().find(|dataset| dataset.key == kind).map(|dataset| dataset.colour)
+    dataset_of_key(key).map(|dataset| dataset.colour)
 }
 
 impl StrataAppState {

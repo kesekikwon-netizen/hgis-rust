@@ -136,6 +136,11 @@ impl RefVectorLayers {
         self.layers.iter().find(|l| l.key == key).and_then(|l| if let Shapes::Ready(data) = &l.shapes { data.extent() } else { None })
     }
 
+    /// The file the layer of this row is drawn from.
+    pub(crate) fn file_of(&self, key: &str) -> Option<&std::path::Path> {
+        self.layers.iter().find(|l| l.key == key).map(|l| l.spec.file.as_path())
+    }
+
     /// How the layer of this row is drawn (the legend menu offers what fits it).
     pub(crate) fn look_of(&self, key: &str) -> Option<&Look> {
         self.layers.iter().find(|l| l.key == key).map(|l| &l.spec.look)

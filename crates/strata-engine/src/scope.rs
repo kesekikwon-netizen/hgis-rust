@@ -101,6 +101,18 @@ impl Scope {
     /// # Errors
     /// A WKT that cannot be read, a radius that is not a positive number, or GEOS cannot build the area.
     pub fn around(polygon_wkts: &[String], radius: f64) -> Result<Option<Self>, EngineError> {
+        let Some(joined) = Self::joined(polygon_wkts)? else {
+            return Ok(None);
+        };
+        // `bufferMeters` gives nothing for such a radius, and `scopeOf` reports that (:71, :24-27).
+        if !radius.is_finite() || radius <= 0.0 {
+            return Err(EngineError(NOT_BUILT.to_owned()));
+        }
+        Self::checked(joined.buffer(radius, QUARTER_SEGMENTS)?).map(Some)
+    }
+
+    /// The shapes joined into one; `None` when there is none.
+    fn joined(polygon_wkts: &[String]) -> Result<Option<Geometry>, EngineError> {
         let mut parts = Vec::new();
         for wkt in polygon_wkts {
             let shape = Geometry::new_from_wkt(wkt)?;
@@ -111,12 +123,16 @@ impl Scope {
         if parts.is_empty() {
             return Ok(None);
         }
-        // `bufferMeters` gives nothing for such a radius, and `scopeOf` reports that (:71, :24-27).
-        if !radius.is_finite() || radius <= 0.0 {
-            return Err(EngineError(NOT_BUILT.to_owned()));
-        }
-        let area = Geometry::create_geometry_collection(parts)?.unary_union()?.buffer(radius, QUARTER_SEGMENTS)?;
-        Self::checked(area).map(Some)
+        Ok(Some(Geometry::create_geometry_collection(parts)?.unary_union()?))
+    }
+
+    /// The scope of these shapes (WKT polygons) as they are: joined, not grown. `None` when there is no
+    /// shape.
+    ///
+    /// # Errors
+    /// A WKT that cannot be read, or GEOS cannot build the area.
+    pub fn of(polygon_wkts: &[String]) -> Result<Option<Self>, EngineError> {
+        Self::joined(polygon_wkts)?.map(Self::checked).transpose()
     }
 
     fn checked(area: Geometry) -> Result<Self, EngineError> {

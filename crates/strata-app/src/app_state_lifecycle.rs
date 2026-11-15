@@ -81,6 +81,7 @@ impl StrataAppState {
             dem_look: crate::topo_download::dem::look::DemLook::default(),
             dem_follow: crate::topo_download::dem::look::DemFollow::default(),
             dem_zoom_wanted: false,
+            sheet_numbers: crate::sheet_numbers::SheetNumbers::default(),
             heritage: crate::heritage_run::HeritageRun::default(),
             history_gis_key: String::new(),
             active_tool: MapToolKind::Pan,

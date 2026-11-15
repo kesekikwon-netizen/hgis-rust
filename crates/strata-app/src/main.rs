@@ -213,6 +213,7 @@ mod dlg_cadastral_download;
 mod dlg_drawing_print;
 mod dlg_heritage_browser;
 mod heritage_run;
+mod sheet_numbers;
 mod dlg_heritage_region_select;
 mod dlg_new_survey;
 mod dlg_ngii_topo_download;

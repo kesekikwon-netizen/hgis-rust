@@ -14,6 +14,7 @@ pub mod geology_prepare;
 pub mod geology_request;
 pub mod heritage;
 pub mod heritage_load;
+pub mod heritage_numbers;
 pub mod heritage_recent;
 pub mod river_level;
 pub mod river_prepare;

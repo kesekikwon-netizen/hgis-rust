@@ -171,3 +171,14 @@ fn a_polygon_touches_when_any_part_lies_inside() {
     assert!(!test.touches_polygon(&square(205_060.0, 450_000.0, 205_100.0, 450_050.0)).expect("apart"));
     assert!(!test.touches_polygon(&[]).expect("no ring"));
 }
+
+/// An area that is taken as it is (one that was cut out before): its shapes are joined and not grown.
+#[test]
+fn shapes_taken_as_they_are_are_joined_and_not_grown() {
+    let scope = Scope::of(&[rect(0.0, 0.0, 100.0, 100.0), rect(100.0, 0.0, 200.0, 100.0)]).expect("scope").expect("some");
+    assert!((scope.area().expect("area") - 20_000.0).abs() < 1e-6);
+    assert_eq!(scope.polygons().expect("polygons").len(), 1, "joined");
+    let test = scope.test().expect("test");
+    assert!(test.touches_point([150.0, 50.0]).expect("inside") && !test.touches_point([201.0, 50.0]).expect("outside"));
+    assert!(Scope::of(&[]).expect("no error").is_none());
+}
