@@ -157,6 +157,9 @@ impl StrataAppState {
                     self.modals.active = Some(ActiveModalDialog::DrawingPrint);
                 } else if i.key_pressed(egui::Key::E) {
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
+                } else if !wants_kb && i.key_pressed(egui::Key::Z) && self.active_tab == MainTab::Drawing && self.drawing.coord_callout_mode {
+                    // While points are placed on the sheet, the last point (KaDrawingStudio.cpp:3480-3483).
+                    self.undo_last_coord_callout();
                 } else if !wants_kb && i.key_pressed(egui::Key::Z) {
                     // undoMapAction — 그리던 점, 아니면 가장 최근 레이어 편집.
                     self.undo_map_action();

@@ -83,14 +83,8 @@ impl StrataAppState {
                           if cell_resp.clicked() {
                             match i {
                                 0 => {
-            // KaDrawingCoordCallout.cpp — 용지 위 좌표점 콜아웃 모드. beginPlaceCoordPoint ends 「지도 조정」 first.
-            self.end_sheet_map_adjust();
-            self.drawing.coord_callout_mode = !self.drawing.coord_callout_mode;
-            self.home_map.draw_guide_message = Some(if self.drawing.coord_callout_mode {
-                "좌표점 모드 — 용지에서 꼭짓점을 찍으면 화살표와 X·Y가 붙습니다.".to_owned()
-            } else {
-                "좌표점 모드를 껐습니다.".to_owned()
-            });
+            // beginPlaceCoordPoint (KaDrawingStudio.cpp:1662-1675): points are placed until 「항목 이동」.
+            self.begin_place_coord_point();
         }
                                 1 => {
                                     self.center_layer_in_sheet();

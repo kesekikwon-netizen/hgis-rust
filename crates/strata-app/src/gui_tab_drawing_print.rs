@@ -234,7 +234,7 @@ impl StrataAppState {
     }
 
     /// The sheet on white paper, as the screen paints it, without the tools of the screen (toolbar, popups,
-    /// handles). Coordinate points are left out: they are kept as places on the screen.
+    /// handles).
     pub(crate) fn paint_sheet_for_print(&mut self, ctx: &egui::Context, paper: Rect, px_per_mm: f32) {
         let painter = ctx.layer_painter(egui::LayerId::background());
         painter.rect_filled(paper, 0.0, Color32::WHITE);
@@ -244,6 +244,7 @@ impl StrataAppState {
         self.paint_sheet_grid(&f);
         self.paint_sheet_legend(&f);
         self.paint_sheet_chrome(&f);
+        self.paint_sheet_coord_points(&f);
         self.drawing.item_rects = screen_items;
     }
 }

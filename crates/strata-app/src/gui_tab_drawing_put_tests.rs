@@ -107,8 +107,8 @@ fn delete_without_a_selection_says_so_and_takes_the_last_coordinate_point_while_
     app.delete_sheet_selection();
     assert_eq!(app.status_left_message(), "지울 항목을 먼저 선택하세요.");
     app.drawing.coord_callout_mode = true;
-    for tag in ["A", "B"] {
-        app.drawing.coord_callouts.push(CoordCallout { tag: tag.to_owned(), pos: [300.0, 300.0], world: [450_000.0, 200_000.0] });
+    for _ in ["A", "B"] {
+        app.drawing.coord_callouts.push(CoordCallout { ground: [200_000.0, 450_000.0] });
     }
     app.delete_sheet_selection();
     assert_eq!((app.drawing.coord_callouts.len(), app.status_left_message()), (1, "마지막 좌표점을 지웠습니다. 남은 점 1개."));

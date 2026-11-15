@@ -35,6 +35,8 @@ pub struct DrawingTabState {
     pub(crate) seen_guide: Option<String>,
     /// How many screen points one millimetre of paper had when the sheet was painted last.
     pub(crate) screen_px_per_mm: Option<f32>,
+    /// The paper and its map frame on the screen when the sheet was painted last.
+    pub(crate) paper_on_screen: Option<[eframe::egui::Rect; 2]>,
     /// The PDF of the sheet being made (「PDF 내보내기」).
     pub(crate) pdf: crate::gui_tab_drawing::gui_tab_drawing_print::SheetPdfSlot,
     /// KaDrawingSheetSet.cpp — 보관한 도면 목록
@@ -59,12 +61,9 @@ pub enum SheetItem {
 /// KaDrawingCoordCallout.cpp — 용지 위 좌표점 하나
 #[derive(Debug, Clone)]
 pub struct CoordCallout {
-    /// A, B, C … 태그
-    pub tag: String,
-    /// 용지 위 픽셀 위치
-    pub pos: [f32; 2],
-    /// 작업 좌표 N(북), E(동)
-    pub world: [f64; 2],
+    /// Its place on the ground in the work CRS: easting, northing. The point is drawn where this is on the
+    /// sheet now (KaDrawingStudio.cpp:1796, `m_coordMapPts`); its letter comes from its order (A, B, C …).
+    pub ground: [f64; 2],
 }
 
 /// KaDrawingSheetSet.cpp — 보관한 도면 한 벌
@@ -99,6 +98,7 @@ impl Default for DrawingTabState {
             status: None,
             seen_guide: None,
             screen_px_per_mm: None,
+            paper_on_screen: None,
             pdf: crate::gui_tab_drawing::gui_tab_drawing_print::SheetPdfSlot::default(),
             stored_sheets: Vec::new(),
             sheet_set_menu_open: false,

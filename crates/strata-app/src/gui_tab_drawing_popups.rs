@@ -1,4 +1,4 @@
-//! 용지 위 팝업 — 지도 조정 안내 띠, 좌표점 콜아웃, 도면 목록.
+//! 용지 위 팝업 — 지도 조정 안내 띠, 좌표점 찍기, 도면 목록.
 //!
 //! C++ `KaDrawingStudio.cpp:822-838`, `KaDrawingCoordCallout.cpp`,
 //! `KaDrawingSheetSet.cpp:135-160`.
@@ -12,7 +12,6 @@ use super::gui_tab_drawing_frame::SheetFrame;
 impl StrataAppState {
     /// 지도 조정 안내 띠, 좌표점 콜아웃(A, B, C …), 도면 목록 팝업.
     pub(crate) fn paint_sheet_popups(&mut self, ui: &mut egui::Ui, f: &SheetFrame) {
-        let sheet_rect = f.sheet_rect;
         let rect = f.rect;
         let p = f.p.clone();
         // KaDrawingStudio.cpp:822-838 m_adjustBar — 지도 조정 중 상단 안내 띠
@@ -64,66 +63,8 @@ impl StrataAppState {
             p.text(centre_r.center(), egui::Align2::CENTER_CENTER, "레이어를 가운데", FontId::proportional(11.0), Color32::from_rgb(28, 25, 23));
         }
 
-        // KaDrawingCoordCallout.cpp — 용지 위 좌표점 콜아웃(A, B, C …)
-        {
-            let mut callout_pick: Option<[f32; 2]> = None;
-            if self.drawing.coord_callout_mode {
-                let resp = ui.interact(
-                    sheet_rect,
-                    ui.id().with("drawing_callout_pick"),
-                    egui::Sense::click(),
-                );
-                if resp.clicked() {
-                    if let Some(pos) = ui.ctx().pointer_interact_pos() {
-                        if sheet_rect.contains(pos) {
-                            callout_pick = Some([pos.x, pos.y]);
-                        }
-                    }
-                }
-            }
-            if let Some(pos) = callout_pick {
-                let tag =
-                    ((b'A' + (self.drawing.coord_callouts.len() % 26) as u8) as char)
-                        .to_string();
-                // 그 점의 실제 지상 좌표 — 지도 칸 변환의 역(F1: 예전엔 경주 기본점에 용지 점 × 0.5 를 더했다).
-                let [e, n] = f.m2w(Pos2::new(pos[0], pos[1]));
-                self.drawing
-                    .coord_callouts
-                    .push(crate::tab_drawing::CoordCallout {
-                        tag,
-                        pos,
-                        world: [n, e],
-                    });
-            }
-            for c in &self.drawing.coord_callouts {
-                let cp = Pos2::new(c.pos[0], c.pos[1]);
-                let label = format!("{}  X {:.2}  Y {:.2}", c.tag, c.world[1], c.world[0]);
-                let lw = (label.chars().count() as f32) * 6.6 + 22.0;
-                let pill = Rect::from_min_size(
-                    Pos2::new(cp.x + 8.0, cp.y - 22.0),
-                    Vec2::new(lw, 18.0),
-                );
-                p.circle_filled(cp, 3.2, Color32::from_rgb(181, 87, 58));
-                p.line_segment(
-                    [cp, Pos2::new(pill.left(), pill.center().y)],
-                    Stroke::new(1.0, Color32::from_rgb(181, 87, 58)),
-                );
-                p.rect_filled(pill, 3.0, Color32::WHITE);
-                p.rect_stroke(
-                    pill,
-                    3.0,
-                    Stroke::new(1.0, Color32::from_rgb(0xC5, 0xBF, 0xB2)),
-                    egui::StrokeKind::Middle,
-                );
-                p.text(
-                    Pos2::new(pill.left() + 5.0, pill.center().y),
-                    egui::Align2::LEFT_CENTER,
-                    &label,
-                    FontId::monospace(9.5),
-                    Color32::from_rgb(28, 25, 23),
-                );
-            }
-        }
+        // KaDrawingCoordCallout.cpp — 좌표점: clicks while points are placed (gui_tab_drawing_coords.rs).
+        self.handle_coord_point_clicks(ui, f);
 
         // KaDrawingSheetSet.cpp:135-160 — 도면 목록 팝업
         if self.drawing.sheet_set_menu_open {

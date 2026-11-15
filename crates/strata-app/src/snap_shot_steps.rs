@@ -93,6 +93,14 @@ impl StrataAppState {
                 self.drawing.item_offsets_mm.insert(crate::tab_drawing::SheetItem::Legend, [-95.0, 150.0]);
                 self.drawing.item_offsets_mm.insert(crate::tab_drawing::SheetItem::TitleBlock, [-60.0, 0.0]);
             }
+            // A coordinate point dx;dy metres from the middle of the sheet's map, as if clicked there.
+            _ if action.starts_with("@coord=") => {
+                let v: Vec<f64> = action["@coord=".len()..].split(';').filter_map(|s| s.trim().parse().ok()).collect();
+                if let [dx, dy] = v[..] {
+                    let c = self.sheet_map_center();
+                    self.drawing.coord_callouts.push(crate::tab_drawing::CoordCallout { ground: [c[0] + dx, c[1] + dy] });
+                }
+            }
             // 「PDF 내보내기」 with the file named here in place of the save dialog (a temp folder only).
             _ if action.starts_with("@pdf=") => self.start_sheet_pdf(std::path::PathBuf::from(&action["@pdf=".len()..])),
             // The DEM the survey folder has, without an order at the portal.

@@ -14,6 +14,8 @@ use crate::app_state::StrataAppState;
 mod gui_tab_drawing_adjust;
 #[path = "gui_tab_drawing_chrome.rs"]
 mod gui_tab_drawing_chrome;
+#[path = "gui_tab_drawing_coords.rs"]
+mod gui_tab_drawing_coords;
 #[path = "gui_tab_drawing_decoration.rs"]
 pub(crate) mod gui_tab_drawing_decoration;
 #[path = "gui_tab_drawing_frame.rs"]
@@ -32,6 +34,8 @@ mod gui_tab_drawing_map_layers;
 mod gui_tab_drawing_popups;
 #[path = "gui_tab_drawing_print.rs"]
 pub(crate) mod gui_tab_drawing_print;
+#[path = "sheet_coord_points.rs"]
+pub(crate) mod sheet_coord_points;
 #[path = "sheet_pdf_file.rs"]
 mod sheet_pdf_file;
 #[path = "sheet_raster.rs"]

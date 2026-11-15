@@ -27,7 +27,17 @@ impl StrataAppState {
 
     /// 보이는 조사 레이어의 고리·선(작업 좌표계). `exclude` 도형은 뺀다(toCanvasAndFetch 의 ignoreFid).
     fn survey_snap_lines(&self, exclude: Option<(&str, i64)>) -> Vec<Vec<[f64; 2]>> {
-        let mut out = Vec::new();
+        self.survey_parts(exclude).0
+    }
+
+    /// The rings and lines and the points of the visible survey layers (work CRS): what the magnet of a
+    /// coordinate point takes (KaDrawingStudio.cpp:1714-1778).
+    pub(crate) fn survey_snap_parts(&self) -> (Vec<Vec<[f64; 2]>>, Vec<[f64; 2]>) {
+        self.survey_parts(None)
+    }
+
+    fn survey_parts(&self, exclude: Option<(&str, i64)>) -> (Vec<Vec<[f64; 2]>>, Vec<[f64; 2]>) {
+        let (mut out, mut points) = (Vec::new(), Vec::new());
         for e in self.left_layers.entries.iter().filter(|e| self.home_map.real_survey.is_layer_visible(&e.label_ko)) {
             let Some(t) = self.survey_tables.iter().find(|t| t.table == e.layer_key) else { continue };
             let tr = self.table_transformers(t.srs_id);
@@ -41,12 +51,12 @@ impl StrataAppState {
                     match p {
                         WkbGeometry::LineString(l) => out.push(l),
                         WkbGeometry::Polygon(rings) => out.extend(rings),
-                        WkbGeometry::Point(_) => {}
+                        WkbGeometry::Point(point) => points.push(point),
                     }
                 }
             }
         }
-        out
+        (out, points)
     }
 
     /// The lines of the received cadastral map around a shape, while its row is checked: a cadastral layer

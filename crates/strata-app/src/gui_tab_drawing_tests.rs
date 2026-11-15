@@ -17,13 +17,9 @@ fn test_d20_map_adjust_callouts_and_sheet_set() {
     assert!(st.coord_callout_mode);
 
     // KaDrawingCoordCallout.cpp — A, B, C … 태그
-    st.coord_callouts.push(crate::tab_drawing::CoordCallout {
-        tag: "A".to_owned(),
-        pos: [100.0, 120.0],
-        world: [361_622.354, 219_897.093],
-    });
+    st.coord_callouts.push(crate::tab_drawing::CoordCallout { ground: [219_897.093, 361_622.354] });
     assert_eq!(st.coord_callouts.len(), 1);
-    assert_eq!(st.coord_callouts[0].tag, "A");
+    assert_eq!(crate::gui_tab_drawing::sheet_coord_points::tag_for(0), 'A');
 
     // KaDrawingSheetSet.cpp — 보관/열기
     st.stored_sheets.push(crate::tab_drawing::StoredSheet {

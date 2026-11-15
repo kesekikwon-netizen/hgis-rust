@@ -90,6 +90,7 @@ impl StrataAppState {
         self.move_sheet_items(ui, sheet_rect, px_per_mm);
         // The size the sheet is seen at: its PDF is drawn at this size too, so that it looks as the screen.
         self.drawing.screen_px_per_mm = Some(px_per_mm);
+        self.drawing.paper_on_screen = Some([sheet_rect, map_rect]);
         let f = self.sheet_frame_for(rect, sheet_rect, px_per_mm, p, compact_v);
         // 원문 순서 그대로: 지도 레이어 → 도곽 격자 → 범례 → 장식띠(표제란·축척·방위)
         //                 → 7버튼 툴바 → 팝업
@@ -97,6 +98,7 @@ impl StrataAppState {
         self.paint_sheet_grid(&f);
         self.paint_sheet_legend(&f);
         self.paint_sheet_chrome(&f);
+        self.paint_sheet_coord_points(&f);
         self.paint_sheet_toolbar(ui, &f);
         self.paint_sheet_popups(ui, &f);
     }
