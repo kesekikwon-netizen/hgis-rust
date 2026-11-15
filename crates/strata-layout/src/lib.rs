@@ -8,6 +8,7 @@ pub mod atlas_tiles;
 pub mod badge_placer;
 pub mod badge_rings;
 pub mod pdf_geotiff;
+pub mod picture_pdf;
 pub mod raster_stretch;
 pub mod sheet_composer;
 pub mod sheet_decorations;
