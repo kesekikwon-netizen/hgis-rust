@@ -108,6 +108,28 @@ fn shapefile_facts_of(layer: &Layer<'_>) -> Result<TableFacts, EngineError> {
     Ok(TableFacts { epsg, kind: kind_of(layer)?, columns: known_columns(layer).into_iter().map(|(_, name, kind)| (name, kind)).collect(), rows: layer.feature_count() })
 }
 
+/// Whether a shapefile holds points: a kind of shape these tables do not have.
+///
+/// # Errors
+/// The file is missing or no shapefile.
+pub fn shapefile_holds_points(path: &Path, encoding: &str) -> Result<bool, EngineError> {
+    let dataset = open_shapefile(path, encoding)?;
+    let layer = dataset.layer(0).map_err(|e| named(path, e))?;
+    let declared = layer.defn().geom_fields().next().map(|g| gdal::vector::geometry_type_flatten(g.field_type()));
+    Ok(matches!(declared, Some(OGRwkbGeometryType::wkbPoint | OGRwkbGeometryType::wkbMultiPoint)))
+}
+
+/// The box of a shapefile's shapes in its own CRS, `[min x, min y, max x, max y]` (the file's header).
+///
+/// # Errors
+/// The file is missing or no shapefile, or holds no box.
+pub fn shapefile_extent(path: &Path, encoding: &str) -> Result<[f64; 4], EngineError> {
+    let dataset = open_shapefile(path, encoding)?;
+    let layer = dataset.layer(0).map_err(|e| named(path, e))?;
+    let envelope = layer.get_extent().map_err(|e| named(path, e))?;
+    Ok([envelope.MinX, envelope.MinY, envelope.MaxX, envelope.MaxY])
+}
+
 /// What a shapefile holds, without reading its rows.
 ///
 /// # Errors

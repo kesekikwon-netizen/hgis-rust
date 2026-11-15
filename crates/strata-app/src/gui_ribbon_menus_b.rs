@@ -109,7 +109,7 @@ impl StrataAppState {
                 } else if item.contains("파일함") {
                     self.home_map.files_open = !self.home_map.files_open;
                 } else if item.contains("벡터·도면") {
-                    self.modals.active = Some(ActiveModalDialog::CadImportNotice);
+                    self.open_vector_layer();
                 } else {
                     self.modals.active = Some(ActiveModalDialog::AccountSettings);
                 }

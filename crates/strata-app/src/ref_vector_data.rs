@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use strata_engine::{read_table, table_facts, Cell, ShapeKind, Shapes, Transformer};
+use strata_engine::{read_shapefile, read_table, shapefile_facts, table_facts, Cell, ShapeKind, Shapes, Transformer};
 
 #[cfg(test)]
 #[path = "ref_vector_data_tests.rs"]
@@ -191,7 +191,13 @@ impl Build {
 /// The file or table is missing, holds the other kind of shape or no known CRS, lacks the colour column, or
 /// PROJ cannot carry its points into the work CRS. The text is for the log, not for the user.
 pub(crate) fn load(spec: &LoadSpec) -> Result<RefVectorData, String> {
-    let facts = table_facts(&spec.file, &spec.table).map_err(|e| e.0)?;
+    // A user's shapefile is read where it lies, in the encoding its .cpg or .dbf tells (user_files.rs).
+    let shapefile = spec.file.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("shp")).then(|| strata_refmap::heritage::shapefile_encoding(&spec.file));
+    let facts = match &shapefile {
+        Some(encoding) => shapefile_facts(&spec.file, encoding),
+        None => table_facts(&spec.file, &spec.table),
+    }
+    .map_err(|e| e.0)?;
     let (wanted, columns): (ShapeKind, Vec<&str>) = match &spec.look {
         Look::Lines { .. } => (ShapeKind::Lines, Vec::new()),
         Look::Polygons { fill: PolygonFill::Column { name, .. }, .. } => (ShapeKind::Polygons, vec![name]),
@@ -202,7 +208,8 @@ pub(crate) fn load(spec: &LoadSpec) -> Result<RefVectorData, String> {
     if facts.kind != wanted {
         return Err(format!("table {} holds another kind of shape than its layer draws", spec.table));
     }
-    let epsg = facts.epsg.ok_or_else(|| format!("table {} names no CRS", spec.table))?;
+    // A shapefile that names no CRS is taken to be in the work CRS (`openVectorLayer`, MainWindow.cpp:2618-2624).
+    let epsg = facts.epsg.or(shapefile.as_ref().map(|_| spec.work_epsg)).ok_or_else(|| format!("table {} names no CRS", spec.table))?;
     // The work CRS is checked even when the table is in it already: an unknown CRS is an error, never a pass-through.
     let checked = Transformer::new(epsg, spec.work_epsg).map_err(|e| e.0)?;
     let carry = (epsg != spec.work_epsg).then_some(checked);
@@ -237,13 +244,17 @@ pub(crate) fn load(spec: &LoadSpec) -> Result<RefVectorData, String> {
             _ => Err("a row holds another kind of shape than its table".to_owned()),
         }
     };
-    read_table(&spec.file, &spec.table, &columns, &mut |row| match add(row) {
+    let mut each = |row| match add(row) {
         Ok(()) => true,
         Err(e) => {
             failure = Some(e);
             false
         }
-    })
+    };
+    match &shapefile {
+        Some(encoding) => read_shapefile(&spec.file, encoding, &columns, &mut each),
+        None => read_table(&spec.file, &spec.table, &columns, &mut each),
+    }
     .map_err(|e| e.0)?;
     match failure {
         Some(e) => Err(e),

@@ -42,6 +42,8 @@ mod app_state_split;
 pub(crate) mod app_state_save_before;
 #[path = "survey_map_list.rs"]
 pub(crate) mod survey_map_list;
+#[path = "user_files.rs"]
+pub(crate) mod user_files;
 #[path = "app_state_snap_lines.rs"]
 mod app_state_snap_lines;
 #[path = "vertex_edit_geom.rs"]
@@ -76,7 +78,6 @@ pub struct StrataAppState {
     pub layer_context_menu_key: Option<String>,
     /// 라벨 하위 메뉴 펼침 상태 (라벨·명칭 속성 / 투명도 / 깨진 한글)
     // MainWindowFiles.cpp:259-289 — 파일 끌어 놓기
-    pub last_drop_message: Option<String>,
     /// 종료 확인 (KaClosePrompt.cpp)
     pub close_prompt_open: bool,
     /// What waits for the answer to 「저장할까요?」 before unsaved work is left (새 조사, 열기).

@@ -66,11 +66,9 @@ pub(crate) fn render_cad_import_notice(
                     )
                     .clicked()
                 {
-                    app.active_tab = crate::app_state::MainTab::Map;
-                    app.home_map.draw_guide_message = Some(format!(
-                        "CAD 도면을 {} 좌표계로 지도에 올렸습니다.",
-                        app.work_crs.auth_id()
-                    ));
+                    // Not carried over yet (user_files.rs): the button says so instead of saying it loaded.
+                    let name = std::path::Path::new(&app.modals.cad_import_path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    app.show_status_message(format!("CAD 도면(DXF·DWG)은 아직 지도에 올리지 못합니다: {name}"));
                     app.modals.active = None;
                 }
                 if ui

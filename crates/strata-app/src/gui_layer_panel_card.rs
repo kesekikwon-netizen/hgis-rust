@@ -206,21 +206,13 @@ impl StrataAppState {
                     egui::FontId::proportional(11.0),
                     Color32::from_rgb(45, 44, 41),
                 );
-                if ui
-                    .interact(row_r, ui.id().with(("fb_entry", fi)), egui::Sense::click())
-                    .clicked()
-                {
-                    if *is_dir {
-                        self.home_map.real_survey.file_browser_dir = fpath.clone();
-                        self.home_map.real_survey.refresh_file_browser();
-                    } else if let Ok(driver) =
-                        crate::left_layer_panel::detect_file_drawer_driver(fpath)
-                    {
-                        self.home_map.draw_guide_message = Some(format!(
-                            "파일함에서 「{}」 (드라이버: {:?}) 레이어를 적재했습니다.",
-                            fname, driver
-                        ));
-                    }
+                let row = ui.interact(row_r, ui.id().with(("fb_entry", fi)), egui::Sense::click());
+                if *is_dir && row.clicked() {
+                    self.home_map.real_survey.file_browser_dir = fpath.clone();
+                    self.home_map.real_survey.refresh_file_browser();
+                } else if !*is_dir && row.double_clicked() {
+                    // KaFileBrowserPanel `fileActivated` (a double click): the file on the map (user_files.rs).
+                    self.activate_drawer_file(fpath);
                 }
             }
         });

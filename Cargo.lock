@@ -5351,6 +5351,7 @@ dependencies = [
  "dirs 6.0.0",
  "eframe",
  "egui",
+ "gdal",
  "geo",
  "image",
  "rfd",

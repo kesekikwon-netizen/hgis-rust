@@ -55,6 +55,8 @@ fn swatch_for(entry: &LayerTreeEntry) -> SwatchKind {
         "control_points" => SwatchKind::DomainMarker { fill: rgb(234, 179, 8), stroke: rgb(161, 98, 7), size_mm: 4.0 },
         "artifact_point" => SwatchKind::DomainMarker { fill: rgb(185, 28, 28), stroke: rgb(127, 29, 29), size_mm: 3.6 },
         "trial_trench" => SwatchKind::DomainFill { fill: rgba(220, 38, 38, 18), stroke: rgb(220, 38, 38), stroke_mm: 0.5 },
+        // A file of the user (user_files.rs): the black outline of `applySimpleVectorStyle` (MainWindow.cpp:2969).
+        k if is_user_file_key(k) => SwatchKind::DomainFill { fill: Color32::TRANSPARENT, stroke: rgb(0, 0, 0), stroke_mm: 0.2 },
         // 버퍼 반경 레이어(C++ 「주변 500m」)는 띠 견본을 쓴다.
         k if k.contains("buffer") => SwatchKind::BufferBand,
         // A row of the 「유산」 button: the outline in the colour of its kind (`HeritageSiteLegend.cpp:44-74`).
@@ -71,6 +73,11 @@ fn swatch_for(entry: &LayerTreeEntry) -> SwatchKind {
     }
 }
 
+/// A row of a file of the user (the buffer rings are made, not files).
+fn is_user_file_key(key: &str) -> bool {
+    key.starts_with(crate::app_state::user_files::USER_PREFIX) && !key.starts_with("user:buffer_")
+}
+
 /// 조사 레이어의 「글자」 칸 이름 — C++ `LayerLabelControls.cpp:140-145` 가 새 레이어 기본
 /// 라벨(`LayerOps.cpp:227-233` applyDomainDrawStyle)에 붙이는 이름: 시굴격자는 이름+면적,
 /// 다른 면은 면적, 선·점은 이름.
@@ -79,6 +86,8 @@ fn label_caption(entry: &LayerTreeEntry) -> Option<&'static str> {
         return None;
     }
     Some(match entry.layer_key.as_str() {
+        // The names of a user file are not written yet: no switch.
+        k if is_user_file_key(k) => return None,
         "trial_trench" => "이름·면적",
         "survey_area" | "feature_poly" => "면적",
         k if k.starts_with("user_poly_") => "면적",

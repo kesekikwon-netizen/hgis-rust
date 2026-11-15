@@ -103,6 +103,11 @@ impl StrataAppState {
             }
             // 「PDF 내보내기」 with the file named here in place of the save dialog (a temp folder only).
             _ if action.starts_with("@pdf=") => self.start_sheet_pdf(std::path::PathBuf::from(&action["@pdf=".len()..])),
+            // Files dropped on the window, `;` between them (a drop cannot be made by a script otherwise).
+            _ if action.starts_with("@drop=") => {
+                let paths: Vec<std::path::PathBuf> = action["@drop=".len()..].split(';').map(std::path::PathBuf::from).collect();
+                self.drop_paths(&paths);
+            }
             // The DEM the survey folder has, without an order at the portal.
             "@dem" => self.show_survey_dem(),
             // 「DEM 표현」: the dialog as the menu row opens it, and 적용 with preset;relief;times;per cent.

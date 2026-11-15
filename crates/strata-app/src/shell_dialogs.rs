@@ -1,66 +1,14 @@
 //! Dropped files (target/cpp-ref/src/app/MainWindowFiles.cpp:259-289) and close prompt
 //! (target/cpp-ref/src/app/KaClosePrompt.cpp).
 use eframe::egui::{self, Color32, Vec2};
-use crate::app_state::{MainTab, StrataAppState};
-use crate::dialogs_modal::ActiveModalDialog;
+use crate::app_state::StrataAppState;
 
 impl StrataAppState {
-    /// `MainWindowFiles.cpp:259-289` `tryAddDroppedPaths` — 창에 끌어 놓은 파일을
-    /// 확장자에 따라 레이어로 올린다. CAD 도면은 안내 창을 먼저 띄운다.
+    /// `MainWindowFiles.cpp:252-258` `tryAddDroppedUrls` — 창에 끌어 놓은 파일(user_files.rs).
     pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) {
-        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
-        if dropped.is_empty() {
-            return;
-        }
-        let mut added = 0usize;
-        let mut cad_path: Option<String> = None;
-        let mut skipped = 0usize;
-        for f in &dropped {
-            let Some(path) = f.path.as_ref() else {
-                skipped += 1;
-                continue;
-            };
-            let name = path.to_string_lossy().to_string();
-            let low = name.to_lowercase();
-            let is_cad = low.ends_with(".dxf") || low.ends_with(".dwg");
-            let ok = low.ends_with(".shp")
-                || is_cad
-                || low.ends_with(".gpkg")
-                || low.ends_with(".geojson")
-                || low.ends_with(".json")
-                || low.ends_with(".tif")
-                || low.ends_with(".tiff")
-                || low.ends_with(".img")
-                || low.ends_with(".csv")
-                || low.ends_with(".xlsx")
-                || low.ends_with(".hgis");
-            if !ok {
-                skipped += 1;
-                continue;
-            }
-            if is_cad {
-                cad_path = Some(name);
-                continue;
-            }
-            added += 1;
-        }
-        if let Some(path) = cad_path {
-            // KaCadImportNotice.cpp — 도면은 좌표계 확인 안내를 먼저 보여준다
-            self.modals.active = Some(ActiveModalDialog::CadImportNotice);
-            self.modals.cad_import_path = path;
-            self.home_map.draw_guide_message =
-                Some("CAD 도면을 끌어 놓았습니다. 좌표계를 확인하고 지도에 올리세요.".to_owned());
-            return;
-        }
-        if added > 0 {
-            let msg = format!("레이어 {added}개 추가됨 (파일→지도)");
-            self.last_drop_message = Some(msg.clone());
-            self.home_map.draw_guide_message = Some(msg);
-            self.active_tab = MainTab::Map;
-            self.is_dirty = true;
-        } else if skipped > 0 {
-            self.home_map.draw_guide_message =
-                Some("지도에 올릴 수 있는 파일이 아닙니다.".to_owned());
+        let dropped: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
+        if !dropped.is_empty() {
+            self.drop_paths(&dropped);
         }
     }
     /// 「저장하지 않고 끝내기」 of the close prompt.

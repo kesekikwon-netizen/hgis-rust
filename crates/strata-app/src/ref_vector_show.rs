@@ -27,6 +27,14 @@ impl StrataAppState {
         self.put_vector_row(key, title, spec, LegendGroup::Cadastral, 0);
     }
 
+    /// A file of the user: a row of 조사 데이터 at the top of that group (`addVectorFromPath` marks it a survey
+    /// layer, LayerOps.cpp:1040-1044), read-only here (user_files.rs).
+    pub(crate) fn show_user_vector_layer(&mut self, key: &str, title: &str, spec: LoadSpec) {
+        let entries = &self.left_layers.entries;
+        let at = entries.iter().position(|e| e.group == LegendGroup::SurveyData).or_else(|| entries.iter().position(|e| e.group != LegendGroup::Cadastral)).unwrap_or(entries.len());
+        self.put_vector_row(key, title, spec, LegendGroup::SurveyData, at);
+    }
+
     fn put_vector_row(&mut self, key: &str, title: &str, spec: LoadSpec, group: LegendGroup, at: usize) {
         self.ref_vectors.layers.retain(|l| l.key != key);
         self.ref_vectors.layers.push(Layer::new(key.to_owned(), spec));

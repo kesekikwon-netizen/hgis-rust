@@ -19,6 +19,7 @@ use crate::ref_vector::cadastral::layer::{kept_style, CADASTRAL_KEY};
 use crate::ref_vector::map::{GEOLOGY, RIVER, SOIL};
 use crate::topo_download::dem::{files_of, DEM_KEY, RELIEF_KEY};
 use crate::topo_download::post::{held_topographic_merge, topo_spec, TOPO_KEY, TOPO_TITLE};
+use crate::app_state::user_files::{user_shapefile, USER_PREFIX};
 
 /// The version of the list; a list of another version is not read.
 const VERSION: u32 = 1;
@@ -48,10 +49,12 @@ pub(crate) fn list_path(survey: &Path) -> PathBuf {
     survey.with_extension("strata-maps.json")
 }
 
-/// The rows the list keeps: the maps whose layers can be made again from what the survey folder holds, and
-/// the maps of tiles.
+/// The rows the list keeps: the maps whose layers can be made again from what the survey folder holds, the
+/// maps of tiles, and the files of the user (user_files.rs; the buffer rings are made, not files).
 fn kept_key(key: &str) -> bool {
-    [TOPO_KEY, DEM_KEY, RELIEF_KEY, CADASTRAL_KEY, SOIL.key, GEOLOGY.key, RIVER.key].contains(&key) || ref_tile_layer(key).is_some()
+    [TOPO_KEY, DEM_KEY, RELIEF_KEY, CADASTRAL_KEY, SOIL.key, GEOLOGY.key, RIVER.key].contains(&key)
+        || ref_tile_layer(key).is_some()
+        || (key.starts_with(USER_PREFIX) && !key.starts_with("user:buffer_"))
 }
 
 impl StrataAppState {
@@ -114,6 +117,11 @@ impl StrataAppState {
         // `join` keeps a whole path (a file outside the survey folder, after 다른 이름으로 저장) as it is.
         let file = row.file.as_ref().map(|file| folder.join(file)).filter(|file| file.is_file() || !files_of(file).is_empty());
         let work_epsg = CrsCode::from(self.work_crs).epsg_number();
+        if row.key.starts_with(USER_PREFIX) {
+            let Some(Ok((spec, _, _))) = file.map(|file| user_shapefile(&file, work_epsg)) else { return false };
+            self.show_user_vector_layer(&row.key, &row.title, spec);
+            return true;
+        }
         if row.key == TOPO_KEY {
             // A later run in this folder replaces the merged file by a newer one that has every sheet.
             let Some(file) = file.or_else(|| held_topographic_merge(Some(survey))) else { return false };

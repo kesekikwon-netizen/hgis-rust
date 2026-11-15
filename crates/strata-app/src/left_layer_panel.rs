@@ -202,39 +202,6 @@ impl LayerPresetType {
     }
 }
 
-/// C++ `FileLoadError` 파일함 적재 오류 열거형 1:1 대응
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FileLoadError {
-    UnsupportedExtension,
-    CorruptedFileFormat,
-}
-
-/// C++ `KaFileDrawerLoader::loadFileDirect` 확장자별 프로바이더 분기 결과
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FileLoadDriver {
-    GeoPackageVector,
-    AutoCadDxfCp949,
-    DelimitedTextCsv,
-    GdalGeoTiff,
-}
-
-/// 파일함 더블클릭 시 4대 확장자(`.gpkg`, `.dxf`, `.csv`, `.tif`/`.tiff`) 자동 감지 및 미지원 확장자 차단
-/// (C++ `KaFileDrawerLoader::loadFileDirect` 1:1 대응)
-pub fn detect_file_drawer_driver(path: &std::path::Path) -> Result<FileLoadDriver, FileLoadError> {
-    let ext = path
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    match ext.as_str() {
-        "gpkg" => Ok(FileLoadDriver::GeoPackageVector),
-        "dxf" => Ok(FileLoadDriver::AutoCadDxfCp949),
-        "csv" => Ok(FileLoadDriver::DelimitedTextCsv),
-        "tif" | "tiff" => Ok(FileLoadDriver::GdalGeoTiff),
-        _ => Err(FileLoadError::UnsupportedExtension),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,30 +231,5 @@ mod tests {
         let (none_matched, none_expanded) = panel.filter_layers_by_keyword(".*[+(?");
         assert!(none_matched.is_empty());
         assert!(none_expanded.is_empty());
-    }
-
-    #[test]
-    fn test_dxf_and_gpkg_auto_detection_and_layer_preset_switching() {
-        // TestKaFileDrawerLoader::testDxfAndGpkgAutoDetection
-        assert_eq!(
-            detect_file_drawer_driver(std::path::Path::new("site_survey.gpkg")),
-            Ok(FileLoadDriver::GeoPackageVector)
-        );
-        assert_eq!(
-            detect_file_drawer_driver(std::path::Path::new("cad_drawing.dxf")),
-            Ok(FileLoadDriver::AutoCadDxfCp949)
-        );
-        assert_eq!(
-            detect_file_drawer_driver(std::path::Path::new("points.csv")),
-            Ok(FileLoadDriver::DelimitedTextCsv)
-        );
-        assert_eq!(
-            detect_file_drawer_driver(std::path::Path::new("ortho.tif")),
-            Ok(FileLoadDriver::GdalGeoTiff)
-        );
-        assert_eq!(
-            detect_file_drawer_driver(std::path::Path::new("broken.xyz_corrupted")),
-            Err(FileLoadError::UnsupportedExtension)
-        );
     }
 }

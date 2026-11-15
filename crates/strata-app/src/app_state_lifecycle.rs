@@ -41,7 +41,6 @@ impl StrataAppState {
             layer_context_menu_open: false,
             layer_context_menu_pos: [0.0, 0.0],
             layer_context_menu_key: None,
-            last_drop_message: None,
             close_prompt_open: false,
             save_before: None,
             startup_notice: None,
