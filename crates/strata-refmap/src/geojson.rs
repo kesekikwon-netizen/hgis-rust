@@ -27,7 +27,7 @@ pub fn declared_epsg(collection: &Map<String, Value>) -> Option<u32> {
 
 /// `EPSG:5186`, `urn:ogc:def:crs:EPSG::5186`, `http://www.opengis.net/def/crs/EPSG/0/5186`, and the names of
 /// longitude and latitude on WGS 84 (`CRS84`).
-fn named_epsg(name: &str) -> Option<u32> {
+pub(crate) fn named_epsg(name: &str) -> Option<u32> {
     let parts: Vec<&str> = name.split([':', '/']).filter(|p| !p.is_empty()).collect();
     if parts.iter().any(|p| p.eq_ignore_ascii_case("CRS84")) || (parts.len() >= 2 && parts[parts.len() - 2].eq_ignore_ascii_case("CRS") && parts[parts.len() - 1] == "84") {
         return Some(4326);

@@ -16,12 +16,22 @@ impl StrataAppState {
     /// Puts the layer on the map: its legend row, checked, above the tile maps and the background. A layer of
     /// that key that is there already now draws the new file; its row keeps what the user set on it.
     pub(crate) fn show_reference_vector_layer(&mut self, key: &str, title: &str, spec: LoadSpec) {
+        let entries = &self.left_layers.entries;
+        let at = entries.iter().position(|e| e.group == LegendGroup::Basemap || crate::ref_tile_layers::ref_tile_layer(&e.layer_key).is_some()).unwrap_or(entries.len());
+        self.put_vector_row(key, title, spec, LegendGroup::ReferenceMap, at);
+    }
+
+    /// The same for the received cadastral map, whose row is a top row of its own, outside 주변·참조
+    /// (`LayerOps.cpp:1091-1101`).
+    pub(crate) fn show_top_vector_layer(&mut self, key: &str, title: &str, spec: LoadSpec) {
+        self.put_vector_row(key, title, spec, LegendGroup::Cadastral, 0);
+    }
+
+    fn put_vector_row(&mut self, key: &str, title: &str, spec: LoadSpec, group: LegendGroup, at: usize) {
         self.ref_vectors.layers.retain(|l| l.key != key);
         self.ref_vectors.layers.push(Layer::new(key.to_owned(), spec));
         if !self.left_layers.entries.iter().any(|e| e.layer_key == key) {
-            let entries = &self.left_layers.entries;
-            let at = entries.iter().position(|e| e.group == LegendGroup::Basemap || crate::ref_tile_layers::ref_tile_layer(&e.layer_key).is_some()).unwrap_or(entries.len());
-            let row = LayerTreeEntry { layer_key: key.to_owned(), label_ko: title.to_owned(), group: LegendGroup::ReferenceMap, visible: true, opacity: 1.0, read_only: true, snap_enabled: false, feature_count: 0 };
+            let row = LayerTreeEntry { layer_key: key.to_owned(), label_ko: title.to_owned(), group, visible: true, opacity: 1.0, read_only: true, snap_enabled: false, feature_count: 0 };
             self.left_layers.entries.insert(at, row);
         }
         // The check mark is kept by the row's present name (the user may have renamed the row).

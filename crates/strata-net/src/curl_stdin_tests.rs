@@ -74,8 +74,8 @@ fn local_target_launch_offline_adds_noproxy_refuses_redirects_and_blocks_remote(
     );
     assert_eq!(cmds[0].stdin, curl_url_config(local_url).into_bytes());
 
-    // Switch off + local target with -L or --location: refused, starts nothing.
-    let count_before_refusal = allowed_launches();
+    // Switch off + local target with -L or --location: refused, starts nothing. (The launch count of the
+    // whole process is no evidence here: tests that run beside this one launch meanwhile.)
     for redirect_flag in ["-L", "--location", "-sSL"] {
         let (r_launches, r_cmds) = probe_dry_run(false, || {
             let mut cmd = Command::new("curl");
@@ -85,7 +85,6 @@ fn local_target_launch_offline_adds_noproxy_refuses_redirects_and_blocks_remote(
         assert_eq!(r_launches, 0, "redirect flag {redirect_flag} must be refused");
         assert!(r_cmds.is_empty());
     }
-    assert_eq!(allowed_launches(), count_before_refusal);
 
     // Switch off + non-local target: starts nothing.
     let (remote_launches, remote_cmds) = probe_dry_run(false, || {

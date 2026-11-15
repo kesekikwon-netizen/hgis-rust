@@ -155,11 +155,8 @@ impl StrataAppState {
                     self.press_ngii_order(crate::topo_download::OrderOf::Dem);
                 }
             }
-            "지적" => {
-                self.active_tab = MainTab::Map;
-                self.left_layers.add_cadastral_wms_layer();
-                self.modals.active = Some(ActiveModalDialog::CadastralDownload);
-            }
+            // The digital cadastral map within 5 km is received in the background (cadastral_run.rs).
+            "지적" => self.press_cadastral(),
             // The order runs in the background; the bottom gauge shows it (docs/RUST_PLAN.md 2.8, 2.9).
             "수치지형" => self.open_topographic_download(),
             // The city is asked for once a survey area is drawn (heritage_run.rs).

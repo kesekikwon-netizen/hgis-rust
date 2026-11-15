@@ -28,6 +28,9 @@ pub(crate) mod labels;
 /// The ribbon buttons that fetch such layers.
 #[path = "ref_map.rs"]
 pub(crate) mod map;
+/// The 지적 button: its run and its row.
+#[path = "cadastral_run.rs"]
+pub(crate) mod cadastral;
 #[path = "ref_vector_raster.rs"]
 pub(crate) mod raster;
 /// The app's side: legend rows, and the painting of every frame.
@@ -139,6 +142,11 @@ impl RefVectorLayers {
     /// The file the layer of this row is drawn from.
     pub(crate) fn file_of(&self, key: &str) -> Option<&std::path::Path> {
         self.layers.iter().find(|l| l.key == key).map(|l| l.spec.file.as_path())
+    }
+
+    /// All that the layer of this row is drawn by.
+    pub(crate) fn spec_of(&self, key: &str) -> Option<&data::LoadSpec> {
+        self.layers.iter().find(|l| l.key == key).map(|l| &l.spec)
     }
 
     /// How the layer of this row is drawn (the legend menu offers what fits it).

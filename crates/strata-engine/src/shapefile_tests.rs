@@ -8,7 +8,7 @@ use gdal::spatial_ref::SpatialRef;
 use gdal::vector::{Feature, FieldDefn, Geometry, LayerAccess, LayerOptions, OGRFieldType, OGRwkbGeometryType};
 use gdal::DriverManager;
 
-use super::{read_shapefile, shapefile_facts};
+use super::{read_shapefile, read_shapefile_within, shapefile_facts};
 use crate::{Cell, ColumnKind, ShapeKind, Shapes};
 
 /// Two made-up sites as squares in EPSG:5179, written in CP949; the `.cpg` GDAL writes beside is removed.
@@ -59,6 +59,29 @@ fn a_korean_shapefile_is_read_with_its_text() {
     assert_eq!(rows[1].cells, [Cell::Text("B-2".to_owned()), Cell::Text("가상 산성".to_owned())]);
     let Shapes::Polygons(polygons) = &rows[1].shapes else { panic!("polygons") };
     assert_eq!(polygons[0][0][0], [1_000_500.0, 2_000_000.0]);
+}
+
+/// Only the rows whose box meets the rectangle are handed over (`QgsFeatureRequest::setFilterRect`, as
+/// `CadastralImport.cpp:170` reads the parcels of a whole county); the facts stay those of the whole file.
+#[test]
+fn a_shapefile_is_read_within_a_rectangle() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = korean_shapefile(dir.path());
+    let mut names = Vec::new();
+    let facts = read_shapefile_within(&file, "CP949", &["유적명"], [999_900.0, 1_999_900.0, 1_000_200.0, 2_000_200.0], &mut |row| {
+        names.push(row.cells[0].clone());
+        true
+    })
+    .unwrap();
+    assert_eq!(names, [Cell::Text("가상 고분군".to_owned())]);
+    assert_eq!(facts.rows, 2);
+    let mut met = 0;
+    read_shapefile_within(&file, "CP949", &[], [0.0, 0.0, 10.0, 10.0], &mut |_| {
+        met += 1;
+        true
+    })
+    .unwrap();
+    assert_eq!(met, 0, "a rectangle that meets no shape brings no row");
 }
 
 /// A column that is not there, and a file that is no shapefile, are refused.

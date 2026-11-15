@@ -113,6 +113,8 @@ pub struct StrataAppState {
     pub(crate) ref_vectors: crate::ref_vector::RefVectorLayers,
     /// Reference maps being fetched by a ribbon button (`ref_map.rs`).
     pub(crate) ref_maps: crate::ref_vector::map::run::RefMapJobs,
+    /// The digital cadastral map being received by the 지적 button (`cadastral_run.rs`).
+    pub(crate) cadastral: crate::ref_vector::cadastral::CadastralJobs,
     /// 마지막 프레임에 칠한 타일 수(진단·시험용).
     pub basemap_tiles_painted: usize,
     /// 연속지적도 z/x/y 타일별 텍스처(위성 타일과 같은 격자).

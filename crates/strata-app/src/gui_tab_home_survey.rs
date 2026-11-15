@@ -106,6 +106,7 @@ impl StrataAppState {
         self.remove_reference_tile_rows();
         self.remove_reference_vector_rows();
         self.drop_reference_map_fetches();
+        self.drop_cadastral_run();
         self.drop_topographic_post();
         self.drop_heritage_run();
         (self.dem_look, self.dem_follow, self.dem_zoom_wanted) = Default::default();

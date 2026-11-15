@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod cadastral;
 pub mod collection;
 pub mod geojson;
 pub mod geology_colour;

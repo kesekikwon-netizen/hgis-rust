@@ -175,6 +175,7 @@ impl eframe::App for StrataAppState {
         self.drive_topographic_download(frame, ctx.input(|i| i.time));
         self.drive_topographic_post(ctx);
         self.drive_reference_maps(ctx, ctx.input(|i| i.time));
+        self.drive_cadastral(ctx, ctx.input(|i| i.time));
         self.drive_heritage(ctx, ctx.input(|i| i.time));
         let perf_frame = crate::perf_recorder::begin_frame();
         // 첫 프레임에 창이 화면보다 크면 화면 안으로 줄인다.

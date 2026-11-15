@@ -70,6 +70,7 @@ impl StrataAppState {
             ref_circle: crate::ref_tile_layers::RefCircleCache::default(),
             ref_vectors: crate::ref_vector::RefVectorLayers::default(),
             ref_maps: crate::ref_vector::map::run::RefMapJobs::default(),
+            cadastral: crate::ref_vector::cadastral::CadastralJobs::default(),
             basemap_tiles_painted: 0,
             cadastral_cells: crate::basemap_paint::CadastralCellCache::default(),
             cadastral_fetch,

@@ -5502,13 +5502,17 @@ dependencies = [
 name = "strata-refmap"
 version = "2.0.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "gdal",
  "image",
  "serde_json",
  "sha2 0.10.9",
  "strata-engine",
+ "strata-net",
+ "strata-topo",
  "tempfile",
+ "zip 2.6.1",
 ]
 
 [[package]]

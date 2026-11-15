@@ -68,7 +68,7 @@ impl StrataAppState {
 
         // 2) 자리 잡을 시간을 준다(폰트·레이아웃 확정).
         // A download a step started runs over many frames; the capture waits for its end.
-        if settle > 0 || self.topographic_download_busy() || self.ref_maps.is_busy() || self.heritage.is_busy() || self.ref_vectors.is_busy() || self.dem_follow_waits() {
+        if settle > 0 || self.topographic_download_busy() || self.ref_maps.is_busy() || self.cadastral.is_busy() || self.heritage.is_busy() || self.ref_vectors.is_busy() || self.dem_follow_waits() {
             if let Some(snap) = self.snap.as_mut() {
                 snap.settle = snap.settle.saturating_sub(1);
             }

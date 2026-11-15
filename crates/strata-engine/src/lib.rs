@@ -38,7 +38,7 @@ pub use rings::{distance_rings, ring_label_points};
 pub use scope::{Scope, ScopeTest};
 pub use surface::{point_on_surface, polygons_area};
 #[cfg(feature = "gdal")]
-pub use vector_table::{read_shapefile, shapefile_facts};
+pub use vector_table::{read_shapefile, read_shapefile_within, shapefile_facts};
 #[cfg(feature = "gdal")]
 pub use vector_table::{append_to_table, read_table, table_facts, write_new_table, Cell, ColumnKind, Row, ShapeKind, Shapes, TableFacts, TableLayout};
 #[cfg(feature = "gdal")]

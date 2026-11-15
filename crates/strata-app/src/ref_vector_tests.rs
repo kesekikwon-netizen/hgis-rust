@@ -268,10 +268,6 @@ impl RefVectorLayers {
         })
     }
 
-    pub(crate) fn spec_of(&self, key: &str) -> Option<&LoadSpec> {
-        self.layers.iter().find(|l| l.key == key).map(|l| &l.spec)
-    }
-
     pub(crate) fn is_loaded(&self, key: &str) -> bool {
         self.shapes_of(key).is_some()
     }

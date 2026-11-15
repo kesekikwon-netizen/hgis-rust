@@ -23,6 +23,7 @@ pub mod ngii_topographic;
 pub mod tile_fetcher;
 pub mod topographic_catalog;
 pub mod vworld_client;
+pub mod vworld_portal;
 
 #[cfg(test)]
 #[path = "geoinfo_borehole_tests.rs"]

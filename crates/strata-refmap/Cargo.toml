@@ -15,12 +15,19 @@ workspace = true
 
 [dependencies]
 strata-engine = { workspace = true, features = ["gdal"] }
+# The 지적 run: the site session and the list of archives (strata-net), the unpacking (strata-topo).
+strata-net = { workspace = true }
+strata-topo = { workspace = true }
+base64 = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 image = { workspace = true }
 chrono = { workspace = true }
+# The draft of a table is written in a folder of its own beside the finished one (QTemporaryDir in the C++).
+tempfile = { workspace = true }
 
 [dev-dependencies]
-tempfile = { workspace = true }
+# Tests pack the county archive the made-up site sends.
+zip = { workspace = true }
 # Tests write the shapefiles they read (the same GDAL the engine builds).
 gdal = "=0.19.0"

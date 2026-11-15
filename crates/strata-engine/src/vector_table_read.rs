@@ -124,12 +124,29 @@ pub fn shapefile_facts(path: &Path, encoding: &str) -> Result<TableFacts, Engine
 /// # Errors
 /// As `shapefile_facts`; a named column is missing or of a kind these tables do not hold; a row cannot be read.
 pub fn read_shapefile(path: &Path, encoding: &str, columns: &[&str], each: &mut dyn FnMut(Row) -> bool) -> Result<TableFacts, EngineError> {
+    rows_of_shapefile(path, encoding, columns, None, each)
+}
+
+/// As [`read_shapefile`], but only the rows whose shape's box meets `rect` (`[min x, min y, max x, max y]` in
+/// the CRS of the file) are handed over, as `QgsFeatureRequest::setFilterRect` does for the C++. The facts
+/// are those of the whole file.
+///
+/// # Errors
+/// As [`read_shapefile`].
+pub fn read_shapefile_within(path: &Path, encoding: &str, columns: &[&str], rect: [f64; 4], each: &mut dyn FnMut(Row) -> bool) -> Result<TableFacts, EngineError> {
+    rows_of_shapefile(path, encoding, columns, Some(rect), each)
+}
+
+fn rows_of_shapefile(path: &Path, encoding: &str, columns: &[&str], rect: Option<[f64; 4]>, each: &mut dyn FnMut(Row) -> bool) -> Result<TableFacts, EngineError> {
     let dataset = open_shapefile(path, encoding)?;
     let mut layer = dataset.layer(0).map_err(|e| named(path, e))?;
     let (facts, known) = (shapefile_facts_of(&layer)?, known_columns(&layer));
     let mut wanted = Vec::new();
     for name in columns {
         wanted.push(known.iter().find(|(_, known, _)| known == name).map(|(place, _, _)| *place).ok_or_else(|| named(path, format!("the shapefile has no column {name}")))?);
+    }
+    if let Some([min_x, min_y, max_x, max_y]) = rect {
+        layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y);
     }
     for feature in layer.features() {
         let cells = wanted.iter().map(|place| cell(feature.field(*place)?)).collect::<Result<Vec<_>, _>>()?;

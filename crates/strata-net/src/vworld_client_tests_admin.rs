@@ -171,3 +171,15 @@ fn test_heritage_nearby_regions_and_tiled_fetch_and_pledge() {
     );
     assert!(notice.contains("서약 요지(원문 그대로):"));
 }
+
+/// `selectsSejongMunicipalityInsteadOfProvinceArchive` (`test_cadastral.cpp:664-676`): the site lists both
+/// 세종시 (the city) and 세종 (the province); the city's archive is taken for either spelling of the name.
+#[test]
+fn sejong_takes_the_archive_of_the_city() {
+    let archive = |file_no: &str, name: &str, size_kb| CadastralResource { file_no: file_no.to_owned(), name: name.to_owned(), size_kb, revision: String::new() };
+    let resources = [archive("306", "LSMD_CONT_LDREG_세종시.zip", 100), archive("312", "LSMD_CONT_LDREG_세종.zip", 200)];
+    for name in ["세종특별자치시", "세종특별자치시 세종시"] {
+        let picked = select_cadastral_resources(&resources, &[CadastralDistrict { code: "36110".to_owned(), name: name.to_owned() }]).unwrap();
+        assert_eq!(picked.iter().map(|file| file.file_no.as_str()).collect::<Vec<_>>(), ["306"], "{name}");
+    }
+}
