@@ -2,8 +2,8 @@
 //! (x, y) to (x + 1, y + 1); world y grows upwards, picture y downwards.
 
 use super::*;
-use crate::ref_vector_data::{Item, PaintOf, Run};
-use crate::ref_vector_stroke::Polylines;
+use crate::ref_vector::data::{Item, PaintOf, Run};
+use crate::ref_vector::stroke::Polylines;
 
 const GREY: [u8; 4] = [128, 128, 128, 255];
 

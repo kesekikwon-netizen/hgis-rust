@@ -83,7 +83,7 @@ impl StrataAppState {
     /// The looks are those of the layers that use them: sheet lines (`KaTopographicImportDialog.cpp:204-208`),
     /// parcels, and polygons coloured by their `ka_color` column (`GeologyMapService.cpp:382-458`).
     fn snap_reference_vector(&mut self, text: &str) {
-        use crate::ref_vector_data::{LoadSpec, Look, PolygonFill};
+        use crate::ref_vector::data::{LoadSpec, Look, PolygonFill};
         let mut parts = text.splitn(4, ';');
         let (file, table, title) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
         let look = match parts.next() {

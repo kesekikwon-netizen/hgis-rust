@@ -149,7 +149,6 @@ fn main() {
         std::process::exit(1);
     }
 }
-
 #[cfg(test)]
 #[path = "tabs_paleo_3d_tests.rs"]
 mod tabs_paleo_3d_tests;
@@ -203,13 +202,8 @@ mod basemap_fetch;
 mod basemap_mesh;
 mod basemap_paint;
 mod basemap_tiles;
-mod ref_map;
 mod ref_tile_layers;
 mod ref_vector;
-mod ref_vector_clip;
-mod ref_vector_data;
-mod ref_vector_raster;
-mod ref_vector_stroke;
 mod topo_download;
 mod diag_layout;
 mod snap_shot;

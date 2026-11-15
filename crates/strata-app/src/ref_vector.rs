@@ -15,9 +15,20 @@ use strata_types::schema::LegendGroup;
 use crate::app_state::StrataAppState;
 use crate::gui_tab_map::{s2w, w2s};
 use crate::left_layer_panel::LayerTreeEntry;
-use crate::ref_vector_data::{load, LoadSpec, Look, RefVectorData};
-use crate::ref_vector_raster::{render, Raster, RasterView};
+use crate::ref_vector::data::{load, LoadSpec, Look, RefVectorData};
+use crate::ref_vector::raster::{render, Raster, RasterView};
 
+#[path = "ref_vector_clip.rs"]
+pub(crate) mod clip;
+#[path = "ref_vector_data.rs"]
+pub(crate) mod data;
+/// The ribbon buttons that fetch such layers.
+#[path = "ref_map.rs"]
+pub(crate) mod map;
+#[path = "ref_vector_raster.rs"]
+pub(crate) mod raster;
+#[path = "ref_vector_stroke.rs"]
+pub(crate) mod stroke;
 #[cfg(test)]
 #[path = "ref_vector_tests.rs"]
 mod tests;
@@ -272,36 +283,5 @@ impl StrataAppState {
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-impl RefVectorLayers {
-    /// Work runs inside the call that asks for it.
-    pub(crate) fn run_at_once(&mut self) {
-        self.runner = Arc::new(|work| work());
-    }
-
-    pub(crate) fn pictures_made(&self) -> u32 {
-        self.pictures_made
-    }
-
-    pub(crate) fn shapes_of(&self, key: &str) -> Option<Arc<RefVectorData>> {
-        self.layers.iter().find(|l| l.key == key).and_then(|l| match &l.shapes {
-            Shapes::Ready(data) => Some(Arc::clone(data)),
-            _ => None,
-        })
-    }
-
-    pub(crate) fn spec_of(&self, key: &str) -> Option<&LoadSpec> {
-        self.layers.iter().find(|l| l.key == key).map(|l| &l.spec)
-    }
-
-    pub(crate) fn is_loaded(&self, key: &str) -> bool {
-        self.shapes_of(key).is_some()
-    }
-
-    pub(crate) fn holds_picture(&self, key: &str) -> bool {
-        self.layers.iter().any(|l| l.key == key && l.picture.is_some())
     }
 }

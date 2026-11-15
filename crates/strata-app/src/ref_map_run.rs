@@ -13,7 +13,7 @@ use strata_types::crs::CrsCode;
 use super::{kept_map, survey_scope, write_scope_note, RefMapKind, BUSY};
 use crate::app_state::{MainTab, StrataAppState};
 use crate::download_jobs::{DownloadJobHandle, DownloadJobState, StopCode};
-use crate::ref_vector_data::LoadSpec;
+use crate::ref_vector::data::LoadSpec;
 
 /// Sends one request to a map service.
 type Fetch = Arc<dyn Fn(&Request) -> Result<Vec<u8>, TransferFailure> + Send + Sync>;

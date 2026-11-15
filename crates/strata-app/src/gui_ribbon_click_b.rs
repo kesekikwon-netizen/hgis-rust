@@ -40,7 +40,7 @@ impl StrataAppState {
             // MainWindowOverlay.cpp:405-472 downloadGeologyMap: with the layer in the legend the button hides and
             // shows it; without it the map is fetched (ref_map.rs). The relief under it (`지질 음영`,
             // GeologyMapService.cpp:609-636) is order NET-GEO1c.
-            "지질" => self.press_reference_map(&crate::ref_map::GEOLOGY),
+            "지질" => self.press_reference_map(&crate::ref_vector::map::GEOLOGY),
             // C++ MainWindowOverlay.cpp:476-527 downloadRiverMap — :479 toggleExistingOverlay
             // (`수계도(하천망)`, m_actRiver)로 껐다 켰다 하고, 없을 때만 내려받는다
             // (:522 → :536,622 `수계도를 추가했습니다. …`).

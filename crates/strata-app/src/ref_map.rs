@@ -15,7 +15,7 @@ use strata_storage::wkb_codec::WkbGeometry;
 use strata_types::crs::CrsCode;
 
 use crate::app_state::StrataAppState;
-use crate::ref_vector_data::{Look, PolygonFill};
+use crate::ref_vector::data::{Look, PolygonFill};
 use crate::survey_area_setup::is_survey_area_key;
 
 #[path = "ref_map_run.rs"]
@@ -23,6 +23,9 @@ pub(crate) mod run;
 #[cfg(test)]
 #[path = "ref_map_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "ref_map_tests_b.rs"]
+mod tests_b;
 
 /// The function of strata-refmap that fetches and stores one kind of map.
 type Prepare = fn(&Scope, &Path, Download<'_>, &dyn Fn() -> bool) -> Result<Prepared, Stopped>;

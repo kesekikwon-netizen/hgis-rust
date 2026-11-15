@@ -11,7 +11,7 @@ use strata_engine::{write_new_table, Cell, ColumnKind, Row, ShapeKind, Shapes, T
 use strata_types::schema::LegendGroup;
 
 use super::*;
-use crate::ref_vector_data::Look;
+use crate::ref_vector::data::Look;
 
 const KEY: &str = "ref_topographic";
 const CENTRE: [f64; 2] = [220_000.0, 370_000.0];
@@ -200,4 +200,35 @@ fn a_copy_of_the_app_state_knows_the_layers_but_holds_none_of_their_memory() {
     let copy = app.ref_vectors.clone();
     assert!(copy.has(KEY) && !copy.is_loaded(KEY) && !copy.holds_picture(KEY));
     assert!(Arc::strong_count(&app.ref_vectors.shapes_of(KEY).unwrap()) >= 2, "the original still holds its shapes");
+}
+
+/// What the tests of this and of other modules look at.
+impl RefVectorLayers {
+    /// Work runs inside the call that asks for it.
+    pub(crate) fn run_at_once(&mut self) {
+        self.runner = Arc::new(|work| work());
+    }
+
+    pub(crate) fn pictures_made(&self) -> u32 {
+        self.pictures_made
+    }
+
+    pub(crate) fn shapes_of(&self, key: &str) -> Option<Arc<RefVectorData>> {
+        self.layers.iter().find(|l| l.key == key).and_then(|l| match &l.shapes {
+            super::Shapes::Ready(data) => Some(Arc::clone(data)),
+            _ => None,
+        })
+    }
+
+    pub(crate) fn spec_of(&self, key: &str) -> Option<&LoadSpec> {
+        self.layers.iter().find(|l| l.key == key).map(|l| &l.spec)
+    }
+
+    pub(crate) fn is_loaded(&self, key: &str) -> bool {
+        self.shapes_of(key).is_some()
+    }
+
+    pub(crate) fn holds_picture(&self, key: &str) -> bool {
+        self.layers.iter().any(|l| l.key == key && l.picture.is_some())
+    }
 }

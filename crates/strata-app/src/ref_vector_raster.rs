@@ -10,9 +10,9 @@
 
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform};
 
-use crate::ref_vector_clip::{clip_ring, clip_segment, ClipBox};
-use crate::ref_vector_data::{Item, RefVectorData};
-use crate::ref_vector_stroke::{coverage, lay_over, Polylines};
+use crate::ref_vector::clip::{clip_ring, clip_segment, ClipBox};
+use crate::ref_vector::data::{Item, RefVectorData};
+use crate::ref_vector::stroke::{coverage, lay_over, Polylines};
 
 #[cfg(test)]
 #[path = "ref_vector_raster_tests.rs"]
