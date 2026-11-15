@@ -6,6 +6,7 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod align_fit;
 pub mod boolean_split;
 pub mod buffer_round;
 pub mod cadastral_parcel;
