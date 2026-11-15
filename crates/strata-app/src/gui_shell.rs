@@ -97,40 +97,6 @@ impl StrataAppState {
             } else if !wants_kb && i.key_pressed(egui::Key::Backspace) && !self.delete_active_vertex() {
                 self.home_map.cad.on_backspace(&mut self.home_map.scene);
             }
-            if !wants_kb && self.active_tab == MainTab::Map {
-                let arrow = if i.key_pressed(egui::Key::ArrowLeft) {
-                    Some(strata_geo::trench_grid::TrenchArrowKey::Left)
-                } else if i.key_pressed(egui::Key::ArrowRight) {
-                    Some(strata_geo::trench_grid::TrenchArrowKey::Right)
-                } else if i.key_pressed(egui::Key::ArrowUp) {
-                    Some(strata_geo::trench_grid::TrenchArrowKey::Up)
-                } else if i.key_pressed(egui::Key::ArrowDown) {
-                    Some(strata_geo::trench_grid::TrenchArrowKey::Down)
-                } else {
-                    None
-                };
-                if let Some(key) = arrow {
-                    if let Ok(next_origin) =
-                        strata_geo::trench_grid::translate_trench_center_with_key(
-                            [0.0, 0.0],
-                            key,
-                            i.modifiers.shift,
-                            true,
-                        )
-                    {
-                        self.home_map.real_survey.translate_all_trenches(
-                            next_origin[0],
-                            next_origin[1],
-                            None,
-                        );
-                        self.is_dirty = true;
-                        let step_m = if i.modifiers.shift { 1.0 } else { 0.1 };
-                        self.home_map.draw_guide_message = Some(format!(
-                            "시굴격자를 화살표 방향으로 {step_m:.1} m 이동했습니다."
-                        ));
-                    }
-                }
-            }
             if i.modifiers.ctrl {
                 if i.key_pressed(egui::Key::N) {
                     // `MainWindowRibbon.cpp:280` QKeySequence::New → newSurvey(「새 조사」 창).
@@ -251,3 +217,7 @@ impl eframe::App for StrataAppState {
         self.snap_tick(ctx);
     }
 }
+
+#[cfg(test)]
+#[path = "gui_shell_keys_tests.rs"]
+mod keys_tests;
