@@ -71,6 +71,8 @@ impl StrataAppState {
                                 }
                             }
                         }
+                        // syncAdjustButton (KaDrawingStudio.cpp:3616-3621): the button reads 「조정 끝」 while the mode is on.
+                        let lbl = if i == 2 && self.drawing.map_adjust_active { &"조정 끝" } else { lbl };
                         p.text(Pos2::new(cell_r.center().x, cell_r.bottom() - bar_h_px * 0.24), egui::Align2::CENTER_CENTER, *lbl, egui::FontId::proportional(if compact_v { 8.0 } else { 10.0 }), Color32::from_rgb(55, 54, 50));
                         let cell_resp = ui
                               .interact(cell_r, ui.id().with(("drawing_toolbar_btn", i)), egui::Sense::click())
@@ -81,7 +83,8 @@ impl StrataAppState {
                           if cell_resp.clicked() {
                             match i {
                                 0 => {
-            // KaDrawingCoordCallout.cpp — 용지 위 좌표점 콜아웃 모드
+            // KaDrawingCoordCallout.cpp — 용지 위 좌표점 콜아웃 모드. beginPlaceCoordPoint ends 「지도 조정」 first.
+            self.end_sheet_map_adjust();
             self.drawing.coord_callout_mode = !self.drawing.coord_callout_mode;
             self.home_map.draw_guide_message = Some(if self.drawing.coord_callout_mode {
                 "좌표점 모드 — 용지에서 꼭짓점을 찍으면 화살표와 X·Y가 붙습니다.".to_owned()
@@ -92,21 +95,11 @@ impl StrataAppState {
                                 1 => {
                                     self.center_layer_in_sheet();
                                 }
-                                2 => {
-            // KaDrawingStudio.cpp:822-838 m_adjustBar — 지도 조정 모드
-            self.drawing.map_adjust_active = !self.drawing.map_adjust_active;
-            self.home_map.draw_guide_message = Some(if self.drawing.map_adjust_active {
-                "지도 조정: 드래그로 이동, 휠로 확대. 끝나면 「지도조정끝」.".to_owned()
-            } else {
-                "지도 조정을 끝냈습니다.".to_owned()
-            });
-        }
+                                2 => self.toggle_sheet_map_adjust(),
                                 3 => {
-                                    // 지도 화면과 같은 범위로 — 「레이어를 가운데」로 옮긴 가운데를 푼다(C++ centerOnMapCanvas).
-                                    self.drawing.sheet_center = None;
                                     self.drawing.sheet.replace_sheet_chrome();
                                     self.drawing.sheet.recover_orphaned_items();
-                                    self.home_map.draw_guide_message = Some("용지 화면 맞춤 및 하단 장식 띠(축척자·좌표계·방위) 정렬을 완료했습니다.".to_owned());
+                                    self.fit_sheet_to_map_view();
                                 }
                                 4 => {
                                     self.home_map.draw_guide_message = Some("항목 이동 모드 — 범례·표제란·방위표를 끌어 자리를 옮기세요.".to_owned());

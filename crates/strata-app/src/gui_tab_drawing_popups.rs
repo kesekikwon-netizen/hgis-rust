@@ -17,7 +17,7 @@ impl StrataAppState {
         let p = f.p.clone();
         // KaDrawingStudio.cpp:822-838 m_adjustBar — 지도 조정 중 상단 안내 띠
         if self.drawing.map_adjust_active {
-            let bar_w = 420.0_f32.min(rect.width() - 24.0);
+            let bar_w = 540.0_f32.min(rect.width() - 24.0);
             let bar_r = Rect::from_min_size(
                 Pos2::new(rect.center().x - bar_w * 0.5, rect.top() + 8.0),
                 Vec2::new(bar_w, 30.0),
@@ -45,9 +45,7 @@ impl StrataAppState {
                 .on_hover_text("지도 조정을 끝냅니다.")
                 .clicked()
             {
-                self.drawing.map_adjust_active = false;
-                self.home_map.draw_guide_message =
-                    Some("지도 조정을 끝냈습니다.".to_owned());
+                self.toggle_sheet_map_adjust();
             }
             p.text(
                 done_r.center(),
@@ -56,6 +54,14 @@ impl StrataAppState {
                 FontId::proportional(11.0),
                 Color32::from_rgb(28, 25, 23),
             );
+            // KaDrawingStudio.cpp:835, :838 — the bar's own 「레이어를 가운데」 (centerSurveyInMap).
+            let centre_r = Rect::from_min_size(Pos2::new(done_r.left() - 104.0, done_r.top()), Vec2::new(98.0, 22.0));
+            if ui.interact(centre_r, ui.id().with("drawing_adjust_centre"), egui::Sense::click()).clicked() {
+                self.center_layer_in_sheet();
+            }
+            p.rect_stroke(centre_r, 4.0, Stroke::new(1.0, Color32::from_rgb(0xC5, 0xBF, 0xB2)), egui::StrokeKind::Middle);
+            p.rect_stroke(done_r, 4.0, Stroke::new(1.0, Color32::from_rgb(0xC5, 0xBF, 0xB2)), egui::StrokeKind::Middle);
+            p.text(centre_r.center(), egui::Align2::CENTER_CENTER, "레이어를 가운데", FontId::proportional(11.0), Color32::from_rgb(28, 25, 23));
         }
 
         // KaDrawingCoordCallout.cpp — 용지 위 좌표점 콜아웃(A, B, C …)

@@ -18,5 +18,6 @@ pub mod sheet_labels;
 pub mod sheet_layout;
 pub mod sheet_pdf_export;
 pub mod sheet_scalebar;
+pub mod standard_scales;
 pub mod tile_print;
 pub mod tile_print_plan;

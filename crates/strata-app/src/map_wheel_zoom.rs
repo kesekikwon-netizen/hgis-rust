@@ -148,8 +148,21 @@ pub(crate) fn apply_map_wheel_zoom(
     if blocked.is_some() {
         return;
     }
+    let Some(factor) = wheel_mpp_factor_of_frame(ui) else {
+        return;
+    };
+    // `ViewportTransform::zoom_at` (`crates/strata-canvas2d/src/viewport.rs:48-54`) takes map-rectangle-local pixels.
+    let anchor = match hover_pos.or_else(|| ui.input(|i| i.pointer.hover_pos())) {
+        Some(hp) => [f64::from(hp.x - rect.left()), f64::from(hp.y - rect.top())],
+        None => [f64::from(rect.width()) * 0.5, f64::from(rect.height()) * 0.5],
+    };
+    vp.zoom_at(factor, anchor);
+}
+
+/// The `meters_per_pixel` multiplier of all `Event::MouseWheel` events of this frame, `None` without one.
+pub(crate) fn wheel_mpp_factor_of_frame(ui: &egui::Ui) -> Option<f64> {
     let line_speed = f64::from(ui.ctx().options(|o| o.line_scroll_speed));
-    let (factor, any_wheel, ptr_pos) = ui.input(|i| {
+    let (factor, any_wheel) = ui.input(|i| {
         let mut combined = 1.0_f64;
         let mut any = false;
         let page_h = f64::from(i.screen_rect.height());
@@ -168,17 +181,9 @@ pub(crate) fn apply_map_wheel_zoom(
                 }
             }
         }
-        (combined, any, i.pointer.hover_pos())
+        (combined, any)
     });
-    if !any_wheel {
-        return;
-    }
-    // `ViewportTransform::zoom_at` (`crates/strata-canvas2d/src/viewport.rs:48-54`) takes map-rectangle-local pixels.
-    let anchor = match hover_pos.or(ptr_pos) {
-        Some(hp) => [f64::from(hp.x - rect.left()), f64::from(hp.y - rect.top())],
-        None => [f64::from(rect.width()) * 0.5, f64::from(rect.height()) * 0.5],
-    };
-    vp.zoom_at(factor, anchor);
+    any_wheel.then_some(factor)
 }
 
 #[cfg(test)]

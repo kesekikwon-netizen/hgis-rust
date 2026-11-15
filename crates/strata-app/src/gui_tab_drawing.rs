@@ -10,6 +10,8 @@
 
 use crate::app_state::StrataAppState;
 
+#[path = "gui_tab_drawing_adjust.rs"]
+mod gui_tab_drawing_adjust;
 #[path = "gui_tab_drawing_chrome.rs"]
 mod gui_tab_drawing_chrome;
 #[path = "gui_tab_drawing_decoration.rs"]
