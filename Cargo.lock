@@ -4130,6 +4130,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "strata-refmap"
+version = "2.0.0"
+dependencies = [
+ "image",
+ "serde_json",
+ "sha2",
+ "strata-engine",
+ "tempfile",
+]
+
+[[package]]
 name = "strata-secrets"
 version = "2.0.0"
 dependencies = [

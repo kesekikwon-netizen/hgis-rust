@@ -1,0 +1,23 @@
+[package]
+name = "strata-refmap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# Reference maps fetched from public map services (geology, soil, rivers, parcels): the request forms, the
+# checks on the answers, and what is kept in the survey folder, as the C++ GeologyMapService, SoilMapService,
+# RiverMapService, ReferenceTiledFetch and PreparedReferenceMap do it. No request is sent from here: the
+# caller hands in the function that fetches, so that every test runs on recorded answers.
+
+[lints]
+workspace = true
+
+[dependencies]
+strata-engine = { workspace = true, features = ["gdal"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+image = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

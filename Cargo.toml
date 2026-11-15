@@ -13,6 +13,7 @@ members = [
     "crates/strata-check-export",
     "crates/strata-app",
     "crates/strata-engine",
+    "crates/strata-refmap",
     "crates/strata-webview",
     "crates/strata-ngii-fixture",
     "crates/strata-ngii-run",
@@ -68,6 +69,7 @@ strata-terrain3d = { path = "crates/strata-terrain3d" }
 strata-layout = { path = "crates/strata-layout" }
 strata-check-export = { path = "crates/strata-check-export" }
 strata-engine = { path = "crates/strata-engine" }
+strata-refmap = { path = "crates/strata-refmap" }
 
 [profile.release]
 opt-level = 3
