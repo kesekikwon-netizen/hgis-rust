@@ -24,6 +24,8 @@ pub enum ReferenceFailure {
 
 fn command(user_agent: &str, idle_secs: u64, total_secs: u64) -> Command {
     let mut cmd = Command::new(if cfg!(target_os = "windows") { "curl.exe" } else { "curl" });
+    // No console window flashes over the app while curl runs.
+    strata_types::process::no_window(&mut cmd);
     // --fail: an HTTP error status is a failure without a body (Qt reports it as an error to the C++).
     // --speed-limit 1 --speed-time N: given up when less than a byte a second arrives for N seconds, which
     // is the C++ inactivity limit; --max-time is its absolute limit.
