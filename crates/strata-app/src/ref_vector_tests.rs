@@ -11,7 +11,7 @@ use strata_engine::{write_new_table, Cell, ColumnKind, Row, ShapeKind, Shapes, T
 use strata_types::schema::LegendGroup;
 
 use super::*;
-use crate::ref_vector::data::Look;
+use crate::ref_vector::data::{LabelLook, Look, PolygonFill};
 
 const KEY: &str = "ref_topographic";
 const CENTRE: [f64; 2] = [220_000.0, 370_000.0];
@@ -25,7 +25,7 @@ fn topo_file(dir: &Path) -> PathBuf {
 }
 
 fn spec(file: PathBuf) -> LoadSpec {
-    LoadSpec { file, table: "topo".to_owned(), work_epsg: 5187, look: Look::Lines { stroke: [128, 128, 128, 255], width_mm: 0.2 } }
+    LoadSpec { file, table: "topo".to_owned(), work_epsg: 5187, look: Look::Lines { stroke: [128, 128, 128, 255], width_mm: 0.2 }, label: None }
 }
 
 /// A map app of 900 x 600 points looking at `CENTRE` with 2 m to the point; work runs at once.
@@ -200,6 +200,34 @@ fn a_copy_of_the_app_state_knows_the_layers_but_holds_none_of_their_memory() {
     let copy = app.ref_vectors.clone();
     assert!(copy.has(KEY) && !copy.is_loaded(KEY) && !copy.holds_picture(KEY));
     assert!(Arc::strong_count(&app.ref_vectors.shapes_of(KEY).unwrap()) >= 2, "the original still holds its shapes");
+}
+
+/// The symbols of a labelled layer are written while its row is checked (C++ `setLabelsEnabled(true)`,
+/// `GeologyMapService.cpp:453-454`) and go with the picture when the row is unchecked.
+#[test]
+fn a_labelled_layer_writes_its_symbols_while_its_row_is_checked() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut app, rect) = map_app();
+    let path = dir.path().join("지질도_KIGAM.gpkg");
+    let layout = TableLayout { table: "geology_map", epsg: 5187, kind: ShapeKind::Polygons, columns: &[("기호", ColumnKind::Text)] };
+    let unit = |x: f64, symbol: &str| Row { shapes: Shapes::Polygons(vec![vec![vec![[x, 369_800.0], [x + 400.0, 369_800.0], [x + 400.0, 370_200.0], [x, 370_200.0], [x, 369_800.0]]]]), cells: vec![Cell::Text(symbol.to_owned())] };
+    write_new_table(&path, &layout, &mut vec![unit(219_500.0, "Kqp"), unit(220_100.0, "Qa")].into_iter()).unwrap();
+    let symbols = LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220] };
+    let look = Look::Polygons { stroke: [80, 80, 80, 130], width_mm: 0.12, fill: PolygonFill::None };
+    app.show_reference_vector_layer("ref_geology", "지질도(KIGAM 1:5만)", LoadSpec { file: path, table: "geology_map".to_owned(), work_epsg: 5187, look, label: Some(symbols) });
+
+    let ctx = egui::Context::default();
+    let inked = |app: &mut StrataAppState| {
+        let out = ctx.run(RawInput { screen_rect: Some(rect), ..RawInput::default() }, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.paint_reference_vector_layers(ctx, &ui.painter_at(rect), rect));
+        });
+        out.shapes.iter().filter(|c| matches!(&c.shape, Shape::Text(text) if text.override_text_color == Some(Color32::from_rgb(40, 40, 40)))).count()
+    };
+    assert_eq!(inked(&mut app), 2);
+    app.home_map.real_survey.layer_visible.insert("지질도(KIGAM 1:5만)".to_owned(), false);
+    assert_eq!(inked(&mut app), 0);
+    app.home_map.real_survey.layer_visible.insert("지질도(KIGAM 1:5만)".to_owned(), true);
+    assert_eq!(inked(&mut app), 2);
 }
 
 /// What the tests of this and of other modules look at.

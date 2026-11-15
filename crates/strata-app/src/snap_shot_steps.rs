@@ -91,7 +91,7 @@ impl StrataAppState {
             Some("outlines") => Look::Polygons { stroke: [80, 80, 80, 255], width_mm: 0.2, fill: PolygonFill::None },
             _ => Look::Lines { stroke: [128, 128, 128, 255], width_mm: 0.2 },
         };
-        let spec = LoadSpec { file: file.into(), table: table.to_owned(), work_epsg: self.work_crs.epsg_code(), look };
+        let spec = LoadSpec { file: file.into(), table: table.to_owned(), work_epsg: self.work_crs.epsg_code(), look, label: None };
         self.show_reference_vector_layer(&format!("ref_snap_{table}"), title, spec);
     }
 }

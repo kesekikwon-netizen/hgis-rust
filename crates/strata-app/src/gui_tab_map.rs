@@ -40,6 +40,7 @@ mod gui_tab_map_survey;
 mod gui_tab_map_survey_labels;
 
 pub(crate) use gui_tab_map_survey::LABEL_FONT_FAMILY;
+pub(crate) use gui_tab_map_survey_labels::{paint_placed_labels, place_labels, LabelDraw, LabelReq};
 #[path = "gui_tab_map_tab.rs"]
 mod gui_tab_map_tab;
 #[path = "gui_tab_map_undo.rs"]

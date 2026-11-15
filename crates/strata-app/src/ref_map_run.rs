@@ -89,7 +89,7 @@ fn stop_code(why: Why) -> StopCode {
 
 impl StrataAppState {
     fn load_spec(&self, kind: &RefMapKind, file: PathBuf) -> LoadSpec {
-        LoadSpec { file, table: kind.table.to_owned(), work_epsg: CrsCode::from(self.work_crs).epsg_number(), look: kind.look.clone() }
+        LoadSpec { file, table: kind.table.to_owned(), work_epsg: CrsCode::from(self.work_crs).epsg_number(), look: kind.look.clone(), label: kind.label }
     }
 
     /// The ribbon button of a reference map. With its row in the legend the press hides and shows the row

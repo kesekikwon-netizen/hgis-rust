@@ -15,7 +15,7 @@ use strata_storage::wkb_codec::WkbGeometry;
 use strata_types::crs::CrsCode;
 
 use crate::app_state::StrataAppState;
-use crate::ref_vector::data::{Look, PolygonFill};
+use crate::ref_vector::data::{LabelLook, Look, PolygonFill};
 use crate::survey_area_setup::is_survey_area_key;
 
 #[path = "ref_map_run.rs"]
@@ -45,6 +45,7 @@ pub(crate) struct RefMapKind {
     /// How far around the survey area the map reaches, metres.
     pub(crate) radius_m: f64,
     pub(crate) look: Look,
+    pub(crate) label: Option<LabelLook>,
     pub(crate) prepare: Prepare,
     /// `MainWindowDownloads.cpp:93-103`.
     pub(crate) needs_survey: &'static str,
@@ -72,6 +73,8 @@ pub(crate) const GEOLOGY: RefMapKind = RefMapKind {
     // Fill opacity 220, outline (80, 80, 80, 130) 0.12 mm (`eraFillSymbol`, GeologyMapService.cpp:98-108);
     // grey for a unit without a colour (the 「기타」 category, :382-458).
     look: Look::Polygons { stroke: [80, 80, 80, 130], width_mm: 0.12, fill: PolygonFill::Column { name: geology_prepare::COLOUR_COLUMN, alpha: 220, missing: [200, 200, 200] } },
+    // The symbol of every unit over it (GeologyMapService.cpp:426-455).
+    label: Some(LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220] }),
     prepare: geology_prepare::prepare,
     needs_survey: "먼저 「새 조사」를 만들거나 조사를 여세요. 받은 자료는 조사 폴더에 저장해 다음에도 인터넷 없이 열 수 있게 합니다.",
     needs_area: "조사구역을 먼저 그려 주세요. 조사구역에서 반경 10km 안의 지질도를 받습니다.",

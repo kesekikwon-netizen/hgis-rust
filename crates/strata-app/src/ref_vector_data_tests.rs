@@ -27,6 +27,8 @@ fn geology_file(dir: &std::path::Path) -> std::path::PathBuf {
     path
 }
 
+const SYMBOLS: LabelLook = LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220] };
+
 fn geology_look() -> Look {
     Look::Polygons { stroke: [80, 80, 80, 130], width_mm: 0.12, fill: PolygonFill::Column { name: "ka_color", alpha: 220, missing: [200, 200, 200] } }
 }
@@ -36,7 +38,7 @@ fn geology_look() -> Look {
 #[test]
 fn polygons_arrive_in_the_work_crs_with_rings_and_parts() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let data = load(&LoadSpec { file: geology_file(dir.path()), table: "geology_map".to_owned(), work_epsg: 5187, look: geology_look() }).expect("load");
+    let data = load(&LoadSpec { file: geology_file(dir.path()), table: "geology_map".to_owned(), work_epsg: 5187, look: geology_look(), label: None }).expect("load");
     assert_eq!(data.rows, 3);
     assert!(data.closed);
     // Row one has two polygons (the first with a hole), rows two and three one each.
@@ -68,7 +70,7 @@ fn polygons_arrive_in_the_work_crs_with_rings_and_parts() {
 #[test]
 fn the_fill_comes_from_the_colour_column() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let data = load(&LoadSpec { file: geology_file(dir.path()), table: "geology_map".to_owned(), work_epsg: 5186, look: geology_look() }).expect("load");
+    let data = load(&LoadSpec { file: geology_file(dir.path()), table: "geology_map".to_owned(), work_epsg: 5186, look: geology_look(), label: None }).expect("load");
     let paint = |i: usize| data.paints[data.items[i].paint as usize];
     assert_eq!(paint(0).fill, [0xFA, 0xF4, 0xB4, 220]);
     assert_eq!(paint(1).fill, [0xFA, 0xF4, 0xB4, 220]);
@@ -94,7 +96,7 @@ fn lines_are_one_shape_for_each_part() {
     ];
     write_new_table(&path, &layout, &mut rows.into_iter()).expect("write");
     let look = Look::Lines { stroke: [128, 128, 128, 255], width_mm: 0.2 };
-    let data = load(&LoadSpec { file: path, table: "topo".to_owned(), work_epsg: 5187, look }).expect("load");
+    let data = load(&LoadSpec { file: path, table: "topo".to_owned(), work_epsg: 5187, look, label: None }).expect("load");
     assert_eq!((data.rows, data.items.len(), data.runs.len()), (2, 3, 3));
     assert!(!data.closed);
     assert_eq!(data.paints, [PaintOf { fill: [0, 0, 0, 0], stroke: [128, 128, 128, 255], width_mm: 0.2 }]);
@@ -108,13 +110,13 @@ fn lines_are_one_shape_for_each_part() {
 fn a_table_that_does_not_fit_the_look_is_refused() {
     let dir = tempfile::tempdir().expect("tempdir");
     let file = geology_file(dir.path());
-    let spec = |table: &str, look: Look, work_epsg: u32| LoadSpec { file: file.clone(), table: table.to_owned(), work_epsg, look };
+    let spec = |table: &str, look: Look, work_epsg: u32| LoadSpec { file: file.clone(), table: table.to_owned(), work_epsg, look, label: None };
     assert!(load(&spec("none", geology_look(), 5187)).is_err());
     assert!(load(&spec("geology_map", Look::Lines { stroke: [0, 0, 0, 255], width_mm: 0.2 }, 5187)).is_err());
     let other_column = Look::Polygons { stroke: [0, 0, 0, 255], width_mm: 0.1, fill: PolygonFill::Column { name: "colour", alpha: 255, missing: [0, 0, 0] } };
     assert!(load(&spec("geology_map", other_column, 5187)).is_err());
     assert!(load(&spec("geology_map", geology_look(), 999_999)).is_err());
-    let missing = LoadSpec { file: dir.path().join("none.gpkg"), table: "geology_map".to_owned(), work_epsg: 5187, look: geology_look() };
+    let missing = LoadSpec { file: dir.path().join("none.gpkg"), table: "geology_map".to_owned(), work_epsg: 5187, look: geology_look(), label: None };
     assert!(load(&missing).is_err());
     // Without a fill no column is asked for.
     let outline = Look::Polygons { stroke: [0, 0, 0, 255], width_mm: 0.1, fill: PolygonFill::None };
@@ -129,9 +131,39 @@ fn an_empty_table_of_the_other_kind_is_refused_too() {
     let path = dir.path().join("empty.gpkg");
     let layout = TableLayout { table: "geology_map", epsg: 5186, kind: ShapeKind::Polygons, columns: &[("기호", ColumnKind::Text)] };
     write_new_table(&path, &layout, &mut std::iter::empty()).expect("write");
-    let lines = LoadSpec { file: path.clone(), table: "geology_map".to_owned(), work_epsg: 5187, look: Look::Lines { stroke: [0, 0, 0, 255], width_mm: 0.2 } };
+    let lines = LoadSpec { file: path.clone(), table: "geology_map".to_owned(), work_epsg: 5187, look: Look::Lines { stroke: [0, 0, 0, 255], width_mm: 0.2 }, label: None };
     assert!(load(&lines).is_err());
     let polygons = LoadSpec { look: Look::Polygons { stroke: [0, 0, 0, 255], width_mm: 0.2, fill: PolygonFill::None }, ..lines };
     let data = load(&polygons).expect("an empty layer of the right kind is a layer");
     assert!(data.items.is_empty() && data.closed && data.rows == 0);
+}
+
+/// C++ writes the symbol of every unit over it (`GeologyMapService.cpp:426-455`: the column 기호). A row
+/// gets one label for all its polygons; a row without text gets none, and a table without the column has
+/// no labels (`:427`).
+#[test]
+fn a_label_column_gives_every_row_with_text_one_label_for_its_polygons() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("labels.gpkg");
+    let layout = TableLayout { table: "geology_map", epsg: 5187, kind: ShapeKind::Polygons, columns: &[("기호", ColumnKind::Text), ("ka_color", ColumnKind::Text)] };
+    let holed = vec![square(220_000.0, 370_000.0, 100.0), square(220_010.0, 370_010.0, 40.0)];
+    let one = |x: f64, y: f64, side: f64, symbol: Cell| Row { shapes: Shapes::Polygons(vec![vec![square(x, y, side)]]), cells: vec![symbol, Cell::Null] };
+    let rows = vec![
+        Row { shapes: Shapes::Polygons(vec![vec![square(221_000.0, 371_000.0, 10.0)], holed]), cells: vec![Cell::Text("Kqp".to_owned()), Cell::Text("#112233".to_owned())] },
+        one(222_000.0, 372_000.0, 20.0, Cell::Text(String::new())),
+        one(223_000.0, 373_000.0, 20.0, Cell::Null),
+        one(224_000.0, 374_000.0, 30.0, Cell::Text("Qa".to_owned())),
+    ];
+    write_new_table(&path, &layout, &mut rows.into_iter()).expect("write");
+    let spec = |look: Look, label: Option<LabelLook>| LoadSpec { file: path.clone(), table: "geology_map".to_owned(), work_epsg: 5187, look, label };
+    for look in [geology_look(), Look::Polygons { stroke: [0, 0, 0, 255], width_mm: 0.1, fill: PolygonFill::None }] {
+        let data = load(&spec(look, Some(SYMBOLS))).expect("load");
+        // The first row has two polygons (shapes 0 and 1), the fourth one (shape 4).
+        let labels = [Label { text: "Kqp".to_owned(), first_item: 0, items: 2 }, Label { text: "Qa".to_owned(), first_item: 4, items: 1 }];
+        assert_eq!(data.labels, labels);
+    }
+    assert!(load(&spec(geology_look(), None)).expect("load").labels.is_empty());
+    let other = LabelLook { column: "지층", ..SYMBOLS };
+    let data = load(&spec(geology_look(), Some(other))).expect("a table without the label column is drawn without labels");
+    assert!(data.labels.is_empty() && data.items.len() == 5);
 }

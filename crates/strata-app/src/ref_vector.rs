@@ -22,6 +22,8 @@ use crate::ref_vector::raster::{render, Raster, RasterView};
 pub(crate) mod clip;
 #[path = "ref_vector_data.rs"]
 pub(crate) mod data;
+#[path = "ref_vector_labels.rs"]
+pub(crate) mod labels;
 /// The ribbon buttons that fetch such layers.
 #[path = "ref_map.rs"]
 pub(crate) mod map;
@@ -99,6 +101,8 @@ struct Painted {
     /// Seconds the reading took, and the size and seconds of a picture that arrived in this frame.
     read_secs: Option<f32>,
     drawn: Option<(u32, u32, f32)>,
+    /// The shapes of a layer whose picture is on the map and whose rows are labelled.
+    labelled: Option<(Arc<RefVectorData>, data::LabelLook)>,
 }
 
 impl RefVectorLayers {
@@ -196,6 +200,7 @@ impl RefVectorLayers {
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let tint = Color32::from_white_alpha((opacity.clamp(0.0, 1.0) * 255.0).round() as u8);
             p.image(pic.texture.id(), on_screen, Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), tint);
+            painted.labelled = layer.spec.label.map(|look| (Arc::clone(data), look));
         }
         painted
     }
@@ -265,8 +270,13 @@ impl StrataAppState {
         let shown_keys: Vec<&str> = shown.iter().map(|(key, _)| key.as_str()).collect();
         self.ref_vectors.release(&rows, &shown_keys);
         let viewport = self.home_map.viewport;
+        // Labels go over every reference picture, chosen among all layers at once.
+        let mut labels = labels::Pending::default();
         for (key, opacity) in &shown {
             let painted = self.ref_vectors.paint(key, ctx, p, rect, &viewport, *opacity);
+            if let Some((data, look)) = &painted.labelled {
+                labels.add(ctx, data, look, rect, &viewport);
+            }
             if let Some(rows) = painted.rows {
                 self.left_layers.update_feature_count_badge(key, usize::try_from(rows).unwrap_or(usize::MAX));
             }
@@ -283,5 +293,6 @@ impl StrataAppState {
                 }
             }
         }
+        labels.paint(p);
     }
 }

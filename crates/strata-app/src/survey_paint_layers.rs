@@ -58,7 +58,7 @@ fn ring_signed_area(ring: &[[f64; 2]]) -> f64 {
     ring.windows(2).map(|w| w[0][0] * w[1][1] - w[1][0] * w[0][1]).sum::<f64>() * 0.5
 }
 
-fn polygon_area(rings: &[Vec<[f64; 2]>]) -> f64 {
+pub(crate) fn polygon_area(rings: &[Vec<[f64; 2]>]) -> f64 {
     let mut it = rings.iter();
     let outer = it.next().map_or(0.0, |r| ring_signed_area(r).abs());
     outer - it.map(|r| ring_signed_area(r).abs()).sum::<f64>()
@@ -76,7 +76,7 @@ pub(crate) fn planar_area(parts: &[WkbGeometry]) -> f64 {
 }
 
 /// 면 하나의 무게중심(구멍 반영).
-fn polygon_centroid(rings: &[Vec<[f64; 2]>]) -> Option<[f64; 2]> {
+pub(crate) fn polygon_centroid(rings: &[Vec<[f64; 2]>]) -> Option<[f64; 2]> {
     let (mut a, mut cx, mut cy) = (0.0, 0.0, 0.0);
     for (i, ring) in rings.iter().enumerate() {
         let s = ring_signed_area(ring);
