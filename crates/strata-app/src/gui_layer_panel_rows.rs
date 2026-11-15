@@ -154,6 +154,11 @@ impl StrataAppState {
                     Color32::from_rgb(135, 133, 126),
                 );
             }
+            // DEM 줄 아래에는 그 색띠가 선다(`DemColorRampLegend.cpp`: 표고 (m), 눈금, 비선형 눈금).
+            if let (true, Some(ramp)) = (spec.key == crate::topo_download::dem::DEM_KEY, self.dem_legend_ramp()) {
+                let (bar, _) = ui.allocate_exact_size(egui::Vec2::new(avail_w, crate::topo_download::dem::legend::HEIGHT), egui::Sense::hover());
+                self.paint_dem_legend(&ui.painter_at(bar), Pos2::new(bar.left() + spec.indent + 41.0, bar.top()), ramp);
+            }
         }
         // 목록의 빈 곳 우클릭 — 레이어 아닌 줄 메뉴(:195-213).
         let (_, blank) = ui.allocate_exact_size(egui::Vec2::new(avail_w, ui.available_height().max(24.0)), egui::Sense::click());

@@ -21,6 +21,9 @@ use crate::ref_vector::data::{HeightRamp, LoadSpec, Look};
 /// 「DEM 표현」: the colour preset, the relief and its strength.
 #[path = "dem_look.rs"]
 pub(crate) mod look;
+/// The colour bar under the DEM's legend row.
+#[path = "dem_legend.rs"]
+pub(crate) mod legend;
 #[cfg(test)]
 #[path = "dem_post_tests.rs"]
 mod tests;
