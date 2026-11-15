@@ -9,6 +9,10 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+# The sheets are read through GDAL's DXF driver and placed with PROJ, as in the C++.
+strata-engine = { workspace = true, features = ["gdal"] }
+# The 1:25,000 sheet-number grid.
+strata-net = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 zip = { workspace = true }

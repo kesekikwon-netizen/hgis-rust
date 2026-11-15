@@ -5547,6 +5547,8 @@ version = "2.0.0"
 dependencies = [
  "serde_json",
  "sha2 0.10.9",
+ "strata-engine",
+ "strata-net",
  "tempfile",
  "zip 2.6.1",
 ]
