@@ -199,7 +199,7 @@ pub(crate) fn gauge_state(run: &RunFacts<'_>) -> DownloadJobState {
 mod run;
 pub(crate) use run::TopoDownload;
 #[path = "topo_post.rs"]
-mod post;
+pub(crate) mod post;
 #[path = "dem_post.rs"]
 pub(crate) mod dem;
 

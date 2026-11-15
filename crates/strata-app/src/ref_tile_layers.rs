@@ -106,7 +106,7 @@ pub(crate) fn ref_tile_layer(key: &str) -> Option<&'static RefTileLayer> {
 /// asked for is not hidden under an older one (the director's choice, docs/EVOLUTION.md E-13). C++ puts a new
 /// tile layer BELOW the older ones: addXyzBasemap appends its node (`BasemapOps.cpp:922`) and
 /// ensureSatelliteAtBottom (`:362-401`) keeps the tile layers in that order above the satellite.
-fn ensure_row(panel: &mut LeftLayerPanel, layer: &RefTileLayer) {
+pub(crate) fn ensure_row(panel: &mut LeftLayerPanel, layer: &RefTileLayer) {
     if panel.entries.iter().any(|e| e.layer_key == layer.key) {
         return;
     }
@@ -139,6 +139,8 @@ impl StrataAppState {
             return false;
         };
         ensure_row(&mut self.left_layers, layer);
+        // Unsaved work until 저장 keeps it for the next open, as a received map (survey_map_list.rs).
+        self.is_dirty = true;
         // The check mark is kept by the row's present name (the user may have renamed the row).
         if let Some(name) = self.left_layers.entries.iter().find(|e| e.layer_key == layer.key).map(|e| e.label_ko.clone()) {
             self.home_map.real_survey.layer_visible.insert(name, true);

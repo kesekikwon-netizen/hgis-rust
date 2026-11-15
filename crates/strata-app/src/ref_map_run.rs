@@ -120,7 +120,7 @@ fn stop_code(why: Why) -> StopCode {
 }
 
 impl StrataAppState {
-    fn load_spec(&self, kind: &RefMapKind, file: PathBuf) -> LoadSpec {
+    pub(crate) fn load_spec(&self, kind: &RefMapKind, file: PathBuf) -> LoadSpec {
         LoadSpec { file, table: kind.table.to_owned(), work_epsg: CrsCode::from(self.work_crs).epsg_number(), look: kind.look.clone(), label: kind.label }
     }
 

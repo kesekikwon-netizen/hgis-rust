@@ -38,6 +38,15 @@ impl StrataAppState {
         if let Some(name) = self.left_layers.entries.iter().find(|e| e.layer_key == key).map(|e| e.label_ko.clone()) {
             self.home_map.real_survey.layer_visible.insert(name, true);
         }
+        // A received map is unsaved work until 저장 keeps it for the next open (`setDirty(true)` after each
+        // received map, MainWindowCadastral.cpp:167, MainWindowDownloads.cpp:156, MainWindowOverlay.cpp:671).
+        self.is_dirty = true;
+    }
+
+    /// Takes the row of this key away, with its layer.
+    pub(crate) fn remove_reference_vector_row(&mut self, key: &str) {
+        self.ref_vectors.layers.retain(|l| l.key != key);
+        self.left_layers.entries.retain(|e| e.layer_key != key);
     }
 
     /// Rows of an earlier survey do not belong to the next one.

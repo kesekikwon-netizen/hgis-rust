@@ -246,9 +246,15 @@ impl StrataAppState {
         self.remember_survey_dir(&written);
         // recordSurveyFacts(MainWindowSession.cpp:961) — 홈 「이어서 작업」·「최근 조사」의 구역·유구 수와 작업 좌표계.
         self.record_survey_facts(&written);
+        // The received maps of the legend, for the next open (survey_map_list.rs).
+        let maps_kept = self.write_survey_map_list(&written).is_ok();
         self.survey_path = Some(written);
         self.is_dirty = false;
-        self.home_map.draw_guide_message = Some(format!("조사 데이터와 작업 구성을 저장했습니다: {name}"));
+        self.home_map.draw_guide_message = Some(if maps_kept {
+            format!("조사 데이터와 작업 구성을 저장했습니다: {name}")
+        } else {
+            format!("조사 데이터를 저장했습니다: {name} · 받은 지도 목록은 쓰지 못했습니다.")
+        });
         true
     }
 

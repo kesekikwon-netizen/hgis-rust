@@ -142,7 +142,7 @@ pub(crate) fn entries_of(root: &Path, received: &[(PathBuf, Map<String, Value>)]
 impl StrataAppState {
     /// The two rows of a DEM: 「지형 음영」 over 「DEM」. `root` is the survey's DEM folder (the layers read
     /// the files of its list) or one DEM file of the user.
-    fn show_dem_layers(&mut self, root: &Path) {
+    pub(crate) fn show_dem_layers(&mut self, root: &Path) {
         let work_epsg = CrsCode::from(self.work_crs).epsg_number();
         let spec = |look| LoadSpec { file: root.to_path_buf(), table: String::new(), work_epsg, look, label: None };
         // The relief first: the next row comes in under it.

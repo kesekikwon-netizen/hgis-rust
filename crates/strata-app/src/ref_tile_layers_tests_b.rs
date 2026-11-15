@@ -179,3 +179,15 @@ fn test_f1_opacity_rail_and_legend_menu_share_the_opacity_of_a_picture_row() {
     assert!((opacity(&app, "vworld_satellite") - 0.25).abs() < f32::EPSILON);
     assert!((opacity(&app, "ref_daedongyeojido") - 0.6).abs() < f32::EPSILON, "only the selected row");
 }
+
+/// A map of tiles added to the legend is unsaved work like a received map, so that 저장 keeps it for the
+/// next open (survey_map_list.rs).
+#[test]
+fn test_f1_an_added_tile_map_leaves_the_survey_unsaved() {
+    let centre = work_xy(GYEONGJU.0, GYEONGJU.1);
+    let (mut app, _rect) = map_app(centre, 30.0);
+    draw_survey_area(&mut app, centre);
+    app.is_dirty = false;
+    assert!(app.add_reference_tile_layer(&DAEDONGYEOJIDO));
+    assert!(app.is_dirty);
+}

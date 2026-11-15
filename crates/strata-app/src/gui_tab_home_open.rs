@@ -1,6 +1,6 @@
 //! 「열기」 — C++ `MainWindow::openProject`(`MainWindowSession.cpp:1634-1650`)와, 작업공간(.qgz·
 //! 내장 프로젝트) 없이 조사 데이터만 여는 `openSurveyGpkg` 길(:242-420, `loadSurveyLayers`
-//! :762-790). 열기 전 저장 확인은 app_state_save_before.rs. 작업공간 복원(2D)은 아직 없다.
+//! :762-790). 열기 전 저장 확인은 app_state_save_before.rs, 받은 지도 되살리기는 survey_map_list.rs. 작업공간 복원(2D)은 아직 없다.
 
 use std::path::Path;
 
@@ -65,6 +65,8 @@ impl StrataAppState {
         self.survey_tables = tables;
         self.left_layers.apply_default_basemaps();
         self.survey_path = Some(target.clone());
+        // The received maps it had when it was saved (survey_map_list.rs).
+        self.restore_survey_maps();
         // The survey area comes into view, as in the C++ open with its workspace (`MainWindowSession.cpp:
         // 186-188` zoomToProjectDataLayers, else all of Korea); owner 2026-11-15: 「모든도면은 조사구역이
         // 중심이되게하라」. The size of the map frame is known at the next map frame: the view is set there.

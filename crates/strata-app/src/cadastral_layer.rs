@@ -76,8 +76,18 @@ pub(crate) fn kept_table(directory: &Path, areas: &[String], work_epsg: u32, rad
     let note = noted(directory)?;
     let same = note["radius_m"].as_f64() == Some(radius_m) && note["work_epsg"].as_u64() == Some(u64::from(work_epsg)) && note["areas"].as_array().is_some_and(|kept| kept.iter().map(serde_json::Value::as_str).eq(areas.iter().map(|area| Some(area.as_str()))));
     let file = directory.join("표시").join(note["file"].as_str()?);
+    (same && file.is_file()).then_some((file, noted_style(&note)))
+}
+
+/// The look the note keeps for this table, when the note is about it (the survey reopened, survey_map_list.rs).
+pub(crate) fn kept_style(directory: &Path, file: &Path) -> Option<Style> {
+    let note = noted(directory)?;
+    (note["file"].as_str()? == file.file_name()?.to_str()?).then(|| noted_style(&note))
+}
+
+fn noted_style(note: &serde_json::Value) -> Style {
     let colour = serde_json::from_value::<[u8; 3]>(note["colour"].clone()).unwrap_or(Style::default().colour);
-    (same && file.is_file()).then_some((file, Style { colour, labels: note["labels"].as_bool().unwrap_or(true) }))
+    Style { colour, labels: note["labels"].as_bool().unwrap_or(true) }
 }
 
 impl StrataAppState {

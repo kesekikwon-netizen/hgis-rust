@@ -40,6 +40,8 @@ mod app_state_merge;
 mod app_state_split;
 #[path = "app_state_save_before.rs"]
 pub(crate) mod app_state_save_before;
+#[path = "survey_map_list.rs"]
+pub(crate) mod survey_map_list;
 #[path = "app_state_snap_lines.rs"]
 mod app_state_snap_lines;
 #[path = "vertex_edit_geom.rs"]
