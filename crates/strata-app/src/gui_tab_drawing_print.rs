@@ -20,7 +20,7 @@ use crate::dialogs_modal::ActiveModalDialog;
 use crate::ref_vector::print::PictureSet;
 use super::sheet_raster::{paint, Textures};
 pub(crate) use super::sheet_pdf_file::CANCELLED;
-use super::sheet_pdf_file::{picture_size, print_dpi, render_note, write_pdf, DESIGN_PX_PER_MM, TILE_WAIT_SECONDS};
+use super::sheet_pdf_file::{pack_pdf, picture_size, print_dpi, put_pdf, render_note, DESIGN_PX_PER_MM, TILE_WAIT_SECONDS};
 
 /// Whether the PDF can be made after `passes` passes, the last `quiet` of which asked for nothing new and had
 /// nothing on the way, `waited` after it began: the tiles had time to be asked for (a tile is asked for once
@@ -58,7 +58,23 @@ impl TileSide {
 enum Stage {
     Painting,
     /// The picture is made and written in the background; it answers with the pictures it had to leave out.
-    Making(Receiver<Result<usize, String>>),
+    Making(Receiver<Made>),
+}
+
+/// What the background work says.
+pub(crate) enum Made {
+    /// The file is being written.
+    Saving,
+    /// The end: the number of pictures left out, or why there is no file.
+    Done(Result<usize, String>),
+}
+
+/// The status line after the PDF was written, with what the picture had to leave out.
+pub(crate) fn saved_words(target: &std::path::Path, left_out: usize) -> String {
+    match left_out {
+        0 => format!("저장: {}", target.display()),
+        _ => format!("저장: {} · 그림 {left_out}개는 PDF에 넣지 못했습니다.", target.display()),
+    }
 }
 
 /// A PDF of the sheet being made.
@@ -78,6 +94,8 @@ pub(crate) struct SheetPdf {
     started: Instant,
     shapes: Vec<ClippedShape>,
     stage: Stage,
+    /// The background work is writing the file.
+    saving: bool,
     pub(crate) cancel: Arc<AtomicBool>,
 }
 
@@ -86,6 +104,8 @@ impl SheetPdf {
     pub(crate) fn words(&self) -> String {
         match self.stage {
             Stage::Painting => "도면을 정리하는 중…".to_owned(),
+            // KaDrawingStudio.cpp:3813.
+            Stage::Making(_) if self.saving => "파일을 저장하는 중…".to_owned(),
             Stage::Making(_) => render_note(self.paper_mm, self.dpi),
         }
     }
@@ -104,8 +124,11 @@ impl SheetPdf {
         std::thread::spawn(move || {
             let picture = paint(&primitives, &textures, scale, size);
             drop((primitives, textures));
-            let written = write_pdf(&target, paper_mm, &title, &picture, &cancel).map(|()| picture.unknown_pictures);
-            drop(send.send(written));
+            let written = pack_pdf(paper_mm, &title, &picture).and_then(|pdf| {
+                drop(send.send(Made::Saving));
+                put_pdf(&target, &pdf, &cancel)
+            });
+            drop(send.send(Made::Done(written.map(|()| picture.unknown_pictures))));
         });
         self.stage = Stage::Making(receive);
     }
@@ -165,6 +188,7 @@ impl StrataAppState {
             started: Instant::now(),
             shapes: Vec::new(),
             stage: Stage::Painting,
+            saving: false,
             cancel: Arc::new(AtomicBool::new(false)),
         };
         self.drawing.pdf.0 = Some(Box::new(job));
@@ -186,12 +210,18 @@ impl StrataAppState {
                 None
             }
             Stage::Making(receive) => match receive.try_recv() {
-                Ok(written) => Some(written),
+                Ok(Made::Done(written)) => Some(written),
+                Ok(Made::Saving) => {
+                    job.saving = true;
+                    None
+                }
                 Err(TryRecvError::Empty) => None,
                 Err(TryRecvError::Disconnected) => Some(Err("PDF를 만드는 중에 멈췄습니다.".to_owned())),
             },
         };
         let Some(ended) = ended else {
+            // Nothing takes the place of the window while the PDF is made: the C++ one is modal (:14).
+            self.modals.active = Some(ActiveModalDialog::PdfPreparing);
             self.drawing.pdf.0 = Some(job);
             return;
         };
@@ -199,9 +229,19 @@ impl StrataAppState {
             self.modals.active = None;
         }
         match ended {
-            Ok(_) => self.show_status_message(format!("저장: {}", job.target.display())),
+            Ok(left_out) => self.show_status_message(saved_words(&job.target, left_out)),
             Err(why) if why == CANCELLED => self.show_status_message(CANCELLED),
             Err(why) => self.show_status_message(format!("PDF를 저장하지 못했습니다. {why}")),
+        }
+    }
+
+    /// The PDF stops when the survey is left: the next survey's sheet is not the one the file was named for.
+    pub(crate) fn drop_sheet_pdf(&mut self) {
+        if let Some(job) = self.drawing.pdf.0.take() {
+            job.cancel.store(true, Ordering::Release);
+            if self.modals.active == Some(ActiveModalDialog::PdfPreparing) {
+                self.modals.active = None;
+            }
         }
     }
 

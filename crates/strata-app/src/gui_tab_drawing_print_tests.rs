@@ -130,3 +130,87 @@ fn the_pdf_waits_for_the_tiles_to_be_asked_for() {
     assert!(!super::ready(5, 1, rest * 4), "one quiet pass is not enough");
     assert!(super::ready(1, 0, Duration::from_secs(91)), "the longest wait is over");
 }
+
+fn frame(app: &mut StrataAppState, ctx: &egui::Context, events: Vec<egui::Event>) {
+    let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1680.0, 960.0))), events, ..Default::default() };
+    let _ = ctx.run(raw, |ctx| {
+        let _ = app.render_workspace_egui(ctx);
+    });
+}
+
+/// The progress window holds the app as the C++ one (`Qt::ApplicationModal`, KaDrawingPdfProgress.cpp:14):
+/// while the PDF is made the keys and tools of the main window wait and a click outside the window reaches
+/// nothing behind it. Esc is 취소 (the Escape of the window's 취소 button), never a way to hide the window
+/// while the PDF goes on; the window stays until the PDF has stopped.
+#[test]
+fn the_progress_window_holds_the_app_and_esc_cancels() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = StrataAppState::new_startup();
+    app.active_tab = crate::app_state::MainTab::Drawing;
+    app.start_sheet_pdf(dir.path().join("도면.pdf"));
+    assert!(app.modal_window_open(), "the keys and tools of the main window wait");
+    let ctx = egui::Context::default();
+    frame(&mut app, &ctx, Vec::new());
+    let behind = ctx.layer_id_at(egui::pos2(5.0, 5.0));
+    assert_eq!(behind, Some(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("ka_modal_pdf_prep"))), "a click outside the window reaches nothing behind it");
+    let esc = egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::default() };
+    frame(&mut app, &ctx, vec![esc]);
+    assert!(app.drawing.pdf.0.as_ref().expect("it stops at the next frame").cancel.load(Ordering::Acquire));
+    assert_eq!(app.modals.active, Some(crate::dialogs_modal::ActiveModalDialog::PdfPreparing));
+    frame(&mut app, &ctx, Vec::new());
+    assert!(app.drawing.pdf.0.is_none());
+    assert_eq!(app.status_left_message(), CANCELLED);
+    assert!(!dir.path().join("도면.pdf").exists());
+}
+
+/// Nothing takes the place of the window while the PDF is made: it is back at the next frame.
+#[test]
+fn the_progress_window_comes_back_while_the_pdf_is_made() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = StrataAppState::new_startup();
+    app.start_sheet_pdf(dir.path().join("도면.pdf"));
+    app.modals.active = None;
+    app.advance_sheet_pdf(&egui::Context::default());
+    assert_eq!(app.modals.active, Some(crate::dialogs_modal::ActiveModalDialog::PdfPreparing));
+}
+
+/// Opening another survey stops the PDF: nothing of the next survey goes into the file named for this one.
+#[test]
+fn opening_another_survey_stops_the_pdf() {
+    let dir = tempfile::tempdir().unwrap();
+    let other = dir.path().join("다른.gpkg");
+    strata_storage::gpkg::GpkgRepository::create_new_survey(&other, strata_types::crs::WorkCrs::Epsg5187).unwrap();
+    let mut app = StrataAppState::new_startup();
+    app.start_sheet_pdf(dir.path().join("도면.pdf"));
+    assert!(app.open_survey_gpkg(&other));
+    assert!(app.drawing.pdf.0.is_none());
+    assert_ne!(app.modals.active, Some(crate::dialogs_modal::ActiveModalDialog::PdfPreparing));
+    assert!(!dir.path().join("도면.pdf").exists());
+}
+
+/// The window says the three steps of the C++ (KaDrawingStudio.cpp:3771, 3785, 3813): the sheet, the
+/// picture, then 「파일을 저장하는 중…」 while the file is written.
+#[test]
+fn the_window_says_when_the_file_is_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = StrataAppState::new_startup();
+    app.start_sheet_pdf(dir.path().join("도면.pdf"));
+    assert_eq!(app.drawing.pdf.0.as_ref().unwrap().words(), "도면을 정리하는 중…");
+    let (send, receive) = std::sync::mpsc::channel();
+    app.drawing.pdf.0.as_mut().unwrap().stage = super::Stage::Making(receive);
+    assert!(app.drawing.pdf.0.as_ref().unwrap().words().starts_with("PDF를 그리는 중…"));
+    send.send(super::Made::Saving).unwrap();
+    app.advance_sheet_pdf(&egui::Context::default());
+    assert_eq!(app.drawing.pdf.0.as_ref().unwrap().words(), "파일을 저장하는 중…");
+    send.send(super::Made::Done(Ok(0))).unwrap();
+    app.advance_sheet_pdf(&egui::Context::default());
+    assert!(app.drawing.pdf.0.is_none());
+}
+
+/// The status line says when the picture had to leave something out, rather than only 「저장:」.
+#[test]
+fn the_status_says_when_pictures_were_left_out() {
+    let target = Path::new("C:/조사/도면.pdf");
+    assert_eq!(super::saved_words(target, 0), "저장: C:/조사/도면.pdf");
+    assert_eq!(super::saved_words(target, 2), "저장: C:/조사/도면.pdf · 그림 2개는 PDF에 넣지 못했습니다.");
+}

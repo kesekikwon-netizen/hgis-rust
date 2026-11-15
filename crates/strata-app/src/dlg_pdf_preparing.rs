@@ -1,5 +1,6 @@
 //! The progress window of 「PDF 내보내기」 — C++ `KaDrawingPdfProgress` (KaDrawingPdfProgress.cpp:10-58): the
-//! title 「PDF 내보내기」, the step being done, a bar that runs while the length is not known, and 「취소」.
+//! title 「PDF 내보내기」, the step being done, a bar that runs while the length is not known, and 「취소」. It
+//! holds the app as the C++ window does (`Qt::ApplicationModal`, :14): a click outside it reaches nothing.
 
 use std::sync::atomic::Ordering;
 
@@ -12,12 +13,14 @@ pub(crate) fn render_pdf_preparing(app: &mut StrataAppState, ctx: &egui::Context
     // The step of the PDF being made; the first words of the C++ window before any (`:20`).
     let words = app.drawing.pdf.0.as_ref().map_or_else(|| "준비하는 중…".to_owned(), |job| job.words());
     let mut cancel = false;
-    egui::Window::new("ka_modal_pdf_prep")
-        .title_bar(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .fixed_size([440.0_f32.min(ctx.screen_rect().width() - 32.0), 132.0_f32.min(ctx.screen_rect().height() - 32.0)])
+    let size = [440.0_f32.min(ctx.screen_rect().width() - 32.0), 132.0_f32.min(ctx.screen_rect().height() - 32.0)];
+    // No shade behind it: the C++ window does not darken the app.
+    egui::Modal::new(egui::Id::new("ka_modal_pdf_prep"))
+        .backdrop_color(Color32::TRANSPARENT)
+        .frame(egui::Frame::window(&ctx.style()))
         .show(ctx, |ui| {
+            ui.set_width(size[0]);
+            ui.set_min_height(size[1]);
             render_strata_modal_header(ui, "PDF 내보내기", open);
             let mut lines = words.lines();
             ui.label(egui::RichText::new(lines.next().unwrap_or_default()).size(13.0));
@@ -43,6 +46,8 @@ pub(crate) fn render_pdf_preparing(app: &mut StrataAppState, ctx: &egui::Context
                 cancel = ui.add(cancel_button).clicked();
             });
         });
+    // Esc is 취소: the 취소 button of the C++ window answers Escape (QProgressDialog).
+    cancel |= ctx.input(|i| i.key_pressed(egui::Key::Escape));
     // 취소, or the window's ×: the PDF stops, and no file is made (the window closes when it has stopped).
     if cancel || !*open {
         *open = true;

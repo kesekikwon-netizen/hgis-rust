@@ -44,20 +44,31 @@ pub(crate) fn render_note(paper_mm: [f64; 2], dpi: f32) -> String {
     }
 }
 
-/// Packs the picture as a JPEG in a PDF of the paper, written next to `target` first and then put in its
-/// place, unless 취소 came in the meantime (`KaDrawingPdfProgress::commit`, KaDrawingPdfProgress.cpp:60-80).
-pub(crate) fn write_pdf(target: &Path, paper_mm: [f64; 2], title: &str, picture: &Picture, cancel: &AtomicBool) -> Result<(), String> {
+/// Packs the picture as a JPEG in a PDF of the paper.
+pub(crate) fn pack_pdf(paper_mm: [f64; 2], title: &str, picture: &Picture) -> Result<Vec<u8>, String> {
     let (width, height) = (u32::try_from(picture.size[0]).unwrap_or(u32::MAX), u32::try_from(picture.size[1]).unwrap_or(u32::MAX));
     let mut jpeg = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 92)
         .encode(&picture.rgb, width, height, image::ExtendedColorType::Rgb8)
         .map_err(|why| format!("그림을 PDF에 담지 못했습니다: {why}"))?;
-    let pdf = strata_layout::picture_pdf::picture_page_pdf(paper_mm, title, &jpeg, [width, height]);
+    Ok(strata_layout::picture_pdf::picture_page_pdf(paper_mm, title, &jpeg, [width, height]))
+}
+
+/// Writes the PDF next to `target` first and then puts it in its place, unless 취소 came in the meantime;
+/// a draft that could not be written whole is taken away (`KaDrawingPdfProgress::commit`,
+/// KaDrawingPdfProgress.cpp:60-80).
+pub(crate) fn put_pdf(target: &Path, pdf: &[u8], cancel: &AtomicBool) -> Result<(), String> {
     if cancel.load(Ordering::Acquire) {
         return Err(CANCELLED.to_owned());
     }
     let draft = target.with_extension("pdf.part");
-    std::fs::write(&draft, pdf).map_err(|_| "PDF 저장 파일을 열지 못했습니다.".to_owned())?;
+    let mut file = std::fs::File::create(&draft).map_err(|_| "PDF 저장 파일을 열지 못했습니다.".to_owned())?;
+    if std::io::Write::write_all(&mut file, pdf).and_then(|()| file.sync_all()).is_err() {
+        drop(file);
+        drop(std::fs::remove_file(&draft));
+        return Err("PDF 파일을 저장하지 못했습니다.".to_owned());
+    }
+    drop(file);
     if cancel.load(Ordering::Acquire) {
         drop(std::fs::remove_file(&draft));
         return Err(CANCELLED.to_owned());
