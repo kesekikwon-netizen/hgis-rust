@@ -49,6 +49,24 @@ impl StrataAppState {
         out
     }
 
+    /// The lines of the received cadastral map around a shape, while its row is checked: a cadastral layer
+    /// is a snap source (C++ `isSnapSourceLayer`, LayerOps.cpp:1278-1282; the VWorld picture has no lines).
+    /// The snap looks no further than 37.5 m from the shape (cad_ring_snap.rs): 40 m around its box.
+    fn cadastral_snap_lines(&self, shape: &[WkbGeometry]) -> Vec<Vec<[f64; 2]>> {
+        let key = crate::ref_vector::cadastral::layer::CADASTRAL_KEY;
+        let checked = self.left_layers.entries.iter().any(|e| e.layer_key == key && self.home_map.real_survey.is_layer_visible(&e.label_ko));
+        let points = shape.iter().flat_map(|part| match part {
+            WkbGeometry::Point(p) => vec![*p],
+            WkbGeometry::LineString(line) => line.clone(),
+            WkbGeometry::Polygon(rings) => rings.concat(),
+        });
+        let around = points.fold(None::<[f64; 4]>, |b, p| Some(b.map_or([p[0], p[1], p[0], p[1]], |b| [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])])));
+        match around {
+            Some(b) if checked => self.ref_vectors.runs_within(key, [b[0] - 40.0, b[1] - 40.0, b[2] + 40.0, b[3] + 40.0]),
+            _ => Vec::new(),
+        }
+    }
+
     /// 붙일 대상들(snapCanvasShapesToNearestLines). 고른 것이 없으면 대상을 골라 둔다(selectByIds).
     fn snap_targets(&mut self) -> Vec<(String, i64)> {
         let has_geometry = |app: &Self, (table, fid): &(String, i64)| {
@@ -83,7 +101,8 @@ impl StrataAppState {
             Some((to_work, _)) => moved(&parts, to_work)?,
             None => parts,
         };
-        let mut refs: Vec<Vec<[f64; 2]>> = self.home_map.real_survey.cadastral_parcels.iter().map(|p| p.ring.clone()).collect();
+        let mut refs = self.cadastral_snap_lines(&in_work);
+        refs.extend(self.home_map.real_survey.cadastral_parcels.iter().map(|p| p.ring.clone()));
         refs.extend(self.home_map.real_survey.heritage_polys.iter().map(|h| h.ring.clone()));
         refs.extend(self.survey_snap_lines(Some((table, fid))));
         let mupp = self.home_map.viewport.meters_per_pixel;

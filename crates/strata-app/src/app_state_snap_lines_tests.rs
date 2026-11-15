@@ -65,3 +65,70 @@ fn nothing_to_snap_says_so() {
     assert_eq!(app.snap_shapes_to_nearest_lines(), 0);
     assert_eq!(app.status_left_message(), "먼저 지적도·도면 위에 도형을 그리거나 도형선택으로 도형을 고르세요.");
 }
+
+/// A received cadastral map with one parcel, shown on the map and read (one map frame).
+fn with_received_cadastral_map(app: &mut StrataAppState, dir: &std::path::Path) {
+    use strata_engine::{write_new_table, Cell, ColumnKind, Row, ShapeKind, Shapes, TableLayout};
+    let file = dir.join("지적도-시험.gpkg");
+    let layout = TableLayout { table: "cadastral", epsg: 5187, kind: ShapeKind::Polygons, columns: &[("PNU", ColumnKind::Text), ("JIBUN", ColumnKind::Text)] };
+    let ring = vec![[200_000.0, 450_000.0], [200_010.0, 450_001.2], [200_020.0, 450_000.0], [200_020.0, 449_980.0], [200_000.0, 449_980.0], [200_000.0, 450_000.0]];
+    let parcel = Row { shapes: Shapes::Polygons(vec![vec![ring]]), cells: vec![Cell::Text("4713010100100010000".to_owned()), Cell::Text("1대".to_owned())] };
+    write_new_table(&file, &layout, &mut vec![parcel].into_iter()).expect("write the test table");
+    app.ref_vectors.run_at_once();
+    app.show_cadastral_layer(file, None);
+    app.home_map.viewport = strata_canvas2d::viewport::ViewportTransform::new([200_010.0, 450_005.0], 0.125, [640.0, 480.0]);
+    let ctx = eframe::egui::Context::default();
+    let rect = eframe::egui::Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(640.0, 480.0));
+    for _ in 0..3 {
+        let _ = ctx.run(eframe::egui::RawInput { screen_rect: Some(rect), ..Default::default() }, |ctx| {
+            eframe::egui::CentralPanel::default().show(ctx, |ui| app.paint_reference_vector_layers(ctx, &ui.painter_at(rect), rect));
+        });
+    }
+    assert!(app.ref_vectors.extent_of(crate::ref_vector::cadastral::layer::CADASTRAL_KEY).is_some(), "the received map is read");
+}
+
+fn draw_area_along_the_parcel(app: &mut StrataAppState) {
+    app.start_edit_survey_area();
+    app.accept_survey_area_setup();
+    for p in [[200_001.2, 449_999.1], [200_019.0, 450_000.8], [200_020.8, 450_019.2], [199_999.3, 450_020.6]] {
+        app.sketch_press(p);
+    }
+    app.sketch_finish();
+}
+
+/// Owner 2026-11-15: 「그린도형 가까운곳에 붙이기 가능하게하라」. The lines a shape is snapped to are those of the
+/// received cadastral map while its row is checked (C++ `isSnapSourceLayer`, LayerOps.cpp:1278-1282). Before,
+/// the snap read a list that only the old sample data filled, so on a real survey there was never a line to
+/// snap to. The same area as above: two corners go onto the parcel's corners and the corner between them is
+/// filled in.
+#[test]
+fn a_drawn_area_snaps_to_the_received_cadastral_map() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut app = new_survey(dir.path());
+    with_received_cadastral_map(&mut app, dir.path());
+    draw_area_along_the_parcel(&mut app);
+
+    assert_eq!(app.snap_shapes_to_nearest_lines(), 1);
+    let snapped = outer_ring(&app);
+    assert_eq!(snapped.len(), 6, "{snapped:?}");
+    for corner in [[200_000.0, 450_000.0], [200_010.0, 450_001.2], [200_020.0, 450_000.0]] {
+        assert!(snapped.iter().any(|p| (p[0] - corner[0]).abs() < 0.002 && (p[1] - corner[1]).abs() < 0.002), "{corner:?} in {snapped:?}");
+    }
+    assert!(app.status_left_message().starts_with("도형을 가장 가까운 선에 붙였습니다 (꼭짓점 "));
+}
+
+/// An unchecked cadastral row gives no line: the drawn area stays as it is, with the C++ words.
+#[test]
+fn an_unchecked_cadastral_map_gives_no_line_to_snap_to() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut app = new_survey(dir.path());
+    with_received_cadastral_map(&mut app, dir.path());
+    draw_area_along_the_parcel(&mut app);
+    let drawn = outer_ring(&app);
+    let row = app.left_layers.entries.iter().find(|e| e.layer_key == crate::ref_vector::cadastral::layer::CADASTRAL_KEY).map(|e| e.label_ko.clone()).expect("row");
+    app.home_map.real_survey.layer_visible.insert(row, false);
+
+    assert_eq!(app.snap_shapes_to_nearest_lines(), 0);
+    assert_eq!(outer_ring(&app), drawn);
+    assert_eq!(app.status_left_message(), "이미 가장 가까운 선에 붙어 있거나 주변에 붙일 기준 선(지적·도면)이 없습니다.");
+}

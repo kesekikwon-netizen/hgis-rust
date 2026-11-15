@@ -74,6 +74,19 @@ impl Drawn {
         }
     }
 
+    /// The lines and rings of a table that reach into a box of the work CRS (`[min x, min y, max x, max y]`),
+    /// as points of the work CRS; nothing for heights. Kept points are single precision around an origin
+    /// (ref_vector_data.rs): within a millimetre at the distances a layer covers.
+    pub(crate) fn runs_within(&self, within: [f64; 4]) -> Vec<Vec<[f64; 2]>> {
+        let Self::Shapes(shapes) = self else {
+            return Vec::new();
+        };
+        let [x, y] = shapes.origin;
+        let reaches = |b: &[f32; 4]| x + f64::from(b[0]) <= within[2] && x + f64::from(b[2]) >= within[0] && y + f64::from(b[1]) <= within[3] && y + f64::from(b[3]) >= within[1];
+        let runs = shapes.items.iter().filter(|item| reaches(&item.bbox)).flat_map(|item| &shapes.runs[item.first_run as usize..(item.first_run + item.run_count) as usize]);
+        runs.map(|run| shapes.coords[run.start as usize..(run.start + run.len) as usize].iter().map(|p| [x + f64::from(p[0]), y + f64::from(p[1])]).collect()).collect()
+    }
+
     /// The lowest and the highest height among the cells whose centres lie in a box of the work CRS
     /// (`[min x, min y, max x, max y]`); `None` for a table and where the box holds no height.
     pub(crate) fn height_range(&self, within: [f64; 4]) -> Option<(f32, f32)> {

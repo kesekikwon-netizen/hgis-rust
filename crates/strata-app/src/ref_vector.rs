@@ -173,6 +173,11 @@ impl RefVectorLayers {
         }
     }
 
+    /// The lines and rings of a layer that reach into a box of the work CRS, once the layer is read.
+    pub(crate) fn runs_within(&self, key: &str, within: [f64; 4]) -> Vec<Vec<[f64; 2]>> {
+        self.layers.iter().find(|l| l.key == key).map_or_else(Vec::new, |l| if let Shapes::Ready(data) = &l.shapes { data.runs_within(within) } else { Vec::new() })
+    }
+
     /// The lowest and highest height an elevation layer holds inside a box of the work CRS.
     pub(crate) fn height_range(&self, key: &str, within: [f64; 4]) -> Option<(f32, f32)> {
         self.layers.iter().find(|l| l.key == key).and_then(|l| if let Shapes::Ready(data) = &l.shapes { data.height_range(within) } else { None })
