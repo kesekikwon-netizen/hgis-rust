@@ -21,3 +21,5 @@ image = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# Tests write the shapefiles they read (the same GDAL the engine builds).
+gdal = "=0.19.0"

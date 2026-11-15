@@ -5502,6 +5502,7 @@ dependencies = [
 name = "strata-refmap"
 version = "2.0.0"
 dependencies = [
+ "gdal",
  "image",
  "serde_json",
  "sha2 0.10.9",

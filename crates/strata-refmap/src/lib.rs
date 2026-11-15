@@ -12,6 +12,7 @@ pub mod geology_colour;
 pub mod geology_era;
 pub mod geology_prepare;
 pub mod geology_request;
+pub mod heritage;
 pub mod river_level;
 pub mod river_prepare;
 pub mod river_request;

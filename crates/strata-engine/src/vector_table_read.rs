@@ -3,8 +3,9 @@
 use std::path::Path;
 
 use gdal::vector::{FieldValue, Geometry, Layer, LayerAccess, OGRwkbGeometryType};
+use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
 
-use super::{columns_of, named, open, Cell, Row, ShapeKind, Shapes, TableFacts};
+use super::{columns_of, named, open, Cell, ColumnKind, Row, ShapeKind, Shapes, TableFacts};
 use crate::EngineError;
 
 /// What kind of shapes the table of a file holds; single-part tables are read as well.
@@ -87,3 +88,58 @@ pub fn table_facts(path: &Path, table: &str) -> Result<TableFacts, EngineError> 
     let layer = dataset.layer_by_name(table).map_err(|e| named(path, e))?;
     facts_of(&layer)
 }
+
+/// Opens a shapefile, and nothing else, for reading; its text is decoded from `encoding` ("CP949", "UTF-8").
+/// Korean public shapefiles come in CP949 without a `.cpg` (`LayerOps.cpp:359-450` decides which).
+fn open_shapefile(path: &Path, encoding: &str) -> Result<Dataset, EngineError> {
+    let decode = format!("ENCODING={encoding}");
+    let options = DatasetOptions { open_flags: GdalOpenFlags::GDAL_OF_VECTOR | GdalOpenFlags::GDAL_OF_READONLY, allowed_drivers: Some(&["ESRI Shapefile"]), open_options: Some(&[&decode]), sibling_files: None };
+    Dataset::open_ex(path, options).map_err(|e| named(path, e))
+}
+
+/// The columns of a shapefile that these tables can hold, each with its place in the file. A column of
+/// another kind (a date) is left out: it must not spoil the whole file.
+fn known_columns(layer: &Layer<'_>) -> Vec<(usize, String, ColumnKind)> {
+    layer.defn().fields().enumerate().filter_map(|(place, field)| ColumnKind::of(field.field_type()).map(|kind| (place, field.name(), kind))).collect()
+}
+
+fn shapefile_facts_of(layer: &Layer<'_>) -> Result<TableFacts, EngineError> {
+    let epsg = layer.spatial_ref().filter(|s| s.auth_name().as_deref() == Some("EPSG")).and_then(|s| s.auth_code().ok()).and_then(|code| u32::try_from(code).ok());
+    Ok(TableFacts { epsg, kind: kind_of(layer)?, columns: known_columns(layer).into_iter().map(|(_, name, kind)| (name, kind)).collect(), rows: layer.feature_count() })
+}
+
+/// What a shapefile holds, without reading its rows.
+///
+/// # Errors
+/// The file is missing or no shapefile, or holds neither lines nor polygons.
+pub fn shapefile_facts(path: &Path, encoding: &str) -> Result<TableFacts, EngineError> {
+    let dataset = open_shapefile(path, encoding)?;
+    let layer = dataset.layer(0).map_err(|e| named(path, e))?;
+    shapefile_facts_of(&layer)
+}
+
+/// Reads a shapefile row by row, with the cells of the named columns in that order, until `each` returns
+/// false.
+///
+/// # Errors
+/// As `shapefile_facts`; a named column is missing or of a kind these tables do not hold; a row cannot be read.
+pub fn read_shapefile(path: &Path, encoding: &str, columns: &[&str], each: &mut dyn FnMut(Row) -> bool) -> Result<TableFacts, EngineError> {
+    let dataset = open_shapefile(path, encoding)?;
+    let mut layer = dataset.layer(0).map_err(|e| named(path, e))?;
+    let (facts, known) = (shapefile_facts_of(&layer)?, known_columns(&layer));
+    let mut wanted = Vec::new();
+    for name in columns {
+        wanted.push(known.iter().find(|(_, known, _)| known == name).map(|(place, _, _)| *place).ok_or_else(|| named(path, format!("the shapefile has no column {name}")))?);
+    }
+    for feature in layer.features() {
+        let cells = wanted.iter().map(|place| cell(feature.field(*place)?)).collect::<Result<Vec<_>, _>>()?;
+        if !each(Row { shapes: shapes(feature.geometry(), facts.kind)?, cells }) {
+            break;
+        }
+    }
+    Ok(facts)
+}
+
+#[cfg(test)]
+#[path = "shapefile_tests.rs"]
+mod shapefile_tests;
