@@ -68,8 +68,10 @@ impl StrataAppState {
                             .stroke(stroke)
                             .corner_radius(5.0)
                             .min_size(Vec2::new(cols[i].available_width(), 42.0));
+                            // beginPlaceScaleBar (KaDrawingStudio.cpp:1629-1638).
                             if cols[i].add(b).clicked() {
                                 self.drawing.sheet.scale_bar_style = style;
+                                self.put_item_on_sheet(crate::tab_drawing::SheetItem::ScaleBar);
                             }
                         }
                     });
@@ -91,13 +93,18 @@ impl StrataAppState {
                     ui.columns(3, |cols| {
                         for (i, lbl) in ["축척 글자", "좌표계", "좌표 격자"].into_iter().enumerate()
                         {
-                            if cols[i]
+                            let clicked = cols[i]
                                 .add_sized(
                                     [cols[i].available_width(), 24.0],
                                     egui::Button::new(egui::RichText::new(lbl).size(11.0)),
                                 )
-                                .clicked()
-                                && i == 2
+                                .clicked();
+                            // beginPlaceScaleLabel / beginPlaceCrsLabel (KaDrawingStudio.cpp:1640-1660).
+                            if clicked && i < 2 {
+                                let item = if i == 0 { crate::tab_drawing::SheetItem::ScaleText } else { crate::tab_drawing::SheetItem::CrsLabel };
+                                self.put_item_on_sheet(item);
+                            }
+                            if clicked && i == 2
                             {
                                 let next_follow = !self.drawing.sheet.grid_follow_map;
                                 if next_follow {

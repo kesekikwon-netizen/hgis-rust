@@ -42,8 +42,9 @@ impl StrataAppState {
                                 ))
                                 .corner_radius(5.0)
                                 .min_size(Vec2::new(cols[0].available_width(), 40.0));
+                        // beginPlaceLegend (KaDrawingStudio.cpp:1606-1616): puts it on, never takes it off.
                         if cols[0].add(b0).clicked() {
-                            self.drawing.sheet.legend_visible = !self.drawing.sheet.legend_visible;
+                            self.put_item_on_sheet(crate::tab_drawing::SheetItem::Legend);
                         }
                         let title_sel = self.drawing.sheet.title_block_visible;
                         let b1 =
@@ -59,9 +60,9 @@ impl StrataAppState {
                                 ))
                                 .corner_radius(5.0)
                                 .min_size(Vec2::new(cols[1].available_width(), 40.0));
+                        // placeTitleBlock (KaDrawingStudioSheets.cpp:35-69): puts it on; Delete takes it off.
                         if cols[1].add(b1).clicked() {
-                            self.drawing.sheet.title_block_visible =
-                                !self.drawing.sheet.title_block_visible;
+                            self.put_item_on_sheet(crate::tab_drawing::SheetItem::TitleBlock);
                         }
                     });
                     ui.add_space(6.0);
@@ -125,8 +126,10 @@ impl StrataAppState {
                             .stroke(stroke)
                             .corner_radius(5.0)
                             .min_size(Vec2::new(cols[i].available_width(), 44.0));
+                            // beginPlaceNorth (KaDrawingStudio.cpp:1618-1627).
                             if cols[i].add(b).clicked() {
                                 self.drawing.sheet.north_arrow_style = style;
+                                self.put_item_on_sheet(crate::tab_drawing::SheetItem::NorthArrow);
                             }
                         }
                     });

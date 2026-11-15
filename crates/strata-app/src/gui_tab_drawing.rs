@@ -15,7 +15,7 @@ mod gui_tab_drawing_adjust;
 #[path = "gui_tab_drawing_chrome.rs"]
 mod gui_tab_drawing_chrome;
 #[path = "gui_tab_drawing_decoration.rs"]
-mod gui_tab_drawing_decoration;
+pub(crate) mod gui_tab_drawing_decoration;
 #[path = "gui_tab_drawing_frame.rs"]
 mod gui_tab_drawing_frame;
 #[path = "gui_tab_drawing_grid.rs"]
@@ -30,6 +30,8 @@ mod gui_tab_drawing_legend_flow;
 mod gui_tab_drawing_map_layers;
 #[path = "gui_tab_drawing_popups.rs"]
 mod gui_tab_drawing_popups;
+#[path = "gui_tab_drawing_put.rs"]
+mod gui_tab_drawing_put;
 #[path = "gui_tab_drawing_refs.rs"]
 mod gui_tab_drawing_refs;
 #[path = "gui_tab_drawing_right.rs"]

@@ -108,6 +108,21 @@ impl StrataAppState {
         }
     }
 
+    /// Once a frame, before the status line is painted: words given while the 도면 tab is shown are the
+    /// sheet's and its status line shows them (MainWindowExport.cpp:225-232, 「도면 탭의 안내는 메인 상태줄 한
+    /// 줄에 보인다」); once the tab is left they leave the status line (「떠나면 지운다」).
+    pub(crate) fn sync_sheet_status(&mut self) {
+        let guide = self.home_map.draw_guide_message.clone();
+        if self.active_tab == crate::app_state::MainTab::Drawing {
+            if guide != self.drawing.seen_guide {
+                self.drawing.status.clone_from(&guide);
+            }
+        } else if guide.is_some() && guide == self.drawing.status {
+            self.home_map.draw_guide_message = None;
+        }
+        self.drawing.seen_guide = self.home_map.draw_guide_message.clone();
+    }
+
     /// QStatusBar::showMessage — 상태줄 왼쪽 글을 바꾼다(가장 최근 글이 보인다: 남아 있던 리본 안내도 지운다).
     pub(crate) fn show_status_message(&mut self, text: impl Into<String>) {
         self.status_bar_hint.clear();

@@ -83,6 +83,11 @@ impl StrataAppState {
             }
             if capture && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
                 self.sketch_undo_vertex();
+            } else if !wants_kb && self.active_tab == MainTab::Drawing && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+                // On the sheet both keys go to the sheet (KaDrawingStudio.cpp:3512-3522).
+                if self.modals.active.is_none() && !self.modal_window_open() {
+                    self.delete_sheet_selection();
+                }
             } else if !wants_kb && i.key_pressed(egui::Key::Delete) {
                 // QKeySequence::Delete (MainWindow.cpp:256-268). An open window keeps the key to itself.
                 // A picked vertex is what Delete removes, not the whole shape (MainWindowUndo.cpp:497-500).

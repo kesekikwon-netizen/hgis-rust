@@ -191,8 +191,8 @@ impl StrataAppState {
     /// 상태줄 왼쪽 글 — 도면 탭 안내, 잠깐 띄운 알림, 그리기 안내, 없으면 다음 할 일.
     pub(crate) fn status_left_message(&self) -> &str {
         if self.active_tab == MainTab::Drawing {
-            // MainWindowExport.cpp:252 — 도면 탭 안내는 C++ 원문 그대로.
-            return StrataAppState::DRAWING_STUDIO_WELCOME;
+            // MainWindowExport.cpp:225-232, 252 — the sheet's last words, else the welcome of the tab.
+            return self.drawing.status.as_deref().unwrap_or(StrataAppState::DRAWING_STUDIO_WELCOME);
         }
         if !self.status_bar_hint.is_empty() {
             return &self.status_bar_hint;

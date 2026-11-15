@@ -4,7 +4,7 @@
 //! (`KaDrawingStudio.cpp:1891-1897`). Owner 2026-11-15: 「조판에서 자동으로 배치를 하지만 모든것을 사용자가
 //! 움직일수있게하라」. What is kept is the way from the sheet's own place, in millimetres of paper.
 
-use eframe::egui::{self, emath::TSTransform, layers::ShapeIdx, Color32, Rect, Stroke, Vec2};
+use eframe::egui::{self, emath::TSTransform, layers::ShapeIdx, Color32, Pos2, Rect, Stroke, Vec2};
 
 use super::gui_tab_drawing_frame::SheetFrame;
 use crate::app_state::StrataAppState;
@@ -21,6 +21,17 @@ pub(crate) fn sheet_shapes(f: &SheetFrame) -> ShapeIdx {
     f.sheet_p.ctx().graphics_mut(|layers| layers.entry(f.sheet_p.layer_id()).next_idx())
 }
 
+/// The frame of the selected item with a handle at each corner (the C++ selection of a layout item).
+fn paint_selection(painter: &egui::Painter, item: Rect) {
+    let (clay, frame) = (Color32::from_rgb(181, 87, 58), item.expand(3.0));
+    painter.rect_stroke(frame, 1.0, Stroke::new(1.4, clay), egui::StrokeKind::Middle);
+    for corner in [frame.left_top(), frame.right_top(), frame.left_bottom(), frame.right_bottom()] {
+        let handle = Rect::from_center_size(corner, Vec2::splat(6.0));
+        painter.rect_filled(handle, 0.0, Color32::WHITE);
+        painter.rect_stroke(handle, 0.0, Stroke::new(1.2, clay), egui::StrokeKind::Middle);
+    }
+}
+
 impl StrataAppState {
     /// How far the user moved an item, in screen points; an item nobody moved stays exactly where the sheet
     /// places it.
@@ -31,6 +42,16 @@ impl StrataAppState {
     /// The shapes painted since `start` are the item, which the sheet placed at `placed`: moves them to
     /// where the user put it, and remembers the item for the mouse.
     pub(crate) fn place_sheet_item(&mut self, f: &SheetFrame, item: SheetItem, start: ShapeIdx, placed: Rect) {
+        if !self.sheet_item_on(item) {
+            // Taken off with Delete: what was painted for it is wiped, and the mouse does not find it.
+            f.sheet_p.ctx().graphics_mut(|layers| {
+                let shapes = layers.entry(f.sheet_p.layer_id());
+                for index in start.0..shapes.next_idx().0 {
+                    shapes.reset_shape(ShapeIdx(index));
+                }
+            });
+            return;
+        }
         let moved = self.sheet_item_offset(item, placed, f);
         if moved != Vec2::ZERO {
             f.sheet_p.ctx().graphics_mut(|layers| {
@@ -42,16 +63,28 @@ impl StrataAppState {
         self.drawing.item_rects.push((item, placed, moved));
     }
 
-    /// The items as they were painted last, under the mouse: a drag moves the item, kept on the paper.
-    /// Not while the map is adjusted or coordinate points are placed (one tool of the sheet at a time).
+    /// The items as they were painted last, under the mouse: a click selects an item, a drag moves it, kept
+    /// on the paper; a press on bare paper lets go of the selection. Not while the map is adjusted or
+    /// coordinate points are placed (one tool of the sheet at a time).
     pub(crate) fn move_sheet_items(&mut self, ui: &egui::Ui, paper: Rect, px_per_mm: f32) {
         let painted = std::mem::take(&mut self.drawing.item_rects);
         if self.drawing.map_adjust_active || self.drawing.coord_callout_mode {
             return;
         }
+        let pressed: Option<Pos2> = ui.input(|i| i.pointer.press_origin().filter(|_| i.pointer.primary_pressed()));
+        if pressed.is_some_and(|at| paper.contains(at) && !painted.iter().any(|(_, placed, moved)| placed.translate(*moved).contains(at))) {
+            self.drawing.selected_item = None;
+        }
         for (item, placed, moved) in painted {
             let now = placed.translate(moved);
+            // Drags only: a drag starts at the press, so a click selects and a move is followed at once.
             let response = ui.interact(now, ui.id().with(("sheet_item", item)), egui::Sense::drag());
+            if response.drag_started() {
+                self.drawing.selected_item = Some(item);
+            }
+            if self.drawing.selected_item == Some(item) {
+                paint_selection(ui.painter(), now);
+            }
             if response.hovered() || response.dragged() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
                 ui.painter().rect_stroke(now.expand(2.0), 2.0, Stroke::new(1.0, Color32::from_rgb(181, 87, 58)), egui::StrokeKind::Middle);

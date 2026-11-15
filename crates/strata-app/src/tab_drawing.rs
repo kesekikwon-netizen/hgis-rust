@@ -25,6 +25,14 @@ pub struct DrawingTabState {
     /// The scale box (KaDrawingStudio.cpp:1061-1082): a number typed and not applied yet, with the sheet's
     /// scale it was typed against.
     pub(crate) scale_entry: Option<(u32, u32)>,
+    /// The item the user clicked last (KaDrawingStudio's select tool), and the items Delete took off the paper
+    /// (the legend and the title block are off while `sheet.legend_visible` / `title_block_visible` are false).
+    pub(crate) selected_item: Option<SheetItem>,
+    pub(crate) removed_items: std::collections::BTreeSet<SheetItem>,
+    /// The last words the sheet gave while its tab was shown (C++ `kaLastStatus`), and the guide message as
+    /// it was at the last frame, to see new words come.
+    pub(crate) status: Option<String>,
+    pub(crate) seen_guide: Option<String>,
     /// KaDrawingSheetSet.cpp — 보관한 도면 목록
     pub stored_sheets: Vec<StoredSheet>,
     /// KaDrawingSheetSet.cpp:135 팝업 열림 상태
@@ -82,6 +90,10 @@ impl Default for DrawingTabState {
             item_offsets_mm: std::collections::BTreeMap::new(),
             item_rects: Vec::new(),
             scale_entry: None,
+            selected_item: None,
+            removed_items: std::collections::BTreeSet::new(),
+            status: None,
+            seen_guide: None,
             stored_sheets: Vec::new(),
             sheet_set_menu_open: false,
             terrain3d_layout_active: false,
