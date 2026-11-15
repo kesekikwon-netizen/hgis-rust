@@ -75,3 +75,25 @@ fn without_a_map_the_gauge_says_why() {
     assert_eq!(state_of(&mut app), DownloadJobState::Stopped { code: StopCode::Data1, reason: "받은 수치지형도 레이어를 열지 못했습니다: 359012. 기존 지도와 받은 원본은 유지됩니다.".to_owned() });
     assert!(!app.left_layers.entries.iter().any(|e| e.layer_key == "ref_topo"));
 }
+
+/// Owner 2026-11-15: 「맵을받아 레이어에 추가되는맵이면 받은것을 같은개발일때 그다음에 넣을때 적용되게하라」; MORE0 M6-2.
+/// With sheets the survey has merged already and no row on the map, 「수치지형」 puts them on the map at once,
+/// without the portal, the internet or the account; nothing is ordered.
+#[test]
+fn a_press_puts_the_sheets_the_survey_has_on_the_map_without_ordering() {
+    let dir = tempfile::tempdir().unwrap();
+    let survey = dir.path().join("현장.gpkg");
+    std::fs::write(&survey, b"x").unwrap();
+    let merged = dir.path().join("지형도").join(strata_topo::post::MERGED_FOLDER);
+    std::fs::create_dir_all(&merged).unwrap();
+    std::fs::write(merged.join(format!("{}100.gpkg", strata_topo::post::MERGED_PREFIX)), b"old").unwrap();
+    std::fs::write(merged.join(format!("{}200.gpkg", strata_topo::post::MERGED_PREFIX)), b"new").unwrap();
+    let mut app = StrataAppState::new_startup();
+    app.survey_path = Some(survey);
+    app.handle_ribbon_click("수치지형");
+    let spec = app.ref_vectors.spec_of("ref_topo").expect("the row of the sheets the survey has");
+    assert_eq!(spec.file, merged.join(format!("{}200.gpkg", strata_topo::post::MERGED_PREFIX)), "the newest merged file");
+    assert!(app.left_layers.entries.iter().any(|e| e.layer_key == "ref_topo"));
+    assert!(!app.topographic_download_busy(), "nothing is ordered");
+    assert_eq!(app.home_map.draw_guide_message.as_deref(), Some("받아 둔 수치지형도를 지도에 올렸습니다."));
+}

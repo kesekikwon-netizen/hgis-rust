@@ -188,3 +188,19 @@ fn a_run_without_a_new_file_shows_what_the_survey_has_or_says_there_is_none() {
     assert_eq!(app.home_map.draw_guide_message.as_deref(), Some("DEM을 준비했습니다. 도엽 1장을 지도에 올렸습니다."));
     assert_eq!(rows(&app).len(), 2);
 }
+
+/// Owner 2026-11-15 (reuse what was received); MORE0 M6-4: with DEM sheets the survey has and no row on the
+/// map, 「DEM」 shows them at once, without the internet or the account; nothing is ordered.
+#[test]
+fn a_press_shows_the_dem_the_survey_has_without_ordering() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("DEM");
+    std::fs::create_dir_all(root.join("원본/a")).unwrap();
+    std::fs::write(root.join("원본/a/35901.img"), b"raster").unwrap();
+    add_to_list(&root, &[entry("35901", "2025", "원본/a/35901.img")]).unwrap();
+    let mut app = app_with_survey(dir.path());
+    app.handle_ribbon_click("DEM");
+    assert_eq!(rows(&app).len(), 2, "「지형 음영」 and 「DEM」");
+    assert!(app.dem_shown());
+    assert!(!app.topographic_download_busy(), "nothing is ordered");
+}

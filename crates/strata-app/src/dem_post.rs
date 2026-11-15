@@ -180,6 +180,11 @@ impl StrataAppState {
     }
 
     /// Puts the DEM the survey folder has on the map (a scripted screenshot shows it without an order).
+    /// Whether the survey's DEM folder holds a sheet.
+    pub(crate) fn survey_has_dem(&self) -> bool {
+        crate::survey_folder::survey_folder(self.survey_path.as_deref()).is_some_and(|folder| !received_numbers(&folder.join("DEM")).is_empty())
+    }
+
     pub(crate) fn show_survey_dem(&mut self) {
         if let Some(root) = crate::survey_folder::survey_folder(self.survey_path.as_deref()).map(|folder| folder.join("DEM")) {
             self.show_dem_layers(&root);

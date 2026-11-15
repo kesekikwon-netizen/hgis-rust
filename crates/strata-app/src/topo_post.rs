@@ -27,6 +27,22 @@ pub(crate) const TOPO_READY: &str = "수치지형도를 준비했습니다.";
 /// This app's own words: the C++ has no sentence for sheets that hold nothing near the survey.
 const NO_LINES: &str = "조사구역 5km 안에 지도에 올릴 수치지형도 선이 없습니다.";
 
+/// The layer of merged sheets: one read-only line layer, grey 128, 0.2 mm, no labels (`:936-975`).
+pub(crate) fn topo_spec(file: std::path::PathBuf, work_epsg: u32) -> LoadSpec {
+    LoadSpec { file, table: strata_topo::merge::TABLE.to_owned(), work_epsg, look: Look::Lines { stroke: [128, 128, 128, 255], width_mm: 0.2 }, label: None }
+}
+
+/// The newest merged file of the sheets the survey has (`지형도/합침/수치지형도-합침-<ms>.gpkg`), if one is there.
+pub(crate) fn held_topographic_merge(survey: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+    let folder = crate::survey_folder::survey_folder(survey)?.join("지형도").join(strata_topo::post::MERGED_FOLDER);
+    let stamp = |path: &std::path::Path| -> Option<u128> {
+        let name = path.file_name()?.to_str()?;
+        name.strip_prefix(strata_topo::post::MERGED_PREFIX)?.strip_suffix(".gpkg")?.parse().ok()
+    };
+    let files = std::fs::read_dir(folder).ok()?.filter_map(|entry| entry.ok().map(|entry| entry.path()));
+    files.filter(|path| path.is_file()).filter_map(|path| stamp(&path).map(|at| (at, path))).max_by_key(|(at, _)| *at).map(|(_, path)| path)
+}
+
 /// The work on what a run left, while it runs.
 pub(crate) struct TopoPost {
     result: Receiver<Result<Posted, MergeStop>>,
@@ -63,7 +79,7 @@ impl StrataAppState {
             return;
         };
         // One read-only line layer under 참조 지도: grey 128, 0.2 mm, no labels (`:936-975`).
-        let spec = LoadSpec { file, table: strata_topo::merge::TABLE.to_owned(), work_epsg: CrsCode::from(self.work_crs).epsg_number(), look: Look::Lines { stroke: [128, 128, 128, 255], width_mm: 0.2 }, label: None };
+        let spec = topo_spec(file, CrsCode::from(self.work_crs).epsg_number());
         self.show_reference_vector_layer(TOPO_KEY, TOPO_TITLE, spec);
         job.report_done(TOPO_READY);
         let mut said = vec![format!("{TOPO_READY} 도엽 {}장을 지도에 올렸습니다.", posted.placed.len())];

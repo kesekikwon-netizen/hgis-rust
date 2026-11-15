@@ -148,6 +148,10 @@ impl StrataAppState {
                     } else {
                         "DEM 지형을 숨겼습니다.".to_owned()
                     };
+                } else if self.survey_has_dem() {
+                    // The DEM the survey has goes on the map at once, without the internet or the account
+                    // (owner 2026-11-15 「받은것을 … 그다음에 넣을때 적용되게하라」; MORE0 M6-4).
+                    self.show_survey_dem();
                 } else {
                     // The C++ starts its own DEM download here (:344 startDemDownload, a Copernicus DEM). The
                     // owner asked for the NGII DEM of the same area as the topographic sheets (2026-11-15):

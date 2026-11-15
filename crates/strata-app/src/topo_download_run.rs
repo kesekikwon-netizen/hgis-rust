@@ -80,8 +80,18 @@ impl StrataAppState {
     }
 
     /// The ribbon button 「수치지형」 and the first row of its menu: the order runs hidden, and what it
-    /// receives goes on the map (topo_post.rs). A sheet the survey has is not ordered again.
+    /// receives goes on the map (topo_post.rs). A sheet the survey has is not ordered again, and sheets the
+    /// survey has merged already go on the map at once without the portal (owner 2026-11-15 「받은것을 …
+    /// 그다음에 넣을때 적용되게하라」; the C++ puts stored sheets on the map first, KaTopographicScopePanel.cpp:306-337).
     pub(crate) fn open_topographic_download(&mut self) {
+        let on_map = self.left_layers.entries.iter().any(|e| e.layer_key == super::post::TOPO_KEY);
+        if let (false, Some(file)) = (on_map, super::post::held_topographic_merge(self.survey_path.as_deref())) {
+            self.active_tab = MainTab::Map;
+            let spec = super::post::topo_spec(file, strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
+            self.show_reference_vector_layer(super::post::TOPO_KEY, super::post::TOPO_TITLE, spec);
+            self.show_status_message("받아 둔 수치지형도를 지도에 올렸습니다.");
+            return;
+        }
         self.press_ngii_order(OrderOf::Sheets);
     }
 
