@@ -24,21 +24,19 @@ enum LegendRow {
     Site(Badge),
 }
 
+/// The frame of the legend on the screen, its columns, and the scale of its rows.
+pub(crate) struct LegendCard {
+    pub(crate) rect: Rect,
+    columns: usize,
+    s: f32,
+    leg_w: f32,
+    row_h: f32,
+}
+
 impl StrataAppState {
-    /// 범례 상자와 항목들.
-    pub(crate) fn paint_sheet_legend(&mut self, f: &SheetFrame) {
-        let map_rect = f.map_rect;
-        let px_per_mm = f.px_per_mm;
-        let ink = f.ink;
-        let sheet_p = f.sheet_p.clone();
-        if !self.drawing.sheet.legend_visible {
-            return;
-        }
-        // The sites the map of this sheet numbers (the same view as the badges: nothing is counted twice).
-        let (north_west, south_east) = (f.m2w(map_rect.left_top()), f.m2w(map_rect.right_bottom()));
-        let badges = self.sheet_heritage_badges([north_west[0], south_east[1], south_east[0], north_west[1]]);
+    /// The rows of the survey layers that the legend lists.
+    fn sheet_legend_survey_rows(&self) -> Vec<LegendRow> {
         let rs = &self.home_map.real_survey;
-        // 3. 용지 내 4요소 실물 조판: (1) 범례, (2) 표제란, (3) 축척막대·축척글·좌표계, (4) 방위표(도북 화살)
         let mut rows: Vec<LegendRow> = Vec::new();
         if rs.is_layer_visible("조사구역") {
             rows.push(LegendRow::Swatch(Color32::from_rgba_unmultiplied(214, 92, 32, 95), Color32::from_rgb(214, 78, 22), "조사구역"));
@@ -52,17 +50,44 @@ impl StrataAppState {
         if rs.is_layer_visible("지적도 · 조사 주변 5km") {
             rows.push(LegendRow::Swatch(Color32::TRANSPARENT, Color32::from_rgb(68, 66, 60), "지적도"));
         }
-        rows.extend(badges.into_iter().map(LegendRow::Site));
+        rows
+    }
 
+    /// The legend's frame for its survey rows and `site_rows` rows of numbered sites; `None` when the
+    /// legend is hidden. The badges of the map keep off it (`LayoutBadgePlacer::legendBlocks`).
+    pub(crate) fn sheet_legend_card(&self, f: &SheetFrame, site_rows: usize) -> Option<LegendCard> {
+        if !self.drawing.sheet.legend_visible {
+            return None;
+        }
+        let (map_rect, px_per_mm) = (f.map_rect, f.px_per_mm);
+        let rows = self.sheet_legend_survey_rows().len() + site_rows;
         let s = (px_per_mm / 1.65).clamp(0.42, 1.3);
         let base_leg_r = f.mm_to_rect(self.drawing.sheet.legend_rect);
         let row_h = 12.0 * s;
         let leg_w = base_leg_r.width().clamp(42.0 * s, map_rect.width() * 0.42);
-        let font_pt = self.drawing.sheet.legend_font_pt as f32;
-        let columns = legend_columns(leg_w / px_per_mm, font_pt, rows.len());
+        let columns = legend_columns(leg_w / px_per_mm, self.drawing.sheet.legend_font_pt as f32, rows);
         // The frame keeps its width and takes the height its rows need (`LayoutService.cpp:1531-1534`).
-        let leg_h = (20.0 * s + (legend_column_rows(rows.len(), columns) as f32) * row_h).max(24.0 * s);
-        let leg_r = Rect::from_min_size(Pos2::new((map_rect.right() - leg_w - 5.0 * s).max(map_rect.left() + 4.0), base_leg_r.top()), Vec2::new(leg_w, leg_h));
+        let leg_h = (20.0 * s + (legend_column_rows(rows, columns) as f32) * row_h).max(24.0 * s);
+        let rect = Rect::from_min_size(Pos2::new((map_rect.right() - leg_w - 5.0 * s).max(map_rect.left() + 4.0), base_leg_r.top()), Vec2::new(leg_w, leg_h));
+        Some(LegendCard { rect, columns, s, leg_w, row_h })
+    }
+
+    /// 범례 상자와 항목들.
+    pub(crate) fn paint_sheet_legend(&mut self, f: &SheetFrame) {
+        let map_rect = f.map_rect;
+        let px_per_mm = f.px_per_mm;
+        let ink = f.ink;
+        let sheet_p = f.sheet_p.clone();
+        // The sites the map of this sheet numbers (the same view as the badges: nothing is counted twice).
+        let (north_west, south_east) = (f.m2w(map_rect.left_top()), f.m2w(map_rect.right_bottom()));
+        let badges = self.sheet_heritage_badges([north_west[0], south_east[1], south_east[0], north_west[1]]);
+        let Some(LegendCard { rect: leg_r, columns, s, leg_w, row_h }) = self.sheet_legend_card(f, badges.len()) else {
+            return;
+        };
+        // 3. 용지 내 4요소 실물 조판: (1) 범례, (2) 표제란, (3) 축척막대·축척글·좌표계, (4) 방위표(도북 화살)
+        let mut rows = self.sheet_legend_survey_rows();
+        rows.extend(badges.into_iter().map(LegendRow::Site));
+        let font_pt = self.drawing.sheet.legend_font_pt as f32;
         sheet_p.rect_filled(leg_r, 1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 245));
         sheet_p.rect_stroke(leg_r, 1.0, Stroke::new(0.9, ink), egui::StrokeKind::Middle);
         let title_pt = (font_pt * s).clamp(4.5, 11.5);

@@ -76,3 +76,50 @@ fn a_badge_has_the_colour_of_its_kind_and_grows_with_its_digits() {
     assert!((three.diameter - (1.0 + 3.0 * 0.725) * 1.3 * 4.0).abs() < 1e-4, "{}", three.diameter);
     assert_eq!(three.ink, [0, 0, 0]);
 }
+
+/// A sheet at 1:5,000 whose paper of 300 x 200 mm has the survey area's middle at (100, 100) mm.
+fn paper_at_5000(blocks: Vec<[f64; 4]>) -> SheetPaper {
+    let (scale, per_metre) = (5000.0, 1000.0 / 5000.0);
+    SheetPaper { to_paper: strata_layout::badge_rings::ToPaper { scale: [per_metre, -per_metre], shift: [100.0 - CENTRE[0] * per_metre, 100.0 + CENTRE[1] * per_metre] }, frame: [0.0, 0.0, 300.0, 200.0], blocks, scale }
+}
+
+fn badge_at(number: u32, at: [f64; 2], ground: Vec<strata_layout::badge_rings::Rings>) -> Badge {
+    Badge { layer_key: "ref_heritage:designated_heritage:국가지정유산".to_owned(), kind: "지정유산", name: format!("유적 {number}"), number, colour: [0x8E, 0x44, 0xAD], at, placed: at, ground }
+}
+
+/// Badges that would cover each other are moved apart, the first staying on its site and the next taking
+/// a free place on its own ground; a lone badge stays where it is. The step between two badges is the
+/// widest badge and a gap of 0.3 mm of paper (`HeritageLayoutNumbers.cpp:186-192, 983-990`).
+#[test]
+fn badges_on_one_spot_are_moved_apart_on_their_ground() {
+    let strip = vec![vec![[CENTRE[0] - 5.0, CENTRE[1] - 5.0], [CENTRE[0] + 200.0, CENTRE[1] - 5.0], [CENTRE[0] + 200.0, CENTRE[1] + 5.0], [CENTRE[0] - 5.0, CENTRE[1] + 5.0], [CENTRE[0] - 5.0, CENTRE[1] - 5.0]]];
+    let lone = [CENTRE[0] + 500.0, CENTRE[1]];
+    let mut badges = vec![badge_at(1, CENTRE, vec![strip.clone()]), badge_at(2, CENTRE, vec![strip]), badge_at(3, lone, Vec::new())];
+    place_badges(&mut badges, &paper_at_5000(Vec::new()));
+
+    let step = (2.3 * 1.3 + 0.3) / 1000.0 * 5000.0;
+    assert_eq!(badges[0].placed, CENTRE, "the first stays on its site");
+    let moved = badges[1].placed;
+    let apart = (moved[0] - CENTRE[0]).hypot(moved[1] - CENTRE[1]);
+    assert!(apart >= step * 0.96 - 1e-6 && apart <= step * 1.01, "one step away: {apart} against {step}");
+    assert!((moved[1] - CENTRE[1]).abs() <= 5.0 && moved[0] > CENTRE[0], "on its own ground, the strip to the east: {moved:?}");
+    assert_eq!(badges[2].placed, lone);
+    assert_eq!((badges[1].at, badges[2].at), (CENTRE, lone), "the point of the site stays");
+}
+
+/// A badge whose site lies under the legend card moves off the card, and one at the edge of the map
+/// frame moves wholly on to it (`LayoutBadgePlacer.cpp:70-81`).
+#[test]
+fn a_badge_stays_off_the_legend_card_and_on_the_map() {
+    let card = [90.0, 90.0, 110.0, 110.0];
+    let at_the_edge = [CENTRE[0] - 499.0, CENTRE[1]];
+    let mut badges = vec![badge_at(1, CENTRE, Vec::new()), badge_at(2, at_the_edge, Vec::new())];
+    let paper = paper_at_5000(vec![card]);
+    place_badges(&mut badges, &paper);
+    let on_paper = |at: [f64; 2]| [at[0] * paper.to_paper.scale[0] + paper.to_paper.shift[0], at[1] * paper.to_paper.scale[1] + paper.to_paper.shift[1]];
+    let half = 2.3 * 1.3 / 2.0;
+    let under = on_paper(badges[0].placed);
+    assert!(under[0] + half <= card[0] || under[0] - half >= card[2] || under[1] + half <= card[1] || under[1] - half >= card[3], "off the card: {under:?}");
+    let edge = on_paper(badges[1].placed);
+    assert!(edge[0] - half >= 0.0 && edge[1] - half >= 0.0 && edge[0] + half <= 300.0 && edge[1] + half <= 200.0, "wholly on the map: {edge:?}");
+}

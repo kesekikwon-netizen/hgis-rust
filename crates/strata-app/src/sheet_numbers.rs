@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use strata_layout::badge_rings::{BadgePlacer, Paper, Rings, ToPaper};
 use strata_layout::sheet_heritage::{ink_for_badge_rgb, layout_badge_circle_size_mm};
 use strata_refmap::heritage_numbers::{number_sites, numbered_area, read_sites, SheetLayer, Site};
 use strata_types::crs::CrsCode;
@@ -18,6 +19,8 @@ mod tests;
 
 /// The height of the number in a badge, in millimetres of paper (`:1064-1083`: Malgun Gothic Bold 1.82 mm).
 const LETTER_MM: f32 = 1.82;
+/// The paper left between two badges (`kNumberGapMm`).
+const NUMBER_GAP_MM: f64 = 0.3;
 
 /// A numbered site of the sheet.
 #[derive(Debug, Clone, PartialEq)]
@@ -29,8 +32,37 @@ pub(crate) struct Badge {
     pub(crate) name: String,
     pub(crate) number: u32,
     pub(crate) colour: [u8; 3],
-    /// Where the badge stands, in the work CRS.
+    /// The point of the site the number belongs to, in the work CRS.
     pub(crate) at: [f64; 2],
+    /// Where the badge stands: on that point, or the free place it was moved to (`place_badges`).
+    pub(crate) placed: [f64; 2],
+    /// The ground of the site on the sheet: a badge that must move looks for a free place on it first.
+    pub(crate) ground: Vec<Rings>,
+}
+
+/// The paper of a sheet for the placing of its badges: how map coordinates become millimetres of paper,
+/// the visible map frame and the legend cards over it (millimetres), and the scale of the sheet.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SheetPaper {
+    pub(crate) to_paper: ToPaper,
+    pub(crate) frame: [f64; 4],
+    pub(crate) blocks: Vec<[f64; 4]>,
+    pub(crate) scale: f64,
+}
+
+/// Moves the badges that would cover each other, lie off the map frame or under a legend card
+/// (`HeritageLayoutNumbers.cpp:968-995`).
+pub(crate) fn place_badges(badges: &mut [Badge], paper: &SheetPaper) {
+    let diameters: Vec<f64> = badges.iter().map(|badge| layout_badge_circle_size_mm(badge.number as usize)).collect();
+    // Badge centres stay the sheet's widest badge and a gap apart on paper (`:186-192, 983-990`).
+    let widest = diameters.iter().copied().fold(0.0, f64::max);
+    let step = (widest + NUMBER_GAP_MM) / 1000.0 * if paper.scale > 0.0 { paper.scale } else { 5000.0 };
+    let (origins, grounds): (Vec<[f64; 2]>, Vec<Vec<Rings>>) = badges.iter().map(|badge| (badge.at, badge.ground.clone())).unzip();
+    let allowed = Paper { frame: paper.frame, blocks: paper.blocks.clone() };
+    let placed = BadgePlacer::new(paper.to_paper, Some(allowed), step).place_all(&origins, &diameters, &grounds);
+    for (badge, at) in badges.iter_mut().zip(placed) {
+        badge.placed = at;
+    }
 }
 
 /// How a badge is drawn, in points of the screen.
@@ -71,6 +103,8 @@ pub(crate) struct SheetNumbers {
     /// The sites of the copies read so far, with the CRS of their shapes.
     read: Vec<(PathBuf, u32, Sites)>,
     last: Option<(Asked, Vec<Badge>)>,
+    /// The badges as they were numbered, the paper they were placed on, and where they stand.
+    placed: Option<(Vec<Badge>, SheetPaper, Vec<Badge>)>,
 }
 
 impl SheetNumbers {
@@ -119,10 +153,25 @@ impl StrataAppState {
             .filter_map(|site| {
                 let (key, _) = &asked.rows[held.get(site.layer)?.0];
                 let kind = dataset_of_key(key)?;
-                Some(Badge { layer_key: key.clone(), kind: kind.name, name: site.name, number: site.number, colour: kind.colour, at: site.at })
+                Some(Badge { layer_key: key.clone(), kind: kind.name, name: site.name, number: site.number, colour: kind.colour, at: site.at, placed: site.at, ground: site.pieces })
             })
             .collect();
         self.sheet_numbers.last = Some((asked, badges.clone()));
         badges
+    }
+
+    /// The same badges, each where it stands on the paper of the sheet: placed anew only when the numbers
+    /// or the paper changed.
+    pub(crate) fn sheet_heritage_badges_placed(&mut self, sheet_box: [f64; 4], paper: SheetPaper) -> Vec<Badge> {
+        let numbered = self.sheet_heritage_badges(sheet_box);
+        if let Some((known, on, placed)) = &self.sheet_numbers.placed {
+            if *known == numbered && *on == paper {
+                return placed.clone();
+            }
+        }
+        let mut placed = numbered.clone();
+        place_badges(&mut placed, &paper);
+        self.sheet_numbers.placed = Some((numbered, paper, placed.clone()));
+        placed
     }
 }

@@ -56,6 +56,12 @@ fn sites_near_the_survey_area_are_numbered_by_kind_and_name() {
     let numbered = number_sites(&layers, &area, 5187).unwrap();
     assert_eq!(listed(&numbered), [(0, "가 산성", 1), (0, "나 고분", 2), (0, "무명", 3), (1, "다 요지", 4), (2, "가 유물산포지", 1)]);
     assert!(inside(numbered[0].at, &large), "the number of a site of two pieces stands on the larger: {:?}", numbered[0].at);
+    // The ground of a site: its pieces within the area, joined (two squares apart stay two; a square that
+    // lies wholly within is itself).
+    assert_eq!(numbered[0].pieces.len(), 2);
+    assert_eq!(numbered[1].pieces.len(), 1);
+    let ground: f64 = numbered.iter().take(2).map(|site| strata_engine::polygons_area(&site.pieces).unwrap()).sum();
+    assert!((ground - (40.0 * 40.0 + 80.0 * 80.0 + 60.0 * 60.0)).abs() < 1e-6, "{ground}");
     assert!(inside(numbered[1].at, &square(0.0, 0.0, 60.0)));
     assert_eq!((NUMBERED_NEAR_M, UNNAMED), (500.0, "무명"));
 }
@@ -105,6 +111,10 @@ fn a_layer_in_another_crs_is_numbered_where_it_lies() {
     let numbered = number_sites(&layers, &area, 5187).unwrap();
     assert_eq!(listed(&numbered), [(0, "가 고분", 1)]);
     assert!(inside(numbered[0].at, &shape), "{:?}", numbered[0].at);
+    let ground = &numbered[0].pieces;
+    assert_eq!(ground.len(), 1);
+    assert!(ground[0][0].iter().all(|point| (point[0] - (CENTRE[0] + 100.0)).abs() <= 30.01 && (point[1] - (CENTRE[1] + 100.0)).abs() <= 30.01), "the ground comes back in the work CRS: {ground:?}");
+    assert!((strata_engine::polygons_area(ground).unwrap() - 3600.0).abs() < 1.0);
 }
 
 /// The sites are read from the copy a layer is drawn from: every row with its name and its shapes, in the

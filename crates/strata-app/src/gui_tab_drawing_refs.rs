@@ -8,7 +8,7 @@ use strata_canvas2d::viewport::ViewportTransform;
 use super::gui_tab_drawing_frame::SheetFrame;
 use crate::app_state::StrataAppState;
 use crate::gui_tab_map::LABEL_FONT_FAMILY;
-use crate::sheet_numbers::badge_look;
+use crate::sheet_numbers::{badge_look, SheetPaper};
 use crate::survey_style::mm_to_points;
 
 #[cfg(test)]
@@ -42,13 +42,23 @@ impl StrataAppState {
     /// of the kind with the number in it, and no line to it (`HeritageLayoutNumbers.cpp:1027-1110`).
     fn paint_sheet_heritage_badges(&mut self, f: &SheetFrame) {
         let (north_west, south_east) = (f.m2w(f.map_rect.left_top()), f.m2w(f.map_rect.right_bottom()));
-        let badges = self.sheet_heritage_badges([north_west[0], south_east[1], south_east[0], north_west[1]]);
+        let sheet_box = [north_west[0], south_east[1], south_east[0], north_west[1]];
+        // The paper in millimetres from the sheet's corner: the map frame, and the legend card over it.
+        let numbered = self.sheet_heritage_badges(sheet_box).len();
+        let (per_mm, corner) = (f64::from(f.px_per_mm), f.sheet_rect.min);
+        let mm = |rect: Rect| [f64::from(rect.left() - corner.x) / per_mm, f64::from(rect.top() - corner.y) / per_mm, f64::from(rect.right() - corner.x) / per_mm, f64::from(rect.bottom() - corner.y) / per_mm];
+        let per_metre = f.px_per_meter / per_mm;
+        let to_paper = strata_layout::badge_rings::ToPaper { scale: [per_metre, -per_metre], shift: [f64::from(f.mc.x - corner.x) / per_mm - f.scx * per_metre, f64::from(f.mc.y - corner.y) / per_mm + f.scy * per_metre] };
+        let card = self.sheet_legend_card(f, numbered).map(|card| card.rect).filter(|card| card.intersects(f.map_rect));
+        let paper = SheetPaper { to_paper, frame: mm(f.map_rect), blocks: card.map(mm).into_iter().collect(), scale: f.scale_denom };
+        let badges = self.sheet_heritage_badges_placed(sheet_box, paper);
         let bold = FontFamily::Name(LABEL_FONT_FAMILY.into());
         let family = if f.map_p.ctx().fonts(|fonts| fonts.families().contains(&bold)) { bold } else { FontFamily::Proportional };
         for badge in &badges {
             let look = badge_look(badge.number, badge.colour, f.px_per_mm);
-            let (at, [red, green, blue], [ink_red, ink_green, ink_blue]) = (f.w2m(badge.at), badge.colour, look.ink);
-            f.map_p.circle(at, look.diameter * 0.5, Color32::from_rgb(red, green, blue), Stroke::NONE);
+            let (at, [red, green, blue], [ink_red, ink_green, ink_blue]) = (f.w2m(badge.placed), badge.colour, look.ink);
+            // The circle has a black edge of 0.15 mm (`:1046-1050`).
+            f.map_p.circle(at, look.diameter * 0.5, Color32::from_rgb(red, green, blue), Stroke::new(0.15 * f.px_per_mm, Color32::BLACK));
             f.map_p.text(at, Align2::CENTER_CENTER, badge.number.to_string(), FontId::new(look.letter, family.clone()), Color32::from_rgb(ink_red, ink_green, ink_blue));
         }
     }
