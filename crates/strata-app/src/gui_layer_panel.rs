@@ -10,7 +10,7 @@ mod gui_layer_panel_consts;
 #[path = "gui_layer_panel_context_menu.rs"]
 mod gui_layer_panel_context_menu;
 #[path = "gui_layer_panel_paint.rs"]
-mod gui_layer_panel_paint;
+pub(crate) mod gui_layer_panel_paint;
 #[path = "gui_layer_panel_row_spec.rs"]
 pub(crate) mod gui_layer_panel_row_spec;
 #[path = "gui_layer_panel_rows.rs"]

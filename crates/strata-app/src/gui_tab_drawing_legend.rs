@@ -7,6 +7,8 @@
 use eframe::egui::{self, Color32, FontFamily, FontId, Pos2, Rect, Stroke, Vec2};
 
 use crate::app_state::StrataAppState;
+use crate::gui_layer_panel::gui_layer_panel_paint::SwatchKind;
+use crate::gui_layer_panel::gui_layer_panel_row_spec::layer_rows;
 use crate::gui_tab_map::LABEL_FONT_FAMILY;
 use crate::sheet_numbers::{badge_look, legend_kinds, legend_site_rows, names_shown, Badge};
 
@@ -18,8 +20,8 @@ const BADGE_EDGE_MM: f32 = 0.15;
 
 /// A row of the legend.
 enum LegendRow {
-    /// A layer of the survey: its fill, its outline and its name.
-    Swatch(Color32, Color32, &'static str),
+    /// A layer that is checked in the legend panel: the symbol the panel shows for it, and its name.
+    Layer(SwatchKind, String),
     /// A numbered heritage site.
     Site(Badge),
     /// A kind of heritage data, when the names of its sites stand on the map: its colour and its name.
@@ -40,24 +42,27 @@ pub(crate) struct LegendCard {
     row_h: f32,
 }
 
+#[cfg(test)]
+#[path = "gui_tab_drawing_legend_tests.rs"]
+mod tests;
+
 impl StrataAppState {
-    /// The rows of the survey layers that the legend lists.
+    /// The names of the layer rows of the legend.
+    #[cfg(test)]
+    pub(crate) fn sheet_legend_layer_names(&self) -> Vec<String> {
+        self.sheet_legend_survey_rows().into_iter().filter_map(|row| if let LegendRow::Layer(_, name) = row { Some(name) } else { None }).collect()
+    }
+
+    /// The rows of the layers that are checked in the legend panel, top to bottom, each by the name and the
+    /// symbol the panel shows (owner 2026-11-15: 「범례는 레이어가 선택일때 자동으로 배치되게하라」). A picture
+    /// (base map, tile map) has no row, and the rows of the 「유산」 button have none here: their sites are
+    /// listed one by one.
     fn sheet_legend_survey_rows(&self) -> Vec<LegendRow> {
-        let rs = &self.home_map.real_survey;
-        let mut rows: Vec<LegendRow> = Vec::new();
-        if rs.is_layer_visible("조사구역") {
-            rows.push(LegendRow::Swatch(Color32::from_rgba_unmultiplied(214, 92, 32, 95), Color32::from_rgb(214, 78, 22), "조사구역"));
-        }
-        if rs.is_layer_visible("시굴격자") {
-            rows.push(LegendRow::Swatch(Color32::from_rgba_unmultiplied(156, 62, 32, 80), Color32::from_rgb(156, 62, 32), "시굴격자"));
-        }
-        if rs.is_layer_visible("주변 500m") {
-            rows.push(LegendRow::Swatch(Color32::TRANSPARENT, Color32::from_rgb(184, 58, 24), "주변 500m"));
-        }
-        if rs.is_layer_visible("지적도 · 조사 주변 5km") {
-            rows.push(LegendRow::Swatch(Color32::TRANSPARENT, Color32::from_rgb(68, 66, 60), "지적도"));
-        }
-        rows
+        let rows = layer_rows(&self.left_layers, Color32::BLACK, Color32::BLACK).into_iter();
+        // The distance letters of a ring are letters, not a layer with a symbol.
+        let own_rows = |key: &str| !key.starts_with(crate::heritage_run::KEY_PREFIX) && !key.starts_with("user:buffer_label_");
+        let listed = rows.filter(|row| self.home_map.real_survey.is_layer_visible(&row.name) && own_rows(&row.key));
+        listed.filter(|row| !matches!(row.swatch, SwatchKind::RasterChecker | SwatchKind::HeritageSub)).map(|row| LegendRow::Layer(row.swatch, row.name)).collect()
     }
 
     /// The legend's frame for its survey rows and `site_rows` rows of numbered sites; `None` when the
@@ -73,6 +78,12 @@ impl StrataAppState {
         let row_h = 12.0 * s;
         let leg_w = base_leg_r.width().clamp(42.0 * s, map_rect.width() * 0.42);
         let columns = legend_columns(leg_w / px_per_mm, self.drawing.sheet.legend_font_pt as f32, rows);
+        // Each column is wide enough for the longest layer name (its symbol, the gap and the margin: 16
+        // units, and 10 for the frame), as far as 42 % of the map allows.
+        let label = FontId::proportional(((self.drawing.sheet.legend_font_pt as f32 * s).clamp(4.5, 11.5) - 1.2 * s).max(4.0));
+        let widths = self.sheet_legend_survey_rows().into_iter().filter_map(|row| if let LegendRow::Layer(_, name) = row { Some(name) } else { None });
+        let longest = widths.map(|name| f.sheet_p.layout_no_wrap(name, label.clone(), Color32::BLACK).size().x).fold(0.0, f32::max);
+        let leg_w = leg_w.max(columns as f32 * (longest + 16.0 * s) + 10.0 * s).min(map_rect.width() * 0.42);
         // The frame keeps its width and takes the height its rows need (`LayoutService.cpp:1531-1534`).
         let leg_h = (20.0 * s + (legend_column_rows(rows, columns) as f32) * row_h).max(24.0 * s);
         let rect = Rect::from_min_size(Pos2::new((map_rect.right() - leg_w - 5.0 * s).max(map_rect.left() + 4.0), base_leg_r.top()), Vec2::new(leg_w, leg_h));
@@ -122,13 +133,29 @@ impl StrataAppState {
             let cell = Rect::from_min_max(Pos2::new(left, ry - row_h * 0.5), Pos2::new(left + column_w - 2.0 * s, ry + row_h * 0.5));
             let p = sheet_p.with_clip_rect(cell.intersect(leg_r));
             let (symbol_w, name) = match row {
-                LegendRow::Swatch(fill, stroke, name) => {
+                LegendRow::Layer(symbol, name) => {
                     let swatch = Rect::from_min_size(Pos2::new(left, ry - 3.5 * s), Vec2::new(10.0 * s, 7.0 * s));
-                    if fill != Color32::TRANSPARENT {
-                        p.rect_filled(swatch, 1.0, fill);
+                    match symbol {
+                        SwatchKind::DomainLine { stroke, .. } => {
+                            p.line_segment([swatch.left_center(), swatch.right_center()], Stroke::new(1.6, stroke));
+                        }
+                        SwatchKind::DomainMarker { fill, stroke, .. } => {
+                            p.circle(swatch.center(), swatch.height() * 0.42, fill, Stroke::new(1.0, stroke));
+                        }
+                        // A filled layer, the outline of the cadastral map, the ring of a distance.
+                        other => {
+                            let (fill, stroke) = match other {
+                                SwatchKind::DomainFill { fill, stroke, .. } => (fill, stroke),
+                                SwatchKind::BufferBand => (Color32::TRANSPARENT, Color32::from_rgb(184, 58, 24)),
+                                _ => (Color32::TRANSPARENT, Color32::from_rgb(68, 66, 60)),
+                            };
+                            if fill != Color32::TRANSPARENT {
+                                p.rect_filled(swatch, 1.0, fill);
+                            }
+                            p.rect_stroke(swatch, 1.0, Stroke::new(1.0, stroke), egui::StrokeKind::Middle);
+                        }
                     }
-                    p.rect_stroke(swatch, 1.0, Stroke::new(1.0, stroke), egui::StrokeKind::Middle);
-                    (swatch.width(), name.to_owned())
+                    (swatch.width(), name)
                 }
                 LegendRow::Kind([red, green, blue], name) => {
                     let side = KIND_SQUARE_MM * px_per_mm;
