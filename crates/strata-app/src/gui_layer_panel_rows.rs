@@ -36,6 +36,7 @@ impl StrataAppState {
         let ppp = ui.ctx().pixels_per_point();
         // 보이는 행 번호 — QTreeView 처럼 한 줄 걸러 배경을 바꾼다(띠도 그 행의 배경을 쓴다).
         let mut painted = 0_usize;
+        let mut painted_rows = Vec::with_capacity(rows.len());
         for spec in &rows {
             if !filter.is_empty()
                 && !spec.name.is_empty()
@@ -47,9 +48,14 @@ impl StrataAppState {
             let row_h = UX_LEGEND_ROW_HEIGHT;
             let (full_r, resp) = ui.allocate_exact_size(
                 egui::Vec2::new(avail_w, band_h + row_h),
-                egui::Sense::click(),
+                egui::Sense::click_and_drag(),
             );
             let right_col_x = full_r.right() - UX_LABEL_COLUMN_WIDTH;
+            // A row is taken with the mouse to go up or down; not while the list is filtered (KaLayerListChrome.cpp:100).
+            painted_rows.push((spec.key.clone(), spec.group, Rect::from_min_max(Pos2::new(full_r.left(), full_r.top() + band_h), full_r.max)));
+            if filter.is_empty() && resp.drag_started_by(egui::PointerButton::Primary) {
+                self.home_map.legend_drag = Some(crate::app_state_layer_remove::order::LegendDrag { key: spec.key.clone(), onto: None });
+            }
 
             if resp.clicked() {
                 self.on_layer_row_clicked(&spec.name, full_r, &resp, right_col_x);
@@ -162,6 +168,7 @@ impl StrataAppState {
                 self.paint_dem_legend(&ui.painter_at(bar), Pos2::new(bar.left() + spec.indent + 41.0, bar.top()), ramp);
             }
         }
+        self.drag_layer_rows(ui, &painted_rows);
         // 목록의 빈 곳 우클릭 — 레이어 아닌 줄 메뉴(:195-213).
         let (_, blank) = ui.allocate_exact_size(egui::Vec2::new(avail_w, ui.available_height().max(24.0)), egui::Sense::click());
         if let (true, Some(at)) = (blank.secondary_clicked(), blank.interact_pointer_pos()) {

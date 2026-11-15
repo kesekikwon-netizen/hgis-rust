@@ -13,6 +13,8 @@ use crate::left_layer_panel::LayerTreeEntry;
 pub(crate) enum UndoStep {
     Table(String),
     LayersRemoved(Vec<RemovedLayer>),
+    /// A row of the legend was dragged: the keys of the rows in the order they had (KaUndoAction::LayerTreeChanged).
+    RowsMoved(Vec<String>),
 }
 
 /// 뺀 레이어 하나와 그 자리.
@@ -138,6 +140,9 @@ impl StrataAppState {
         self.show_status_message("도형 1개를 지웠습니다. Ctrl+Z로 복원할 수 있습니다.");
     }
 }
+
+#[path = "app_state_layer_order.rs"]
+pub(crate) mod order;
 
 #[cfg(test)]
 #[path = "app_state_layer_remove_tests.rs"]

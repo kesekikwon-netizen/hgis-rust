@@ -36,6 +36,8 @@ pub struct HomeMapTabState {
     pub selected_shape: Option<(String, i64)>,
     /// A legend row was clicked after the map (Qt: the layer tree has the keyboard focus): Delete is the legend's.
     pub legend_focus: bool,
+    /// The row of the legend that is held with the mouse (drag and drop of the layer list).
+    pub(crate) legend_drag: Option<crate::app_state_layer_remove::order::LegendDrag>,
     /// 방금 그린 면(표 이름, fid) — C++ m_lastDrawnLayer·m_lastDrawnFid(「가까운 선에 붙이기」가 고른 것이 없을 때 쓴다).
     pub last_drawn_shape: Option<(String, i64)>,
     /// 도형선택 겹친 도형 돌기 — (지난 후보, 고른 차례, 누른 화면 자리)(m_lastPickCandidates·Index·Pos).
@@ -116,6 +118,7 @@ impl Default for HomeMapTabState {
             selected_feature_idx: None,
             selected_shape: None,
             legend_focus: false,
+            legend_drag: None,
             last_drawn_shape: None,
             pick_cycle: None,
             survey_area_setup: None,

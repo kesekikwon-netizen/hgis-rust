@@ -40,6 +40,11 @@ impl StrataAppState {
                     self.show_status_message("이전 상태로 되돌렸습니다.".to_owned());
                     return;
                 }
+                crate::app_state_layer_remove::UndoStep::RowsMoved(before) => {
+                    self.restore_layer_order(&before);
+                    self.show_status_message("이전 상태로 되돌렸습니다.".to_owned());
+                    return;
+                }
             };
             let undone = self.survey_tables.iter_mut().find(|t| t.table == key).is_some_and(|t| t.layer.undo());
             if undone {
