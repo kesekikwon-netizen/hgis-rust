@@ -1,5 +1,7 @@
 [workspace]
 resolver = "2"
+# Copies of other projects' code (see each folder) are not part of this workspace's own checks.
+exclude = ["third-party"]
 members = [
     "crates/strata-types",
     "crates/strata-secrets",
@@ -18,6 +20,7 @@ members = [
     "crates/strata-ngii-fixture",
     "crates/strata-ngii-run",
     "crates/strata-topo",
+    "crates/strata-mapengine",
 ]
 
 [workspace.package]
@@ -39,7 +42,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
 rayon = "1.10"
-geo = "0.29"
+geo = "0.33"
 rstar = "0.12"
 spade = "2.12"
 rusqlite = { version = "0.32", features = ["bundled", "functions"] }
@@ -70,6 +73,7 @@ strata-layout = { path = "crates/strata-layout" }
 strata-check-export = { path = "crates/strata-check-export" }
 strata-engine = { path = "crates/strata-engine" }
 strata-refmap = { path = "crates/strata-refmap" }
+strata-mapengine = { path = "crates/strata-mapengine" }
 
 [profile.release]
 opt-level = 3
@@ -85,3 +89,8 @@ incremental = true
 
 [profile.dev.package."*"]
 opt-level = 2
+
+# RustGIS needs rusqlite 0.41, which asks for libsqlite3-sys 0.39; GDAL's build crate takes it below 0.36
+# only. The copy in third-party/ is rusqlite 0.41.1 with that one requirement relaxed (see its Cargo.toml).
+[patch.crates-io]
+rusqlite = { path = "third-party/rusqlite-0.41.1" }

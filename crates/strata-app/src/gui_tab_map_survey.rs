@@ -78,7 +78,8 @@ pub(super) fn fill_mesh(rings: &[Vec<Pos2>], fill: Color32) -> Shape {
     let Some(outer) = rings.first() else { return Shape::Noop };
     let tri = geo::Polygon::new(ls(outer), rings[1..].iter().map(ls).collect()).earcut_triangles_raw();
     let mut mesh = egui::Mesh::default();
-    for v in tri.vertices.chunks_exact(2) {
+    // geo 0.33 gives the corners as pairs.
+    for v in &tri.vertices {
         mesh.colored_vertex(Pos2::new(v[0] as f32, v[1] as f32), fill);
     }
     mesh.indices.extend(tri.triangle_indices.iter().filter_map(|&i| u32::try_from(i).ok()));

@@ -10,7 +10,7 @@ const GREY: [u8; 4] = [128, 128, 128, 255];
 /// A layer of these shapes (world metres), each with its paint.
 fn layer(shapes: &[(Vec<Vec<[f64; 2]>>, PaintOf)], closed: bool) -> RefVectorData {
     let origin = [1000.0, 2000.0];
-    let mut data = RefVectorData { origin, bbox: [0.0; 4], coords: Vec::new(), runs: Vec::new(), items: Vec::new(), paints: Vec::new(), closed, rows: shapes.len() as u64, labels: Vec::new() };
+    let mut data = RefVectorData { origin, bbox: [0.0; 4], coords: Vec::new(), runs: Vec::new(), items: Vec::new(), paints: Vec::new(), closed, rows: shapes.len() as u64 };
     for (runs, paint) in shapes {
         let first_run = data.runs.len() as u32;
         let mut bbox = [f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY];

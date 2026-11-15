@@ -1,0 +1,21 @@
+[package]
+name = "strata-mapengine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "The one place where Strata calls the RustGIS engine (drawing layers, placing labels)"
+
+[lints]
+workspace = true
+
+# RustGIS (github.com/opengeos/RustGIS, Apache-2.0) is not on crates.io: v0.6.0 by its commit.
+[dependencies]
+geo = { workspace = true }
+rustgis-data = { git = "https://github.com/opengeos/RustGIS", rev = "6db08fe7203a54d568deeefcc21f6a7dcc38f26a" }
+rustgis-geom = { git = "https://github.com/opengeos/RustGIS", rev = "6db08fe7203a54d568deeefcc21f6a7dcc38f26a" }
+rustgis-map = { git = "https://github.com/opengeos/RustGIS", rev = "6db08fe7203a54d568deeefcc21f6a7dcc38f26a" }
+rustgis-render = { git = "https://github.com/opengeos/RustGIS", rev = "6db08fe7203a54d568deeefcc21f6a7dcc38f26a" }
+
+[dev-dependencies]
+tempfile = { workspace = true }

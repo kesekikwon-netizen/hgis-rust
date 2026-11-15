@@ -1,2 +1,4 @@
 [env]
 STRATA_OFFLINE = "1"
+# rustgis-render embeds five Natural Earth files; they are in the repository, so a build downloads nothing.
+RUSTGIS_DATA_DIR = { value = "third-party/rustgis-data", relative = true }

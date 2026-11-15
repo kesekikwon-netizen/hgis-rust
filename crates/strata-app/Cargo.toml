@@ -24,6 +24,7 @@ strata-check-export = { workspace = true }
 # (PreparedReferenceMap.cpp:131-155, TopographicCatalog.cpp:181-209). Built from source by gdal-src (MIT).
 strata-engine = { workspace = true, features = ["gdal"] }
 strata-refmap = { workspace = true }
+strata-mapengine = { workspace = true }
 eframe = { workspace = true }
 egui = { workspace = true }
 geo = { workspace = true }

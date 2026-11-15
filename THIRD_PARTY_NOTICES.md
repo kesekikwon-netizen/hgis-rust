@@ -99,6 +99,20 @@ VWorld, 국토정보플랫폼, 국가유산 공간정보, 흙토람, KIGAM 등�
 | Rust 크레이트 `tiny-skia` (`default-features = false`, `features = ["std", "simd"]`) · `tiny-skia-path` | `=0.11.4` (2024-02-04) | BSD-3-Clause (Skia 에서 옮긴 코드 포함: Google Inc. BSD-3-Clause) | https://github.com/linebender/tiny-skia |
 | 그 하위 `arrayref` 0.3.x · `arrayvec` 0.7.x · `bytemuck` 1.x · `cfg-if` 1.x · `log` 0.4.x · `strict-num` 0.1.x | Cargo.lock 기록 판 | BSD-2-Clause · MIT 또는 Apache-2.0 · Zlib 또는 Apache-2.0 또는 MIT · MIT 또는 Apache-2.0 · MIT 또는 Apache-2.0 · MIT | 각 크레이트의 crates.io 페이지 |
 
+## Rust 앱(hgis-rust) 지도 엔진 연결 — `crates/strata-mapengine`
+
+받은 참조 지도(지질도 등)의 글자를 겹치지 않게 놓는 일을 RustGIS 엔진에 맡긴다(사용자 지시 2026-11-13 「rustgis 필요한 기능 다 사용해서 진행」, 2026-11-15 「깃허브 rust gis가있다」). C++ 앱에서 QGIS 가 하던 자리다. 이 크레이트만 RustGIS 를 부른다.
+
+| 구성 | 판 | 라이선스 | 공식 근거 |
+| --- | --- | --- | --- |
+| RustGIS 크레이트 `rustgis-data` · `rustgis-geom` · `rustgis-map` · `rustgis-render` (그 안에서 `rustgis-tiles`) — crates.io 에 없어 git 커밋으로 고정 | v0.6.0 (`6db08fe7203a54d568deeefcc21f6a7dcc38f26a`, 2026-11-09) | **Apache-2.0** | https://github.com/opengeos/RustGIS · https://rustgis.app · 저장소의 `LICENSE` · `ATTRIBUTION.md` · `THIRD-PARTY-LICENSES.txt` |
+| `rusqlite` 0.41.1 의 **고친 사본** (`third-party/rusqlite-0.41.1`, 네 군데, `STRATA-CHANGES.md`) — RustGIS 가 요구하는 판을 GDAL 빌드 부품이 받는 SQLite 연결 부품(`libsqlite3-sys` 0.30)에 맞춘 것 | 0.41.1 | MIT (사본 폴더의 `LICENSE`) | https://github.com/rusqlite/rusqlite |
+| Natural Earth 1:110m 자료 5개 (`third-party/rustgis-data`, RustGIS 그리기 크레이트가 빌드할 때 넣는 견본; Strata 화면에는 쓰지 않음) | RustGIS v0.6.0 배포본 | Public domain | https://www.naturalearthdata.com/about/terms-of-use/ |
+| `geo` (0.29 → 0.33, RustGIS 와 같은 판) 과 그 하위 `i_overlay` · `i_float` · `i_shape` 등 | Cargo.lock 기록 판 | MIT 또는 Apache-2.0 · MIT | https://github.com/georust/geo |
+| RustGIS 가 끌어오는 그 밖의 크레이트 181개 (2026-11-15 `cargo metadata` 로 확인: `parquet` · `arrow-*` · `lyon` · `ab_glyph` · `proj4rs` · `flatgeobuf` · `calamine` · `rustls` · `aws-lc-rs` 등) | Cargo.lock 기록 판 | MIT · Apache-2.0 · BSD-2-Clause · BSD-3-Clause · ISC · Zlib · CC0-1.0 · Unlicense · Unicode-3.0 · CDLA-Permissive-2.0(인증서 목록) · `epaint_default_fonts` 0.37 의 글꼴(OFL-1.1, Ubuntu Font Licence 1.0). **GPL · AGPL · LGPL · MPL 없음** | 각 크레이트의 crates.io 기록 |
+
+RustGIS 의 자료 크레이트에는 웹 주소에서 읽는 기능이 들어 있지만, Strata 는 조사 폴더의 파일을 읽는 함수와 그리는 함수만 부른다(외부 접속 없음). 컴파일러는 이 부품들 때문에 1.91.1 에서 1.99.1 로 올렸다(`epaint_default_fonts` 0.37 · `sysinfo` 0.40 이 1.95 이상을 요구).
+
 ## Rust 앱(hgis-rust) 숨은 웹 엔진 — `crates/strata-webview`
 
 로그인 세션이 필요한 자료 제공 사이트(국토지리정보원 등)와 통신하려고 Windows 구성 요소인 Microsoft Edge WebView2 런타임을 화면에 보이지 않는 자식 창으로 부른다(런타임 판 측정 2026-11-14, 크레이트 판은 2026-11-15 에 `Cargo.lock` 과 다시 대조, 지시 F4-a). `[target.'cfg(windows)'.dependencies]` 로 Windows 에서만 연결되고 다른 운영체제에서는 빈 크레이트로 컴파일된다. 아직 `strata-app` 에는 연결하지 않았다(F4-e 에서 연결). `webview2-com` 과 `windows-core` 는 `wry` 가 끌어오는 전이 의존이다.

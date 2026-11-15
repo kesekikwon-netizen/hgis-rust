@@ -40,7 +40,8 @@ pub(crate) enum Look {
     Polygons { stroke: [u8; 4], width_mm: f32, fill: PolygonFill },
 }
 
-/// The text written over each polygon row of a layer (`GeologyMapService.cpp:426-455`).
+/// The text written over each polygon row of a layer (`GeologyMapService.cpp:426-455`). The places come
+/// from the map engine (`ref_vector_labels.rs`), which reads the column from the file itself.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct LabelLook {
     /// The text column. A table without it has no labels (`:427`).
@@ -62,14 +63,6 @@ pub(crate) struct LoadSpec {
     pub(crate) label: Option<LabelLook>,
 }
 
-/// The text of one row and the row's polygons in `RefVectorData::items`. Where the letters go depends on
-/// what of the row is in view (`ref_vector_labels.rs`).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Label {
-    pub(crate) text: String,
-    pub(crate) first_item: u32,
-    pub(crate) items: u32,
-}
 
 /// A run of points in `RefVectorData::coords`: one line, or one ring of a polygon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,8 +94,6 @@ pub(crate) struct RefVectorData {
     pub(crate) closed: bool,
     /// Rows of the table.
     pub(crate) rows: u64,
-    /// What is written over the shapes, when the layer has a label look.
-    pub(crate) labels: Vec<Label>,
 }
 
 /// `#RRGGBB`.
@@ -178,21 +169,19 @@ impl Build {
 /// PROJ cannot carry its points into the work CRS. The text is for the log, not for the user.
 pub(crate) fn load(spec: &LoadSpec) -> Result<RefVectorData, String> {
     let facts = table_facts(&spec.file, &spec.table).map_err(|e| e.0)?;
-    let (wanted, mut columns): (ShapeKind, Vec<&str>) = match &spec.look {
+    let (wanted, columns): (ShapeKind, Vec<&str>) = match &spec.look {
         Look::Lines { .. } => (ShapeKind::Lines, Vec::new()),
         Look::Polygons { fill: PolygonFill::Column { name, .. }, .. } => (ShapeKind::Polygons, vec![name]),
         Look::Polygons { fill: PolygonFill::None, .. } => (ShapeKind::Polygons, Vec::new()),
     };
-    // Labels are written over polygons, and only when the table has the column (GeologyMapService.cpp:427).
-    let labelled = spec.label.filter(|label| wanted == ShapeKind::Polygons && facts.columns.iter().any(|(name, _)| name == label.column));
-    columns.extend(labelled.map(|label| label.column));
     if facts.kind != wanted {
         return Err(format!("table {} holds another kind of shape than its layer draws", spec.table));
     }
     let epsg = facts.epsg.ok_or_else(|| format!("table {} names no CRS", spec.table))?;
     // The work CRS is checked even when the table is in it already: an unknown CRS is an error, never a pass-through.
-    let carry = Some(Transformer::new(epsg, spec.work_epsg).map_err(|e| e.0)?).filter(|_| epsg != spec.work_epsg);
-    let empty = RefVectorData { origin: [0.0; 2], bbox: [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY], coords: Vec::new(), runs: Vec::new(), items: Vec::new(), paints: Vec::new(), closed: wanted == ShapeKind::Polygons, rows: facts.rows, labels: Vec::new() };
+    let checked = Transformer::new(epsg, spec.work_epsg).map_err(|e| e.0)?;
+    let carry = (epsg != spec.work_epsg).then_some(checked);
+    let empty = RefVectorData { origin: [0.0; 2], bbox: [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY], coords: Vec::new(), runs: Vec::new(), items: Vec::new(), paints: Vec::new(), closed: wanted == ShapeKind::Polygons, rows: facts.rows };
     let mut build = Build { data: empty, carry, paint_of: HashMap::new() };
     let mut failure = None;
     let mut add = |row: strata_engine::Row| -> Result<(), String> {
@@ -202,31 +191,18 @@ pub(crate) fn load(spec: &LoadSpec) -> Result<RefVectorData, String> {
                 lines.into_iter().try_for_each(|line| build.item(&[line], 2, paint).map(drop))
             }
             (Look::Polygons { stroke, width_mm, fill }, Shapes::Polygons(polygons)) => {
-                // The cells come in the order asked for: the colour (if any), then the label (if any).
-                let mut cells = row.cells.into_iter();
                 let fill = match fill {
                     PolygonFill::None => [0; 4],
                     PolygonFill::Column { alpha, missing, .. } => {
-                        let [r, g, b] = match cells.next() {
-                            Some(Cell::Text(text)) => colour(&text).unwrap_or(*missing),
+                        let [r, g, b] = match row.cells.first() {
+                            Some(Cell::Text(text)) => colour(text).unwrap_or(*missing),
                             _ => *missing,
                         };
                         [r, g, b, *alpha]
                     }
                 };
-                let text = match labelled.and_then(|_| cells.next()) {
-                    Some(Cell::Text(text)) if !text.is_empty() => Some(text),
-                    _ => None,
-                };
                 let paint = PaintOf { fill, stroke: *stroke, width_mm: *width_mm };
-                let first_item = u32::try_from(build.data.items.len()).map_err(|_| "too many shapes".to_owned())?;
-                let mut items = 0;
-                for rings in &polygons {
-                    items += u32::from(build.item(rings, 4, paint)?.is_some());
-                }
-                // One label for the row, whatever the number of its polygons.
-                build.data.labels.extend(text.filter(|_| items > 0).map(|text| Label { text, first_item, items }));
-                Ok(())
+                polygons.iter().try_for_each(|rings| build.item(rings, 4, paint).map(drop))
             }
             _ => Err("a row holds another kind of shape than its table".to_owned()),
         }

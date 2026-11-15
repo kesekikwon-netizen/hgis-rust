@@ -76,7 +76,7 @@ pub fn filter_within_euclidean_radius<'a, T>(
     candidates
         .iter()
         .filter_map(|(geom, item)| {
-            if Euclidean::distance(site, geom) <= radius_m {
+            if Euclidean.distance(site, geom) <= radius_m {
                 Some(item)
             } else {
                 None
@@ -86,7 +86,7 @@ pub fn filter_within_euclidean_radius<'a, T>(
 }
 
 pub fn point_within_euclidean_radius(site: &Polygon<f64>, pt: [f64; 2], radius_m: f64) -> bool {
-    Euclidean::distance(site, &Point::new(pt[0], pt[1])) <= radius_m
+    Euclidean.distance(site, &Point::new(pt[0], pt[1])) <= radius_m
 }
 
 pub const HGIS_HERITAGE_BUFFER_URBAN_M: f64 = 300.0;
@@ -141,7 +141,7 @@ mod tests {
         assert!(ring.exterior().0.len() > 20);
         for coord in ring.exterior().coords() {
             let pt = geo::Point::new(coord.x, coord.y);
-            let dist = Euclidean::distance(&site, &pt);
+            let dist = Euclidean.distance(&site, &pt);
             assert!(
                 (dist - 500.0).abs() < 2.5,
                 "corner distance {dist} deviated from 500m"

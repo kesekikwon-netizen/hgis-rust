@@ -16,6 +16,7 @@ use crate::app_state::StrataAppState;
 use crate::gui_tab_map::w2s;
 use crate::left_layer_panel::LayerTreeEntry;
 use crate::ref_vector::data::{load, LoadSpec, Look, RefVectorData};
+use crate::ref_vector::labels::Runner;
 use crate::ref_vector::raster::{render, Raster, RasterView};
 
 #[path = "ref_vector_clip.rs"]
@@ -40,9 +41,6 @@ mod tests;
 /// What the status line says when the file of a layer cannot be read (`MainWindowOverlay.cpp`, 「지질도 표시
 /// 실패」 default text; docs/senior/research/post/geology.md rule 41).
 pub(crate) const OPEN_FAILED: &str = "받은 지도를 열지 못했습니다. 기존 지도는 유지됩니다. 다시 내려받으세요.";
-
-/// Runs work off the UI thread.
-type Runner = Arc<dyn Fn(Box<dyn FnOnce() + Send>) + Send + Sync>;
 
 enum Shapes {
     Wanted,
@@ -80,12 +78,13 @@ pub(crate) struct RefVectorLayers {
     layers: Vec<Layer>,
     runner: Runner,
     pictures_made: u32,
+    labels: labels::Labels,
 }
 
 impl Default for RefVectorLayers {
     fn default() -> Self {
         let runner: Runner = Arc::new(|work| drop(std::thread::spawn(work)));
-        Self { layers: Vec::new(), runner, pictures_made: 0 }
+        Self { layers: Vec::new(), runner, pictures_made: 0, labels: labels::Labels::default() }
     }
 }
 
@@ -99,7 +98,7 @@ impl std::fmt::Debug for RefVectorLayers {
 impl Clone for RefVectorLayers {
     fn clone(&self) -> Self {
         let layers = self.layers.iter().map(|l| Layer::new(l.key.clone(), l.spec.clone())).collect();
-        Self { layers, runner: Arc::clone(&self.runner), pictures_made: 0 }
+        Self { layers, runner: Arc::clone(&self.runner), pictures_made: 0, labels: labels::Labels::default() }
     }
 }
 
@@ -111,8 +110,8 @@ struct Painted {
     /// Seconds the reading took, and the size and seconds of a picture that arrived in this frame.
     read_secs: Option<f32>,
     drawn: Option<(u32, u32, f32)>,
-    /// The shapes of a layer whose picture is on the map and whose rows are labelled.
-    labelled: Option<(Arc<RefVectorData>, data::LabelLook)>,
+    /// What the map engine needs to label the layer, once its picture is on the map.
+    labelled: Option<strata_mapengine::LabelSource>,
 }
 
 impl RefVectorLayers {
@@ -122,7 +121,7 @@ impl RefVectorLayers {
 
     /// Whether a layer is still being read or drawn (the scripted screenshots wait for it).
     pub(crate) fn is_busy(&self) -> bool {
-        self.layers.iter().any(|l| matches!(l.shapes, Shapes::Loading(_)) || l.drawing.is_some())
+        self.labels.is_busy() || self.layers.iter().any(|l| matches!(l.shapes, Shapes::Loading(_)) || l.drawing.is_some())
     }
 
     /// The box of a layer's shapes in the work CRS, once they are read (「선택한 레이어로 이동」).
@@ -226,7 +225,7 @@ impl RefVectorLayers {
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let tint = Color32::from_white_alpha((opacity.clamp(0.0, 1.0) * 255.0).round() as u8);
             p.image(pic.texture.id(), on_screen, Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), tint);
-            painted.labelled = layer.spec.label.map(|look| (Arc::clone(data), look));
+            painted.labelled = layer.spec.label.as_ref().map(|look| labels::source(key, &layer.spec, look));
         }
         painted
     }
@@ -271,13 +270,11 @@ impl StrataAppState {
         self.ref_vectors.follow_work_crs(strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
         self.ref_vectors.release(&rows, &shown_keys);
         let viewport = self.home_map.viewport;
-        // Labels go over every reference picture, chosen among all layers at once.
-        let mut labels = labels::Pending::default();
+        // Labels go over every reference picture, placed among all layers at once by the map engine.
+        let mut labelled = Vec::new();
         for (key, opacity) in &shown {
-            let painted = self.ref_vectors.paint(key, ctx, p, rect, &viewport, *opacity);
-            if let Some((data, look)) = &painted.labelled {
-                labels.add(ctx, data, look, rect, &viewport);
-            }
+            let mut painted = self.ref_vectors.paint(key, ctx, p, rect, &viewport, *opacity);
+            labelled.extend(painted.labelled.take());
             if let Some(rows) = painted.rows {
                 self.left_layers.update_feature_count_badge(key, usize::try_from(rows).unwrap_or(usize::MAX));
             }
@@ -294,6 +291,7 @@ impl StrataAppState {
                 }
             }
         }
-        labels.paint(p);
+        let (runner, work_epsg) = (Arc::clone(&self.ref_vectors.runner), strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
+        self.ref_vectors.labels.paint(ctx, p, rect, &viewport, work_epsg, labelled, &runner);
     }
 }
