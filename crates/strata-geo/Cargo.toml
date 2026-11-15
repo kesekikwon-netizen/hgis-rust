@@ -11,6 +11,8 @@ workspace = true
 [dependencies]
 strata-types.workspace = true
 geo.workspace = true
+# The slice of a shape along a line (「폴리곤 나누기」); the same version geo 0.33 already builds, MIT OR Apache-2.0.
+i_overlay = { version = ">=4.5.1, <4.6.0", default-features = false }
 rstar.workspace = true
 spade.workspace = true
 serde.workspace = true

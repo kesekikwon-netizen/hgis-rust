@@ -126,6 +126,18 @@ impl StrataAppState {
         }
         let mupp = self.home_map.viewport.meters_per_pixel;
         let tool = self.active_tool;
+        // 「폴리곤 나누기」: the line cuts the polygons it crosses instead of becoming a shape (MainWindowEditing.cpp:794-816).
+        if let (MapToolKind::DrawLine, Some(table)) = (tool, self.home_map.splitting.clone()) {
+            match self.draw_sketch.finish_line(mupp) {
+                Ok(line) => {
+                    self.draw_sketch = crate::draw_sketch::DrawSketch::default();
+                    self.split_polygons_with_line(&table, line);
+                }
+                Err(FinishShort::Empty) => {}
+                Err(FinishShort::TooFew) => self.show_status_message("선으로 면을 나누지 못했습니다. 분할선은 최소 2개 이상의 점이어야 합니다."),
+            }
+            return;
+        }
         enum RawGeom {
             Point([f64; 2]),
             Line(Vec<[f64; 2]>),

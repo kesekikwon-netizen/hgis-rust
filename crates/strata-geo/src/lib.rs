@@ -17,6 +17,7 @@ pub mod georef_quality;
 pub mod helmert_solve;
 pub mod mbr_catalog;
 pub mod polygon_erase;
+pub mod polygon_split;
 pub mod polygon_ops;
 pub mod sliver_hole;
 pub mod snap_index;

@@ -32,6 +32,10 @@ impl StrataAppState {
         if !Self::is_capture_tool(self.active_tool) {
             self.draw_sketch.points.clear();
         }
+        // Another tool, or another layer to draw on, ends 「폴리곤 나누기」 (`stopCaptureTool`, MainWindowEditing.cpp:274-285).
+        if self.active_tool != strata_canvas2d::map_tools::MapToolKind::DrawLine || self.edit_layer_key != self.home_map.splitting {
+            self.home_map.splitting = None;
+        }
     }
 }
 

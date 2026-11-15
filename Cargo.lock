@@ -5426,6 +5426,7 @@ name = "strata-geo"
 version = "2.0.0"
 dependencies = [
  "geo",
+ "i_overlay",
  "rstar",
  "serde",
  "serde_json",

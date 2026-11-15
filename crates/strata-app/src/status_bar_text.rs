@@ -209,6 +209,8 @@ impl StrataAppState {
             MapToolKind::Pan => "이동".to_owned(),
             MapToolKind::Select => "도형선택".to_owned(),
             MapToolKind::Measure => "줄자".to_owned(),
+            // KaDrawSketchTools.cpp:180-181 — the line of 「폴리곤 나누기」.
+            MapToolKind::DrawLine if self.home_map.splitting.is_some() => "나누기 선".to_owned(),
             MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint => {
                 let target = match self.edit_layer_key.as_deref() {
                     Some("survey_area") => "조사구역",

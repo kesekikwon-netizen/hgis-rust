@@ -67,7 +67,7 @@ pub(crate) fn merge_conflict_summary(conflicts: &[(String, Vec<String>)]) -> Str
     lines.join("\n")
 }
 
-fn polygons(wkt: &str) -> Option<Vec<Rings>> {
+pub(super) fn polygons(wkt: &str) -> Option<Vec<Rings>> {
     let parts = wkt_to_parts(wkt).ok()?;
     let rings: Vec<Rings> = parts.into_iter().filter_map(|part| if let WkbGeometry::Polygon(rings) = part { Some(rings) } else { None }).collect();
     (!rings.is_empty()).then_some(rings)
