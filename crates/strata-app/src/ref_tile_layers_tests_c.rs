@@ -118,8 +118,11 @@ fn test_f2_a_newer_tile_map_goes_above_the_older_one_and_is_painted_over_it() {
 #[test]
 fn test_f2_terrain_tile_address_and_cache_folder() {
     assert_eq!(tile_url(TileKind::Terrain, "FAKE-TEST-KEY", 17, 112_345, 51_234), "https://tile.opentopomap.org/17/112345/51234.png");
+    // Not the folder `opentopomap` of the first builds: before the request said honestly which program asks
+    // (2026-11-15 06:30) the service answered some tiles with its notice picture "Generic referrer
+    // detected", and those pictures were kept there and shown ever after.
     let cache = crate::basemap_fetch::tile_cache_path(TileKind::Terrain, 12, 3518, 1608);
-    assert!(cache.ends_with("opentopomap/12/3518/1608.png") || cache.ends_with(r"opentopomap\12\3518\1608.png"), "{}", cache.display());
+    assert!(cache.ends_with("opentopomap-2/12/3518/1608.png") || cache.ends_with(r"opentopomap-2\12\3518\1608.png"), "{}", cache.display());
 }
 
 /// The volunteer-run terrain tile service is told which program asks (plan 2.8: a request says honestly what

@@ -36,7 +36,9 @@ fn kind_dir(kind: TileKind) -> &'static str {
         TileKind::Base => "base",
         TileKind::Cadastral => "cadastral",
         TileKind::Daedongyeojido => "daedongyeojido",
-        TileKind::Terrain => "opentopomap",
+        // Not `opentopomap`: that folder of the first builds holds notice pictures ("Generic referrer
+        // detected") the service sent before the request named the program honestly (`tile_curl_for`).
+        TileKind::Terrain => "opentopomap-2",
     }
 }
 
