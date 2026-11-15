@@ -76,3 +76,22 @@ fn a_request_that_is_given_up_ends_at_once() {
     assert!(took >= std::time::Duration::from_millis(400) && took < std::time::Duration::from_secs(4), "{took:?}");
     drop(silent);
 }
+
+/// A service that checks the key against the address it is registered for gets that address as the
+/// `Referer`; the key, which is part of the address asked for, stays off the command line.
+#[test]
+fn a_referer_reaches_curl_and_the_key_stays_off_the_command_line() {
+    let url = "https://api.vworld.kr/req/wfs?SERVICE=WFS&REQUEST=GetFeature&KEY=TEST_KEY";
+    let (launches, commands) = probe_dry_run(true, || {
+        let _ = reference_get_from(url, "ka-hgis/0.3", Some("https://localhost"), 15, 180, &|| false);
+        let _ = reference_get_from(url, "ka-hgis/0.3", None, 15, 180, &|| false);
+    });
+    assert_eq!(launches, 2);
+    let has = |n: usize, pair: [&str; 2]| commands[n].args.windows(2).any(|w| w[0] == pair[0] && w[1] == pair[1]);
+    assert!(has(0, ["-e", "https://localhost"]) && has(0, ["-A", "ka-hgis/0.3"]), "{:?}", commands[0].args);
+    assert!(commands[1].args.iter().all(|a| a != "-e" && !a.contains("localhost")), "{:?}", commands[1].args);
+    for command in &commands {
+        assert!(command.args.iter().all(|a| !a.contains("TEST_KEY") && !a.contains("vworld")), "{:?}", command.args);
+        assert_eq!(String::from_utf8_lossy(&command.stdin), format!("url = \"{url}\"\n"));
+    }
+}

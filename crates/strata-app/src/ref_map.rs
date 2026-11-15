@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use strata_engine::{PolygonRings, Scope, Transformer};
-use strata_refmap::{geology_prepare, soil_prepare};
+use strata_refmap::{geology_prepare, river_prepare, soil_prepare};
 use strata_refmap::transfer::{Download, Prepared, Stopped};
 use strata_storage::gpkg_wkt::wkt_to_parts;
 use strata_storage::wkb_codec::WkbGeometry;
@@ -30,11 +30,22 @@ mod tests_b;
 #[path = "ref_map_tests_c.rs"]
 mod tests_c;
 #[cfg(test)]
+#[path = "ref_map_tests_river.rs"]
+mod tests_river;
+#[cfg(test)]
 #[path = "ref_map_tests_soil.rs"]
 mod tests_soil;
 
+type Fetch = fn(&Scope, &Path, Download<'_>, &dyn Fn() -> bool) -> Result<Prepared, Stopped>;
+type FetchWithKey = fn(&Scope, &Path, &str, Download<'_>, &dyn Fn() -> bool) -> Result<Prepared, Stopped>;
+
 /// The function of strata-refmap that fetches and stores one kind of map.
-type Prepare = fn(&Scope, &Path, Download<'_>, &dyn Fn() -> bool) -> Result<Prepared, Stopped>;
+pub(crate) enum Prepare {
+    /// A public service: no key, no account.
+    Open(Fetch),
+    /// A service that asks for the user's VWorld key (the third argument).
+    VworldKey(FetchWithKey),
+}
 
 /// One kind of reference map and its button.
 pub(crate) struct RefMapKind {
@@ -81,7 +92,7 @@ pub(crate) const GEOLOGY: RefMapKind = RefMapKind {
     look: Look::Polygons { stroke: [80, 80, 80, 130], width_mm: 0.12, fill: PolygonFill::Column { name: geology_prepare::COLOUR_COLUMN, alpha: 220, missing: [200, 200, 200] } },
     // The symbol of every unit over it (GeologyMapService.cpp:426-455).
     label: Some(LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220], bold: false, closest_scale: None, inside_only: false }),
-    prepare: geology_prepare::prepare,
+    prepare: Prepare::Open(geology_prepare::prepare),
     needs_survey: "먼저 「새 조사」를 만들거나 조사를 여세요. 받은 자료는 조사 폴더에 저장해 다음에도 인터넷 없이 열 수 있게 합니다.",
     needs_area: "조사구역을 먼저 그려 주세요. 조사구역에서 반경 10km 안의 지질도를 받습니다.",
     offline: "인터넷 접속이 꺼져 있어 지질도 서버에 연결할 수 없습니다.",
@@ -106,7 +117,7 @@ pub(crate) const SOIL: RefMapKind = RefMapKind {
     // The short name of the terrain class where it fits into its unit, at 1:40 000 or closer
     // (`applyTerrainLabels`, SoilMapService.cpp:200-236).
     label: Some(LabelLook { column: soil_prepare::LABEL_COLUMN, size_pt: 8.0, ink: [28, 32, 38], halo_mm: 0.7, halo: [255, 255, 255, 235], bold: true, closest_scale: Some(40_000.0), inside_only: true }),
-    prepare: soil_prepare::prepare,
+    prepare: Prepare::Open(soil_prepare::prepare),
     needs_survey: GEOLOGY.needs_survey,
     needs_area: "조사구역을 먼저 그려 주세요. 조사구역에서 반경 10km 안의 토양도를 받습니다.",
     offline: "인터넷 접속이 꺼져 있어 토양도 서버에 연결할 수 없습니다.",
@@ -116,6 +127,32 @@ pub(crate) const SOIL: RefMapKind = RefMapKind {
     cancelled: "토양도 내려받기를 취소했습니다. 기존 지도는 유지됩니다.",
 };
 
+/// 수계 — the river network of VWorld (national and local rivers), 10 km around the survey area.
+pub(crate) const RIVER: RefMapKind = RefMapKind {
+    key: "ref_river",
+    title: "수계도(하천망)",
+    job_title: "수계도",
+    file_name: river_prepare::FILE_NAME,
+    table: river_prepare::TABLE,
+    stored_epsg: river_prepare::STORED_EPSG,
+    radius_m: 10_000.0,
+    // Fill opacity 230, outline the fill made darker, opaque, 0.32 mm (`waterFillSymbol`,
+    // RiverMapService.cpp:67-80); the light blue of 「기타 수계」 for a river without a colour (:218).
+    look: Look::Polygons { stroke: [80, 131, 157, 255], width_mm: 0.32, fill: PolygonFill::Columns { fill: river_prepare::COLOUR_COLUMN, line: river_prepare::LINE_COLUMN, alpha: 230, missing: [120, 196, 236] } },
+    // The river's name in blue with a white edge (RiverMapService.cpp:224-252).
+    label: Some(LabelLook { column: river_prepare::NAME_COLUMN, size_pt: 8.0, ink: [0, 72, 186], halo_mm: 0.7, halo: [255, 255, 255, 225], bold: true, closest_scale: None, inside_only: false }),
+    prepare: Prepare::VworldKey(river_prepare::prepare),
+    needs_survey: GEOLOGY.needs_survey,
+    needs_area: "조사구역을 먼저 그려 주세요. 조사구역에서 반경 10km 안의 수계도를 받습니다.",
+    offline: "인터넷 접속이 꺼져 있어 수계도 서버에 연결할 수 없습니다.",
+    fetching: "수계도 자료를 내려받는 중입니다. 지도 작업을 계속할 수 있습니다.",
+    added: "수계도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.",
+    kept: "보관해 둔 수계도를 올렸습니다. 다시 누르면 숨깁니다.",
+    cancelled: "수계도 내려받기를 취소했습니다. 기존 지도는 유지됩니다.",
+};
+
+/// `MainWindowOverlay.cpp:565-567`: a map that needs the user's VWorld key, and none is stored.
+pub(crate) const NO_VWORLD_KEY: &str = "VWorld 인증키가 없습니다. 배경지도 설정에서 키를 먼저 등록하세요.";
 /// `SurveyScopeClip.cpp:57`.
 pub(crate) const AREA_CRS_UNKNOWN: &str = "조사구역 좌표계를 확인하지 못했습니다.";
 /// The survey-area shapes cannot be joined or grown (the C++ then cuts nothing, `SurveyScopeClip.cpp:22`;

@@ -85,7 +85,7 @@ fn prepare_where_no_note_fits(_: &Scope, requested: &Path, _: Download<'_>, _: &
     Ok(Prepared { folder, gpkg, rows: 1, warnings: Vec::new() })
 }
 
-static NO_NOTE: RefMapKind = RefMapKind { prepare: prepare_where_no_note_fits, ..GEOLOGY };
+static NO_NOTE: RefMapKind = RefMapKind { prepare: Prepare::Open(prepare_where_no_note_fits), ..GEOLOGY };
 
 /// A stored map whose note cannot be written would never be used again: it is taken away, and the gauge
 /// says that the map was not saved.

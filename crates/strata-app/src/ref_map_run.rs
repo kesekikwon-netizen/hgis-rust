@@ -10,7 +10,7 @@ use strata_engine::Scope;
 use strata_refmap::transfer::{Prepared, Request, Stopped, TransferFailure, Why};
 use strata_types::crs::CrsCode;
 
-use super::{kept_map, survey_scope, write_scope_note, RefMapKind, BUSY};
+use super::{kept_map, survey_scope, write_scope_note, Prepare, RefMapKind, BUSY, NO_VWORLD_KEY};
 use crate::app_state::{MainTab, StrataAppState};
 use crate::download_jobs::{DownloadJobHandle, DownloadJobId, DownloadJobState, StopCode};
 use crate::ref_vector::data::LoadSpec;
@@ -25,6 +25,9 @@ struct Wanted {
     kind: &'static RefMapKind,
     scope: Scope,
     requested: PathBuf,
+    /// The user's VWorld key for a kind that asks for it, else empty. It lives in this press only and
+    /// goes nowhere but into the request addresses.
+    key: String,
 }
 
 struct Running {
@@ -43,18 +46,20 @@ pub(crate) struct RefMapJobs {
     fetch: Fetch,
     runner: Runner,
     online: fn() -> bool,
+    /// Reads the user's stored VWorld key (`VworldSettings::loadApiKey`).
+    vworld_key: fn() -> String,
 }
 
 impl Default for RefMapJobs {
     fn default() -> Self {
         let fetch: Fetch = Arc::new(|request, give_up| {
-            strata_net::reference_http::reference_get(&request.url, request.user_agent, request.idle_secs, request.total_secs, give_up).map_err(|failure| match failure {
+            strata_net::reference_http::reference_get_from(&request.url, request.user_agent, request.referer, request.idle_secs, request.total_secs, give_up).map_err(|failure| match failure {
                 strata_net::reference_http::ReferenceFailure::Timeout => TransferFailure::Timeout,
                 strata_net::reference_http::ReferenceFailure::Network => TransferFailure::Network,
                 strata_net::reference_http::ReferenceFailure::GivenUp => TransferFailure::Cancelled,
             })
         });
-        Self { wanted: None, refused: None, running: None, fetch, runner: Arc::new(|work| drop(std::thread::spawn(work))), online: strata_net::network::is_allowed }
+        Self { wanted: None, refused: None, running: None, fetch, runner: Arc::new(|work| drop(std::thread::spawn(work))), online: strata_net::network::is_allowed, vworld_key: strata_secrets::vworld::VworldSettings::load_api_key }
     }
 }
 
@@ -67,7 +72,7 @@ impl std::fmt::Debug for RefMapJobs {
 /// A copy of the app state carries no fetch.
 impl Clone for RefMapJobs {
     fn clone(&self) -> Self {
-        Self { wanted: None, refused: None, running: None, fetch: Arc::clone(&self.fetch), runner: Arc::clone(&self.runner), online: self.online }
+        Self { wanted: None, refused: None, running: None, fetch: Arc::clone(&self.fetch), runner: Arc::clone(&self.runner), online: self.online, vworld_key: self.vworld_key }
     }
 }
 
@@ -85,6 +90,8 @@ fn stop_code(why: Why) -> StopCode {
         Why::TooWide => StopCode::Area2,
         Why::NoData => StopCode::None1,
         Why::Service => StopCode::Site1,
+        Why::NoKey => StopCode::Key1,
+        Why::KeyRefused => StopCode::Key2,
         Why::Data => StopCode::Data1,
     }
 }
@@ -129,6 +136,16 @@ impl StrataAppState {
             self.show_status_message(kind.kept);
             return;
         }
+        // A kind that asks for the user's key is not started without one (`MainWindowOverlay.cpp:563-567`).
+        let key = match kind.prepare {
+            Prepare::Open(_) => String::new(),
+            Prepare::VworldKey(_) => (self.ref_maps.vworld_key)(),
+        };
+        if matches!(kind.prepare, Prepare::VworldKey(_)) && key.trim().is_empty() {
+            self.show_status_message(NO_VWORLD_KEY);
+            self.ref_maps.refused = Some((kind.job_title, StopCode::Key1, NO_VWORLD_KEY));
+            return;
+        }
         if !(self.ref_maps.online)() {
             // What the user cannot mend on the map also goes to the gauge, with its code.
             self.show_status_message(kind.offline);
@@ -136,7 +153,7 @@ impl StrataAppState {
             return;
         }
         self.show_status_message(kind.fetching);
-        self.ref_maps.wanted = Some(Wanted { kind, scope, requested: folder.join(kind.file_name) });
+        self.ref_maps.wanted = Some(Wanted { kind, scope, requested: folder.join(kind.file_name), key });
     }
 
     /// A fetch belongs to the survey it was started for. When another survey takes its place the fetch is
@@ -155,14 +172,19 @@ impl StrataAppState {
         if let Some((title, code, reason)) = self.ref_maps.refused.take() {
             drop(self.download_jobs.add_job(title, DownloadJobState::Stopped { code, reason: reason.to_owned() }, now));
         }
-        if let Some(Wanted { kind, scope, requested }) = self.ref_maps.wanted.take() {
+        if let Some(Wanted { kind, scope, requested, key }) = self.ref_maps.wanted.take() {
             let first = DownloadJobState::Running { fraction: None, stage: Some(kind.fetching.to_owned()) };
             let (id, job) = self.download_jobs.add_job(kind.job_title, first, now);
             let (send, result) = channel();
             let (fetch, worker_job, wake) = (Arc::clone(&self.ref_maps.fetch), job.clone(), ctx.clone());
             (self.ref_maps.runner)(Box::new(move || {
                 let stop = || worker_job.is_cancelled();
-                let outcome = (kind.prepare)(&scope, &requested, &|request| fetch(request, &stop), &stop).and_then(|prepared| {
+                let download = |request: &Request| fetch(request, &stop);
+                let prepared = match kind.prepare {
+                    Prepare::Open(run) => run(&scope, &requested, &download, &stop),
+                    Prepare::VworldKey(run) => run(&scope, &requested, &key, &download, &stop),
+                };
+                let outcome = prepared.and_then(|prepared| {
                     // The note says for which area the map was fetched and whether it is whole. A map without
                     // it would never be used again, so it is not left in the survey folder.
                     let noted = scope.polygons().ok().and_then(|shape| write_scope_note(&prepared.folder, kind.radius_m, &shape, prepared.warnings.is_empty()).ok());
@@ -214,7 +236,13 @@ impl StrataAppState {
 impl RefMapJobs {
     /// Answers come from `fetch`, the network counts as on or off, and work runs inside the call that asks.
     pub(crate) fn for_test(fetch: Fetch, online: fn() -> bool) -> Self {
-        Self { wanted: None, refused: None, running: None, fetch, runner: Arc::new(|work| work()), online }
+        // No stored key is read in a test.
+        Self { wanted: None, refused: None, running: None, fetch, runner: Arc::new(|work| work()), online, vworld_key: String::new }
+    }
+
+    /// The key a kind that asks for one gets.
+    pub(crate) fn set_key(&mut self, key: fn() -> String) {
+        self.vworld_key = key;
     }
 
     /// Work is handed to `runner` instead of a thread.

@@ -54,7 +54,20 @@ fn failure_of(exit_code: Option<i32>) -> ReferenceFailure {
 /// # Errors
 /// See [`ReferenceFailure`].
 pub fn reference_get(url: &str, user_agent: &str, idle_secs: u64, total_secs: u64, give_up: &dyn Fn() -> bool) -> Result<Vec<u8>, ReferenceFailure> {
-    let output = crate::curl_stdin::output_with_url_on_stdin_until(command(user_agent, idle_secs, total_secs), url, give_up).map_err(|_| ReferenceFailure::Network)?;
+    reference_get_from(url, user_agent, None, idle_secs, total_secs, give_up)
+}
+
+/// [`reference_get`] with a `Referer` header, for a service that checks the user's key against the
+/// address the key is registered for (VWorld; C++ `RiverMapService.cpp:128`).
+///
+/// # Errors
+/// See [`ReferenceFailure`].
+pub fn reference_get_from(url: &str, user_agent: &str, referer: Option<&str>, idle_secs: u64, total_secs: u64, give_up: &dyn Fn() -> bool) -> Result<Vec<u8>, ReferenceFailure> {
+    let mut command = command(user_agent, idle_secs, total_secs);
+    if let Some(referer) = referer {
+        command.args(["-e", referer]);
+    }
+    let output = crate::curl_stdin::output_with_url_on_stdin_until(command, url, give_up).map_err(|_| ReferenceFailure::Network)?;
     let Some(output) = output else {
         return Err(ReferenceFailure::GivenUp);
     };

@@ -26,6 +26,8 @@ pub const NOT_VERIFIED: &str = "저장한 지도를 다시 확인하지 못했�
 pub struct Request {
     pub url: String,
     pub user_agent: &'static str,
+    /// The `Referer` header, for a service that checks a key against the address it is registered for.
+    pub referer: Option<&'static str>,
     pub idle_secs: u64,
     pub total_secs: u64,
 }
@@ -35,14 +37,20 @@ impl Request {
     /// without a byte, 180 s in all.
     #[must_use]
     pub fn large(url: String, user_agent: &'static str) -> Self {
-        Self { url, user_agent, idle_secs: 15, total_secs: 180 }
+        Self { url, user_agent, referer: None, idle_secs: 15, total_secs: 180 }
     }
 
     /// A request for a small answer (`ReferenceTransferLimits`, `PreparedReferenceMap.h:41-44`): 15 s
     /// without a byte and 15 s in all.
     #[must_use]
     pub fn plain(url: String, user_agent: &'static str) -> Self {
-        Self { url, user_agent, idle_secs: 15, total_secs: 15 }
+        Self { url, user_agent, referer: None, idle_secs: 15, total_secs: 15 }
+    }
+
+    /// The same request with a `Referer` header.
+    #[must_use]
+    pub fn with_referer(self, referer: &'static str) -> Self {
+        Self { referer: Some(referer), ..self }
     }
 }
 
@@ -79,6 +87,10 @@ pub enum Why {
     NoData,
     /// The service was not reached or did not answer with map data.
     Service,
+    /// The service asks for the user's key and none is stored.
+    NoKey,
+    /// The service refused the user's key.
+    KeyRefused,
     /// The answer cannot be read or placed.
     Data,
 }

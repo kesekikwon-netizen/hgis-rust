@@ -151,30 +151,4 @@ impl StrataAppState {
         self.ribbon.sub_toolbar_visible = false;
         self.ribbon.sub_mode = SubToolsMode::None;
     }
-
-    /// C++ `MainWindowOverlay.cpp:225-240` `toggleExistingOverlay` 그대로.
-    /// 레이어가 이미 있으면 켜고 끄기만 하며 `…를 껐습니다.` / `…를 다시 켰습니다.` 를
-    /// 남기고 `true`. 없으면 `false` 라 호출한 쪽이 처음 받아 오는 길로 간다.
-    /// (`layer_visible` 에 키가 있는지가 C++ 의 `layersMatchingBaseName` 비어 있지 않음에 해당)
-    pub(crate) fn toggle_existing_overlay(&mut self, title: &str) -> bool {
-        if !self
-            .home_map
-            .real_survey
-            .layer_visible
-            .contains_key(title)
-        {
-            return false;
-        }
-        let now_on = !self.home_map.real_survey.is_layer_visible(title);
-        self.home_map
-            .real_survey
-            .layer_visible
-            .insert(title.to_owned(), now_on);
-        self.status_bar_hint = if now_on {
-            format!("{title}를 다시 켰습니다.")
-        } else {
-            format!("{title}를 껐습니다.")
-        };
-        true
-    }
 }

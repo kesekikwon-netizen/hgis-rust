@@ -31,6 +31,9 @@ pub(crate) enum PolygonFill {
     /// A text column holding `#RRGGBB`; `alpha` is the layer's fill opacity, `missing` the colour of a row
     /// without a readable one.
     Column { name: &'static str, alpha: u8, missing: [u8; 3] },
+    /// Two text columns holding `#RRGGBB`: the fill, as in `Column`, and the outline of the row. A row
+    /// without a readable outline colour gets the stroke of the look; its opacity holds for every row.
+    Columns { fill: &'static str, line: &'static str, alpha: u8, missing: [u8; 3] },
 }
 
 /// How a layer is drawn.
@@ -177,6 +180,7 @@ pub(crate) fn load(spec: &LoadSpec) -> Result<RefVectorData, String> {
     let (wanted, columns): (ShapeKind, Vec<&str>) = match &spec.look {
         Look::Lines { .. } => (ShapeKind::Lines, Vec::new()),
         Look::Polygons { fill: PolygonFill::Column { name, .. }, .. } => (ShapeKind::Polygons, vec![name]),
+        Look::Polygons { fill: PolygonFill::Columns { fill, line, .. }, .. } => (ShapeKind::Polygons, vec![fill, line]),
         Look::Polygons { fill: PolygonFill::None, .. } => (ShapeKind::Polygons, Vec::new()),
     };
     if facts.kind != wanted {
@@ -195,10 +199,10 @@ pub(crate) fn load(spec: &LoadSpec) -> Result<RefVectorData, String> {
                 let paint = PaintOf { fill: [0; 4], stroke: *stroke, width_mm: *width_mm };
                 lines.into_iter().try_for_each(|line| build.item(&[line], 2, paint).map(drop))
             }
-            (Look::Polygons { stroke, width_mm, fill }, Shapes::Polygons(polygons)) => {
-                let fill = match fill {
+            (Look::Polygons { stroke, width_mm, fill: fill_from }, Shapes::Polygons(polygons)) => {
+                let fill = match fill_from {
                     PolygonFill::None => [0; 4],
-                    PolygonFill::Column { alpha, missing, .. } => {
+                    PolygonFill::Column { alpha, missing, .. } | PolygonFill::Columns { alpha, missing, .. } => {
                         let [r, g, b] = match row.cells.first() {
                             Some(Cell::Text(text)) => colour(text).unwrap_or(*missing),
                             _ => *missing,
@@ -206,7 +210,12 @@ pub(crate) fn load(spec: &LoadSpec) -> Result<RefVectorData, String> {
                         [r, g, b, *alpha]
                     }
                 };
-                let paint = PaintOf { fill, stroke: *stroke, width_mm: *width_mm };
+                // The row's own outline colour where the look has a column for it, at the look's opacity.
+                let line = match (fill_from, row.cells.get(1)) {
+                    (PolygonFill::Columns { .. }, Some(Cell::Text(text))) => colour(text).map(|[r, g, b]| [r, g, b, stroke[3]]),
+                    _ => None,
+                };
+                let paint = PaintOf { fill, stroke: line.unwrap_or(*stroke), width_mm: *width_mm };
                 polygons.iter().try_for_each(|rings| build.item(rings, 4, paint).map(drop))
             }
             _ => Err("a row holds another kind of shape than its table".to_owned()),

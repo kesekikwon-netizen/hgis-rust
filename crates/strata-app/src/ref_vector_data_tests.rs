@@ -153,3 +153,26 @@ fn a_polygon_without_a_drawable_outer_ring_is_left_out() {
     let data = load(&LoadSpec { file: path, table: "geology_map".to_owned(), work_epsg: 5187, look, label: None }).expect("load");
     assert_eq!((data.items.len(), data.runs.len()), (1, 1), "only the second row is drawn");
 }
+
+/// With two colour columns the outline of a polygon is the colour its row names, at the opacity of the
+/// look's stroke; a row without a readable one gets the look's stroke (the rivers: `RiverMapService.cpp:
+/// 67-80`, an outline that is the fill made darker).
+#[test]
+fn the_outline_comes_from_the_second_colour_column() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("수계도_VWorld.gpkg");
+    let layout = TableLayout { table: "river_map", epsg: 5186, kind: ShapeKind::Polygons, columns: &[("ka_color", ColumnKind::Text), ("ka_line", ColumnKind::Text)] };
+    let river = |x: f64, cells: Vec<Cell>| Row { shapes: Shapes::Polygons(vec![vec![square(x, 270_000.0, 50.0)]]), cells };
+    let rows = vec![
+        river(334_000.0, vec![Cell::Text("#007ED4".to_owned()), Cell::Text("#00548D".to_owned())]),
+        river(335_000.0, vec![Cell::Text("#28A6E8".to_owned()), Cell::Null]),
+        river(336_000.0, vec![Cell::Null, Cell::Text("no colour".to_owned())]),
+    ];
+    write_new_table(&path, &layout, &mut rows.into_iter()).expect("write");
+    let look = Look::Polygons { stroke: [80, 131, 157, 255], width_mm: 0.32, fill: PolygonFill::Columns { fill: "ka_color", line: "ka_line", alpha: 230, missing: [120, 196, 236] } };
+    let data = load(&LoadSpec { file: path, table: "river_map".to_owned(), work_epsg: 5186, look, label: None }).expect("load");
+    let paint = |i: usize| data.paints[data.items[i].paint as usize];
+    assert_eq!((paint(0).fill, paint(0).stroke, paint(0).width_mm), ([0x00, 0x7E, 0xD4, 230], [0x00, 0x54, 0x8D, 255], 0.32));
+    assert_eq!((paint(1).fill, paint(1).stroke), ([0x28, 0xA6, 0xE8, 230], [80, 131, 157, 255]));
+    assert_eq!((paint(2).fill, paint(2).stroke), ([120, 196, 236, 230], [80, 131, 157, 255]));
+}
