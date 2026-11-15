@@ -37,7 +37,7 @@ struct Asked {
 pub(crate) fn source(key: &str, spec: &LoadSpec, look: &LabelLook) -> LabelSource {
     let [r, g, b] = look.ink;
     let look = strata_mapengine::LabelLook { column: look.column.to_owned(), size_pt: label_font_size_points(look.size_pt), ink: [r, g, b, 255], bold: false, halo: Some((look.halo, mm_to_points(look.halo_mm))), closest_scale: None };
-    LabelSource { key: key.to_owned(), file: spec.file.clone(), look }
+    LabelSource { key: key.to_owned(), file: spec.file.clone(), table: Some(spec.table.clone()), look }
 }
 
 /// The labels of the reference layers: the engine, what it placed last, and what is being asked.

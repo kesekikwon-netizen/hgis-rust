@@ -21,7 +21,7 @@ fn two_units(dir: &Path) -> PathBuf {
 
 fn symbols(file: PathBuf) -> LabelSource {
     let look = LabelLook { column: "기호".to_owned(), size_pt: 10.667, ink: [40, 40, 40, 255], bold: false, halo: Some(([255, 255, 255, 220], 2.27)), closest_scale: None };
-    LabelSource { key: "ref_geology".to_owned(), file, look }
+    LabelSource { key: "ref_geology".to_owned(), file, table: None, look }
 }
 
 /// A view of 900 x 600 points centred between the two units, 2 m to the point.
@@ -44,7 +44,9 @@ fn a_label_stands_in_the_middle_of_its_unit_in_the_work_crs() {
     assert_eq!(labels.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["Qa", "Kqp"]);
     for (label, x) in labels.iter().zip([219_800.0, 220_400.0]) {
         assert!((label.at[0] - x).abs() < 1.0 && (label.at[1] - 370_000.0).abs() < 1.0, "{label:?}");
-        assert_eq!((label.ink, label.bold, label.halo), ([40, 40, 40, 255], false, Some(([255, 255, 255, 220], 2.27))));
+        assert_eq!((label.ink, label.bold), ([40, 40, 40, 255], false));
+        let (edge, width) = label.halo.unwrap();
+        assert!(edge == [255, 255, 255, 220] && (width - 2.27).abs() < 0.001, "{label:?}");
         assert!((label.size_pt - 10.667).abs() < 0.001);
     }
 }
@@ -60,6 +62,53 @@ fn a_unit_larger_than_the_view_is_labelled_over_the_part_in_view() {
     let labels = engine.place(5187, &[symbols(two_units(dir.path()))], &close).unwrap();
     assert_eq!(labels.len(), 1, "{labels:?}");
     assert!(labels[0].at[0] > 219_850.0 && labels[0].at[0] < 220_000.0, "{:?}", labels[0]);
+}
+
+/// A GeoPackage holds several tables: the labels come from the one that is named, not from the first of
+/// the file, and a table that is not there is said.
+#[test]
+fn labels_come_from_the_named_table_of_a_file() {
+    use rustgis_data::io::{read_path, write_path_to, GpkgMode, GpkgTable};
+    let dir = tempfile::tempdir().unwrap();
+    let (units, _) = read_path(&two_units(dir.path())).unwrap();
+    let mut others = units.clone();
+    for feature in &mut others.features {
+        feature.attrs = vec![Value::Text("X".to_owned()), Value::Text("X".to_owned())];
+    }
+    let file = dir.path().join("maps.gpkg");
+    let table = |name: &str| GpkgTable { mode: GpkgMode::AddTable, name: Some(name.to_owned()) };
+    // 「a_first」 comes first in the file's list of tables.
+    write_path_to(&others, &file, rustgis_data::raster::Crs::Epsg(5186), &table("a_first")).unwrap();
+    write_path_to(&units, &file, rustgis_data::raster::Crs::Epsg(5186), &table("geology_map")).unwrap();
+
+    let named = |name: &str| LabelSource { table: Some(name.to_owned()), ..symbols(file.clone()) };
+    let texts = |labels: Vec<PlacedText>| sorted(labels).into_iter().map(|l| l.text).collect::<Vec<_>>();
+    let mut engine = LabelEngine::default();
+    assert_eq!(texts(engine.place(5187, &[named("geology_map")], &view()).unwrap()), ["Qa", "Kqp"]);
+    assert_eq!(texts(engine.place(5187, &[named("a_first")], &view()).unwrap()), ["X", "X"]);
+    assert!(engine.place(5187, &[named("soil_map")], &view()).is_err());
+}
+
+/// The engine keeps labels apart by the size they are written at. Two units of 400 m by 42 m, one over
+/// the other: their symbols stand 21 points apart at 2 m to the point. Letters of 10.667 points with an
+/// edge of 2.27 need 10.03 + 2 x (2.27 + 2 of the engine's padding) = 18.6 points: both are written. (Taken
+/// as the engine's own unit, a third larger, they would need 23.4 and one would go.)
+#[test]
+fn labels_are_kept_apart_by_the_size_they_are_written_at() {
+    let dir = tempfile::tempdir().unwrap();
+    // The corners carried from EPSG:5187 by PROJ (gdaltransform of GDAL 3.12, 2026-11-15): x 219 600 and
+    // 220 000, y 369 958, 370 000 and 370 042.
+    let lower = "[[129.217182058,35.926923485],[129.221614316,35.926915385],[129.221615372,35.927293905],[129.217183093,35.927302005],[129.217182058,35.926923485]]";
+    let upper = "[[129.217183093,35.927302005],[129.221615372,35.927293905],[129.221616428,35.927672425],[129.217184128,35.927680525],[129.217183093,35.927302005]]";
+    let unit = |ring: &str, symbol: &str| format!(r#"{{"type":"Feature","properties":{{"기호":"{symbol}"}},"geometry":{{"type":"Polygon","coordinates":[{ring}]}}}}"#);
+    let file = dir.path().join("stacked.geojson");
+    std::fs::write(&file, format!(r#"{{"type":"FeatureCollection","features":[{},{}]}}"#, unit(lower, "Qa"), unit(upper, "Kqp"))).unwrap();
+
+    let around = ViewBox { centre: [219_800.0, 370_000.0], ..view() };
+    let mut labels = LabelEngine::default().place(5187, &[symbols(file)], &around).unwrap();
+    labels.sort_by(|a, b| a.at[1].total_cmp(&b.at[1]));
+    assert_eq!(labels.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["Qa", "Kqp"]);
+    assert!((labels[1].at[1] - labels[0].at[1] - 42.0).abs() < 1.0, "{labels:?}");
 }
 
 /// Layers come and go with what is asked for; another work CRS moves the places; what cannot be read or

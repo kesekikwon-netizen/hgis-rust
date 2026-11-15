@@ -45,6 +45,8 @@ pub struct LabelSource {
     /// The app's name for the layer.
     pub key: String,
     pub file: PathBuf,
+    /// The table of a file that holds several (a GeoPackage); `None` for a file that is one table.
+    pub table: Option<String>,
     pub look: LabelLook,
 }
 
@@ -68,6 +70,11 @@ pub struct PlacedText {
     pub bold: bool,
 }
 
+/// The engine's unit for a label's size and the width of its edge: it writes and measures letters a third
+/// larger than the number it is given (`rustgis-render` `text.rs`: "font px = size x 1.33"). Strata's
+/// sizes are the screen points the letters are written at, so they are carried into that unit and back.
+const ENGINE_UNIT: f32 = 1.33;
+
 /// One row of a labelled table: its polygons (longitude and latitude), their box, and its label value.
 type Shape = (geo::Rect<f64>, geo::MultiPolygon<f64>, Value);
 
@@ -90,7 +97,12 @@ fn polygons(geometry: Option<&Geometry>) -> Option<geo::MultiPolygon<f64>> {
 /// Reads a table and keeps what labels need of it; `None` when it has no such column
 /// (`GeologyMapService.cpp:427`).
 fn read(source: &LabelSource) -> Result<Option<Vec<Shape>>, String> {
-    let (dataset, _) = rustgis_data::io::read_path(&source.file).map_err(|e| e.to_string())?;
+    // `read_path` takes the first table of a GeoPackage, whatever it is: a named one is opened by its name.
+    let read = match &source.table {
+        Some(table) => rustgis_data::source::open_path(&source.file, Some(table)).and_then(|table| rustgis_data::source::materialize(table.as_ref())),
+        None => rustgis_data::io::read_path(&source.file),
+    };
+    let (dataset, _) = read.map_err(|e| e.to_string())?;
     let Some(column) = dataset.field_index(&source.look.column) else {
         return Ok(None);
     };
@@ -153,12 +165,12 @@ impl LabelEngine {
             layer.labels.enabled = true;
             let class = &mut layer.labels.default;
             class.field.clone_from(&source.look.column);
-            class.size = source.look.size_pt;
+            class.size = source.look.size_pt / ENGINE_UNIT;
             class.color = Rgba(source.look.ink);
             class.bold = source.look.bold;
             class.halo = source.look.halo.is_some();
             class.halo_color = source.look.halo.map(|(colour, _)| Rgba(colour));
-            class.halo_width = source.look.halo.map(|(_, width)| width);
+            class.halo_width = source.look.halo.map(|(_, width)| width / ENGINE_UNIT);
             class.min_scale = source.look.closest_scale;
             map.add_layer(layer);
         }
@@ -172,7 +184,7 @@ impl LabelEngine {
         Ok(drawn
             .labels
             .into_iter()
-            .map(|label| PlacedText { at: world(label.x, label.y), text: label.text, size_pt: label.size, ink: label.color.0, halo: label.halo.map(|colour| (colour.0, label.halo_width.unwrap_or(1.0))), bold: label.bold })
+            .map(|label| PlacedText { at: world(label.x, label.y), text: label.text, size_pt: label.size * ENGINE_UNIT, ink: label.color.0, halo: label.halo.map(|colour| (colour.0, label.halo_width.unwrap_or(1.0) * ENGINE_UNIT)), bold: label.bold })
             .collect())
     }
 }

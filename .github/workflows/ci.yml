@@ -82,7 +82,7 @@ jobs:
           if ($hash -ne "adbefda5f92d471cbde9cb3232775485bd1bad61ba97376c9661c37dfd6ad027") { throw "sqlite-tools sha256 mismatch: $hash" }
           Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\sqlite-tools"
           "$env:RUNNER_TEMP\sqlite-tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      # Keep RUSTUP_TOOLCHAIN=stable set explicitly as well so rust-toolchain.toml (1.91.1) never overrides stable in Cargo or child processes.
+      # Keep RUSTUP_TOOLCHAIN=stable set explicitly as well so rust-toolchain.toml (1.99.1) never overrides stable in Cargo or child processes.
       - name: Run Clippy
         env:
           RUSTUP_TOOLCHAIN: stable
