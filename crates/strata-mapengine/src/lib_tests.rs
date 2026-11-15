@@ -20,7 +20,7 @@ fn two_units(dir: &Path) -> PathBuf {
 }
 
 fn symbols(file: PathBuf) -> LabelSource {
-    let look = LabelLook { column: "기호".to_owned(), size_pt: 10.667, ink: [40, 40, 40, 255], bold: false, halo: Some(([255, 255, 255, 220], 2.27)), closest_scale: None };
+    let look = LabelLook { column: "기호".to_owned(), size_pt: 10.667, ink: [40, 40, 40, 255], bold: false, halo: Some(([255, 255, 255, 220], 2.27)), closest_scale: None, inside_only: false };
     LabelSource { key: "ref_geology".to_owned(), file, table: None, look }
 }
 
@@ -109,6 +109,41 @@ fn labels_are_kept_apart_by_the_size_they_are_written_at() {
     labels.sort_by(|a, b| a.at[1].total_cmp(&b.at[1]));
     assert_eq!(labels.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["Qa", "Kqp"]);
     assert!((labels[1].at[1] - labels[0].at[1] - 42.0).abs() < 1.0, "{labels:?}");
+}
+
+/// A scale limit is the app's scale, a screen point being 1/96 inch (as QGIS and Strata count it): 1:40 000
+/// is 10.583 m to the point. (The engine's own scale counts a point as 0.28 mm and would still write the
+/// labels at 10.7 m.)
+#[test]
+fn a_scale_limit_is_the_scale_of_the_screen() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut limited = symbols(two_units(dir.path()));
+    limited.look.closest_scale = Some(40_000.0);
+    let mut engine = LabelEngine::default();
+    let at = |metres_per_point: f64| ViewBox { metres_per_point, ..view() };
+    assert_eq!(engine.place(5187, &[limited.clone()], &at(10.5)).unwrap().len(), 2, "1:39 685");
+    assert_eq!(engine.place(5187, &[limited], &at(10.7)).unwrap(), [], "1:40 441");
+}
+
+/// With `inside_only` a label is written only where it fits into its unit, and a row without text is not
+/// labelled at all. The west unit here is 30 m wide (15 points at 2 m to the point) and 400 m tall: its
+/// name of five letters does not fit; the east unit of 400 m takes it.
+#[test]
+fn a_label_that_does_not_fit_into_its_unit_is_not_written() {
+    let dir = tempfile::tempdir().unwrap();
+    // x 219 600 to 219 630, y 369 800 to 370 200 (PROJ, as above), and the east unit of `two_units`.
+    let narrow = "[[129.217178164,35.925499528],[129.217510578,35.925498926],[129.217520451,35.929103879],[129.217188022,35.929104481],[129.217178164,35.925499528]]";
+    let east = "[[129.223826431,35.925487318],[129.228258606,35.925478973],[129.228268967,35.929083924],[129.223836590,35.929092269],[129.223826431,35.925487318]]";
+    let unit = |ring: &str, name: &str| format!(r#"{{"type":"Feature","properties":{{"ka_label":"{name}"}},"geometry":{{"type":"Polygon","coordinates":[{ring}]}}}}"#);
+    let file = dir.path().join("soil.geojson");
+    std::fs::write(&file, format!(r#"{{"type":"FeatureCollection","features":[{},{},{}]}}"#, unit(narrow, "곡간·선상"), unit(east, "하성평탄"), unit(east, ""))).unwrap();
+    let names = |inside_only: bool| {
+        let look = LabelLook { column: "ka_label".to_owned(), inside_only, ..symbols(file.clone()).look };
+        let source = LabelSource { key: "ref_soil".to_owned(), file: file.clone(), table: None, look };
+        sorted(LabelEngine::default().place(5187, &[source], &view()).unwrap()).into_iter().map(|l| l.text).collect::<Vec<_>>()
+    };
+    assert_eq!(names(false), ["곡간·선상", "하성평탄"]);
+    assert_eq!(names(true), ["하성평탄"]);
 }
 
 /// Layers come and go with what is asked for; another work CRS moves the places; what cannot be read or

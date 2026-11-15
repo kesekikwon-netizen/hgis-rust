@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use strata_engine::{PolygonRings, Scope, Transformer};
-use strata_refmap::geology_prepare;
+use strata_refmap::{geology_prepare, soil_prepare};
 use strata_refmap::transfer::{Download, Prepared, Stopped};
 use strata_storage::gpkg_wkt::wkt_to_parts;
 use strata_storage::wkb_codec::WkbGeometry;
@@ -29,6 +29,9 @@ mod tests_b;
 #[cfg(test)]
 #[path = "ref_map_tests_c.rs"]
 mod tests_c;
+#[cfg(test)]
+#[path = "ref_map_tests_soil.rs"]
+mod tests_soil;
 
 /// The function of strata-refmap that fetches and stores one kind of map.
 type Prepare = fn(&Scope, &Path, Download<'_>, &dyn Fn() -> bool) -> Result<Prepared, Stopped>;
@@ -77,7 +80,7 @@ pub(crate) const GEOLOGY: RefMapKind = RefMapKind {
     // grey for a unit without a colour (the 「기타」 category, :382-458).
     look: Look::Polygons { stroke: [80, 80, 80, 130], width_mm: 0.12, fill: PolygonFill::Column { name: geology_prepare::COLOUR_COLUMN, alpha: 220, missing: [200, 200, 200] } },
     // The symbol of every unit over it (GeologyMapService.cpp:426-455).
-    label: Some(LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220] }),
+    label: Some(LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220], bold: false, closest_scale: None, inside_only: false }),
     prepare: geology_prepare::prepare,
     needs_survey: "먼저 「새 조사」를 만들거나 조사를 여세요. 받은 자료는 조사 폴더에 저장해 다음에도 인터넷 없이 열 수 있게 합니다.",
     needs_area: "조사구역을 먼저 그려 주세요. 조사구역에서 반경 10km 안의 지질도를 받습니다.",
@@ -86,6 +89,31 @@ pub(crate) const GEOLOGY: RefMapKind = RefMapKind {
     added: "지질도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.",
     kept: "보관해 둔 지질도를 올렸습니다. 다시 누르면 숨깁니다.",
     cancelled: "지질도 내려받기를 취소했습니다. 기존 지도는 유지됩니다.",
+};
+
+/// 토양 — the NAAS (흙토람) soil terrain map, 10 km around the survey area.
+pub(crate) const SOIL: RefMapKind = RefMapKind {
+    key: "ref_soil",
+    title: "토양도(흙토람)",
+    job_title: "토양도",
+    file_name: soil_prepare::FILE_NAME,
+    table: soil_prepare::TABLE,
+    stored_epsg: soil_prepare::STORED_EPSG,
+    radius_m: 10_000.0,
+    // Fill opacity 175, outline (40, 44, 52, 180) 0.28 mm (`terrainFillSymbol`, SoilMapService.cpp:68-78);
+    // grey for a unit without a colour (the 「미분류」 category, :162).
+    look: Look::Polygons { stroke: [40, 44, 52, 180], width_mm: 0.28, fill: PolygonFill::Column { name: soil_prepare::COLOUR_COLUMN, alpha: 175, missing: [200, 200, 200] } },
+    // The short name of the terrain class where it fits into its unit, at 1:40 000 or closer
+    // (`applyTerrainLabels`, SoilMapService.cpp:200-236).
+    label: Some(LabelLook { column: soil_prepare::LABEL_COLUMN, size_pt: 8.0, ink: [28, 32, 38], halo_mm: 0.7, halo: [255, 255, 255, 235], bold: true, closest_scale: Some(40_000.0), inside_only: true }),
+    prepare: soil_prepare::prepare,
+    needs_survey: GEOLOGY.needs_survey,
+    needs_area: "조사구역을 먼저 그려 주세요. 조사구역에서 반경 10km 안의 토양도를 받습니다.",
+    offline: "인터넷 접속이 꺼져 있어 토양도 서버에 연결할 수 없습니다.",
+    fetching: "토양도 자료를 내려받는 중입니다. 지도 작업을 계속할 수 있습니다.",
+    added: "토양도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.",
+    kept: "보관해 둔 토양도를 올렸습니다. 다시 누르면 숨깁니다.",
+    cancelled: "토양도 내려받기를 취소했습니다. 기존 지도는 유지됩니다.",
 };
 
 /// `SurveyScopeClip.cpp:57`.

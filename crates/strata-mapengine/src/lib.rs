@@ -14,7 +14,7 @@
 
 use std::path::PathBuf;
 
-use geo::{BooleanOps, BoundingRect, Intersects};
+use geo::{BooleanOps, BoundingRect, Contains, Intersects};
 use rustgis_data::{Dataset, Field, FieldType, Geometry, GeometryType, Value};
 use rustgis_geom::Coord;
 use rustgis_map::projection::Projector;
@@ -37,6 +37,8 @@ pub struct LabelLook {
     pub halo: Option<([u8; 4], f32)>,
     /// Labels are written only at this scale or closer (1:40000 is 40000).
     pub closest_scale: Option<f64>,
+    /// A label is written only where its letters lie inside its shape (QGIS `fitInPolygonOnly`).
+    pub inside_only: bool,
 }
 
 /// A labelled table of the survey folder.
@@ -75,6 +77,10 @@ pub struct PlacedText {
 /// sizes are the screen points the letters are written at, so they are carried into that unit and back.
 const ENGINE_UNIT: f32 = 1.33;
 
+/// A screen point in metres, 1/96 inch: what QGIS and Strata count a map scale with. (The engine's own
+/// scale takes a point as 0.28 mm, so a limit handed to it would be off by six parts in a hundred.)
+const SCREEN_POINT_M: f64 = 0.0254 / 96.0;
+
 /// One row of a labelled table: its polygons (longitude and latitude), their box, and its label value.
 type Shape = (geo::Rect<f64>, geo::MultiPolygon<f64>, Value);
 
@@ -107,8 +113,10 @@ fn read(source: &LabelSource) -> Result<Option<Vec<Shape>>, String> {
         return Ok(None);
     };
     let shape = |feature: &rustgis_data::Feature| {
+        // A row without text has no label: it is not kept.
+        let value = feature.attrs.get(column).filter(|value| !matches!(value, Value::Null) && !matches!(value, Value::Text(text) if text.trim().is_empty()))?;
         let shapes = polygons(feature.geometry.as_ref())?;
-        Some((shapes.bounding_rect()?, shapes, feature.attrs.get(column).cloned().unwrap_or_default()))
+        Some((shapes.bounding_rect()?, shapes, value.clone()))
     };
     Ok(Some(dataset.features.iter().filter_map(shape).collect()))
 }
@@ -147,15 +155,24 @@ impl LabelEngine {
         let mut map = Map::new("strata");
         map.basemap = Basemap::Blank;
         map.set_projection(Projection::Custom(code));
+        let scale = view.metres_per_point / SCREEN_POINT_M;
+        // The cut shapes of the layers whose labels must fit into their shape, each with its text.
+        let mut fitted: Vec<(&str, geo::MultiPolygon<f64>)> = Vec::new();
         for (id, (source, shapes)) in (1_u32..).zip(&self.held) {
+            if source.look.closest_scale.is_some_and(|closest| scale > closest) {
+                continue;
+            }
             let mut cut = Dataset::new(source.key.clone(), GeometryType::Polygon, vec![Field::new(source.look.column.clone(), FieldType::Text)]);
             for (bounds, shape, value) in shapes.iter().filter(|(bounds, ..)| bounds.intersects(&view_box)) {
-                let _ = bounds;
-                let part = shape.intersection(&in_view);
+                // A shape that lies in the view whole is taken as it is.
+                let part = if in_view.contains(&bounds.to_polygon()) { shape.clone() } else { shape.intersection(&in_view) };
                 let rings = |polygon: &geo::Polygon<f64>| std::iter::once(polygon.exterior()).chain(polygon.interiors()).map(|ring| ring.coords().map(|c| Coord { x: c.x, y: c.y }).collect::<Vec<_>>()).collect::<Vec<_>>();
                 let parts: Vec<Vec<Vec<Coord>>> = part.iter().map(rings).collect();
                 if !parts.is_empty() {
                     cut.push(Some(Geometry::Polygon(parts)), vec![value.clone()]);
+                    if let (true, Value::Text(text)) = (source.look.inside_only, value) {
+                        fitted.push((text, part));
+                    }
                 }
             }
             let mut layer = Layer::new(id, cut);
@@ -171,7 +188,6 @@ impl LabelEngine {
             class.halo = source.look.halo.is_some();
             class.halo_color = source.look.halo.map(|(colour, _)| Rgba(colour));
             class.halo_width = source.look.halo.map(|(_, width)| width / ENGINE_UNIT);
-            class.min_scale = source.look.closest_scale;
             map.add_layer(layer);
         }
         map.camera.center = Coord { x: view.centre[0], y: view.centre[1] };
@@ -181,9 +197,33 @@ impl LabelEngine {
             return Ok(Vec::new());
         };
         let world = |x: f32, y: f32| [view.centre[0] + (f64::from(x) - view.width_pt / 2.0) * view.metres_per_point, view.centre[1] - (f64::from(y) - view.height_pt / 2.0) * view.metres_per_point];
+        let lonlat = |x: f32, y: f32| {
+            let [x, y] = world(x, y);
+            projector.inverse(Coord { x, y }).map(|c| geo::Coord { x: c.x, y: c.y })
+        };
+        // QGIS `fitInPolygonOnly`: the letters (with their edge) lie inside the part of the shape in view.
+        // A placed label does not say which layer it is of: it is one of such a layer when a shape of
+        // that layer with its text holds its middle.
+        let fits = |label: &rustgis_render::PlacedLabel| {
+            let Some(middle) = lonlat(label.center_x(), label.y) else {
+                return true;
+            };
+            let mut own = fitted.iter().filter(|(text, shape)| *text == label.text && shape.contains(&geo::Point::from(middle))).peekable();
+            let (Some(_), Some([x0, y0, x1, y1])) = (own.peek(), rustgis_render::label_extent(label)) else {
+                return true;
+            };
+            // The extent the engine keeps clear, without the padding it adds around every label.
+            let pad = label.collide.text_padding;
+            let corners: Option<Vec<geo::Coord<f64>>> = [(x0 + pad, y0 + pad), (x1 - pad, y0 + pad), (x1 - pad, y1 - pad), (x0 + pad, y1 - pad)].into_iter().map(|(x, y)| lonlat(x, y)).collect();
+            corners.is_some_and(|corners| {
+                let letters = geo::Polygon::new(geo::LineString::from(corners), Vec::new());
+                own.any(|(_, shape)| shape.contains(&letters))
+            })
+        };
         Ok(drawn
             .labels
             .into_iter()
+            .filter(fits)
             .map(|label| PlacedText { at: world(label.x, label.y), text: label.text, size_pt: label.size * ENGINE_UNIT, ink: label.color.0, halo: label.halo.map(|colour| (colour.0, label.halo_width.unwrap_or(1.0) * ENGINE_UNIT)), bold: label.bold })
             .collect())
     }

@@ -13,7 +13,7 @@ use strata_engine::{write_new_table, Cell, ColumnKind, Row, ShapeKind, Shapes, T
 use super::*;
 use crate::ref_vector::data::{Look, PolygonFill};
 
-const SYMBOLS: LabelLook = LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220] };
+const SYMBOLS: LabelLook = LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220], bold: false, closest_scale: None, inside_only: false };
 
 /// Two units of 400 m in EPSG:5187: 「Qa」 around (219 800, 370 000) and 「Kqp」 around (220 400, 370 000).
 fn units(dir: &Path) -> PathBuf {
@@ -69,6 +69,12 @@ fn labels_are_written_where_the_engine_placed_them_in_the_cpp_look() {
     assert!((source.look.size_pt - 8.0 * 96.0 / 72.0).abs() < 0.001);
     let (edge, width) = source.look.halo.unwrap();
     assert!(edge == [255, 255, 255, 220] && (width - 0.6 * 96.0 / 25.4).abs() < 0.001);
+
+    // The soil labels: bold, only where they fit, only at 1:40 000 or closer (`SoilMapService.cpp:200-236`).
+    let soil = LabelLook { column: "ka_label", size_pt: 8.0, ink: [28, 32, 38], halo_mm: 0.7, halo: [255, 255, 255, 235], bold: true, closest_scale: Some(40_000.0), inside_only: true };
+    let asked_of_engine = super::source("ref_soil", &spec(dir.path().join("soil.gpkg")), &soil).look;
+    assert_eq!((asked_of_engine.bold, asked_of_engine.closest_scale, asked_of_engine.inside_only), (true, Some(40_000.0), true));
+    assert_eq!((source.look.closest_scale, source.look.inside_only), (None, false));
 
     let (mut labels, ctx, (_, vp), (runner, asked)) = (Labels::default(), egui::Context::default(), map(), counted());
     let ink = Color32::from_rgb(40, 40, 40);

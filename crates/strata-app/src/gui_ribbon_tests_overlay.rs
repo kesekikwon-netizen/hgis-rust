@@ -12,30 +12,25 @@ fn test_r8_toggle_existing_overlay_returns_false_when_absent() {
     assert_eq!(app.status_bar_hint, "");
 }
 
-/// R8 — 「토양」·「수계」는 `MainWindowOverlay.cpp:357,479` 가
-/// `토양도(흙토람)` / `수계도(하천망)` 이름으로 토글한다.
+/// R8 — 「수계」는 `MainWindowOverlay.cpp:479` 가 `수계도(하천망)` 이름으로 토글한다.
+/// (「토양」은 실제로 받는다: `ref_map_tests_soil.rs`.)
 #[test]
-fn test_r8_soil_and_river_toggle_with_cpp_layer_names() {
-    for (button, title) in [("토양", "토양도(흙토람)"), ("수계", "수계도(하천망)")] {
-        let mut app = StrataAppState::new_startup();
-        // 없는 상태: 받아 오는 길(여기서는 안내 문구)로 간다.
-        app.handle_ribbon_click(button);
-        assert!(app.home_map.real_survey.is_layer_visible(title), "{button}");
-        assert!(
-            app.status_bar_hint.contains("추가했습니다"),
-            "{button}: {}",
-            app.status_bar_hint
-        );
+fn test_r8_river_toggles_with_cpp_layer_name() {
+    let (button, title) = ("수계", "수계도(하천망)");
+    let mut app = StrataAppState::new_startup();
+    // 없는 상태: 받아 오는 길(여기서는 안내 문구)로 간다.
+    app.handle_ribbon_click(button);
+    assert!(app.home_map.real_survey.is_layer_visible(title), "{button}");
+    assert!(app.status_bar_hint.contains("추가했습니다"), "{button}: {}", app.status_bar_hint);
 
-        // 있는 상태: 끄고 켜며 C++ toggleExistingOverlay 문구를 쓴다.
-        app.handle_ribbon_click(button);
-        assert!(!app.home_map.real_survey.is_layer_visible(title), "{button}");
-        assert_eq!(app.status_bar_hint, format!("{title}를 껐습니다."));
+    // 있는 상태: 끄고 켜며 C++ toggleExistingOverlay 문구를 쓴다.
+    app.handle_ribbon_click(button);
+    assert!(!app.home_map.real_survey.is_layer_visible(title), "{button}");
+    assert_eq!(app.status_bar_hint, format!("{title}를 껐습니다."));
 
-        app.handle_ribbon_click(button);
-        assert!(app.home_map.real_survey.is_layer_visible(title), "{button}");
-        assert_eq!(app.status_bar_hint, format!("{title}를 다시 켰습니다."));
-    }
+    app.handle_ribbon_click(button);
+    assert!(app.home_map.real_survey.is_layer_visible(title), "{button}");
+    assert_eq!(app.status_bar_hint, format!("{title}를 다시 켰습니다."));
 }
 
 /// R8 — 「지질」 fetches a real map (ref_map.rs, order NET-GEO1): a press that cannot fetch adds no layer

@@ -23,20 +23,10 @@ impl StrataAppState {
                 self.active_tab = MainTab::Map;
                 self.modals.active = Some(ActiveModalDialog::SurveyContour);
             }
-            // C++ MainWindowOverlay.cpp:352-401 downloadSoilTerrain — 본체 클릭은
-            // :357 toggleExistingOverlay(`토양도(흙토람)`)로 껐다 켰다 하고, 없을 때만
-            // 내려받는다(:396 startReferenceDownload → :536,622 `토양도를 추가했습니다. …`).
-            "토양" => {
-                self.active_tab = MainTab::Map;
-                if !self.toggle_existing_overlay("토양도(흙토람)") {
-                    self.home_map
-                        .real_survey
-                        .layer_visible
-                        .insert("토양도(흙토람)".to_owned(), true);
-                    self.status_bar_hint =
-                        "토양도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
-                }
-            }
+            // MainWindowOverlay.cpp:438-490 downloadSoilTerrain: with the layer in the legend the button hides and
+            // shows it; without it the map is fetched (ref_map.rs). The picture row under it
+            // (`토양도(흙토람 그림)`, SoilMapService.cpp:109-138) is order NET-SOIL1b.
+            "토양" => self.press_reference_map(&crate::ref_vector::map::SOIL),
             // MainWindowOverlay.cpp:405-472 downloadGeologyMap: with the layer in the legend the button hides and
             // shows it; without it the map is fetched (ref_map.rs). The relief under it (`지질 음영`,
             // GeologyMapService.cpp:609-636) is order NET-GEO1c.

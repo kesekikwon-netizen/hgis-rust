@@ -36,7 +36,7 @@ struct Asked {
 /// A layer's label look as the engine takes it: Qt points and millimetres become screen points.
 pub(crate) fn source(key: &str, spec: &LoadSpec, look: &LabelLook) -> LabelSource {
     let [r, g, b] = look.ink;
-    let look = strata_mapengine::LabelLook { column: look.column.to_owned(), size_pt: label_font_size_points(look.size_pt), ink: [r, g, b, 255], bold: false, halo: Some((look.halo, mm_to_points(look.halo_mm))), closest_scale: None };
+    let look = strata_mapengine::LabelLook { column: look.column.to_owned(), size_pt: label_font_size_points(look.size_pt), ink: [r, g, b, 255], bold: look.bold, halo: Some((look.halo, mm_to_points(look.halo_mm))), closest_scale: look.closest_scale, inside_only: look.inside_only };
     LabelSource { key: key.to_owned(), file: spec.file.clone(), table: Some(spec.table.clone()), look }
 }
 

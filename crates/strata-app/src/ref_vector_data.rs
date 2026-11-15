@@ -51,6 +51,11 @@ pub(crate) struct LabelLook {
     /// The white edge around the letters: its width and colour.
     pub(crate) halo_mm: f32,
     pub(crate) halo: [u8; 4],
+    pub(crate) bold: bool,
+    /// Written only at this scale or closer (1:40000 is 40000).
+    pub(crate) closest_scale: Option<f64>,
+    /// Written only where the letters lie inside the shape (QGIS `fitInPolygonOnly`).
+    pub(crate) inside_only: bool,
 }
 
 /// Which table to read, into which CRS, and how it will be drawn.

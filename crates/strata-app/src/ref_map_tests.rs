@@ -168,7 +168,7 @@ fn a_press_fetches_the_map_and_puts_its_row_in_the_legend() {
     assert_eq!(spec.look, GEOLOGY.look);
     // The symbol of every unit is written over it: Malgun Gothic 8 pt in 40/40/40 with a white edge of
     // 0.6 mm at alpha 220 (`GeologyMapService.cpp:426-455`).
-    assert_eq!(spec.label, Some(crate::ref_vector::data::LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220] }));
+    assert_eq!(spec.label, Some(crate::ref_vector::data::LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220], bold: false, closest_scale: None, inside_only: false }));
 }
 
 #[test]

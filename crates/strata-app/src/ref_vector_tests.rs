@@ -216,7 +216,7 @@ fn a_labelled_layer_writes_its_symbols_while_its_row_is_checked() {
     let layout = TableLayout { table: "geology_map", epsg: 5187, kind: ShapeKind::Polygons, columns: &[("기호", ColumnKind::Text)] };
     let unit = |x: f64, symbol: &str| Row { shapes: Shapes::Polygons(vec![vec![vec![[x, 369_800.0], [x + 400.0, 369_800.0], [x + 400.0, 370_200.0], [x, 370_200.0], [x, 369_800.0]]]]), cells: vec![Cell::Text(symbol.to_owned())] };
     write_new_table(&path, &layout, &mut vec![unit(219_500.0, "Kqp"), unit(220_100.0, "Qa")].into_iter()).unwrap();
-    let symbols = LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220] };
+    let symbols = LabelLook { column: "기호", size_pt: 8.0, ink: [40, 40, 40], halo_mm: 0.6, halo: [255, 255, 255, 220], bold: false, closest_scale: None, inside_only: false };
     let look = Look::Polygons { stroke: [80, 80, 80, 130], width_mm: 0.12, fill: PolygonFill::None };
     app.show_reference_vector_layer("ref_geology", "지질도(KIGAM 1:5만)", LoadSpec { file: path, table: "geology_map".to_owned(), work_epsg: 5187, look, label: Some(symbols) });
 

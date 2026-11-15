@@ -21,8 +21,7 @@ pub const NOT_SAVED: &str = "새 지도 파일을 저장하지 못했습니다. 
 /// `PreparedReferenceMap.cpp:147`.
 pub const NOT_VERIFIED: &str = "저장한 지도를 다시 확인하지 못했습니다. 기존 지도는 유지됩니다. 다른 저장 폴더에서 다시 내려받으세요.";
 
-/// A GET request. The limits are those of a large transfer (`kLargeTransfer`, `PreparedReferenceMap.h:52`):
-/// given up when no byte arrives for `idle_secs`, and in any case after `total_secs`.
+/// A GET request: given up when no byte arrives for `idle_secs`, and in any case after `total_secs`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     pub url: String,
@@ -32,10 +31,18 @@ pub struct Request {
 }
 
 impl Request {
-    /// A request with the limits of a large transfer: 15 s without a byte, 180 s in all.
+    /// A request with the limits of a large transfer (`kLargeTransfer`, `PreparedReferenceMap.h:52`): 15 s
+    /// without a byte, 180 s in all.
     #[must_use]
     pub fn large(url: String, user_agent: &'static str) -> Self {
         Self { url, user_agent, idle_secs: 15, total_secs: 180 }
+    }
+
+    /// A request for a small answer (`ReferenceTransferLimits`, `PreparedReferenceMap.h:41-44`): 15 s
+    /// without a byte and 15 s in all.
+    #[must_use]
+    pub fn plain(url: String, user_agent: &'static str) -> Self {
+        Self { url, user_agent, idle_secs: 15, total_secs: 15 }
     }
 }
 
