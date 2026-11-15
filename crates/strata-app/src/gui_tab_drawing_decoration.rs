@@ -10,6 +10,8 @@ use strata_layout::sheet_composer::{nice_scale_bar_segment_meters, NorthArrowSty
 use crate::app_state::StrataAppState;
 
 use super::gui_tab_drawing_frame::{ChromeRects, SheetFrame};
+use super::gui_tab_drawing_items::sheet_shapes;
+use crate::tab_drawing::SheetItem;
 
 impl StrataAppState {
     /// 축척막대·축척글·좌표계·방위표 (`KaDrawingNorth::paintMark` 1:1).
@@ -43,6 +45,8 @@ impl StrataAppState {
         let bar_x0 = chrome_bar_r.left();
         let bar_y0 = map_rect.bottom() + 9.5 * px_per_mm;
         let bar_h = (4.0 * px_per_mm).clamp(2.8, 7.2);
+        // Each of the four is an item the user can take (gui_tab_drawing_items.rs).
+        let mut start = sheet_shapes(f);
 
         match self.drawing.sheet.scale_bar_style {
             ScaleBarStyle::DoubleBox => {
@@ -128,8 +132,11 @@ impl StrataAppState {
                 ink,
             );
         }
+        let bar_frame = Rect::from_min_max(Pos2::new(bar_x0, bar_y0 - 5.0 * px_per_mm), Pos2::new(bar_x0 + raw_bar_w, bar_y0 + bar_h));
+        self.place_sheet_item(f, SheetItem::ScaleBar, start, bar_frame);
+        start = sheet_shapes(f);
         let scale_font_sz = (4.8 * px_per_mm).clamp(4.0, 8.2);
-        sheet_p.text(
+        let scale_words = sheet_p.text(
             Pos2::new(
                 bar_x0 + raw_bar_w * 0.5,
                 chrome_lbl_r.center().y.max(bar_y0 + bar_h + 4.5 * px_per_mm),
@@ -140,9 +147,11 @@ impl StrataAppState {
             ink,
         );
 
+        self.place_sheet_item(f, SheetItem::ScaleText, start, scale_words);
+        start = sheet_shapes(f);
         // 좌표계 라벨 (chrome.crs)
         let crs_font_sz = (4.5 * px_per_mm).clamp(3.8, 7.5);
-        sheet_p.text(
+        let crs_words = sheet_p.text(
             Pos2::new(north_rect.left() - 3.0 * px_per_mm, map_rect.bottom() + 4.5 * px_per_mm),
             egui::Align2::RIGHT_CENTER,
             match self.work_crs {
@@ -153,6 +162,8 @@ impl StrataAppState {
             ink,
         );
 
+        self.place_sheet_item(f, SheetItem::CrsLabel, start, crs_words);
+        start = sheet_shapes(f);
         // (4) 방위표 (도북 화살, KaDrawingNorth::paintMark 1:1)
         let nc = north_rect.center();
         let nr = north_rect.width() * 0.44;
@@ -243,6 +254,7 @@ impl StrataAppState {
                 );
             }
         }
+        self.place_sheet_item(f, SheetItem::NorthArrow, start, north_rect);
     }
 }
 

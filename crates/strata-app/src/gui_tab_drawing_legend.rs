@@ -32,6 +32,8 @@ const KIND_SQUARE_MM: f32 = 3.0;
 /// The frame of the legend on the screen, its columns, and the scale of its rows.
 pub(crate) struct LegendCard {
     pub(crate) rect: Rect,
+    /// How far the user moved the legend from where the sheet places it.
+    moved: Vec2,
     columns: usize,
     s: f32,
     leg_w: f32,
@@ -74,7 +76,8 @@ impl StrataAppState {
         // The frame keeps its width and takes the height its rows need (`LayoutService.cpp:1531-1534`).
         let leg_h = (20.0 * s + (legend_column_rows(rows, columns) as f32) * row_h).max(24.0 * s);
         let rect = Rect::from_min_size(Pos2::new((map_rect.right() - leg_w - 5.0 * s).max(map_rect.left() + 4.0), base_leg_r.top()), Vec2::new(leg_w, leg_h));
-        Some(LegendCard { rect, columns, s, leg_w, row_h })
+        let moved = self.sheet_item_offset(crate::tab_drawing::SheetItem::Legend, rect, f);
+        Some(LegendCard { rect: rect.translate(moved), moved, columns, s, leg_w, row_h })
     }
 
     /// 범례 상자와 항목들.
@@ -88,9 +91,10 @@ impl StrataAppState {
         let badges = self.sheet_heritage_badges([north_west[0], south_east[1], south_east[0], north_west[1]]);
         // With the names on the map the legend lists the kinds only (`:1207, 1281-1293`).
         let names = names_shown(f.scale_denom, self.drawing.sheet.show_site_names_under_5000);
-        let Some(LegendCard { rect: leg_r, columns, s, leg_w, row_h }) = self.sheet_legend_card(f, legend_site_rows(&badges, names)) else {
+        let Some(LegendCard { rect: leg_r, moved, columns, s, leg_w, row_h }) = self.sheet_legend_card(f, legend_site_rows(&badges, names)) else {
             return;
         };
+        self.drawing.item_rects.push((crate::tab_drawing::SheetItem::Legend, leg_r.translate(-moved), moved));
         // 3. 용지 내 4요소 실물 조판: (1) 범례, (2) 표제란, (3) 축척막대·축척글·좌표계, (4) 방위표(도북 화살)
         let mut rows = self.sheet_legend_survey_rows();
         if names {

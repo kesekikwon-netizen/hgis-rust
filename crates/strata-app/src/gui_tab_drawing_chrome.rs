@@ -88,6 +88,7 @@ impl StrataAppState {
         // 표제란 (title_block_visible 토글 연동, KaTitleBlock.cpp:57-111 1:1)
         // 도면명 / 조사명 / 유적명 / 축  척 / 작성일 (빈 값은 ―, 위치는 chrome.crs 아래 1.5mm 또는 지도 우하단)
         if self.drawing.sheet.title_block_visible {
+            let start = super::gui_tab_drawing_items::sheet_shapes(f);
             let raw_tb_r = f.mm_to_rect(self.drawing.sheet.default_title_block_rect());
             let tb_top = map_rect.bottom() + 8.2 * px_per_mm;
             let tb_bottom = (sheet_rect.bottom() - 2.0 * px_per_mm).max(tb_top + 16.0);
@@ -119,6 +120,7 @@ impl StrataAppState {
                     ink,
                 );
             }
+            self.place_sheet_item(f, crate::tab_drawing::SheetItem::TitleBlock, start, tb_r);
         }
     }
 }

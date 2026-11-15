@@ -24,7 +24,7 @@ impl StrataAppState {
                           ("◎", "레이어를 가운데", "축척은 두고, 고른 레이어를 용지 한가운데로 옮깁니다"),
                           ("□", "지도 조정", "지도 칸 안의 지도를 끌어 옮기고 휠로 확대합니다. 다시 누르면 끝냅니다"),
                           ("▣", "화면 맞춤", "지도 화면과 같은 범위·축척으로 지도 칸을 다시 맞춥니다"),
-                          ("✥", "항목 이동", "좌표 상자를 끌어 옮깁니다"),
+                          ("✥", "항목 이동", "범례·표제란·방위표·축척을 끌어 옮깁니다"),
                           ("▯", "용지/방향", "용지 크기(A4/A3) 및 방향(가로/세로)을 전환합니다"),
                           ("≡", "도면 목록", "지금 도면을 이름 붙여 보관하고, 보관한 도면을 다시 엽니다. 제출 PDF는 지금 열린 도면입니다"),
                       ];
@@ -101,9 +101,7 @@ impl StrataAppState {
                                     self.drawing.sheet.recover_orphaned_items();
                                     self.fit_sheet_to_map_view();
                                 }
-                                4 => {
-                                    self.home_map.draw_guide_message = Some("항목 이동 모드 — 범례·표제란·방위표를 끌어 자리를 옮기세요.".to_owned());
-                                }
+                                4 => self.use_sheet_select_tool(),
                                 5 => {
                                     // target/cpp-ref/src/app/KaDrawingStudio.cpp:447-454, 1317-1319 — openPaperSettingsDialog()
                                     self.modals.active =

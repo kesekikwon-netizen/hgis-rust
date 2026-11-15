@@ -20,6 +20,8 @@ mod gui_tab_drawing_decoration;
 mod gui_tab_drawing_frame;
 #[path = "gui_tab_drawing_grid.rs"]
 mod gui_tab_drawing_grid;
+#[path = "gui_tab_drawing_items.rs"]
+mod gui_tab_drawing_items;
 #[path = "gui_tab_drawing_legend.rs"]
 mod gui_tab_drawing_legend;
 #[path = "gui_tab_drawing_legend_flow.rs"]

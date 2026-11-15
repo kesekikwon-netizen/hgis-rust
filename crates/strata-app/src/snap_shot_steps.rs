@@ -88,6 +88,11 @@ impl StrataAppState {
             "@cadastral_style" => self.open_cadastral_style(),
             // The check of the sheet: names of the sites in place of their numbers at 1:5,000 and larger.
             "@sheet_names" => self.drawing.sheet.show_site_names_under_5000 = true,
+            // The check of the sheet: the legend and the title block as if the user had moved them (mm of paper).
+            "@sheet_moved" => {
+                self.drawing.item_offsets_mm.insert(crate::tab_drawing::SheetItem::Legend, [-95.0, 150.0]);
+                self.drawing.item_offsets_mm.insert(crate::tab_drawing::SheetItem::TitleBlock, [-60.0, 0.0]);
+            }
             // The DEM the survey folder has, without an order at the portal.
             "@dem" => self.show_survey_dem(),
             // 「DEM 표현」: the dialog as the menu row opens it, and 적용 with preset;relief;times;per cent.

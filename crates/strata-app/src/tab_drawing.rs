@@ -16,12 +16,29 @@ pub struct DrawingTabState {
     pub coord_callouts: Vec<CoordCallout>,
     /// 도면 지도 칸의 가운데(작업 좌표계) — 없으면 지도 화면 가운데(C++ studioMapExtent), 「레이어를 가운데」가 정한다.
     pub sheet_center: Option<[f64; 2]>,
+    /// Where the user put the items of the sheet: the way from where the sheet places them itself, in
+    /// millimetres of paper.
+    pub item_offsets_mm: std::collections::BTreeMap<SheetItem, [f32; 2]>,
+    /// The items as they were painted last: where the sheet places each (screen points) and how far it is
+    /// moved. For the mouse of the next frame.
+    pub(crate) item_rects: Vec<(SheetItem, eframe::egui::Rect, eframe::egui::Vec2)>,
     /// KaDrawingSheetSet.cpp — 보관한 도면 목록
     pub stored_sheets: Vec<StoredSheet>,
     /// KaDrawingSheetSet.cpp:135 팝업 열림 상태
     pub sheet_set_menu_open: bool,
     /// KaTerrain3dLayoutStudio.cpp — 3D 입체지형 조판 모드
     pub terrain3d_layout_active: bool,
+}
+
+/// An item of a sheet that the user can take with the mouse and put somewhere else on the paper.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SheetItem {
+    Legend,
+    TitleBlock,
+    NorthArrow,
+    ScaleBar,
+    ScaleText,
+    CrsLabel,
 }
 
 /// KaDrawingCoordCallout.cpp — 용지 위 좌표점 하나
@@ -59,6 +76,8 @@ impl Default for DrawingTabState {
             coord_callout_mode: false,
             coord_callouts: Vec::new(),
             sheet_center: None,
+            item_offsets_mm: std::collections::BTreeMap::new(),
+            item_rects: Vec::new(),
             stored_sheets: Vec::new(),
             sheet_set_menu_open: false,
             terrain3d_layout_active: false,

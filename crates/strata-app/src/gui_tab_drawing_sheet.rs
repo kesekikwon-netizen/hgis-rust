@@ -100,6 +100,7 @@ impl StrataAppState {
         let chrome = self.drawing.sheet.standard_chrome();
         let map_rect = mm_to_rect(chrome.map);
         self.adjust_sheet_map(ui, map_rect, px_per_mm);
+        self.move_sheet_items(ui, sheet_rect, px_per_mm);
 
         let (map_bg, [scx, scy]) = {
             let rs = &self.home_map.real_survey;
