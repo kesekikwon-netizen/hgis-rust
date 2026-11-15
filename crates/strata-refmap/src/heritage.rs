@@ -10,7 +10,7 @@ use strata_engine::{read_shapefile, shapefile_facts, write_new_table, Cell, Colu
 
 #[cfg(test)]
 #[path = "heritage_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 /// The table of the copy, and its two columns.
 pub const TABLE: &str = "heritage";

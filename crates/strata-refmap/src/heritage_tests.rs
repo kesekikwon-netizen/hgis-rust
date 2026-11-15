@@ -90,29 +90,42 @@ fn the_column_that_names_a_site() {
 /// Three made-up sites of 200 m in EPSG:5179 around a survey area of the work CRS (EPSG:5187): one on it, one
 /// across the 5 km line, one 9 km away.
 fn shapefile_near(dir: &Path, centre_work: [f64; 2]) -> PathBuf {
+    shapefile_of(dir, "국가지정유산", centre_work, &[("A-1", "가상 고분군", 0.0), ("B-2", "가상 산성", 5050.0), ("C-3", "가상 사지", 9000.0)], true)
+}
+
+/// A shapefile as the intranet sends it (EPSG:5179, CP949, no `.cpg`) of made-up sites: squares of 200 m,
+/// each `east` metres from `centre_work` (EPSG:5187), with its code and name; `named: false` leaves the
+/// text columns out (one number column instead).
+pub(crate) fn shapefile_of(dir: &Path, stem: &str, centre_work: [f64; 2], sites: &[(&str, &str, f64)], named: bool) -> PathBuf {
     let to = Transformer::new(5187, 5179).unwrap();
-    let path = dir.join("국가지정유산.shp");
+    let path = dir.join(format!("{stem}.shp"));
     let mut file = DriverManager::get_driver_by_name("ESRI Shapefile").unwrap().create_vector_only(&path).unwrap();
     let crs = SpatialRef::from_epsg(5179).unwrap();
-    let layer = file.create_layer(LayerOptions { name: "국가지정유산", srs: Some(&crs), ty: OGRwkbGeometryType::wkbMultiPolygon, options: Some(&["ENCODING=CP949"]) }).unwrap();
-    for name in ["유산코드", "국가유산명"] {
-        FieldDefn::new(name, OGRFieldType::OFTString).unwrap().add_to_layer(&layer).unwrap();
+    let layer = file.create_layer(LayerOptions { name: stem, srs: Some(&crs), ty: OGRwkbGeometryType::wkbMultiPolygon, options: Some(&["ENCODING=CP949"]) }).unwrap();
+    if named {
+        for name in ["유산코드", "국가유산명"] {
+            FieldDefn::new(name, OGRFieldType::OFTString).unwrap().add_to_layer(&layer).unwrap();
+        }
+    } else {
+        FieldDefn::new("면적", OGRFieldType::OFTInteger).unwrap().add_to_layer(&layer).unwrap();
     }
-    for (code, name, east) in [("A-1", "가상 고분군", 0.0), ("B-2", "가상 산성", 5050.0), ("C-3", "가상 사지", 9000.0)] {
+    for (code, name, east) in sites {
         let [x, y] = to.transform([centre_work[0] + east, centre_work[1]]).unwrap();
         let mut feature = Feature::new(layer.defn()).unwrap();
-        feature.set_field_string(0, code).unwrap();
-        feature.set_field_string(1, name).unwrap();
+        if named {
+            feature.set_field_string(0, code).unwrap();
+            feature.set_field_string(1, name).unwrap();
+        }
         let wkt = format!("MULTIPOLYGON ((({} {}, {} {}, {} {}, {} {}, {} {})))", x - 100.0, y - 100.0, x + 100.0, y - 100.0, x + 100.0, y + 100.0, x - 100.0, y + 100.0, x - 100.0, y - 100.0);
         feature.set_geometry(Geometry::from_wkt(&wkt).unwrap()).unwrap();
         feature.create(&layer).unwrap();
     }
     drop(file);
-    let _ = std::fs::remove_file(dir.join("국가지정유산.cpg"));
+    let _ = std::fs::remove_file(dir.join(format!("{stem}.cpg")));
     path
 }
 
-fn names_in(table: &Path) -> Vec<(String, String)> {
+pub(crate) fn names_in(table: &Path) -> Vec<(String, String)> {
     let mut names = Vec::new();
     read_table(table, TABLE, &[NAME_COLUMN, CODE_COLUMN], &mut |row| {
         let text = |cell: &Cell| if let Cell::Text(text) = cell { text.clone() } else { String::new() };

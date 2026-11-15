@@ -107,6 +107,7 @@ impl StrataAppState {
         self.remove_reference_vector_rows();
         self.drop_reference_map_fetches();
         self.drop_topographic_post();
+        self.drop_heritage_run();
         (self.dem_look, self.dem_follow, self.dem_zoom_wanted) = Default::default();
         self.right_inspector = crate::right_inspector::RightInspectorState::new_default();
         self.home_map.scene = strata_canvas2d::painter_scene::MapSceneModel::default();

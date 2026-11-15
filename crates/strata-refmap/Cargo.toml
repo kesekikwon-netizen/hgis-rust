@@ -18,6 +18,7 @@ strata-engine = { workspace = true, features = ["gdal"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 image = { workspace = true }
+chrono = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

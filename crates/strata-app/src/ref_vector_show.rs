@@ -35,6 +35,12 @@ impl StrataAppState {
         self.left_layers.entries.retain(|e| !layers.iter().any(|l| l.key == e.layer_key));
     }
 
+    /// Takes the rows whose key starts with `prefix` away, with their layers.
+    pub(crate) fn remove_reference_vector_rows_of(&mut self, prefix: &str) {
+        self.ref_vectors.layers.retain(|l| !l.key.starts_with(prefix));
+        self.left_layers.entries.retain(|e| !e.layer_key.starts_with(prefix));
+    }
+
     /// Paints the checked reference vector rows, the lowest row first.
     pub(crate) fn paint_reference_vector_layers(&mut self, ctx: &egui::Context, p: &egui::Painter, rect: Rect) {
         let rows: Vec<&str> = self.left_layers.entries.iter().map(|e| e.layer_key.as_str()).filter(|k| self.ref_vectors.has(k)).collect();

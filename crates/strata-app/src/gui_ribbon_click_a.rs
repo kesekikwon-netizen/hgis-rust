@@ -162,9 +162,10 @@ impl StrataAppState {
             }
             // The order runs in the background; the bottom gauge shows it (docs/RUST_PLAN.md 2.8, 2.9).
             "수치지형" => self.open_topographic_download(),
+            // The city is asked for once a survey area is drawn (heritage_run.rs).
             "유산" => {
                 self.active_tab = MainTab::Map;
-                self.modals.active = Some(ActiveModalDialog::HeritageRegionSelect);
+                self.press_heritage();
             }
             _ => {}
         }

@@ -74,6 +74,14 @@ impl StrataAppState {
             "@old_map_1919" => self.add_history_map_1919(),
             // A table of a GeoPackage file as a reference row: file;table;title;lines | outlines | coloured.
             _ if action.starts_with("@ref_vector=") => self.snap_reference_vector(&action["@ref_vector=".len()..]),
+            // 「유산」 with 「최근 받은 자료 다시 쓰기」, from archives kept under the folder named here:
+            // folder;시·도;시·군·구. Nothing is asked of the intranet.
+            _ if action.starts_with("@heritage=") => {
+                let mut parts = action["@heritage=".len()..].split(';').map(str::to_owned);
+                self.heritage.archive_root = parts.next().map(std::path::PathBuf::from);
+                let (sido, city) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
+                self.heritage.wanted = Some(crate::heritage_run::reuse::Wanted { sido, city, reuse: true });
+            }
             // The DEM the survey folder has, without an order at the portal.
             "@dem" => self.show_survey_dem(),
             // 「DEM 표현」: the dialog as the menu row opens it, and 적용 with preset;relief;times;per cent.

@@ -57,6 +57,11 @@ fn swatch_for(entry: &LayerTreeEntry) -> SwatchKind {
         "trial_trench" => SwatchKind::DomainFill { fill: rgba(220, 38, 38, 18), stroke: rgb(220, 38, 38), stroke_mm: 0.5 },
         // 버퍼 반경 레이어(C++ 「주변 500m」)는 띠 견본을 쓴다.
         k if k.contains("buffer") => SwatchKind::BufferBand,
+        // A row of the 「유산」 button: the outline in the colour of its kind (`HeritageSiteLegend.cpp:44-74`).
+        k if k.starts_with(crate::heritage_run::KEY_PREFIX) => match crate::heritage_run::colour_of_key(k) {
+            Some([red, green, blue]) => SwatchKind::DomainFill { fill: Color32::TRANSPARENT, stroke: rgb(red, green, blue), stroke_mm: 1.2 },
+            None => SwatchKind::HeritageSub,
+        },
         // 지정유산 하위 항목은 흰 견본(C++ 트리의 하위 노드).
         k if k.contains("heritage") => SwatchKind::HeritageSub,
         _ if entry.group == LegendGroup::SurveyData => {

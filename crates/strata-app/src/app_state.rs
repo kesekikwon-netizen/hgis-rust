@@ -134,6 +134,8 @@ pub struct StrataAppState {
     pub(crate) dem_follow: crate::topo_download::dem::look::DemFollow,
     /// A DEM file was imported: once it is read the map goes to it, if it is a small one (dem_import.rs).
     pub(crate) dem_zoom_wanted: bool,
+    /// The run of the 「유산」 button (`heritage_run.rs`).
+    pub(crate) heritage: crate::heritage_run::HeritageRun,
     /// The history-GIS key the tiles of the 1919 map are asked for with (ref_tile_history.rs); never shown.
     pub(crate) history_gis_key: String,
     pub active_tool: MapToolKind,
