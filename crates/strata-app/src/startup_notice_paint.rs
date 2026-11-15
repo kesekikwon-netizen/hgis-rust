@@ -126,6 +126,8 @@ pub(crate) fn paint_card(painter: &egui::Painter, card: Rect, icon: Option<&egui
     on.painter.rect_filled(band, CornerRadiusF32 { nw: 0.0, ne: 0.0, sw: RADIUS, se: RADIUS }, BEDROCK);
     on.fitted(32.0, 367.0, COPYRIGHT, on.ui(12.0), PAPER.gamma_multiply(0.96), width - 64.0);
     on.fitted(32.0, 385.0, DATA, on.font(LIGHT, 11.0), PAPER.gamma_multiply(0.86), width - 64.0);
+    // Last, so that its letters' places in the font picture are read after every other text of the frame.
+    super::rust_word::paint_word(&on, 140.0, frame.clock);
     // A hairline edge so the paper card reads against a light desktop.
     painter.rect_stroke(card.shrink(0.5), RADIUS, Stroke::new(1.0, Color32::from_rgba_unmultiplied(31, 30, 29, 40)), egui::StrokeKind::Middle);
 }

@@ -11,6 +11,8 @@ use crate::app_state::StrataAppState;
 pub(crate) mod paint;
 #[path = "startup_notice_section.rs"]
 mod section;
+#[path = "startup_notice_rust.rs"]
+mod rust_word;
 
 /// `ReadingDurationMs` (KaStartupSplash.h:22) and `kMinMotionMs` (KaStartupSplash.cpp:37), in seconds.
 const READING_SECONDS: f64 = 5.0;
@@ -62,6 +64,8 @@ pub(crate) struct CardFrame {
     pub(crate) progress: f64,
     pub(crate) status: &'static str,
     pub(crate) version: &'static str,
+    /// Seconds since the card appeared, for the swing of 「rust」; `None` without motion.
+    pub(crate) clock: Option<f64>,
 }
 
 /// The notice while it shows. Times are seconds since it appeared.
@@ -115,7 +119,8 @@ impl StartupNotice {
     /// What to paint now. Reduced motion: the finished picture at once.
     fn frame(&self, now: f64) -> CardFrame {
         let (seconds, progress) = if self.reduced_motion { (10.0, 1.0) } else { (self.seconds(now), self.progress(now)) };
-        CardFrame { seconds, progress, status: self.status(now), version: env!("CARGO_PKG_VERSION") }
+        let clock = (!self.reduced_motion).then_some(now);
+        CardFrame { seconds, progress, status: self.status(now), version: env!("CARGO_PKG_VERSION"), clock }
     }
 }
 

@@ -112,7 +112,7 @@ fn has_mesh_of(shapes: &[Shape], colour: Color32) -> bool {
 /// and 「EL. 154.00 m」 where the string reached the staff.
 #[test]
 fn the_first_frame_has_the_name_and_the_notices_and_the_finished_one_the_section() {
-    let first = shapes_of(&CardFrame { seconds: 0.0, progress: 0.0, status: "앱을 준비하고 있습니다", version: "2.1" });
+    let first = shapes_of(&CardFrame { seconds: 0.0, progress: 0.0, status: "앱을 준비하고 있습니다", version: "2.1", clock: None });
     let words = texts(&first);
     for wanted in ["Strata", "필드고고학 GIS · v2.1", "앱을 준비하고 있습니다", "© 2026 동국문화재연구원 · 권영인 · GNU GPL v2 이상으로 배포"] {
         assert!(words.iter().any(|w| w == wanted), "{wanted} in {words:?}");
@@ -121,10 +121,22 @@ fn the_first_frame_has_the_name_and_the_notices_and_the_finished_one_the_section
     assert!(first.iter().any(|shape| matches!(shape, Shape::Rect(rect) if rect.fill == BEDROCK)), "the bedrock band");
     assert!(!has_mesh_of(&first, CLAY) && !words.iter().any(|w| w == "기준점" || w == "EL. 154.00 m" || w == "Ⅲ"));
 
-    let finished = shapes_of(&CardFrame { seconds: 10.0, progress: 1.0, status: "준비 완료", version: "2.1" });
+    let finished = shapes_of(&CardFrame { seconds: 10.0, progress: 1.0, status: "준비 완료", version: "2.1", clock: None });
     let words = texts(&finished);
     assert!(has_mesh_of(&finished, CLAY), "stratum Ⅲ is filled with clay");
     for wanted in ["기준점", "EL. 154.00 m", "Ⅰ", "Ⅴ", "154", "152", "준비 완료"] {
         assert!(words.iter().any(|w| w == wanted), "{wanted} in {words:?}");
     }
+}
+
+/// Each frame carries the seconds since the card appeared, so that 「rust」 swings; without motion it has none
+/// and the word stands still.
+#[test]
+fn a_frame_carries_the_clock_of_the_swing_unless_motion_is_off() {
+    let mut moving = StartupNotice::new(false);
+    moving.mark_ready(0.0);
+    assert_eq!(moving.frame(1.25).clock, Some(1.25));
+    let mut still = StartupNotice::new(true);
+    still.mark_ready(0.0);
+    assert_eq!(still.frame(1.25).clock, None);
 }
