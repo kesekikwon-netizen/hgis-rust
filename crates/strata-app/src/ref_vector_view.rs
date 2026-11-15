@@ -13,8 +13,8 @@ const MARGIN: f32 = 256.0;
 /// (`[min x, min y, max x, max y]`). The picture is the map's own pixels plus the margin on every side.
 /// When that is more than the graphics card takes as one picture (`max_side`), the same part of the world
 /// is drawn with fewer and coarser pixels: a picture cut off at the limit would leave the far side of a
-/// wide map empty.
-pub(super) fn wanted_view(rect: Rect, vp: &ViewportTransform, scale: f32, max_side: usize) -> (RasterView, [f64; 4]) {
+/// wide map empty. `paper_zoom` is 1 on the map.
+pub(super) fn wanted_view(rect: Rect, vp: &ViewportTransform, scale: f32, max_side: usize, paper_zoom: f32) -> (RasterView, [f64; 4]) {
     let metres_per_pixel = vp.meters_per_pixel / f64::from(scale);
     let (top_left, bottom_right) = (s2w(rect, vp, rect.left_top()), s2w(rect, vp, rect.right_bottom()));
     let wanted = |points: f32| (points * scale).ceil() + 2.0 * MARGIN;
@@ -29,7 +29,8 @@ pub(super) fn wanted_view(rect: Rect, vp: &ViewportTransform, scale: f32, max_si
         metres_per_pixel: metres_per_pixel * f64::from(coarser),
         width: side(across),
         height: side(down),
-        pixels_per_mm: crate::survey_style::mm_to_points(1.0) * scale / coarser,
+        // On a sheet a millimetre is one of the paper, which the screen shows `paper_zoom` times as large.
+        pixels_per_mm: crate::survey_style::mm_to_points(1.0) * paper_zoom * scale / coarser,
     };
     (view, [top_left[0], bottom_right[1], bottom_right[0], top_left[1]])
 }
@@ -41,3 +42,7 @@ pub(super) fn covers(have: &RasterView, wanted: &RasterView, map: &[f64; 4]) -> 
     let have = have.world();
     same_scale && map[0] >= have[0] && map[1] >= have[1] && map[2] <= have[2] && map[3] <= have[3]
 }
+
+#[cfg(test)]
+#[path = "ref_vector_view_tests.rs"]
+mod tests;

@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use eframe::egui::{self, Rect};
+use strata_canvas2d::viewport::ViewportTransform;
 use strata_types::schema::LegendGroup;
 
 use super::{Layer, OPEN_FAILED};
@@ -41,8 +42,23 @@ impl StrataAppState {
         self.left_layers.entries.retain(|e| !e.layer_key.starts_with(prefix));
     }
 
-    /// Paints the checked reference vector rows, the lowest row first.
+    /// Paints the checked reference vector rows on the map, the lowest row first.
     pub(crate) fn paint_reference_vector_layers(&mut self, ctx: &egui::Context, p: &egui::Painter, rect: Rect) {
+        let viewport = self.home_map.viewport;
+        // What follows the view (the colours of 「현재 화면 맞춤」, dem_look.rs) asks for the world box of the map.
+        let (north_west, south_east) = (s2w(rect, &viewport, rect.left_top()), s2w(rect, &viewport, rect.right_bottom()));
+        self.ref_vectors.map_box = Some([north_west[0], south_east[1], south_east[0], north_west[1]]);
+        if self.follow_dem_view(ctx.input(|i| i.time)) {
+            ctx.request_repaint_after(std::time::Duration::from_millis(360));
+        }
+        self.paint_reference_vector_layers_in(ctx, p, rect, &viewport, 1.0, |_| true);
+        self.zoom_to_new_dem();
+    }
+
+    /// Paints the checked reference vector rows into a view: the map, or the map frame of a sheet, which
+    /// shows paper `paper_zoom` times as large (1 on the map). `labels_of` says for a row whether its letters
+    /// are written in this view.
+    pub(crate) fn paint_reference_vector_layers_in(&mut self, ctx: &egui::Context, p: &egui::Painter, rect: Rect, viewport: &ViewportTransform, paper_zoom: f32, labels_of: fn(&str) -> bool) {
         let rows: Vec<&str> = self.left_layers.entries.iter().map(|e| e.layer_key.as_str()).filter(|k| self.ref_vectors.has(k)).collect();
         let shown: Vec<(String, f32)> = self
             .left_layers
@@ -55,18 +71,11 @@ impl StrataAppState {
         let shown_keys: Vec<&str> = shown.iter().map(|(key, _)| key.as_str()).collect();
         self.ref_vectors.follow_work_crs(strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
         self.ref_vectors.release(&rows, &shown_keys);
-        let viewport = self.home_map.viewport;
-        // What follows the view (the colours of 「현재 화면 맞춤」, dem_look.rs) asks for the world box of the map.
-        let (north_west, south_east) = (s2w(rect, &viewport, rect.left_top()), s2w(rect, &viewport, rect.right_bottom()));
-        self.ref_vectors.map_box = Some([north_west[0], south_east[1], south_east[0], north_west[1]]);
-        if self.follow_dem_view(ctx.input(|i| i.time)) {
-            ctx.request_repaint_after(std::time::Duration::from_millis(360));
-        }
         // Labels go over every reference picture, placed among all layers at once by the map engine.
         let mut labelled = Vec::new();
         for (key, opacity) in &shown {
-            let mut painted = self.ref_vectors.paint(key, ctx, p, rect, &viewport, *opacity);
-            labelled.extend(painted.labelled.take());
+            let mut painted = self.ref_vectors.paint(key, ctx, p, rect, viewport, *opacity, paper_zoom);
+            labelled.extend(painted.labelled.take().filter(|_| labels_of(key)));
             if let Some(rows) = painted.rows {
                 self.left_layers.update_feature_count_badge(key, usize::try_from(rows).unwrap_or(usize::MAX));
             }
@@ -83,8 +92,7 @@ impl StrataAppState {
                 }
             }
         }
-        self.zoom_to_new_dem();
         let (runner, work_epsg) = (Arc::clone(&self.ref_vectors.runner), strata_types::crs::CrsCode::from(self.work_crs).epsg_number());
-        self.ref_vectors.labels.paint(ctx, p, rect, &viewport, work_epsg, labelled, &runner);
+        self.ref_vectors.labels.paint_zoomed(ctx, p, rect, viewport, work_epsg, labelled, &runner, paper_zoom);
     }
 }

@@ -13,6 +13,8 @@ use super::gui_tab_drawing_frame::SheetFrame;
 impl StrataAppState {
     /// (a) 지적도 ~ (f) 작도 유구.
     pub(crate) fn paint_sheet_map_layers(&mut self, f: &SheetFrame) {
+        // What is checked on the map as a reference row (gui_tab_drawing_refs.rs), under everything else.
+        self.paint_sheet_reference_layers(f);
         let map_rect = f.map_rect;
         let map_p = f.map_p.clone();
         let rs = &self.home_map.real_survey;

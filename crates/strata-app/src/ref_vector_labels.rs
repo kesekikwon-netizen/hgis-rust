@@ -40,6 +40,13 @@ pub(crate) fn source(key: &str, spec: &LoadSpec, look: &LabelLook) -> LabelSourc
     LabelSource { key: key.to_owned(), file: spec.file.clone(), table: Some(spec.table.clone()), look }
 }
 
+/// The view the engine is asked about. On a sheet the screen shows the paper `paper_zoom` times as large;
+/// the engine sees the paper at its own size, so that sizes in points and the scale are those of the paper.
+pub(crate) fn engine_view(rect: Rect, vp: &ViewportTransform, paper_zoom: f32) -> ViewBox {
+    let zoom = f64::from(paper_zoom);
+    ViewBox { centre: vp.center_xy, metres_per_point: vp.meters_per_pixel * zoom, width_pt: f64::from(rect.width()) / zoom, height_pt: f64::from(rect.height()) / zoom }
+}
+
 /// The labels of the reference layers: the engine, what it placed last, and what is being asked.
 #[derive(Default)]
 pub(crate) struct Labels {
@@ -58,13 +65,20 @@ impl Labels {
     /// Writes the labels of these layers for this view. The engine is asked again when the view or the
     /// layers changed; until it answers, the labels placed last stay on their ground.
     #[allow(clippy::too_many_arguments)] // a view of the map is made of this many things
+    #[cfg(test)] // the app paints through `paint_zoomed`; the tests of the map keep this form
     pub(crate) fn paint(&mut self, ctx: &egui::Context, p: &Painter, rect: Rect, vp: &ViewportTransform, work_epsg: u32, sources: Vec<LabelSource>, runner: &Runner) {
+        self.paint_zoomed(ctx, p, rect, vp, work_epsg, sources, runner, 1.0);
+    }
+
+    /// The same for a view that shows paper `paper_zoom` times as large (the map frame of a sheet): the
+    /// letters and their edge are those of the paper, enlarged with it.
+    #[allow(clippy::too_many_arguments)] // a view of the map is made of this many things
+    pub(crate) fn paint_zoomed(&mut self, ctx: &egui::Context, p: &Painter, rect: Rect, vp: &ViewportTransform, work_epsg: u32, sources: Vec<LabelSource>, runner: &Runner, paper_zoom: f32) {
         if sources.is_empty() {
             (self.placed, self.placed_for, self.asking) = (Vec::new(), None, None);
             return;
         }
-        let view = ViewBox { centre: vp.center_xy, metres_per_point: vp.meters_per_pixel, width_pt: f64::from(rect.width()), height_pt: f64::from(rect.height()) };
-        let wanted = Asked { work_epsg, sources, view };
+        let wanted = Asked { work_epsg, sources, view: engine_view(rect, vp, paper_zoom) };
         // Twice at most: with work that runs at once the answer is there in the same frame.
         for _ in 0..2 {
             if let Some((asked, answer)) = &self.asking {
@@ -95,7 +109,7 @@ impl Labels {
             let family = if label.bold && ctx.fonts(|f| f.families().contains(&bold)) { bold } else { FontFamily::Proportional };
             let [r, g, b, a] = label.ink;
             let ink = Color32::from_rgba_unmultiplied(r, g, b, a);
-            let galley = ctx.fonts(|fonts| fonts.layout_no_wrap(label.text.clone(), FontId::new(label.size_pt, family), ink));
+            let galley = ctx.fonts(|fonts| fonts.layout_no_wrap(label.text.clone(), FontId::new(label.size_pt * paper_zoom, family), ink));
             let origin = w2s(rect, vp, label.at) - galley.rect.size() * 0.5;
             // A label that a pan has carried to the edge waits for the engine's next answer.
             if !rect.contains_rect(Rect::from_min_size(origin, galley.rect.size())) {
@@ -105,7 +119,7 @@ impl Labels {
                 let [r, g, b, a] = qt_premultiplied(c);
                 Color32::from_rgba_premultiplied(r, g, b, a)
             };
-            let (halo, width) = label.halo.map_or((Color32::TRANSPARENT, 0.0), |(c, width)| (edge(c), width));
+            let (halo, width) = label.halo.map_or((Color32::TRANSPARENT, 0.0), |(c, width)| (edge(c), width * paper_zoom));
             paint_placed_labels(p, &[LabelDraw { galley, ink, angle: 0.0, origins: vec![origin] }], &[Some(0)], width, halo);
         }
     }

@@ -176,7 +176,8 @@ impl RefVectorLayers {
         }
     }
 
-    fn paint(&mut self, key: &str, ctx: &egui::Context, p: &egui::Painter, rect: Rect, vp: &strata_canvas2d::viewport::ViewportTransform, opacity: f32) -> Painted {
+    #[allow(clippy::too_many_arguments)] // a view of the map is made of this many things
+    fn paint(&mut self, key: &str, ctx: &egui::Context, p: &egui::Painter, rect: Rect, vp: &strata_canvas2d::viewport::ViewportTransform, opacity: f32, paper_zoom: f32) -> Painted {
         let mut painted = Painted::default();
         let Some(layer) = self.layers.iter_mut().find(|l| l.key == key) else {
             return painted;
@@ -223,7 +224,7 @@ impl RefVectorLayers {
                 Some(Ok((None, _)) | Err(TryRecvError::Disconnected)) => layer.failed = layer.drawing.take().map(|(asked, _, _)| asked),
                 Some(Err(TryRecvError::Empty)) | None => {}
             }
-            let (wanted, map) = view::wanted_view(rect, vp, scale, ctx.input(|i| i.max_texture_side));
+            let (wanted, map) = view::wanted_view(rect, vp, scale, ctx.input(|i| i.max_texture_side), paper_zoom);
             let fresh = layer.picture.as_ref().is_some_and(|pic| pic.look == layer.spec.look && view::covers(&pic.view, &wanted, &map));
             let hopeless = layer.failed.as_ref().is_some_and(|failed| failed.same_as(&wanted));
             if fresh || hopeless || layer.drawing.is_some() {

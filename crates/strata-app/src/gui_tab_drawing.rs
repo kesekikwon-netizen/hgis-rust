@@ -24,6 +24,8 @@ mod gui_tab_drawing_legend;
 mod gui_tab_drawing_map_layers;
 #[path = "gui_tab_drawing_popups.rs"]
 mod gui_tab_drawing_popups;
+#[path = "gui_tab_drawing_refs.rs"]
+mod gui_tab_drawing_refs;
 #[path = "gui_tab_drawing_right.rs"]
 mod gui_tab_drawing_right;
 #[path = "gui_tab_drawing_right_b.rs"]
