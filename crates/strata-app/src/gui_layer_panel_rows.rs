@@ -131,8 +131,10 @@ impl StrataAppState {
             }
             // 글자 칸은 그 레이어의 지금 라벨 글자(LayerLabelControls::describe — 메뉴로 항목·면적을 바꾸면 따라간다).
             let live = spec.right_label.and_then(|_| self.layer_menu_input(&spec.key)).filter(|i| i.has_labeling).map(|i| i.label.caption);
-            if let Some(rl) = live.as_deref().or(spec.right_label) {
-                let lbl_vis = self.home_map.real_survey.is_label_visible(&spec.name);
+            // On the sheet a heritage row has the switch 「번호」 (`LayerLabelControls.cpp:98-102`).
+            let numbers = self.is_sheet_numbers_row(&spec.key);
+            if let Some(rl) = if numbers { Some("번호") } else { live.as_deref().or(spec.right_label) } {
+                let lbl_vis = if numbers { self.sheet_numbers_on(&spec.name) } else { self.home_map.real_survey.is_label_visible(&spec.name) };
                 paint_checkbox_state(
                     &p,
                     Pos2::new(right_col_x + 6.0, ry),
@@ -182,7 +184,12 @@ impl StrataAppState {
                 self.home_map.real_survey.toggle_layer_visible(name);
                 newly_selected = Some(name.to_owned());
             } else if pos.x >= right_col_x {
-                self.home_map.real_survey.toggle_label_visible(name);
+                let key = self.left_layers.entries.iter().find(|e| e.label_ko == name).map(|e| e.layer_key.clone()).unwrap_or_default();
+                if self.is_sheet_numbers_row(&key) {
+                    self.toggle_sheet_numbers(name);
+                } else {
+                    self.home_map.real_survey.toggle_label_visible(name);
+                }
             } else if self.right_inspector.selected_layer_key.as_deref() == Some(name) {
                 self.right_inspector.selected_layer_key = None;
             } else {

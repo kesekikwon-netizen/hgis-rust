@@ -171,7 +171,28 @@ impl SheetNumbers {
     }
 }
 
+/// The name the switch 「번호」 of a legend row is kept under, beside the row's other switches.
+fn numbers_switch(row_name: &str) -> String {
+    format!("{row_name} · 번호")
+}
+
 impl StrataAppState {
+    /// Whether the legend shows the switch 「번호」 for this row: a heritage row, while the sheet is shown.
+    pub(crate) fn is_sheet_numbers_row(&self, layer_key: &str) -> bool {
+        self.active_tab == crate::app_state::MainTab::Drawing && layer_key.starts_with(KEY_PREFIX)
+    }
+
+    /// Whether the sites of this heritage row are numbered on the sheet.
+    pub(crate) fn sheet_numbers_on(&self, row_name: &str) -> bool {
+        self.home_map.real_survey.is_label_visible(&numbers_switch(row_name))
+    }
+
+    /// The switch 「번호」 of a heritage row on the sheet (`ka_hgis/layout_numbers_visible`,
+    /// `LayerLabelControls.cpp:98-102, 155-161`).
+    pub(crate) fn toggle_sheet_numbers(&mut self, row_name: &str) {
+        self.home_map.real_survey.toggle_label_visible(&numbers_switch(row_name));
+    }
+
     /// The badges of a sheet whose map shows `sheet_box` (`[min x, min y, max x, max y]`, work CRS): the
     /// checked rows of the 「유산」 button, in the order of the legend (the top row first, `:701, 725`).
     pub(crate) fn sheet_heritage_badges(&mut self, sheet_box: [f64; 4]) -> Vec<Badge> {
@@ -180,7 +201,7 @@ impl StrataAppState {
             .left_layers
             .entries
             .iter()
-            .filter(|entry| entry.layer_key.starts_with(KEY_PREFIX) && visible.is_layer_visible(&entry.label_ko))
+            .filter(|entry| entry.layer_key.starts_with(KEY_PREFIX) && visible.is_layer_visible(&entry.label_ko) && visible.is_label_visible(&numbers_switch(&entry.label_ko)))
             .filter_map(|entry| Some((entry.layer_key.clone(), self.ref_vectors.file_of(&entry.layer_key)?.to_path_buf())))
             .collect();
         if rows.is_empty() {

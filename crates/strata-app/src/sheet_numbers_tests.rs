@@ -63,6 +63,35 @@ fn the_checked_heritage_rows_are_numbered_for_the_sheet() {
     assert!(app.sheet_heritage_badges(narrow).is_empty(), "this sheet shows none of the sites that are left");
 }
 
+/// The switch 「번호」 a heritage row has on the sheet (`ka_hgis/layout_numbers_visible`,
+/// `LayerLabelControls.cpp:98-102, 155-161`, `HeritageLayoutNumbers.cpp:738`): a row whose numbers are
+/// switched off stays drawn, its sites carry no number, and its kind counts through the other rows. It is
+/// another switch than the row's letters on the map.
+#[test]
+fn a_row_whose_numbers_are_off_is_not_numbered() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = StrataAppState::new_startup();
+    draw_survey_area(&mut app, CENTRE, 5187);
+    app.show_heritage_layers(&DATASETS[0], &[copy_of(dir.path(), "국가지정유산", &[("나 고분", 0.0, 0.0, 60.0), ("가 산성", 300.0, 0.0, 40.0)]), copy_of(dir.path(), "시도지정유산", &[("다 요지", 0.0, 200.0, 40.0)])]);
+    assert!(app.sheet_numbers_on("국가지정유산"));
+    assert_eq!(app.sheet_heritage_badges(wide_sheet()).len(), 3);
+
+    app.toggle_sheet_numbers("국가지정유산");
+    assert!(!app.sheet_numbers_on("국가지정유산") && app.sheet_numbers_on("시도지정유산"));
+    assert_eq!(listed(&app.sheet_heritage_badges(wide_sheet())), [("지정유산", "다 요지", 1)]);
+    assert!(app.home_map.real_survey.is_layer_visible("국가지정유산") && app.home_map.real_survey.is_label_visible("국가지정유산"));
+
+    app.toggle_sheet_numbers("국가지정유산");
+    assert_eq!(app.sheet_heritage_badges(wide_sheet()).len(), 3);
+
+    // The legend offers the switch for a heritage row, and only while the sheet is shown.
+    let heritage = "ref_heritage:designated_heritage:국가지정유산";
+    app.active_tab = crate::app_state::MainTab::Map;
+    assert!(!app.is_sheet_numbers_row(heritage));
+    app.active_tab = crate::app_state::MainTab::Drawing;
+    assert!(app.is_sheet_numbers_row(heritage) && !app.is_sheet_numbers_row("ref_topo") && !app.is_sheet_numbers_row("survey_area"));
+}
+
 /// The badge (`HeritageLayoutNumbers.cpp:103-110, 1027-1110`): a circle in the colour of the kind, its
 /// diameter `max(2.3, 1.0 + digits × 0.725) × 1.3` mm of paper, the number in bold 1.82 mm, black on a light
 /// colour and white on a dark one (luminance 0.62).
