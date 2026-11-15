@@ -253,6 +253,8 @@ impl StrataAppState {
             self.paint_basemap_layer(ctx, &p, rect);
             self.paint_reference_tile_layers(ctx, &p, rect);
         }
+        // Pictures of the user over the background, under the cadastral lines (picture_layers.rs).
+        self.paint_picture_layers(ctx, &p, rect);
         {
             let _perf =
                 crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::CadastralTiles);

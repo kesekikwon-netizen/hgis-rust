@@ -115,8 +115,8 @@ fn a_picked_shapefile_without_a_crs_is_read_in_the_work_crs() {
 }
 
 /// What is not carried over yet is refused in words and adds nothing: a shapefile of points, the tables of a
-/// GeoPackage that is no survey, GeoJSON, CAD drawings and pictures. A broken shapefile picked with
-/// 「벡터·도면 불러오기」 says the C++ 「파일을 열지 못했습니다」 (`:2603`).
+/// GeoPackage that is no survey, GeoJSON and CAD drawings; a picture GDAL cannot open adds nothing either. A
+/// broken shapefile picked with 「벡터·도면 불러오기」 says the C++ 「파일을 열지 못했습니다」 (`:2603`).
 #[test]
 fn files_not_carried_over_yet_are_refused_in_words() {
     let dir = tempfile::tempdir().unwrap();
@@ -134,13 +134,15 @@ fn files_not_carried_over_yet_are_refused_in_words() {
     for (name, words) in [
         ("a.geojson", "GeoJSON 파일은 아직 지도에 올리지 못합니다: a.geojson"),
         ("b.dxf", "CAD 도면(DXF·DWG)은 아직 지도에 올리지 못합니다: b.dxf"),
-        ("c.tif", "그림 파일은 아직 지도에 올리지 못합니다: c.tif"),
     ] {
         let path = dir.path().join(name);
         std::fs::write(&path, b"x").unwrap();
         app.drop_paths(&[path]);
         assert_eq!(app.status_left_message(), words);
     }
+    let broken_picture = dir.path().join("c.tif");
+    std::fs::write(&broken_picture, b"x").unwrap();
+    app.drop_paths(&[broken_picture]);
     assert_eq!(app.left_layers.entries.len(), rows, "no row");
     assert!(!app.is_dirty, "nothing added, nothing unsaved");
     let broken = dir.path().join("깨짐.shp");

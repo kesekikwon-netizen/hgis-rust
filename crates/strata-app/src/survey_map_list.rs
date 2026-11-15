@@ -20,6 +20,7 @@ use crate::ref_vector::map::{GEOLOGY, RIVER, SOIL};
 use crate::topo_download::dem::{files_of, DEM_KEY, RELIEF_KEY};
 use crate::topo_download::post::{held_topographic_merge, topo_spec, TOPO_KEY, TOPO_TITLE};
 use crate::app_state::user_files::{user_shapefile, USER_PREFIX};
+use crate::app_state::picture_layers::{picture_layer_of, PICTURE_PREFIX};
 
 /// The version of the list; a list of another version is not read.
 const VERSION: u32 = 1;
@@ -55,6 +56,7 @@ fn kept_key(key: &str) -> bool {
     [TOPO_KEY, DEM_KEY, RELIEF_KEY, CADASTRAL_KEY, SOIL.key, GEOLOGY.key, RIVER.key].contains(&key)
         || ref_tile_layer(key).is_some()
         || (key.starts_with(USER_PREFIX) && !key.starts_with("user:buffer_"))
+        || key.starts_with(PICTURE_PREFIX)
 }
 
 impl StrataAppState {
@@ -71,7 +73,7 @@ impl StrataAppState {
                 title: e.label_ko.clone(),
                 visible: visible(&e.label_ko),
                 opacity: e.opacity,
-                file: self.ref_vectors.spec_of(&e.layer_key).map(|spec| from_folder(&spec.file)),
+                file: self.ref_vectors.spec_of(&e.layer_key).map(|spec| from_folder(&spec.file)).or_else(|| self.pictures.layers.iter().find(|l| l.key == e.layer_key).map(|l| from_folder(&l.file))),
             })
             .collect();
         if rows.is_empty() {
@@ -117,6 +119,11 @@ impl StrataAppState {
         // `join` keeps a whole path (a file outside the survey folder, after 다른 이름으로 저장) as it is.
         let file = row.file.as_ref().map(|file| folder.join(file)).filter(|file| file.is_file() || !files_of(file).is_empty());
         let work_epsg = CrsCode::from(self.work_crs).epsg_number();
+        if row.key.starts_with(PICTURE_PREFIX) {
+            let Some((layer, _)) = file.and_then(|file| picture_layer_of(&file, row.key.clone(), work_epsg)) else { return false };
+            self.put_picture_row(layer, &row.title);
+            return true;
+        }
         if row.key.starts_with(USER_PREFIX) {
             let Some(Ok((spec, _, _))) = file.map(|file| user_shapefile(&file, work_epsg)) else { return false };
             self.show_user_vector_layer(&row.key, &row.title, spec);

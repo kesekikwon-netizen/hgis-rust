@@ -44,6 +44,8 @@ pub(crate) mod app_state_save_before;
 pub(crate) mod survey_map_list;
 #[path = "user_files.rs"]
 pub(crate) mod user_files;
+#[path = "picture_layers.rs"]
+pub(crate) mod picture_layers;
 #[path = "app_state_snap_lines.rs"]
 mod app_state_snap_lines;
 #[path = "vertex_edit_geom.rs"]
@@ -132,6 +134,8 @@ pub struct StrataAppState {
     pub(crate) ref_circle: crate::ref_tile_layers::RefCircleCache,
     /// Downloaded reference maps kept as tables in the survey folder (`ref_vector.rs`).
     pub(crate) ref_vectors: crate::ref_vector::RefVectorLayers,
+    /// Pictures of the user on the map (`picture_layers.rs`).
+    pub(crate) pictures: picture_layers::PictureLayers,
     /// Reference maps being fetched by a ribbon button (`ref_map.rs`).
     pub(crate) ref_maps: crate::ref_vector::map::run::RefMapJobs,
     /// The digital cadastral map being received by the 지적 button (`cadastral_run.rs`).

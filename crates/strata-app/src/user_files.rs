@@ -2,8 +2,9 @@
 //! 260-289), opened in 파일함 (`fileActivated`, MainWindow.cpp:902-914) or picked with 「벡터·도면 불러오기」
 //! (`openVectorLayer`, :2592-2636). A shapefile of lines or polygons becomes a row of 조사 데이터 named after
 //! the file (`addVectorFromPath`, :2939-3033: key `user:<name>`, black 0.2 mm, no fill), read where it lies:
-//! nothing is written beside it. Points, the tables of other GeoPackages, GeoJSON, CAD drawings and pictures
-//! are not carried over yet and are refused in words (docs/RUST_PLAN.md 「F-파일 불러오기-1」).
+//! nothing is written beside it. A picture becomes a row of 주변·참조 (picture_layers.rs). Points, the tables of
+//! other GeoPackages, GeoJSON and CAD drawings are not carried over yet and are refused in words
+//! (docs/RUST_PLAN.md 「F-파일 불러오기-1」).
 
 use std::path::{Path, PathBuf};
 
@@ -47,10 +48,10 @@ fn name_of(path: &Path) -> String {
     path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
-/// A layer put on the map.
+/// A layer put on the map: its title, and the words `addVectorFromPath` / `addRasterFromPath` leave on the status line.
 pub(crate) struct Added {
     title: String,
-    shapes: u64,
+    words: String,
 }
 
 /// Why a file did not go on the map.
@@ -133,7 +134,7 @@ impl StrataAppState {
     /// A file opened in 파일함 (`fileActivated`).
     pub(crate) fn activate_drawer_file(&mut self, path: &Path) {
         let words = match self.add_vector_from_path(path) {
-            Ok(Some(added)) => format!("레이어 1개 추가 · 도형 {}개 · 화면 {}", added.shapes, self.work_crs.auth_id()),
+            Ok(Some(added)) => added.words,
             Ok(None) => return,
             Err(Refused::NotYet(words)) => words,
             Err(Refused::Unreadable) => DRAWER_CANNOT.to_owned(),
@@ -153,7 +154,10 @@ impl StrataAppState {
             FileKind::GeoPackage => Err(Refused::NotYet(format!("GPKG 파일의 표는 아직 지도에 올리지 못합니다: {name}"))),
             FileKind::GeoJson => Err(Refused::NotYet(format!("GeoJSON 파일은 아직 지도에 올리지 못합니다: {name}"))),
             FileKind::Cad => Err(Refused::NotYet(format!("CAD 도면(DXF·DWG)은 아직 지도에 올리지 못합니다: {name}"))),
-            FileKind::Picture => Err(Refused::NotYet(format!("그림 파일은 아직 지도에 올리지 못합니다: {name}"))),
+            FileKind::Picture => match self.add_raster_from_path(path) {
+                Some((title, words)) => Ok(Some(Added { title, words })),
+                None => Err(Refused::Unreadable),
+            },
             FileKind::Other => Err(Refused::Unreadable),
         }
     }
@@ -164,18 +168,19 @@ impl StrataAppState {
         let work_epsg = CrsCode::from(self.work_crs).epsg_number();
         let (spec, shapes, work_box) = user_shapefile(path, work_epsg)?;
         let stem = path.file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
-        let title = self.free_user_title(&stem);
+        let title = self.free_layer_title(&stem, USER_PREFIX);
         self.show_user_vector_layer(&format!("{USER_PREFIX}{title}"), &title, spec);
         if let Some(found) = work_box.filter(|b| self.sits_on_work_map(*b)) {
             self.home_map.set_view_extent(found);
         }
-        Ok(Added { title, shapes })
+        let words = format!("레이어 1개 추가 · 도형 {shapes}개 · 화면 {}", self.work_crs.auth_id());
+        Ok(Added { title, words })
     }
 
     /// The name of the file, or the name with 「(2)」, 「(3)」… when a row has it: each row keeps its own check
     /// mark, which goes by the name.
-    fn free_user_title(&self, stem: &str) -> String {
-        let taken = |title: &str| self.left_layers.entries.iter().any(|e| e.label_ko == title || e.layer_key == format!("{USER_PREFIX}{title}"));
+    pub(crate) fn free_layer_title(&self, stem: &str, prefix: &str) -> String {
+        let taken = |title: &str| self.left_layers.entries.iter().any(|e| e.label_ko == title || e.layer_key == format!("{prefix}{title}"));
         let mut title = stem.to_owned();
         let mut n = 2;
         while taken(&title) {
@@ -186,7 +191,7 @@ impl StrataAppState {
     }
 
     /// Whether the box meets Korea in the work CRS (`LayerOps::koreaExtentForCrs`, BasemapOps.cpp:2406-2418).
-    fn sits_on_work_map(&self, found: [f64; 4]) -> bool {
+    pub(crate) fn sits_on_work_map(&self, found: [f64; 4]) -> bool {
         let work_epsg = CrsCode::from(self.work_crs).epsg_number();
         let korea = Transformer::new(4326, work_epsg).and_then(|carry| carry.transform_box([124.5, 33.0, 132.0, 39.5]));
         korea.is_ok_and(|k| found[0] <= k[2] && found[2] >= k[0] && found[1] <= k[3] && found[3] >= k[1])

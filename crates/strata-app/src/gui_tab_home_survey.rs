@@ -105,6 +105,7 @@ impl StrataAppState {
         self.left_layers.remove_survey_domain_layers();
         self.remove_reference_tile_rows();
         self.remove_reference_vector_rows();
+        self.remove_picture_layers();
         self.drop_reference_map_fetches();
         self.drop_cadastral_run();
         self.drop_topographic_post();
