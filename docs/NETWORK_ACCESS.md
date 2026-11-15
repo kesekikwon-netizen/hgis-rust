@@ -66,6 +66,16 @@ Counts in columns `a`–`f` give the number of Part 3 findings affecting each ho
 
 ---
 
+Rust now (order NET-RIV1, 2026-11-15): the 수계 button sends the river WFS (`TYPENAME=lt_c_wkmstrm`) through
+`strata-net::reference_http::reference_get_from` (`crates/strata-refmap/src/river_request.rs`, `river_prepare.rs`):
+pages of 1000 one after the other (10 at most for one box; a box that stays full is asked again in quarters, then
+sixteenths, as the C++ `ReferenceTiledFetch`), `User-Agent` `ka-hgis/0.3` (no browser name), `Referer`
+`https://localhost` (the address the user's key is registered for), no `DOMAIN`, 15 s idle and 180 s in all, a
+dropped request once more. The box is that of the 10 km scope around the survey area (owner 2026-11-15): a survey
+means 1 request as a rule. The key is part of the address, which goes to curl on its standard input; no sentence,
+file name or log line holds it, and the text of a VWorld XML error is not shown. A map kept for the same area is not
+fetched again.
+
 ### 2. `xdworld.vworld.kr`
 
 | purpose (Korean UI name) | method + path pattern | auth | headers set (literal) | max parallel | pacing & typical job arithmetic | timeout | retry | on 401 / 403 / 429 / 5xx / empty or XML-error body | cache | C++ `file:line` | Rust `file:line` | difference between the two apps |
