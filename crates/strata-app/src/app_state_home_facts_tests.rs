@@ -21,14 +21,14 @@ fn home_visit_counts_an_unopened_recent_survey() {
     app.attach_user_settings(Some(dir.path().join("ka-hgis.ini")));
     app.remember_survey(&survey, "a");
     app.active_tab = MainTab::Home;
-    // 드라이브 종류는 뒤 실행에서 읽는다 — 다 읽을 때까지 매 프레임처럼 부른다.
-    for _ in 0..200 {
+    // 드라이브 종류는 뒤 실행(PowerShell)에서 읽는다 — 다 읽을 때까지 매 프레임처럼 부른다. 바쁜 CI 에서는 PowerShell 이
+    // 뜨는 데 5초를 넘겼다(2026-11-15, cf77cdc 의 실행): 앱처럼 될 때까지 기다리고, 시계로 2분만 끝을 둔다.
+    let give_up = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    while !app.home_map.facts_probed && std::time::Instant::now() < give_up {
         app.home_facts_on_visit(None);
-        if app.home_map.facts_probed {
-            break;
-        }
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
+    assert!(app.home_map.facts_probed, "the drive kinds were not read within two minutes");
     let f = app.facts_of(&app.recent_surveys[0].path.clone());
     assert!(f.has_counts(), "{f:?}");
     assert!(f.areas >= 1);
