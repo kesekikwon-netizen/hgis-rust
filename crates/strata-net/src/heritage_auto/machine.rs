@@ -108,6 +108,14 @@ pub struct HeritageAutomation {
     pub(super) submitted: bool,
     /// The kind being fetched, as an index into [`super::scripts::KINDS`].
     pub(super) kind_index: usize,
+    /// The token of a script still waiting for its answer.
+    ///
+    /// One ask at a time. The C++ polls every 700 ms (`KaHeritageBrowser.cpp:103`) and waits
+    /// for the answer before asking again; asking on every frame makes the answer that does
+    /// arrive look older than the newest token and be dropped, and the run never moves.
+    pub(super) pending: Option<u64>,
+    /// When the last ask went out, so the next one waits [`super::LOGIN_POLL_MS`].
+    pub(super) asked_at_ms: u64,
 }
 
 impl HeritageAutomation {
@@ -122,6 +130,8 @@ impl HeritageAutomation {
             opens: 0,
             submitted: false,
             kind_index: 0,
+            pending: None,
+            asked_at_ms: 0,
         }
     }
 
@@ -137,35 +147,58 @@ impl HeritageAutomation {
         super::scripts::KINDS[self.kind_index.min(super::scripts::KINDS.len() - 1)].1
     }
 
-    /// The next thing to ask a page, or `None` when the run is over or waiting for time.
+    /// The next thing to ask a page, or `None` when the run is over, waiting for the last
+    /// answer, or waiting for its turn.
     ///
     /// `host` is used to open the portal; every later step is a script whose answer comes
     /// back through [`Self::script_answered`].
     pub fn next_step(&mut self, host: &mut dyn PageHost, now_ms: u64) -> Option<ScriptCall> {
-        let _ = now_ms;
-        match self.stage.clone() {
-            HeritageStage::Idle => {
-                host.navigate(&self.config.login_url());
-                self.opens += 1;
-                self.stage = HeritageStage::LoginProbe;
-                self.quiet_ticks = 0;
-                None
-            }
-            HeritageStage::LoginProbe => Some(self.ask(super::scripts::login_probe_script())),
-            HeritageStage::LoggingIn => Some(self.ask(super::scripts::login_script(
+        // The portal is opened once, as soon as the browser has a page to open it in. That is
+        // a navigation, not a script, so this call answers `None`.
+        if self.stage == HeritageStage::Idle {
+            self.open_portal(host)?;
+            return None;
+        }
+        // One ask at a time, and no sooner than the poll interval: the C++ does the same
+        // (`KaHeritageBrowser.cpp:103`). Asking on every frame makes every answer arrive
+        // "late" and be dropped by the token check below.
+        if self.pending.is_some() || now_ms.saturating_sub(self.asked_at_ms) < super::LOGIN_POLL_MS {
+            return None;
+        }
+        // The page the asks go to is the one the browser has open; without one there is
+        // nothing to ask.
+        let page = host.pages().first().map(|p| p.id)?;
+        let script = match self.stage.clone() {
+            HeritageStage::LoginProbe => super::scripts::login_probe_script(),
+            HeritageStage::LoggingIn => super::scripts::login_script(
                 &self.config.account_id.clone(),
                 &self.config.account_password.clone(),
-            ))),
-            HeritageStage::Done | HeritageStage::Stopped(_) => None,
-            _ => None,
+            ),
+            HeritageStage::Done | HeritageStage::Stopped(_) | HeritageStage::Idle => return None,
+            _ => return None,
+        };
+        Some(self.ask_on(page, script, now_ms))
+    }
+
+    /// Opens the portal, once. Answers `None` until the browser has a page to open it in.
+    fn open_portal(&mut self, host: &mut dyn PageHost) -> Option<()> {
+        if host.pages().is_empty() {
+            return None;
         }
+        host.navigate(&self.config.login_url());
+        self.opens += 1;
+        self.stage = HeritageStage::LoginProbe;
+        self.quiet_ticks = 0;
+        Some(())
     }
 
     /// A script answered. Returns what the app must know, if anything.
     pub fn script_answered(&mut self, token: u64, value: &str) -> Option<HeritageEvent> {
-        if token != self.token {
+        // Only the answer we are waiting for, so a late answer cannot move a later stage.
+        if self.pending != Some(token) {
             return None;
         }
+        self.pending = None;
         let value = value.trim().trim_matches('"');
         match self.stage.clone() {
             HeritageStage::LoginProbe => self.on_login_probe(value),
@@ -175,10 +208,12 @@ impl HeritageAutomation {
     }
 
     /// A token for the next script, so a late answer to an earlier one is ignored.
-    pub(super) fn ask(&mut self, script: String) -> ScriptCall {
+    pub(super) fn ask_on(&mut self, page: PageId, script: String, now_ms: u64) -> ScriptCall {
         self.token += 1;
+        self.pending = Some(self.token);
+        self.asked_at_ms = now_ms;
         ScriptCall {
-            page: PageId(u32::MAX),
+            page,
             script,
             token: self.token,
         }

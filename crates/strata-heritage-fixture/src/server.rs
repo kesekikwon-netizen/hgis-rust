@@ -26,9 +26,12 @@ pub(crate) fn spawn(state: FixtureState) -> Fixture {
                 break;
             }
             let s = Arc::clone(&state_conn);
+            // A connection handler never blocks the listener, so one stuck request cannot keep
+            // the next case from starting on a fresh port.
             std::thread::spawn(move || handle(stream, s));
         }
     });
+
 
     Fixture {
         base_url,
@@ -102,8 +105,14 @@ fn handle(mut stream: TcpStream, state: Arc<Mutex<FixtureState>>) {
         s.count(&req.path);
     }
     let (status, content_type, body) = crate::routes::respond(&req.method, &req.path, &req.body, &state);
+    // A redirect needs its Location: a Spring login answers the POST with one.
+    let location = if status == crate::routes::STATUS_302 {
+        "\r\nLocation: /user/checkNet.do"
+    } else {
+        ""
+    };
     let response = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}{location}\r\nConnection: close\r\n\r\n",
         body.len()
     );
     let _ = stream.write_all(response.as_bytes());

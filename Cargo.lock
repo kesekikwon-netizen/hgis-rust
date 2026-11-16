@@ -5440,6 +5440,19 @@ name = "strata-heritage-fixture"
 version = "2.0.0"
 
 [[package]]
+name = "strata-heritage-run"
+version = "2.0.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "raw-window-handle",
+ "strata-heritage-fixture",
+ "strata-net",
+ "strata-webview",
+ "tempfile",
+]
+
+[[package]]
 name = "strata-layout"
 version = "2.0.0"
 dependencies = [

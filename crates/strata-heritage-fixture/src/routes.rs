@@ -12,6 +12,7 @@ use crate::state::FixtureState;
 
 pub(crate) const STATUS_200: &str = "200 OK";
 pub(crate) const STATUS_204: &str = "204 No Content";
+pub(crate) const STATUS_302: &str = "302 Found";
 pub(crate) const STATUS_404: &str = "404 Not Found";
 pub(crate) const CT_HTML: &str = "text/html; charset=utf-8";
 pub(crate) const CT_ZIP: &str = "application/zip";
@@ -23,15 +24,24 @@ pub(crate) fn respond(
     body: &str,
     state: &Arc<Mutex<FixtureState>>,
 ) -> (&'static str, &'static str, Vec<u8>) {
-    // The site's login form posts here; the answer is the login landing page.
+    // The site's login form posts here; a Spring app answers a POST with a redirect back to
+    // the landing page, and the browser then shows that page. Answering the page inline would
+    // leave the browser on this URL, and the run's probe would read it instead of the login
+    // landing page — the stall the first real run against the fixture hit.
     if method == "POST" && path == "/j_spring_security_check" {
+        let mut ok = false;
         if let Ok(mut s) = state.lock() {
             let account = s.account.clone();
-            if matches_login(body, &account) {
-                s.logged_in = true;
-            }
+            ok = matches_login(body, &account);
+            s.logged_in = ok;
         }
-        return html(&login_or_main(state));
+        // A refused login goes back to the form; a run that is told nothing would submit again
+        // and the second answer must be a stop, not a silent loop.
+        return if ok {
+            (STATUS_302, CT_HTML, Vec::new())
+        } else {
+            html(pages::login_failed())
+        };
     }
 
     match path {
@@ -39,6 +49,7 @@ pub(crate) fn respond(
         // the download panel — the frame walker in the scripts needs that layout.
         "/user/checkNet.do" => html(&login_or_main(state)),
         "/main.do" => html(&pages::main_frames(&city(state))),
+        "/left.do" => html(pages::left_menu()),
         "/user/data/heritageDownload.do" => html(&pages::download_page(&city(state))),
         "/user/data/heritageDownloadList.do" => html(&pages::search_result(&city(state))),
         "/user/data/heritageDownload/downloadFilesAll.do" => {

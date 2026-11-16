@@ -8,6 +8,7 @@ members = [
     "crates/strata-storage",
     "crates/strata-geo",
     "crates/strata-heritage-fixture",
+    "crates/strata-heritage-run",
     "crates/strata-net",
     "crates/strata-paleo",
     "crates/strata-canvas2d",

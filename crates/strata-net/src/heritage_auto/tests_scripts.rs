@@ -36,12 +36,13 @@ fn every_script_wraps_with_the_frame_walker() {
 /// escaping is JSON's. A password with a quote must not end the JavaScript string.
 #[test]
 fn values_are_escaped_like_the_cpp() {
-    assert_eq!(super::js_string("plain"), "plain");
-    assert_eq!(super::js_string(r#"a\b"#), r"a\\b");
-    assert_eq!(super::js_string("a\"b"), r#"a\"b"#);
-    assert_eq!(super::js_string("a\nb"), r"a\nb");
-    assert_eq!(super::js_string("a\tb"), r"a\tb");
-    assert_eq!(super::js_string("가"), "가", "Korean passes through unescaped");
+    // A JavaScript string literal keeps its quotes: `user1` without them is an identifier.
+    assert_eq!(super::js_string("plain"), r#""plain""#);
+    assert_eq!(super::js_string(r#"a\b"#), r#""a\\b""#);
+    assert_eq!(super::js_string("a\"b"), r#""a\"b""#);
+    assert_eq!(super::js_string("a\nb"), r#""a\nb""#);
+    assert_eq!(super::js_string("a\tb"), r#""a\tb""#);
+    assert_eq!(super::js_string("가"), r#""가""#, "Korean passes through unescaped");
 }
 
 /// The password reaches the page escaped and nowhere else: the script is the only place it may

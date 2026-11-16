@@ -82,15 +82,15 @@ fn wrap(body: &str) -> String {
     out
 }
 
-/// `jsString()` (`:125-133`): the value as a JSON string, quotes stripped. The C++ serialises
-/// a one-element array and cuts the brackets, so the escaping is JSON's, exactly.
+/// `jsString()` (`:125-133`): the value as a JavaScript string **literal**, quotes included.
+///
+/// The C++ serialises a one-element array (`["user1"]`) and cuts only the brackets, so the
+/// quotes stay and the escaping is JSON's. Stripping the quotes as well turns `user1` into a
+/// bare identifier and the page answers `ReferenceError: user1 is not defined` — which is
+/// exactly what the first real run against the fixture did.
 #[must_use]
 pub fn js_string(value: &str) -> String {
-    let encoded = serde_json::Value::String(value.to_owned()).to_string();
-    encoded
-        .strip_prefix('"')
-        .and_then(|s| s.strip_suffix('"'))
-        .map_or_else(|| "\"\"".to_owned(), str::to_owned)
+    serde_json::Value::String(value.to_owned()).to_string()
 }
 
 /// `loginUrl()` (`:98-100`). The site's login landing page.

@@ -15,16 +15,27 @@ pub const KIND_TABS: [(&str, &str); 6] = [
 
 /// `checkNet.do` before login (`HeritageIntranetFlow.cpp:135-148`): the form the login script
 /// fills, with the site's own `goLogin()` doing the submit.
+///
+/// The real page's `goLogin()` RSA-encrypts `#userId`/`#pwd` into the hidden `USER_ID`/`USER_PW`
+/// fields and posts those (`:137-139`). The fixture does the same copying without the RSA, so the
+/// post itself is what the server reads here — a run that fills the visible fields but does not
+/// go through `goLogin()` sends nothing, which is the failure it must not hide.
 #[must_use]
 pub fn login() -> &'static str {
     r#"<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>로그인</title>
 <script>
-function goLogin(){document.getElementById('loginForm').submit();}
+function goLogin(){
+  document.getElementById('USER_ID').value=document.getElementById('userId').value;
+  document.getElementById('USER_PW').value=document.getElementById('pwd').value;
+  document.getElementById('loginForm').submit();
+}
 </script></head><body>
 <h1>국가유산 공간정보 인트라넷</h1>
 <form id="loginForm" name="loginForm" action="/j_spring_security_check" method="post">
   <input id="userId" name="userId" type="text">
   <input id="pwd" name="pwd" type="password">
+  <input id="USER_ID" name="USER_ID" type="hidden">
+  <input id="USER_PW" name="USER_PW" type="hidden">
   <button type="button" onclick="goLogin();">로그인</button>
 </form>
 </body></html>"#
@@ -32,6 +43,10 @@ function goLogin(){document.getElementById('loginForm').submit();}
 
 /// After login: a frames page whose single child frame holds the download panel. The scripts'
 /// `wrap()` walks into it — a top-frame script would find nothing here.
+///
+/// A `<frameset>` document has no `<body>`, so the 로그아웃 mark the login probe looks for cannot
+/// live here; it lives in the left menu frame, which is where the real site puts it. The probe
+/// walks every frame, so it finds it there.
 #[must_use]
 pub fn main_frames(city: &(String, String)) -> String {
     let (sido, sgg) = city;
@@ -41,10 +56,45 @@ pub fn main_frames(city: &(String, String)) -> String {
   <frame src="/left.do" name="left">
   <frame src="/user/data/heritageDownload.do" name="content">
 </frameset>
-<noframes><body><div>로그아웃</div></body></noframes>
 </html>
 <!-- city:{sido} {sgg} -->"#
     )
+}
+
+/// What a wrong password gets: the login form again, with the browser's credential refused.
+///
+/// Distinct from [`login`] by the body word 로그아웃 being absent *and* the form being present,
+/// which is what the probe reads. Kept separate so a test can tell "we were sent back" from
+/// "the page never loaded".
+#[must_use]
+pub fn login_failed() -> &'static str {
+    r#"<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>로그인</title>
+<script>
+function goLogin(){
+  document.getElementById('USER_ID').value=document.getElementById('userId').value;
+  document.getElementById('USER_PW').value=document.getElementById('pwd').value;
+  document.getElementById('loginForm').submit();
+}
+</script></head><body>
+<h1>국가유산 공간정보 인트라넷</h1>
+<p>아이디 또는 비밀번호가 올바르지 않습니다.</p>
+<form id="loginForm" name="loginForm" action="/j_spring_security_check" method="post">
+  <input id="userId" name="userId" type="text">
+  <input id="pwd" name="pwd" type="password">
+  <input id="USER_ID" name="USER_ID" type="hidden">
+  <input id="USER_PW" name="USER_PW" type="hidden">
+  <button type="button" onclick="goLogin();">로그인</button>
+</form>
+</body></html>"#
+}
+
+/// The left menu frame: the only place a frameset page can carry the 로그아웃 mark.
+#[must_use]
+pub fn left_menu() -> &'static str {
+    r#"<!doctype html><html lang="ko"><head><meta charset="utf-8"></head><body>
+<ul><li>지정유산</li><li>현상변경허용기준</li></ul>
+<div><a href="/logout.do">로그아웃</a></div>
+</body></html>"#
 }
 
 /// The child frame: the download panel with the six kind tabs, the two region selects and the

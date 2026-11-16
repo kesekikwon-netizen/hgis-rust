@@ -1,0 +1,20 @@
+[package]
+name = "strata-heritage-run"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[target.'cfg(windows)'.dependencies]
+strata-net = { workspace = true }
+strata-webview = { path = "../strata-webview" }
+raw-window-handle = "0.6"
+
+[target.'cfg(windows)'.dev-dependencies]
+strata-heritage-fixture = { path = "../strata-heritage-fixture" }
+eframe = { workspace = true }
+egui = { workspace = true }
+tempfile = { workspace = true }
