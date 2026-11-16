@@ -5436,6 +5436,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "strata-heritage-fixture"
+version = "2.0.0"
+
+[[package]]
 name = "strata-layout"
 version = "2.0.0"
 dependencies = [
