@@ -17,6 +17,8 @@ pub enum HeritageStage {
     Idle,
     /// Ask the page whether we are past the login form (`:626-632`).
     LoginProbe,
+    /// Dismiss the tutorial popup that hides the top menu (`KaHeritageBrowser.cpp:820-821`).
+    DismissTutorial,
     /// Fill the form and call the site's `goLogin()` (`:898-933`).
     LoggingIn,
     /// Open the download panel through `showAgreePopup()` (`:1030-1100`).
@@ -116,6 +118,9 @@ pub struct HeritageAutomation {
     pub(super) pending: Option<u64>,
     /// When the last ask went out, so the next one waits [`super::LOGIN_POLL_MS`].
     pub(super) asked_at_ms: u64,
+    /// The pledge the page showed when the box was ticked (`HeritageIntranetFlow.cpp:230-243`),
+    /// so a receipt can hold it.
+    pub(super) pledge: Option<String>,
 }
 
 impl HeritageAutomation {
@@ -132,6 +137,7 @@ impl HeritageAutomation {
             kind_index: 0,
             pending: None,
             asked_at_ms: 0,
+            pledge: None,
         }
     }
 
@@ -139,6 +145,30 @@ impl HeritageAutomation {
     #[must_use]
     pub fn stage(&self) -> &HeritageStage {
         &self.stage
+    }
+
+    /// The pledge the page showed when the box was ticked, for the receipt.
+    #[must_use]
+    pub fn pledge_text(&self) -> Option<&str> {
+        self.pledge.as_deref()
+    }
+
+    /// The token a test answers, when it set the stage directly.
+    #[cfg(test)]
+    pub(crate) fn current_token(&self) -> u64 {
+        self.token
+    }
+
+    /// Puts the machine in a stage, for a test that does not want to drive it there.
+    ///
+    /// The token is advanced and marked outstanding, so `script_answered` accepts the answer a
+    /// test gives straight away — which is what `current_token` hands it.
+    #[cfg(test)]
+    pub(crate) fn force_stage(&mut self, stage: HeritageStage) {
+        self.stage = stage;
+        self.token += 1;
+        self.pending = Some(self.token);
+        self.asked_at_ms = 0;
     }
 
     /// The kind being fetched, as its Korean name.
@@ -174,6 +204,7 @@ impl HeritageAutomation {
                 &self.config.account_id.clone(),
                 &self.config.account_password.clone(),
             ),
+            _ if self.page_script().is_some() => self.page_script()?,
             HeritageStage::Done | HeritageStage::Stopped(_) | HeritageStage::Idle => return None,
             _ => return None,
         };
@@ -203,7 +234,7 @@ impl HeritageAutomation {
         match self.stage.clone() {
             HeritageStage::LoginProbe => self.on_login_probe(value),
             HeritageStage::LoggingIn => self.on_login_submitted(value),
-            _ => None,
+            _ => self.on_page_answer(value),
         }
     }
 

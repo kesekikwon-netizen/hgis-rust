@@ -111,9 +111,12 @@ fn nothing_is_asked_while_an_answer_is_outstanding() {
         m.next_step(&mut host, LOGIN_POLL_MS * 10).is_none(),
         "asked again without an answer"
     );
-    // The answer moves the run on, and the next ask is allowed.
+    // The answer moves the run on, and the next ask is allowed after the interval.
     let _ = m.script_answered(first.token, "past-login");
-    assert!(m.next_step(&mut host, LOGIN_POLL_MS * 11).is_none(), "download page is not built yet");
+    assert!(
+        m.next_step(&mut host, LOGIN_POLL_MS * 11).is_some(),
+        "the tutorial stage asked nothing"
+    );
 }
 
 /// The poll interval is respected even with no answer outstanding.
@@ -147,7 +150,7 @@ fn a_page_with_logout_means_we_are_in() {
     assert_eq!(call.page, PageId(1), "the ask did not go to the open page");
     let ev = m.script_answered(call.token, "past-login");
     assert!(matches!(ev, Some(HeritageEvent::Note(_))));
-    assert_eq!(m.stage(), &HeritageStage::DownloadPage);
+    assert_eq!(m.stage(), &HeritageStage::DismissTutorial, "past-login goes to the tutorial, then the panel");
 }
 
 /// `still-login` submits once; a second one gives up with the C++ words.
@@ -212,7 +215,7 @@ fn an_answer_to_an_old_script_is_ignored() {
         m.script_answered(first.token, "still-login").is_none(),
         "an old token changed the stage"
     );
-    assert_eq!(m.stage(), &HeritageStage::DownloadPage);
+    assert_eq!(m.stage(), &HeritageStage::DismissTutorial);
 }
 
 /// The status line names the stage, so the user can see it moving.

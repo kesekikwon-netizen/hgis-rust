@@ -97,7 +97,7 @@ impl eframe::App for Runner {
         let stage = live.run.stage();
         let over = matches!(
             &stage,
-            HeritageStage::Stopped(_) | HeritageStage::Done | HeritageStage::DownloadPage
+            HeritageStage::Stopped(_) | HeritageStage::Done | HeritageStage::DownloadAll
         );
         let timed_out = live.began.elapsed() > CASE_LIMIT;
         if over || timed_out || live.run.finished() {

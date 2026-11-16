@@ -31,7 +31,7 @@ pub fn cases() -> Vec<Case> {
             run_id: FIXTURE_ACCOUNT.0,
             run_password: FIXTURE_ACCOUNT.1,
             city: ("경상북도", "경주시"),
-            expect: HeritageStage::DownloadPage,
+            expect: HeritageStage::DownloadAll,
         },
         Case {
             name: "wrong password stops and says so",

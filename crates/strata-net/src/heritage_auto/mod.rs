@@ -13,12 +13,17 @@ pub mod scripts;
 mod machine;
 #[path = "machine_login.rs"]
 mod machine_login;
+#[path = "machine_pages.rs"]
+mod machine_pages;
 #[path = "login_answers.rs"]
 mod login_answers;
 
 #[cfg(test)]
 #[path = "tests_login.rs"]
 mod tests_login;
+#[cfg(test)]
+#[path = "tests_pages.rs"]
+mod tests_pages;
 
 pub use machine::{HeritageAutomation, HeritageConfig, HeritageEvent, HeritageStage};
 pub use machine_login::NO_ACCOUNT;

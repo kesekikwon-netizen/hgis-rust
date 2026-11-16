@@ -17,7 +17,7 @@ impl HeritageAutomation {
         match value {
             // The body says 로그아웃: we are in. Open the download panel next.
             "past-login" => {
-                self.go(HeritageStage::DownloadPage);
+                self.go(HeritageStage::DismissTutorial);
                 Some(HeritageEvent::Note("인트라넷에 들어갔습니다.".to_owned()))
             }
             // The form is showing. Submit once; a second time means the account is wrong.
