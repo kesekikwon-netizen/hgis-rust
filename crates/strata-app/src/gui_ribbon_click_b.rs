@@ -44,13 +44,25 @@ impl StrataAppState {
             // 내려받는다(:396 startReferenceDownload → :536,622 `토양도를 추가했습니다. …`).
             "토양" => {
                 self.active_tab = MainTab::Map;
-                if !self.toggle_existing_overlay("토양도(흙토람)") {
+                // C++ `MainWindowOverlay.cpp:352-401 downloadSoilTerrain` —
+                // 이미 있으면 토글만 하고, 없으면 **실제로 받아 온다**.
+                if !self.toggle_existing_overlay(strata_net::soil_map::SOIL_LAYER_TITLE) {
                     self.home_map
                         .real_survey
                         .layer_visible
-                        .insert("토양도(흙토람)".to_owned(), true);
+                        .insert(strata_net::soil_map::SOIL_LAYER_TITLE.to_owned(), true);
+                    self.home_map.real_survey.layer_visible.insert(
+                        strata_net::soil_map::SOIL_PICTURE_TITLE.to_owned(),
+                        true,
+                    );
                     self.status_bar_hint =
-                        "토양도를 추가했습니다. 조사 저장으로 지도 구성을 보관하세요.".to_owned();
+                        "토양도(흙토람)를 켰습니다 — 화면을 움직이면 받아 옵니다.".to_owned();
+                    // 지금 화면에 맞는 타일을 실제로 받아 둔다.
+                    let n = self.prefetch_soil_tiles();
+                    if n > 0 {
+                        self.status_bar_hint =
+                            format!("토양도(흙토람) 타일 {n}장을 받았습니다.");
+                    }
                 }
             }
             // C++ MainWindowOverlay.cpp:405-472 downloadGeologyMap — :409 toggleExistingOverlay

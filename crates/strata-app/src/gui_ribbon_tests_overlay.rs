@@ -39,8 +39,12 @@ fn test_r8_soil_and_river_toggle_with_cpp_layer_names() {
         // 없는 상태: 받아 오는 길(여기서는 안내 문구)로 간다.
         app.handle_ribbon_click(button);
         assert!(app.home_map.real_survey.is_layer_visible(title), "{button}");
+        // 2026-11-10: 「토양」 은 이제 **실제로 타일을 받아 온다**(C++ downloadSoilTerrain).
+        // 그래서 안내 문구가 「켰습니다」 또는 「N장을 받았습니다」 로 바뀐다.
         assert!(
-            app.status_bar_hint.contains("추가했습니다"),
+            app.status_bar_hint.contains("켰습니다")
+                || app.status_bar_hint.contains("받았습니다")
+                || app.status_bar_hint.contains("추가했습니다"),
             "{button}: {}",
             app.status_bar_hint
         );

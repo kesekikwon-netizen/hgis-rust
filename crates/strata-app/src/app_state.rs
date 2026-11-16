@@ -97,6 +97,8 @@ pub struct StrataAppState {
     /// 연속지적도 **화면 한 장** 텍스처. 칸별로 나누지 않는 이유는
     /// 칸 경계에서 선이 끊기고 겹쳐 "격자처럼" 보이기 때문이다(C++ 과 같은 방식).
     pub cadastral_view_tex: crate::basemap_cadastral_view::CadastralViewCache,
+    /// 토양도(흙토람) 타일 텍스처. 키 = (z, x, y).
+    pub soil_textures: crate::gui_tab_map::SoilTextureCache,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,

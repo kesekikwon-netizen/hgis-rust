@@ -32,6 +32,8 @@ mod gui_tab_map_overlay;
 mod gui_tab_map_scene_overlay;
 #[path = "gui_tab_map_terrain_backdrop.rs"]
 mod gui_tab_map_terrain_backdrop;
+#[path = "gui_tab_map_soil.rs"]
+mod gui_tab_map_soil;
 #[path = "gui_tab_map_tab.rs"]
 mod gui_tab_map_tab;
 #[path = "gui_tab_map_undo.rs"]
@@ -42,6 +44,7 @@ pub use gui_tab_map_format::*;
 pub use gui_tab_map_geom::*;
 pub use gui_tab_map_grid::paint_projected_grid;
 pub(crate) use gui_tab_map_scene_overlay::SceneOverlayCtx;
+pub use gui_tab_map_soil::SoilTextureCache;
 
 #[cfg(test)]
 #[path = "gui_tab_map_tests.rs"]

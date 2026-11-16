@@ -173,6 +173,21 @@ impl StrataAppState {
                     self.home_map.viewport.zoom_at(f, center);
                 }
             }
+            // 레이어 토글 — 리본 라벨이 한글이라 셸에서 인자를 넘기기 어렵다.
+            "@layer" => {
+                if let Some(name) = arg {
+                    let on = !self.home_map.real_survey.is_layer_visible(name);
+                    self.home_map
+                        .real_survey
+                        .layer_visible
+                        .insert(name.to_owned(), on);
+                    eprintln!("[SNAP] layer {name} -> {on}");
+                }
+            }
+            "@soil" => {
+                self.handle_ribbon_click("토양");
+                eprintln!("[SNAP] soil hint: {}", self.status_bar_hint);
+            }
             "@snap_on" => self.home_map.cad.snap_enabled = true,
             "@snap_off" => self.home_map.cad.snap_enabled = false,
 

@@ -297,6 +297,8 @@ impl StrataAppState {
         // 배경지도 타일(위성·일반도). C++ 은 QGIS 가 그리지만 Rust 는 직접 받아 칠한다.
         self.paint_basemap_layer(ctx, &p, rect);
         self.paint_cadastral_layer(ctx, &p, rect);
+        // 토양도(흙토람) — C++ SoilMapService 의 그림 레이어.
+        self.paint_soil_layer(ctx, &p, rect);
 
         // 지형 음영 — 실제 DEM 이 있을 때만. 조사 데이터 **아래**에 깐다.
         self.paint_terrain_backdrop(ctx, &p, rect, &self.home_map.viewport);

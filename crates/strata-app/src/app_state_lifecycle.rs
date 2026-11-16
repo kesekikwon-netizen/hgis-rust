@@ -63,6 +63,7 @@ impl StrataAppState {
             basemap_tiles_painted: 0,
             cadastral_cells: crate::basemap_paint::CadastralCellCache::default(),
         cadastral_view_tex: crate::basemap_cadastral_view::CadastralViewCache::default(),
+        soil_textures: crate::gui_tab_map::SoilTextureCache::default(),
             active_tool: MapToolKind::Pan,
             ribbon: KaBeginnerRibbon::default(),
             left_layers: LeftLayerPanel::new_empty(),

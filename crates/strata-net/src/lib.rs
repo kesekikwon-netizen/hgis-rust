@@ -12,6 +12,7 @@ pub mod geoinfo_borehole;
 pub mod heritage_intranet;
 pub mod kigam_soil_river;
 pub mod ngii_topographic;
+pub mod soil_map;
 pub mod tile_fetcher;
 pub mod topographic_catalog;
 pub mod vworld_client;
