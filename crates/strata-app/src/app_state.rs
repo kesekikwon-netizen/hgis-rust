@@ -63,6 +63,7 @@ pub use app_state_types::*;
 
 #[derive(Debug, Clone)]
 pub struct StrataAppState {
+    pub(crate) explorer: crate::gui_tab_home::explorer::ExplorerState,
     pub(crate) printing: crate::dlg_drawing_print::print_state::PrintTabState,
     pub active_tab: MainTab,
     pub open_studio_tabs: Vec<MainTab>,

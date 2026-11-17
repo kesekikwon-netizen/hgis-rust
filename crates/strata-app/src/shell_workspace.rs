@@ -17,6 +17,8 @@ impl StrataAppState {
         self.advance_device_print(ctx);
         self.poll_align_picker(ctx);
         self.poll_align_task(ctx);
+        self.explorer.poll();
+        if self.explorer.busy() { ctx.request_repaint_after(std::time::Duration::from_millis(30)); }
         self.sync_sheet_status();
         self.drop_sketch_when_tool_changed();
         self.resync_card_on_tool_change();

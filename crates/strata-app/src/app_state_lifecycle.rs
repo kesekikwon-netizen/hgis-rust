@@ -26,6 +26,7 @@ impl StrataAppState {
         let (basemap_fetch, cadastral_fetch) = crate::basemap_cadastral_jobs::shared_tile_fetchers();
         let default_opts = DisplayOptions { paper_look: true, ..DisplayOptions::default() };
         let mut app = Self {
+            explorer: crate::gui_tab_home::explorer::ExplorerState::default(),
             printing: crate::dlg_drawing_print::print_state::PrintTabState::default(),
             active_tab: MainTab::Home,
             open_studio_tabs: Vec::new(),
