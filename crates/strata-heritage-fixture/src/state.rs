@@ -4,6 +4,15 @@ use std::collections::HashMap;
 
 use crate::server;
 
+/// Browser document ownership cases (`KaHeritageBrowser.cpp:639-778`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Presentation {
+    #[default]
+    Frames,
+    NestedLogin,
+    Popup,
+}
+
 /// The account the fixture accepts, and the city it knows.
 #[derive(Debug, Clone)]
 pub struct FixtureState {
@@ -23,6 +32,12 @@ pub struct FixtureState {
     pub download_delay_ms: u64,
     /// Whether the logged-in content frame must show the site's agreement first.
     pub require_pledge: bool,
+    /// Delay before DOM acknowledgments, independently of transfer completion.
+    pub page_delay_ms: u64,
+    /// A refreshed search returns zero, after a positive unfiltered baseline.
+    pub empty_results: bool,
+    /// Which document owns the login or download page.
+    pub presentation: Presentation,
 }
 
 impl Default for FixtureState {
@@ -36,6 +51,9 @@ impl Default for FixtureState {
             zips: HashMap::new(),
             download_delay_ms: 0,
             require_pledge: false,
+            page_delay_ms: 0,
+            empty_results: false,
+            presentation: Presentation::Frames,
         }
     }
 }
@@ -109,6 +127,27 @@ impl Fixture {
     pub fn set_download_delay(&self, ms: u64) {
         if let Ok(mut s) = self.state.lock() {
             s.download_delay_ms = ms;
+        }
+    }
+
+    /// Delays login submission, panel opening, form replacement and search refresh.
+    pub fn set_page_delay(&self, ms: u64) {
+        if let Ok(mut state) = self.state.lock() {
+            state.page_delay_ms = ms;
+        }
+    }
+
+    /// Makes each filtered result empty (`KaHeritageBrowser.cpp:1106-1113`).
+    pub fn set_empty_results(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.empty_results = true;
+        }
+    }
+
+    /// Selects frame or popup ownership without changing the endpoint protocol.
+    pub fn set_presentation(&self, presentation: Presentation) {
+        if let Ok(mut state) = self.state.lock() {
+            state.presentation = presentation;
         }
     }
 

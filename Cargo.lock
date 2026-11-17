@@ -5444,13 +5444,12 @@ version = "2.0.0"
 name = "strata-heritage-run"
 version = "2.0.0"
 dependencies = [
- "eframe",
- "egui",
  "raw-window-handle",
  "strata-heritage-fixture",
  "strata-net",
  "strata-webview",
  "tempfile",
+ "winit",
 ]
 
 [[package]]

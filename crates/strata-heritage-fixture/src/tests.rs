@@ -81,8 +81,8 @@ fn a_right_password_reaches_the_frames_page() {
         "no frames page after login: {body}"
     );
     assert!(
-        body.contains("heritageDownload.do"),
-        "download frame missing: {body}"
+        body.contains("/fixture/waiting"),
+        "panel must wait for its menu action: {body}"
     );
 }
 

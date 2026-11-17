@@ -8,7 +8,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::pages;
-use crate::state::FixtureState;
+use crate::state::{FixtureState, Presentation};
 
 pub(crate) const STATUS_200: &str = "200 OK";
 pub(crate) const STATUS_204: &str = "204 No Content";
@@ -48,10 +48,24 @@ pub(crate) fn respond(
         // Before login: the form. After login: the frames page, whose child frame holds
         // the download panel — the frame walker in the scripts needs that layout.
         "/user/checkNet.do" => html(&login_or_main(state)),
-        "/main.do" => html(&frames(state)),
-        "/left.do" => html(pages::left_menu()),
-        "/user/data/heritageAgreement.do" => html(pages::agreement()),
-        "/user/data/heritageDownload.do" => html(&pages::download_page(&city(state))),
+        "/main.do" => html(pages::main_frames()),
+        "/left.do" => html(&with_state(state, |s| {
+            pages::left_menu(
+                s.require_pledge,
+                s.presentation == Presentation::Popup,
+                s.page_delay_ms,
+            )
+        })),
+        "/fixture/login-form" => html(&with_state(state, |s| {
+            pages::delayed_login(s.page_delay_ms)
+        })),
+        "/fixture/waiting" => html("<!doctype html><html><body>Loading</body></html>"),
+        "/user/data/heritageAgreement.do" => {
+            html(&with_state(state, |s| pages::agreement(s.page_delay_ms)))
+        }
+        "/user/data/heritageDownload.do" => html(&with_state(state, |s| {
+            crate::download_page::download_page(&s.city, s.page_delay_ms, s.empty_results)
+        })),
         "/user/data/heritageDownloadList.do" => html(&pages::search_result(&city(state))),
         "/user/data/heritageDownload/downloadFilesAll.do" => {
             let zip = state
@@ -63,7 +77,12 @@ pub(crate) fn respond(
                 None => (STATUS_404, CT_HTML, b"no zip".to_vec()),
             }
         }
-        "/favicon.ico" => (STATUS_204, CT_HTML, Vec::new()),
+        "/favicon.ico"
+        | "/fixture/panel-open"
+        | "/fixture/kind-request"
+        | "/fixture/search-request"
+        | "/fixture/unfiltered-download"
+        | "/fixture/confirm-accepted" => (STATUS_204, CT_HTML, Vec::new()),
         _ => (STATUS_404, CT_HTML, b"not found".to_vec()),
     }
 }
@@ -76,20 +95,26 @@ fn city(state: &Arc<Mutex<FixtureState>>) -> (String, String) {
     state.lock().map(|s| s.city.clone()).unwrap_or_default()
 }
 
+fn with_state(
+    state: &Arc<Mutex<FixtureState>>,
+    page: impl FnOnce(&FixtureState) -> String,
+) -> String {
+    state.lock().map(|s| page(&s)).unwrap_or_default()
+}
+
 fn login_or_main(state: &Arc<Mutex<FixtureState>>) -> String {
     let logged_in = state.lock().map(|s| s.logged_in).unwrap_or(false);
     if logged_in {
-        frames(state)
+        pages::main_frames().to_owned()
     } else {
-        pages::login().to_owned()
+        with_state(state, |s| {
+            if s.presentation == Presentation::NestedLogin {
+                "<!doctype html><html><body><iframe src='/fixture/login-form'></iframe></body></html>".to_owned()
+            } else {
+                pages::delayed_login(s.page_delay_ms)
+            }
+        })
     }
-}
-
-fn frames(state: &Arc<Mutex<FixtureState>>) -> String {
-    state
-        .lock()
-        .map(|s| pages::main_frames(&s.city, s.require_pledge))
-        .unwrap_or_default()
 }
 
 /// `USER_ID=…&USER_PW=…` matching the fixture's account.

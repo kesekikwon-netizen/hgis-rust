@@ -1,26 +1,28 @@
 //! Runs the cases one after another, each with a fixture of its own and a time limit.
 
+use raw_window_handle::HasWindowHandle;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use strata_heritage_fixture::Fixture;
+use strata_heritage_fixture::{Fixture, Presentation};
 use strata_heritage_run::{start_run, HeritageRunHandle, RunOptions};
 use strata_net::heritage_auto::{HeritageConfig, HeritageEvent, HeritageStage};
 
-use crate::case::{cases, matches, Case};
+use crate::case::{cases, matches, Case, Scenario};
 
 /// The C++ gives a login about 5.6 s plus two settle ticks (`KaHeritageBrowser.cpp:395,929`);
 /// a session's start and the fixture's delay come on top.
-const CASE_LIMIT: Duration = Duration::from_secs(45);
+const CASE_LIMIT: Duration = Duration::from_secs(90);
 
 struct Live {
     fixture: Fixture,
     run: HeritageRunHandle,
     began: Instant,
-    stage_when_done: Option<HeritageStage>,
+    download_root: PathBuf,
+    accepted_transfer: bool,
     events: Vec<HeritageEvent>,
 }
 
@@ -48,17 +50,34 @@ impl Runner {
         *self.outcome.borrow_mut() = (passed, failed + 1);
     }
 
-    fn begin(&mut self, frame: &eframe::Frame) -> Result<Live, String> {
+    pub fn planned(&self) -> usize {
+        self.cases.len()
+    }
+
+    fn begin<W: HasWindowHandle>(&mut self, frame: &W) -> Result<Live, String> {
         let case = &self.cases[self.at];
         let fixture = Fixture::start(crate::case::FIXTURE_ACCOUNT, case.city);
-        if case.pledge {
+        if crate::case::wants_pledge(case) {
             fixture.require_pledge();
         }
         if crate::case::wants_zip(case) {
             fixture.give_zip("지정유산", crate::case::sample_zip()?);
         }
         if case.expect == HeritageStage::Cancelled {
-            fixture.set_download_delay(500);
+            fixture.set_download_delay(1500);
+        }
+        match case.scenario {
+            Scenario::Delayed => fixture.set_page_delay(900),
+            Scenario::Absent => fixture.set_empty_results(),
+            Scenario::Popup => fixture.set_presentation(Presentation::Popup),
+            Scenario::NestedLogin => fixture.set_presentation(Presentation::NestedLogin),
+            _ => {}
+        }
+        let case_root = self.work.join(format!("case-{}", self.at + 1));
+        std::fs::create_dir_all(&case_root).map_err(|e| e.to_string())?;
+        let download_root = case_root.join("받은자료");
+        if case.scenario == Scenario::StorageFailure {
+            std::fs::write(&download_root, b"keep original").map_err(|e| e.to_string())?;
         }
         let options = RunOptions {
             data_parent: self
@@ -74,29 +93,26 @@ impl Runner {
             },
             // The fixture is on this PC, so the switch stays off as in `strata-ngii-run`.
             network_allowed: Arc::new(|| false),
-            download_root: self
-                .work
-                .join(format!("case-{}", self.at + 1))
-                .join("받은자료"),
+            download_root: download_root.clone(),
         };
         let run = start_run(frame, options).map_err(|e| e.to_string())?;
         Ok(Live {
             fixture,
             run,
             began: Instant::now(),
-            stage_when_done: None,
+            download_root,
+            accepted_transfer: false,
             events: Vec::new(),
         })
     }
 }
 
-impl eframe::App for Runner {
-    fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
+impl Runner {
+    pub fn tick<W: HasWindowHandle>(&mut self, frame: &W) -> bool {
         // A frame arrives; drive the current case one step.
         if self.live.is_none() {
             if self.at >= self.cases.len() {
-                ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Close);
-                return;
+                return true;
             }
             match self.begin(frame) {
                 Ok(live) => self.live = Some(live),
@@ -106,12 +122,11 @@ impl eframe::App for Runner {
                     self.at += 1;
                 }
             }
-            ctx.request_repaint();
-            return;
+            return false;
         }
 
         let Some(live) = self.live.as_mut() else {
-            return;
+            return false;
         };
         let events = live.run.frame(frame);
         for event in &events {
@@ -119,8 +134,11 @@ impl eframe::App for Runner {
         }
         live.events.extend(events);
         let stage = live.run.stage();
-        if self.cases[self.at].expect == HeritageStage::Cancelled && stage == HeritageStage::Waiting
+        if self.cases[self.at].expect == HeritageStage::Cancelled
+            && !live.accepted_transfer
+            && crate::assertions::offer_was_accepted(&live.download_root, self.cases[self.at].city)
         {
+            live.accepted_transfer = true;
             live.run.cancel();
             live.run.cancel();
         }
@@ -137,59 +155,20 @@ impl eframe::App for Runner {
         };
         let timed_out = live.began.elapsed() > CASE_LIMIT;
         if over || timed_out || live.run.finished() {
-            let _ = &live.fixture;
             let case = &self.cases[self.at];
-            let agreements: Vec<_> = live
-                .events
-                .iter()
-                .filter_map(|event| match event {
-                    HeritageEvent::PledgeAgreed { terms } => Some(terms),
-                    _ => None,
-                })
-                .collect();
-            let pledge_held = if case.pledge {
-                agreements.len() == 1 && agreements[0] == "국가유산 공간정보 원본자료 사용 서약서 \"사용\" \\자료\n\n서약서에 동의확인"
-            } else {
-                agreements.is_empty()
-            };
-            let held = pledge_held
-                && matches(&stage, &case.expect)
-                && match case.expect {
-                    HeritageStage::Done => {
-                        live.events
-                            .iter()
-                            .filter(|e| matches!(e, HeritageEvent::Done))
-                            .count()
-                            == 1
-                            && live
-                                .events
-                                .iter()
-                                .filter(|e| matches!(e, HeritageEvent::ZipReady { .. }))
-                                .count()
-                                == 6
-                            && matches!(live.events.last(), Some(HeritageEvent::Done))
-                    }
-                    HeritageStage::Cancelled => {
-                        live.events
-                            .iter()
-                            .filter(|e| matches!(e, HeritageEvent::Cancelled))
-                            .count()
-                            == 1
-                            && !live.events.iter().any(|e| {
-                                matches!(
-                                    e,
-                                    HeritageEvent::ZipReady { .. }
-                                        | HeritageEvent::KindAbsent { .. }
-                                        | HeritageEvent::Done
-                                )
-                            })
-                    }
-                    _ => true,
-                };
+            let held = !timed_out
+                && crate::assertions::held(
+                    case,
+                    &stage,
+                    &live.events,
+                    &live.fixture,
+                    &live.download_root,
+                    live.accepted_transfer,
+                );
             let (passed, failed) = *self.outcome.borrow();
             if held {
                 println!(
-                    "case {} ok ({} frames)",
+                    "case {} ok ({} ms)",
                     case.name,
                     live.began.elapsed().as_millis()
                 );
@@ -209,13 +188,21 @@ impl eframe::App for Runner {
                 live.fixture.hits("/user/checkNet.do"),
                 live.fixture.hits("/j_spring_security_check")
             );
+            for route in [
+                "/fixture/panel-open",
+                "/fixture/kind-request",
+                "/fixture/search-request",
+                "/fixture/unfiltered-download",
+                "/fixture/confirm-accepted",
+                "/user/data/heritageDownload/downloadFilesAll.do",
+            ] {
+                println!("  {route}: {}", live.fixture.hits(route));
+            }
             self.live = None;
             self.at += 1;
-            ctx.request_repaint();
-            return;
+            return false;
         }
-        live.stage_when_done = Some(stage);
-        ctx.request_repaint();
+        false
     }
 }
 

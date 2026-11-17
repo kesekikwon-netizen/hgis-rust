@@ -8,9 +8,10 @@
 #[cfg(test)]
 mod tests;
 
+mod download_page;
 mod pages;
 mod routes;
 mod server;
 mod state;
 
-pub use state::{Fixture, FixtureState};
+pub use state::{Fixture, FixtureState, Presentation};

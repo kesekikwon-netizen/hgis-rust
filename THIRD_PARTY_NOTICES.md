@@ -127,3 +127,12 @@ RustGIS 의 자료 크레이트에는 웹 주소에서 읽는 기능이 들어 �
 | Rust 크레이트 `http` 1.5.0 · `cookie` 0.18.2 · `time` 0.3.55(`time-core` 0.1.9 · `time-macros` 0.2.32 · `deranged` 0.5.9 · `num-conv` 0.2.2 · `powerfmt` 0.2.1) · `base64` 0.23.1 · `crossbeam-channel` 0.5.17 · `dirs` 7.0.0 · `dtoa` 1.0.11 · `siphasher` 1.0.4 · `tao-macros` 0.1.4 | — | MIT 또는 Apache-2.0 | https://crates.io/crates/wry |
 | Rust 크레이트 `dunce` 1.0.5 | 1.0.5 | CC0-1.0 또는 MIT-0 또는 Apache-2.0 | https://gitlab.com/kornelski/dunce |
 | 비 Windows 타깃 전용 전이 의존(`Cargo.lock` 기록용, Windows 빌드에서는 컴파일하지 않음): `dom_query` 0.28.0 · `derive_more` 2.1.1 · `derive_more-impl` 2.1.1 · `phf` / `phf_*` 0.13.1 · `new_debug_unreachable` 1.0.6 · `precomputed-hash` 0.1.1 (`MIT`), `html5ever` 0.39.0 · `markup5ever` 0.39.0 · `servo_arc` 0.4.3 · `string_cache` 0.9.0 · `string_cache_codegen` 0.6.1 · `tendril` 0.5.1 · `web_atoms` 0.2.6 · `cesu8` 1.1.0 · `jni` 0.21.1 (`MIT 또는 Apache-2.0`), `objc2-exception-helper` 0.1.1 · `objc2-ui-kit` 0.3.2 · `objc2-web-kit` 0.3.2 (`Zlib 또는 Apache-2.0 또는 MIT`), `cssparser` 0.37.0 · `cssparser-macros` 0.7.1 · `dtoa-short` 0.3.5 · `selectors` 0.38.0 (`MPL-2.0`, 무수정) | — | 위 표기 참조 (GPL/AGPL/LGPL 없음) | https://crates.io/crates/wry |
+
+The Windows-only `strata-heritage-run` fixture example directly uses the already locked
+`winit =0.30.13` with default features disabled and `rwh_06` enabled to create an initially invisible test parent.
+Winit is Apache-2.0 (the winit contributors; https://github.com/rust-windowing/winit,
+package `LICENSE`). This adds a test dependency edge, not a new package or native loader.
+Its existing Windows dependencies include `windows-sys`/`windows-targets` (MIT or Apache-2.0),
+`unicode-segmentation` (MIT or Apache-2.0), and common Rust support crates recorded in Cargo.lock;
+`build.rs` only declares platform aliases through `cfg_aliases` (MIT).
+The product keeps using its existing main application window as the hidden browser parent.
