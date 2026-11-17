@@ -39,6 +39,13 @@ impl HeritageAutomation {
 
     /// One answer to a page stage. Each arm is one C++ callback's body.
     pub(super) fn on_page_answer(&mut self, value: &str) -> Option<HeritageEvent> {
+        // Readback and reselection share SelectRegion's budget (`KaHeritageBrowser.cpp:1036-1079`).
+        if matches!(
+            self.stage,
+            HeritageStage::Region | HeritageStage::RegionReady
+        ) {
+            self.quiet_ticks = self.quiet_ticks.saturating_add(1);
+        }
         match self.stage.clone() {
             HeritageStage::DismissTutorial => self.on_tutorial(value),
             HeritageStage::DownloadPage => self.on_download_page(value),
@@ -137,7 +144,6 @@ impl HeritageAutomation {
             return None;
         }
         if let Some(count) = value.strip_prefix("sigungu:") {
-            self.quiet_ticks = self.quiet_ticks.saturating_add(1);
             if self.quiet_ticks <= 12 || count == "0" {
                 return None;
             }
@@ -152,6 +158,12 @@ impl HeritageAutomation {
             "no-sido" => {
                 let sido = self.config.sido.clone();
                 self.stop(format!("「{sido}」 가 인트라넷 시·도 목록에 없습니다."))
+            }
+            "not-found" if self.quiet_ticks > 20 => {
+                self.stop("다운로드 폼에서 시·도 칸을 찾지 못했습니다.".to_owned())
+            }
+            "sigungu-pending" if self.quiet_ticks > 20 => {
+                self.stop("다운로드 폼에서 시·군·구 칸을 찾지 못했습니다.".to_owned())
             }
             "sigungu-pending" | "not-found" => None,
             other => self.stop(format!("지역을 고르는 중 문제가 생겼습니다({other}).")),

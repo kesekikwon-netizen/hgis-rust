@@ -36,6 +36,8 @@ mod tests_login;
 mod tests_pages;
 #[cfg(test)]
 mod tests_readiness;
+#[cfg(test)]
+mod tests_region_wait;
 
 pub use machine::{HeritageAutomation, HeritageConfig, HeritageEvent, HeritageStage};
 pub use machine_kinds::MAX_ATTEMPTS;
