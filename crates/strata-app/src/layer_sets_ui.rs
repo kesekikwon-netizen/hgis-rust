@@ -5,7 +5,7 @@ use eframe::egui::{self, Vec2};
 
 impl StrataAppState {
     pub(crate) fn paint_layer_set_menu(&mut self, ui: &mut egui::Ui) {
-        ui.menu_button("세트 ▾", |ui| {
+        crate::gui_shell::native_menu_button(ui, "세트 ▾", |ui| {
             ui.set_max_width(340.0);
             let height = (ui.ctx().screen_rect().height() - 48.0).max(80.0);
             ui.set_max_height(height);

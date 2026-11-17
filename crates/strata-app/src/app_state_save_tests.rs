@@ -75,7 +75,7 @@ fn ctrl_s_runs_the_same_save() {
         modifiers: egui::Modifiers::CTRL,
         ..Default::default()
     };
-    let _ = ctx.run(raw, |ctx| app.handle_cpp_keyboard_shortcuts(ctx));
+    let _ = ctx.run(raw, |ctx| app.handle_cpp_keyboard_shortcuts(ctx).apply(&mut app, ctx));
     assert_eq!(poly_count(&path), 3);
     assert!(!app.is_dirty);
 }

@@ -115,7 +115,7 @@ impl StrataAppState {
                             chosen = Some(SheetAsk::Open(title.clone()));
                         }
                     }
-                    ui.menu_button("보관한 도면 지우기", |ui| {
+                    crate::gui_shell::native_menu_button(ui, "보관한 도면 지우기", |ui| {
                         for title in &rows {
                             if ui.button(title).clicked() {
                                 chosen = Some(SheetAsk::Remove(title.clone()));

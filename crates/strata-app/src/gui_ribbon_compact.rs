@@ -12,7 +12,7 @@ impl StrataAppState {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(6.0, 4.0);
                 for (group, items) in UX_RIBBON_GROUPS {
-                    ui.menu_button(group, |ui| {
+                    crate::gui_shell::native_menu_button(ui, group, |ui| {
                         ui.set_min_width(190.0);
                         for &label in items {
                             let deferred = super::gui_ribbon_draw::deferred_ribbon_tooltip(label);

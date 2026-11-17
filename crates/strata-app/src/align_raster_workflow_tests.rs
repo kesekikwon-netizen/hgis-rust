@@ -116,7 +116,7 @@ fn alignment_escape_cancels_only_the_pending_source_and_keeps_the_session() {
             events: vec![eframe::egui::Event::Key { key: eframe::egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }],
             ..Default::default()
         },
-        |ctx| app.handle_cpp_keyboard_shortcuts(ctx),
+        |ctx| app.handle_cpp_keyboard_shortcuts(ctx).apply(&mut app, ctx),
     );
     assert!(app.align.pending_source.is_none(), "Escape failed to cancel the pending left point");
     assert_eq!(app.active_tool, strata_canvas2d::map_tools::MapToolKind::GeorefAlign, "Escape incorrectly ended alignment");

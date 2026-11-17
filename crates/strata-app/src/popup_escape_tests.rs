@@ -8,6 +8,7 @@ struct Harness {
     time: f64,
     _directory: tempfile::TempDir,
     textures: crate::gui_tab_drawing::sheet_raster::Textures,
+    size: [u32; 2],
 }
 impl Harness {
     fn drawing() -> Self {
@@ -27,7 +28,7 @@ impl Harness {
         app.start_edit_feature_poly();
         let ctx = egui::Context::default();
         crate::gui_theme_fonts::configure_korean_fonts_and_theme(&ctx, &app.theme);
-        let mut h = Self { app, ctx, time: 0.0, _directory: directory, textures: Default::default() };
+        let mut h = Self { app, ctx, time: 0.0, _directory: directory, textures: Default::default(), size: [1680, 960] };
         for _ in 0..3 {
             h.frame(vec![]);
         }
@@ -40,10 +41,17 @@ impl Harness {
     }
     fn frame(&mut self, events: Vec<Event>) -> egui::FullOutput {
         self.time += 0.05;
-        let output =
-            self.ctx.run(RawInput { time: Some(self.time), screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1680.0, 960.0))), events, ..Default::default() }, |ctx| {
+        let output = self.ctx.run(
+            RawInput {
+                time: Some(self.time),
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(self.size[0] as f32, self.size[1] as f32))),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
                 self.app.render_workspace_egui(ctx);
-            });
+            },
+        );
         self.textures.apply(&output.textures_delta);
         output
     }
@@ -77,7 +85,7 @@ impl Harness {
     }
     fn save(&mut self, name: &str) {
         let output = self.frame(vec![]);
-        crate::test_mods::ui_snapshot_support::save_frame_if_requested(&self.ctx, &output, &self.textures, [1680, 960], name);
+        crate::test_mods::ui_snapshot_support::save_frame_if_requested(&self.ctx, &output, &self.textures, self.size, name);
     }
     fn close_popup_without_losing_capture(&mut self, name: &str) {
         assert_eq!(self.app.draw_sketch.points.len(), 3, "opening the popup discarded capture");
@@ -89,6 +97,100 @@ impl Harness {
         assert_eq!(self.app.draw_sketch.points, points, "popup Escape discarded pending EPSG:5187 vertices");
         assert_eq!(self.app.active_tool, tool, "popup Escape changed the canvas tool");
     }
+}
+
+#[test]
+fn popup_escape_closes_actual_compact_layer_menu_and_preserves_unfinished_polygon() {
+    let mut h = Harness::drawing();
+    h.size = [1024, 768];
+    h.frame(vec![]);
+    let at = h.point_at("레이어");
+    h.press(at, PointerButton::Primary);
+    h.point_at("파일함");
+    h.close_popup_without_losing_capture("popup-escape-native-layer");
+    let output = h.frame(vec![]);
+    assert!(!output.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text() == "파일함")), "native menu did not close");
+    h.escape();
+    assert!(h.app.draw_sketch.points.is_empty(), "canvas Escape no longer cancels after native menu closed");
+}
+
+#[test]
+fn popup_escape_closes_reopened_compact_ribbon_menu_without_discarding_capture() {
+    let mut h = Harness::drawing();
+    h.size = [1024, 768];
+    h.frame(vec![]);
+    for _ in 0..2 {
+        let at = h.point_at("기록");
+        h.press(at, PointerButton::Primary);
+        h.point_at("그리기");
+        h.close_popup_without_losing_capture("popup-escape-native-ribbon");
+        let output = h.frame(vec![]);
+        assert!(!output.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text() == "그리기")), "native ribbon menu did not close");
+    }
+    h.escape();
+    assert!(h.app.draw_sketch.points.is_empty(), "canvas Escape blocked after reopening a native menu");
+}
+
+#[test]
+fn popup_escape_on_native_menu_click_release_keeps_capture() {
+    let mut h = Harness::drawing();
+    h.size = [1024, 768];
+    h.frame(vec![]);
+    let at = h.point_at("레이어");
+    let points = h.app.draw_sketch.points.clone();
+    h.frame(vec![Event::PointerMoved(at)]);
+    h.frame(vec![Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers: Default::default() }]);
+    h.frame(vec![
+        Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: false, modifiers: Default::default() },
+        Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() },
+    ]);
+    assert_eq!(h.app.draw_sketch.points, points, "batched native menu click/Escape discarded capture");
+}
+
+#[test]
+fn popup_escape_stale_stock_popup_id_does_not_block_canvas_cancel() {
+    let mut h = Harness::drawing();
+    h.ctx.memory_mut(|memory| memory.open_popup(egui::Id::new("orphan_combo_after_closed_dialog")));
+    assert!(h.ctx.memory(|memory| memory.any_popup_open()));
+    h.escape();
+    assert!(h.app.draw_sketch.points.is_empty(), "orphan stock popup id blocked real canvas cancellation");
+}
+
+#[test]
+fn popup_escape_with_enter_in_one_input_batch_does_not_commit_the_cancelled_polygon() {
+    let mut h = Harness::drawing();
+    let before = h.app.survey_tables.iter().find(|table| table.table == "feature_poly").expect("actual polygon table").layer.features.len();
+    h.frame([Key::Escape, Key::Enter].into_iter().map(|key| Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }).collect());
+    let after = h.app.survey_tables.iter().find(|table| table.table == "feature_poly").expect("actual polygon table").layer.features.len();
+    assert_eq!(after, before, "Escape/Enter committed the polygon before cancellation");
+    assert!(h.app.draw_sketch.points.is_empty());
+}
+
+#[test]
+fn popup_escape_closes_compact_layer_set_submenu_and_its_parent() {
+    let mut h = Harness::drawing();
+    h.size = [1024, 768];
+    h.app.sketch_cancel();
+    h.app.active_tool = strata_canvas2d::map_tools::MapToolKind::Pan;
+    h.app.open_studio_tab(MainTab::Drawing);
+    assert_eq!(h.app.active_tab, MainTab::Drawing);
+    for _ in 0..3 {
+        h.frame(vec![]);
+    }
+    let at = h.point_at("레이어");
+    h.press(at, PointerButton::Primary);
+    let at = h.point_at("세트 ▾");
+    h.press(at, PointerButton::Primary);
+    h.point_at("지금 켜진 레이어를 세트로 저장…");
+    h.save("popup-escape-native-layer-set-child-open");
+    h.escape();
+    h.save("popup-escape-native-layer-set-child-closed");
+    assert_eq!(h.app.active_tab, MainTab::Drawing);
+    let output = h.frame(vec![]);
+    assert!(
+        !output.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Text(t) if ["파일함", "지금 켜진 레이어를 세트로 저장…"].contains(&t.galley.text()))),
+        "native menu hierarchy stayed open"
+    );
 }
 
 #[test]

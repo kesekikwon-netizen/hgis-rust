@@ -37,11 +37,12 @@ impl Harness {
                 ..Default::default()
             },
             |ctx| {
-                self.app.handle_cpp_keyboard_shortcuts(ctx);
+                let escape = self.app.handle_cpp_keyboard_shortcuts(ctx);
                 egui::CentralPanel::default().show(ctx, |ui| {
                     self.app.render_cpp_left_layer_panel(ui, true);
                 });
                 self.app.render_layer_set_question(ctx);
+                escape.apply(&mut self.app, ctx);
             },
         );
         self.textures.apply(&output.textures_delta);

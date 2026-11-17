@@ -4,6 +4,12 @@ use strata_canvas2d::map_tools::MapToolKind;
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::ActiveModalDialog;
 
+#[path = "gui_shell_escape.rs"]
+mod escape;
+#[path = "native_menu_input.rs"]
+mod native_menu_input;
+pub(crate) use native_menu_input::menu_button as native_menu_button;
+
 /// UX_LAYOUT_SPEC.md 1절: 세로 5단 골격 (창 1600×900 기준, 상태줄 y=839, h=32)
 pub const UX_STATUS_BAR_Y: f32 = 839.0;
 pub const UX_STATUS_BAR_HEIGHT: f32 = 32.0;
@@ -15,10 +21,11 @@ pub const KA_STATUS_SCALE_PRESETS: [u32; 13] = [100, 200, 250, 500, 1_000, 2_000
 
 impl StrataAppState {
     /// C++ `MainWindow.cpp` + `MainWindowRibbon.cpp` + `KaShellFocus.h` 단축키 1:1 처리
-    pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
+    pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) -> escape::PendingCanvasEscape {
+        let escape = self.pending_canvas_escape(ctx);
         // C++ 모달 창(KaFeatureFormDialog·조사구역 설정·도형 속성) 뒤에서는 주 창 단축키가 듣지 않는다 — 창이 Enter·Esc 를 맡는다.
         if self.modal_window_open() {
-            return;
+            return escape;
         }
         let wants_kb = ctx.wants_keyboard_input();
         let mut save_requested: Option<bool> = None;
@@ -26,24 +33,9 @@ impl StrataAppState {
         // KaCaptureMapTool::keyPressEvent (target/cpp-ref/src/app/KaCaptureMapTool.cpp:379-391) and
         // target/cpp-ref/src/app/MainWindowUndo.cpp:486-495 apply Esc, Enter, Backspace and Delete to capture.
         let capture = !wants_kb && self.modals.active.is_none() && self.capture_active();
-        // target/cpp-ref/src/app/KaRegionLocator.cpp:106-120 and MainWindowContextMenus.cpp:192: popup Escape stays out of the canvas.
-        let popup_owns_escape = self.app_popup_menu_open() || self.ribbon.app_bar.address_popup_open;
         ctx.input(|i| {
-            let escape = i.key_pressed(egui::Key::Escape) && !popup_owns_escape;
-            if !wants_kb && self.active_tool == MapToolKind::GeorefAlign && escape {
-                self.align.pending_source = None;
-                self.status_bar_hint = self.align.status_text();
-            } else if capture && escape {
-                self.sketch_cancel();
-            } else if escape && self.home_map.active_vertex.take().is_some() {
-                // KaFeatureSelectTool.cpp:164-170: Esc lets go of the picked vertex and keeps the tool.
-            } else if escape && self.home_map.inline_rename.is_none() {
-                self.home_map.cad.on_escape(&mut self.home_map.scene);
-                self.modals.active = None;
-                self.ribbon.sub_toolbar_visible = false;
-                self.active_tool = MapToolKind::Pan;
-            }
-            if capture && i.key_pressed(egui::Key::Enter) {
+            // target/cpp-ref/src/app/KaCaptureMapTool.cpp:379-386: keep cancellation ahead of a batched Enter.
+            if capture && i.key_pressed(egui::Key::Enter) && !i.key_pressed(egui::Key::Escape) {
                 self.sketch_finish();
             }
             if i.key_pressed(egui::Key::F9) {
@@ -148,6 +140,7 @@ impl StrataAppState {
             }
             None => {}
         }
+        escape
     }
 }
 

@@ -8,7 +8,7 @@ impl StrataAppState {
         if self.home_map.internet.poll() || matches!(self.home_map.internet, InternetCheck::Checking(_)) {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
         }
-        ui.menu_button("연결 상태", |ui| {
+        crate::gui_shell::native_menu_button(ui, "연결 상태", |ui| {
             ui.set_width(300.0);
             ui.label("비밀값은 표시되지 않습니다");
             ui.separator();

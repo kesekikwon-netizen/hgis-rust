@@ -12,7 +12,7 @@ impl StrataAppState {
     pub fn render_workspace_egui(&mut self, ctx: &egui::Context) -> egui::Rect {
         let _perf_frame = crate::perf_recorder::begin_frame();
         self.poll_debug_remote_commands(ctx);
-        self.handle_cpp_keyboard_shortcuts(ctx);
+        let escape = self.handle_cpp_keyboard_shortcuts(ctx);
         self.advance_sheet_pdf(ctx);
         self.advance_device_print(ctx);
         self.poll_align_picker(ctx);
@@ -111,6 +111,7 @@ impl StrataAppState {
         self.render_feature_record(ctx);
         self.render_rename_layer(ctx);
         self.render_layer_set_question(ctx);
+        escape.apply(self, ctx);
         central_rect
     }
 
@@ -119,7 +120,7 @@ impl StrataAppState {
         let compact = ctx.screen_rect().width() < 1100.0;
         // target/cpp-ref/src/app/KaStatusBar.cpp:58-64,121-160; owner-requested narrow-screen overflow menu.
         if compact {
-            ui.menu_button("⋯", |ui| {
+            crate::gui_shell::native_menu_button(ui, "⋯", |ui| {
                 self.render_status_actions(ui);
                 self.render_status_readouts(ui);
             });

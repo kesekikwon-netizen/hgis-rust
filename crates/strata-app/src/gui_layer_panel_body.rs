@@ -4,7 +4,7 @@ use crate::app_state::StrataAppState;
 use eframe::egui::{self, Color32, Pos2, Rect, Vec2};
 impl StrataAppState {
     pub(crate) fn paint_compact_layer_menu(&mut self, ui: &mut egui::Ui, show_set_btn: bool) {
-        ui.menu_button("레이어", |ui| {
+        crate::gui_shell::native_menu_button(ui, "레이어", |ui| {
             ui.set_width(340.0);
             let height = (ui.ctx().screen_rect().height() - 160.0).clamp(100.0, 440.0);
             egui::ScrollArea::vertical().id_salt("compact_layer_pane").drag_to_scroll(false).max_height(height).auto_shrink([false, false]).show(ui, |ui| {

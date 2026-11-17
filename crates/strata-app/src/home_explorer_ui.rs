@@ -62,12 +62,12 @@ impl StrataAppState {
                     self.explorer.refresh();
                 }
                 if !wide {
-                    ui.menu_button("폴더", |ui| {
+                    crate::gui_shell::native_menu_button(ui, "폴더", |ui| {
                         ui.set_width(220.0);
                         egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| self.render_explorer_places(ui, short_height));
                     });
                 }
-                ui.menu_button("정렬", |ui| {
+                crate::gui_shell::native_menu_button(ui, "정렬", |ui| {
                     for (sort, label) in [(Sort::Name, "이름"), (Sort::Size, "크기"), (Sort::Modified, "수정한 날짜"), (Sort::Kind, "종류")] {
                         if ui.selectable_label(self.explorer.sort == sort, label).clicked() {
                             self.explorer.set_sort(sort, self.explorer.descending);

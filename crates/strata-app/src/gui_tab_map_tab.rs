@@ -31,7 +31,7 @@ impl StrataAppState {
             egui::TopBottomPanel::top("compact_map_panels").frame(egui::Frame::NONE).exact_height(36.0).show_inside(ui,|ui| {
                 ui.horizontal(|ui| {
                     self.paint_compact_layer_menu(ui,false);
-                    ui.menu_button("선택한 유구",|ui| {
+                    crate::gui_shell::native_menu_button(ui, "선택한 유구",|ui| {
                         ui.set_width(280.0);
                         let height=(ui.ctx().screen_rect().height()-160.0).clamp(100.0,440.0);
                         egui::ScrollArea::vertical().max_height(height).show(ui,|ui| self.render_ri_body(ui));
