@@ -132,3 +132,87 @@ fn an_unchecked_cadastral_map_gives_no_line_to_snap_to() {
     assert_eq!(outer_ring(&app), drawn);
     assert_eq!(app.status_left_message(), "이미 가장 가까운 선에 붙어 있거나 주변에 붙일 기준 선(지적·도면)이 없습니다.");
 }
+
+// EPSG:5187 fixture values follow target/cpp-ref/tests/test_parcel_copy_keys.cpp's snap trace case.
+fn snap_crs_table(app: &mut StrataAppState, key: strata_types::schema::DomainLayerKey, srs_id: i32, kind: &str, wkt: &str) {
+    use strata_storage::edit_buffer::{FeatureRecord, LayerEditBuffer};
+    use strata_storage::survey_gpkg_read::SurveyFileTable;
+    let mut layer = LayerEditBuffer::new(key);
+    layer.features.push(FeatureRecord { fid: 1, wkt_geom: wkt.to_owned(), attributes: Default::default() });
+    app.survey_tables.retain(|t| t.table != key.id());
+    app.survey_tables.push(SurveyFileTable { table: key.id().to_owned(), srs_id, geometry_type: kind.to_owned(), columns: Vec::new(), baseline: layer.features.to_vec(), layer });
+    app.left_layers.ensure_domain_layer(key);
+    app.home_map.real_survey.layer_visible.insert(key.name_ko().to_owned(), true);
+}
+
+#[test]
+fn snap_crs_unknown_reference_lines_and_points_never_become_work_coordinates() {
+    use strata_types::schema::DomainLayerKey::{ControlPoints, FeatureLine};
+    for srs in [-1, 0, 999_999] {
+        let dir = tempfile::tempdir().expect("temporary survey");
+        let mut app = new_survey(dir.path());
+        snap_crs_table(&mut app, FeatureLine, srs, "LINESTRING", "LINESTRING (200000 450000,200020 450000)");
+        snap_crs_table(&mut app, ControlPoints, srs, "POINT", "POINT (200010 450001.2)");
+        let (lines, points) = app.survey_snap_parts();
+        assert!(lines.is_empty() && points.is_empty(), "unknown EPSG:{srs} leaked raw reference coordinates: {lines:?}, {points:?}");
+    }
+}
+
+#[test]
+fn snap_crs_unknown_target_does_not_change_geometry_history_or_dirty_state() {
+    for srs in [-1, 0, 999_999] {
+        let dir = tempfile::tempdir().expect("temporary survey");
+        let mut app = new_survey(dir.path());
+        app.home_map.viewport.meters_per_pixel = 0.125;
+        draw_area_along_the_parcel(&mut app);
+        assert_eq!(outer_ring(&app).len(), 5);
+        app.home_map.real_survey.cadastral_parcels.push(RealCadastralParcel {
+            jibun: "도면".to_owned(),
+            ring: vec![[200_000.0, 450_000.0], [200_010.0, 450_001.2], [200_020.0, 450_000.0]],
+            center: [200_010.0, 450_000.0],
+        });
+        app.home_map.viewport.meters_per_pixel = 0.125;
+        let area = app.survey_tables.iter_mut().find(|t| t.table == "survey_area").expect("area");
+        area.srs_id = srs;
+        let before = serde_json::to_value(&area.layer).expect("buffer including history");
+        let undo_count = app.undo_tables.len();
+        app.is_dirty = false;
+        assert_eq!(app.snap_shapes_to_nearest_lines(), 0, "unknown EPSG:{srs} target was edited");
+        let area = app.survey_tables.iter().find(|t| t.table == "survey_area").expect("area");
+        assert_eq!(serde_json::to_value(&area.layer).expect("buffer"), before);
+        assert_eq!(app.undo_tables.len(), undo_count);
+        assert!(!app.is_dirty);
+    }
+}
+
+#[test]
+fn snap_crs_invalid_reference_cannot_move_a_valid_target() {
+    for srs in [-1, 0, 999_999] {
+        let dir = tempfile::tempdir().expect("temporary survey");
+        let mut app = new_survey(dir.path());
+        app.home_map.viewport.meters_per_pixel = 0.125;
+        draw_area_along_the_parcel(&mut app);
+        let drawn = outer_ring(&app);
+        snap_crs_table(&mut app, strata_types::schema::DomainLayerKey::FeatureLine, srs, "LINESTRING", "LINESTRING (200000 450000,200010 450001.2,200020 450000)");
+        assert_eq!(app.snap_shapes_to_nearest_lines(), 0, "unknown EPSG:{srs} reference moved the valid EPSG:5187 target");
+        assert_eq!(outer_ring(&app), drawn);
+    }
+}
+
+// Conversion boundary: target/cpp-ref/src/core/SnapTraceOps.cpp:114-125; independent GDAL literals in strata-engine/src/crs_tests.rs:82-83.
+// A 1 mm fixture comparison is 0.008 screen px at 0.125 m/px, not a global projection-error bound.
+#[test]
+fn snap_crs_valid_projected_lines_and_identity_points_keep_their_coordinates() {
+    use strata_types::schema::DomainLayerKey::{ControlPoints, FeatureLine};
+    let dir = tempfile::tempdir().expect("temporary survey");
+    let mut app = new_survey(dir.path());
+    snap_crs_table(&mut app, FeatureLine, 5186, "LINESTRING", "LINESTRING (200050 450040,200000 450000)");
+    snap_crs_table(&mut app, ControlPoints, 5187, "POINT", "POINT (21200 451902)");
+    let (lines, points) = app.survey_snap_parts();
+    assert_eq!(points, [[21200.0, 451902.0]]);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0].len(), 2);
+    for (got, want) in lines[0].iter().zip([[21200.748364012, 451902.649385984], [21149.9056088904, 451863.684731702]]) {
+        assert!((got[0] - want[0]).hypot(got[1] - want[1]) <= 0.001, "EPSG:5186 -> 5187 mismatch: {got:?} vs {want:?}");
+    }
+}

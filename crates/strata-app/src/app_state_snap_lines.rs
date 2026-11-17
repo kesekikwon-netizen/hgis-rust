@@ -18,11 +18,14 @@ impl StrataAppState {
         strata_types::crs::CrsCode::from(self.work_crs).epsg_number()
     }
 
-    /// 표 좌표계 ↔ 작업 좌표계 변환기(같으면 None).
-    fn table_transformers(&self, srs_id: i32) -> Option<(Transformer, Transformer)> {
+    // Failed transforms must not become identity (target/cpp-ref/src/core/SnapTraceOps.cpp:114-125,190-198).
+    fn table_transformers(&self, srs_id: i32) -> Result<Option<(Transformer, Transformer)>, strata_engine::EngineError> {
         let work = self.work_epsg();
-        let src = u32::try_from(srs_id).ok().filter(|s| *s > 0 && *s != work)?;
-        Some((Transformer::new(src, work).ok()?, Transformer::new(work, src).ok()?))
+        let src = u32::try_from(srs_id).map_err(|_| strata_engine::EngineError(format!("Unknown source CRS EPSG:{srs_id}")))?;
+        if src == work {
+            return Ok(None);
+        }
+        Ok(Some((Transformer::new(src, work)?, Transformer::new(work, src)?)))
     }
 
     /// 보이는 조사 레이어의 고리·선(작업 좌표계). `exclude` 도형은 뺀다(toCanvasAndFetch 의 ignoreFid).
@@ -40,7 +43,7 @@ impl StrataAppState {
         let (mut out, mut points) = (Vec::new(), Vec::new());
         for e in self.left_layers.entries.iter().filter(|e| self.home_map.real_survey.is_layer_visible(&e.label_ko)) {
             let Some(t) = self.survey_tables.iter().find(|t| t.table == e.layer_key) else { continue };
-            let tr = self.table_transformers(t.srs_id);
+            let Ok(tr) = self.table_transformers(t.srs_id) else { continue };
             for f in t.layer.features.iter().filter(|f| exclude != Some((t.table.as_str(), f.fid))) {
                 let Some(parts) = wkt_to_parts(&f.wkt_geom).ok() else { continue };
                 let parts = match &tr {
@@ -106,7 +109,7 @@ impl StrataAppState {
         let t = self.survey_tables.iter().find(|t| t.table == table)?;
         let f = t.layer.features.iter().find(|f| f.fid == fid)?;
         let parts = wkt_to_parts(&f.wkt_geom).ok().filter(|p| !p.is_empty())?;
-        let tr = self.table_transformers(t.srs_id);
+        let tr = self.table_transformers(t.srs_id).ok()?;
         let in_work = match &tr {
             Some((to_work, _)) => moved(&parts, to_work)?,
             None => parts,
