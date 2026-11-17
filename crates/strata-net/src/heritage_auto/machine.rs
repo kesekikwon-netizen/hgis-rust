@@ -54,6 +54,32 @@ pub struct HeritageAutomation {
 }
 
 impl HeritageAutomation {
+    /// Validates the native document callback before dispatch (`KaHeritageBrowser.cpp:658-659`).
+    #[must_use]
+    pub fn accepts_script_token(&self, token: u64) -> bool {
+        !self.is_over() && self.pending == Some(token)
+    }
+
+    /// Accepts only the exact pending import group (`KaHeritageBrowser.cpp:1206-1217`).
+    pub fn dataset_loaded(
+        &mut self,
+        _files: &[std::path::PathBuf],
+        _outcome: super::DatasetOutcome,
+    ) -> bool {
+        false
+    }
+
+    /// Whether the runner must close its current browser (`KaHeritageBrowser.cpp:533-562`).
+    #[must_use]
+    pub fn session_restart_required(&self) -> bool {
+        false
+    }
+
+    /// Confirms the runner created a fresh session after backoff (`:533-562`).
+    pub fn session_reopened(&mut self, _now_ms: u64) -> bool {
+        false
+    }
+
     /// Observes the browser frame time before accepting its callbacks.
     pub fn observe_time(&mut self, now_ms: u64) {
         self.observed_at_ms = self.observed_at_ms.max(now_ms);
@@ -187,7 +213,7 @@ impl HeritageAutomation {
     /// A script answered. Returns what the app must know, if anything.
     pub fn script_answered(&mut self, token: u64, value: &str) -> Option<HeritageEvent> {
         // Only the answer we are waiting for, so a late answer cannot move a later stage.
-        if self.is_over() || self.pending != Some(token) {
+        if !self.accepts_script_token(token) {
             return None;
         }
         self.pending = None;

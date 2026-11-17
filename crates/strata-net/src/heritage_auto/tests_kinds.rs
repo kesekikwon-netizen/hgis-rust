@@ -63,11 +63,11 @@ fn a_zip_is_reported_with_its_kind() {
     let mut m = at(HeritageStage::Waiting);
     let path = std::path::PathBuf::from("C:/x/지정유산_261025.zip");
     let ev = m.zip_arrived(path.clone());
-    let Some(HeritageEvent::ZipReady { kind, path: got }) = ev else {
-        panic!("not a ZipReady: {ev:?}");
+    let Some(HeritageEvent::DatasetReady { kind, files: got }) = ev else {
+        panic!("not a DatasetReady: {ev:?}");
     };
     assert_eq!(kind, "지정유산", "the first kind is 지정유산");
-    assert_eq!(got, path);
+    assert_eq!(got, vec![path]);
 }
 
 /// The retry waits 5 s, then 10, then stops on the third failure — where the C++ retries

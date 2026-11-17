@@ -40,10 +40,13 @@ mod tests_readiness;
 mod tests_region_clock;
 #[cfg(test)]
 mod tests_region_wait;
+#[cfg(test)]
+mod tests_transfers;
 
 pub use machine::{HeritageAutomation, HeritageConfig, HeritageEvent, HeritageStage};
 pub use machine_kinds::MAX_ATTEMPTS;
 pub use machine_login::NO_ACCOUNT;
+pub use types::DatasetOutcome;
 
 /// A page of the hidden browser, as the stage logic sees it.
 ///

@@ -20,4 +20,4 @@ mod run;
 #[cfg(windows)]
 pub use run::{start_run, HeritageRunHandle, RunOptions};
 #[cfg(windows)]
-pub use strata_net::heritage_auto::{HeritageConfig, HeritageEvent, HeritageStage};
+pub use strata_net::heritage_auto::{DatasetOutcome, HeritageConfig, HeritageEvent, HeritageStage};

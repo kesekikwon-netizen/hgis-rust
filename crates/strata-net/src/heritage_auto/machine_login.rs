@@ -41,6 +41,12 @@ impl HeritageAutomation {
                 format!("받는 중 · {}", self.current_kind())
             }
             HeritageStage::Done => "주변유적 자료를 다 받았습니다".to_owned(),
+            HeritageStage::AwaitingImport => {
+                "전송 종료 · ZIP 전체 읽기 및 지도 적재 확인 중".to_owned()
+            }
+            HeritageStage::RetryWait => {
+                "공식 화면을 다시 열어 같은 지역·자료를 다시 받습니다.".to_owned()
+            }
             HeritageStage::Cancelled => "사용자가 중지했습니다.".to_owned(),
             HeritageStage::Stopped(words) => words.clone(),
         }

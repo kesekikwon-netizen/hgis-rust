@@ -85,7 +85,10 @@ impl HeritageAutomation {
         let kind = self.kind_name();
         self.retry_count = 0;
         self.files_this_kind += 1;
-        Some(HeritageEvent::ZipReady { kind, path })
+        Some(HeritageEvent::DatasetReady {
+            kind,
+            files: vec![path],
+        })
     }
 
     /// A transfer failed, or what came back was not a file.

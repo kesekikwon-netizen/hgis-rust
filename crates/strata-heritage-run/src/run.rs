@@ -137,6 +137,18 @@ pub fn start_run<W: HasWindowHandle>(
 }
 
 impl HeritageRunHandle {
+    /// Queues the app's actual import outcome without browser reentrancy (`KaHeritageBrowser.cpp:1206-1217`).
+    pub fn dataset_loaded(
+        &mut self,
+        files: &[PathBuf],
+        outcome: strata_net::heritage_auto::DatasetOutcome,
+    ) -> bool {
+        self.core
+            .borrow_mut()
+            .machine
+            .dataset_loaded(files, outcome)
+    }
+
     /// Cancels navigation and transfers (`KaHeritageBrowser.cpp:479-489`).
     /// The next frame reports cancellation and continues profile cleanup.
     pub fn cancel(&mut self) {

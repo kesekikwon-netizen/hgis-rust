@@ -73,7 +73,7 @@ fn the_last_zip_precedes_one_done_event() {
     }
     assert!(matches!(
         machine.zip_arrived("last.zip".into()),
-        Some(HeritageEvent::ZipReady {
+        Some(HeritageEvent::DatasetReady {
             kind: "발굴조사구역",
             ..
         })
@@ -142,4 +142,30 @@ fn a_storage_failure_after_cancel_cannot_replace_the_outcome() {
     machine.storage_failed("late allocation error".into());
     assert_eq!(machine.stage(), &HeritageStage::Cancelled);
     assert!(machine.timers(u64::MAX).is_empty());
+}
+
+#[test]
+fn script_token_guard_accepts_only_the_current_unconsumed_callback() {
+    let mut run = machine(HeritageStage::Terms);
+    let token = run.current_token();
+    assert!(run.accepts_script_token(token));
+    assert!(!run.accepts_script_token(token + 1));
+    let _ = run.script_answered(token, "already-open");
+    assert!(!run.accepts_script_token(token));
+}
+
+#[test]
+fn script_token_guard_refuses_terminal_and_cancelled_callbacks() {
+    for stage in [
+        HeritageStage::Done,
+        HeritageStage::Cancelled,
+        HeritageStage::Stopped("fixture".into()),
+    ] {
+        let run = machine(stage);
+        assert!(!run.accepts_script_token(run.current_token()));
+    }
+    let mut run = machine(HeritageStage::Terms);
+    let token = run.current_token();
+    let _ = run.cancel();
+    assert!(!run.accepts_script_token(token));
 }

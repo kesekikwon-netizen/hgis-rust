@@ -44,6 +44,10 @@ pub enum HeritageStage {
     DownloadAll,
     /// The site is building the ZIP; probe until a file arrives or the retries run out.
     Waiting,
+    /// The completed archive group awaits the app's real import result (`:1206-1217`).
+    AwaitingImport,
+    /// Recoverable failure waits before recreating the authenticated session (`:504-562`).
+    RetryWait,
     /// Every kind is through.
     Done,
     /// The caller cancelled this run (`KaHeritageBrowser.cpp:479-489`).
@@ -65,15 +69,23 @@ pub enum HeritageEvent {
     Done,
     /// The caller cancelled the run.
     Cancelled,
-    /// A ZIP is complete on disk for `kind`.
-    ZipReady {
+    /// All archives for this kind are ready for import (`KaHeritageBrowser.h:71`).
+    DatasetReady {
         /// The kind's Korean name, one of [`super::scripts::KINDS`].
         kind: &'static str,
-        /// Where the browser put it.
-        path: PathBuf,
+        /// Accepted offers in their original order, after every transfer completes.
+        files: Vec<PathBuf>,
     },
     /// The run stopped; the words to show the user.
     Stopped(String),
+}
+
+/// The app's actual full-group import result (`KaHeritageBrowser.cpp:491-501,1206-1217`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DatasetOutcome {
+    Accepted,
+    RetryableFailure { reason: String },
+    FatalFailure { reason: String },
 }
 
 /// What a run is for.
