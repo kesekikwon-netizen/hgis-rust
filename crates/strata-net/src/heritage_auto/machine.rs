@@ -37,6 +37,8 @@ pub enum HeritageStage {
     Waiting,
     /// Every kind is through.
     Done,
+    /// The caller cancelled this run (`KaHeritageBrowser.cpp:479-489`).
+    Cancelled,
     /// The run stopped, with the words to show.
     Stopped(String),
 }
@@ -46,6 +48,14 @@ pub enum HeritageStage {
 pub enum HeritageEvent {
     /// Words for the status line; the run goes on.
     Note(String),
+    /// Exact terms returned after the site's agreement button ran.
+    PledgeAgreed { terms: String },
+    /// A completed filtered search proved this kind has no records.
+    KindAbsent { kind: &'static str },
+    /// All six kinds ended successfully.
+    Done,
+    /// The caller cancelled the run.
+    Cancelled,
     /// A ZIP is complete on disk for `kind`.
     ZipReady {
         /// The kind's Korean name, one of [`super::scripts::KINDS`].
@@ -87,7 +97,10 @@ impl HeritageConfig {
     #[must_use]
     pub fn download_url(&self) -> String {
         match &self.fixture_base {
-            Some(base) => format!("{}/user/data/heritageDownload.do", base.trim_end_matches('/')),
+            Some(base) => format!(
+                "{}/user/data/heritageDownload.do",
+                base.trim_end_matches('/')
+            ),
             None => format!(
                 "https://intranet.gis-heritage.go.kr{}",
                 super::scripts::DOWNLOAD_PAGE_PATH
@@ -214,7 +227,8 @@ impl HeritageAutomation {
         // One ask at a time, and no sooner than the poll interval: the C++ does the same
         // (`KaHeritageBrowser.cpp:103`). Asking on every frame makes every answer arrive
         // "late" and be dropped by the token check below.
-        if self.pending.is_some() || now_ms.saturating_sub(self.asked_at_ms) < super::LOGIN_POLL_MS {
+        if self.pending.is_some() || now_ms.saturating_sub(self.asked_at_ms) < super::LOGIN_POLL_MS
+        {
             return None;
         }
         // The page the asks go to is the one the browser has open; without one there is
@@ -249,7 +263,7 @@ impl HeritageAutomation {
     /// A script answered. Returns what the app must know, if anything.
     pub fn script_answered(&mut self, token: u64, value: &str) -> Option<HeritageEvent> {
         // Only the answer we are waiting for, so a late answer cannot move a later stage.
-        if self.pending != Some(token) {
+        if self.is_over() || self.pending != Some(token) {
             return None;
         }
         self.pending = None;
@@ -272,17 +286,5 @@ impl HeritageAutomation {
             script,
             token: self.token,
         }
-    }
-
-    /// Moves the run on and remembers why.
-    pub(super) fn go(&mut self, stage: HeritageStage) {
-        self.stage = stage;
-        self.quiet_ticks = 0;
-    }
-
-    /// Stops the run with the words the user should see.
-    pub(super) fn stop(&mut self, words: String) -> Option<HeritageEvent> {
-        self.stage = HeritageStage::Stopped(words.clone());
-        Some(HeritageEvent::Stopped(words))
     }
 }

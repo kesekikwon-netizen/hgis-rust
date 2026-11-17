@@ -7,7 +7,10 @@ impl HeritageAutomation {
     /// Whether the run is over.
     #[must_use]
     pub fn is_over(&self) -> bool {
-        matches!(self.stage, HeritageStage::Done | HeritageStage::Stopped(_))
+        matches!(
+            self.stage,
+            HeritageStage::Done | HeritageStage::Stopped(_) | HeritageStage::Cancelled
+        )
     }
 
     /// The words to show while the run goes on, for a status line.
@@ -26,6 +29,7 @@ impl HeritageAutomation {
                 format!("받는 중 · {}", self.current_kind())
             }
             HeritageStage::Done => "주변유적 자료를 다 받았습니다".to_owned(),
+            HeritageStage::Cancelled => "사용자가 중지했습니다.".to_owned(),
             HeritageStage::Stopped(words) => words.clone(),
         }
     }

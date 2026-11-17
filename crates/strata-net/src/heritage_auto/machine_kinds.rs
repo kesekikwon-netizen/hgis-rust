@@ -23,7 +23,10 @@ impl HeritageAutomation {
     /// logging in is not the file the run asked for.
     #[must_use]
     pub fn accepts_files(&self) -> bool {
-        matches!(self.stage, HeritageStage::DownloadAll | HeritageStage::Waiting)
+        matches!(
+            self.stage,
+            HeritageStage::DownloadAll | HeritageStage::Waiting
+        )
     }
 
     /// A file was offered and accepted; its path is known before it finishes.
@@ -51,7 +54,9 @@ impl HeritageAutomation {
             }
             "no-region" => {
                 let kind = self.kind_name();
-                self.stop(format!("{kind}: 지역이 골라지지 않았습니다. 다시 눌러 주세요."))
+                self.stop(format!(
+                    "{kind}: 지역이 골라지지 않았습니다. 다시 눌러 주세요."
+                ))
             }
             "ambiguous" => {
                 let kind = self.kind_name();
@@ -65,13 +70,18 @@ impl HeritageAutomation {
             }
             other => {
                 let kind = self.kind_name();
-                self.stop(format!("{kind}: 다운로드를 누르는 중 문제가 생겼습니다({other})."))
+                self.stop(format!(
+                    "{kind}: 다운로드를 누르는 중 문제가 생겼습니다({other})."
+                ))
             }
         }
     }
 
     /// The ZIP for this kind is complete on disk.
     pub fn zip_arrived(&mut self, path: std::path::PathBuf) -> Option<HeritageEvent> {
+        if !self.accepts_files() {
+            return None;
+        }
         let kind = self.kind_name();
         self.retry_count = 0;
         self.files_this_kind += 1;
@@ -83,6 +93,9 @@ impl HeritageAutomation {
     /// Waits the C++ delays, then presses download again. Stops on the [`MAX_ATTEMPTS`]th
     /// failure, which the C++ does not do (`:1359-1372`).
     pub fn transfer_failed(&mut self, reason: &str, now_ms: u64) -> Option<HeritageEvent> {
+        if self.is_over() {
+            return None;
+        }
         self.retry_count = self.retry_count.saturating_add(1);
         if self.retry_count >= MAX_ATTEMPTS {
             let kind = self.kind_name();
@@ -91,7 +104,8 @@ impl HeritageAutomation {
                  잠시 뒤 다시 눌러 주세요."
             ));
         }
-        let delay = RETRY_DELAYS_MS[usize::from(self.retry_count - 1).min(RETRY_DELAYS_MS.len() - 1)];
+        let delay =
+            RETRY_DELAYS_MS[usize::from(self.retry_count - 1).min(RETRY_DELAYS_MS.len() - 1)];
         self.retry_at_ms = now_ms.saturating_add(delay);
         self.go(HeritageStage::Waiting);
         Some(HeritageEvent::Note(format!(
@@ -112,13 +126,16 @@ impl HeritageAutomation {
 
     /// The current kind is done. Moves to the next, or finishes the run.
     pub fn kind_done(&mut self) -> Option<HeritageEvent> {
+        if self.is_over() || self.files_this_kind == 0 {
+            return None;
+        }
         self.kind_index += 1;
         self.retry_count = 0;
         self.files_this_kind = 0;
         self.pledge_kept = self.pledge_kept || self.pledge.is_some();
         if self.kind_index >= super::scripts::KINDS.len() {
             self.go(HeritageStage::Done);
-            return Some(HeritageEvent::Note("주변유적 자료를 다 받았습니다.".to_owned()));
+            return Some(HeritageEvent::Done);
         }
         self.go(HeritageStage::Kind);
         Some(HeritageEvent::Note(format!(
@@ -147,7 +164,8 @@ impl HeritageAutomation {
         if self.wait_expired(now_ms) && self.files_this_kind == 0 {
             // The C++ gives up on a kind whose file never came (`:1470-1524`).
             let kind = self.kind_name();
-            let words = format!("{kind}: 서버가 파일을 만들지 못했습니다. 잠시 뒤 다시 눌러 주세요.");
+            let words =
+                format!("{kind}: 서버가 파일을 만들지 못했습니다. 잠시 뒤 다시 눌러 주세요.");
             self.stage = HeritageStage::Stopped(words.clone());
             return vec![HeritageEvent::Stopped(words)];
         }

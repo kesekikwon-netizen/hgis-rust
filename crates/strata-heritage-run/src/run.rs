@@ -12,7 +12,9 @@ use raw_window_handle::HasWindowHandle;
 use strata_net::heritage_auto::{HeritageAutomation, HeritageConfig, HeritageEvent, PageId};
 use strata_webview::policy::NavigationPolicy;
 use strata_webview::profile::{remove_session_folder, sweep_abandoned_sessions};
-use strata_webview::{BrowserError, BrowserEvent, BrowserOptions, DownloadPlace, HiddenBrowser, ScriptCall, ViewId};
+use strata_webview::{
+    BrowserError, BrowserEvent, BrowserOptions, DownloadPlace, HiddenBrowser, ScriptCall, ViewId,
+};
 
 use crate::host::{QueuedHost, Wanted};
 
@@ -59,6 +61,7 @@ pub struct HeritageRunHandle {
     answers: HashMap<ScriptCall, u64>,
     /// The data folder of a closed session that the engine has not let go of yet.
     leftover: Option<PathBuf>,
+    pending_events: Vec<HeritageEvent>,
 }
 
 impl std::fmt::Debug for HeritageRunHandle {
@@ -74,7 +77,10 @@ impl std::fmt::Debug for HeritageRunHandle {
 /// # Errors
 ///
 /// When the browser session cannot be made (WebView2 missing, or the data folder unwritable).
-pub fn start_run<W: HasWindowHandle>(parent: &W, options: RunOptions) -> Result<HeritageRunHandle, BrowserError> {
+pub fn start_run<W: HasWindowHandle>(
+    parent: &W,
+    options: RunOptions,
+) -> Result<HeritageRunHandle, BrowserError> {
     // A run that died with the app left its session folder behind.
     let _ = sweep_abandoned_sessions(&options.data_parent);
     // The fixture is on this PC; it stays reachable while the network switch is off
@@ -98,10 +104,7 @@ pub fn start_run<W: HasWindowHandle>(parent: &W, options: RunOptions) -> Result<
     // (`KaHeritageBrowser.cpp:1295-1302`).
     let decide = Rc::clone(&core);
     let root = options.download_root.clone();
-    let (sido, city) = (
-        options.config.sido.clone(),
-        options.config.city.clone(),
-    );
+    let (sido, city) = (options.config.sido.clone(), options.config.city.clone());
     browser.set_download_decider(Box::new(move |offer| {
         let mut core = decide.try_borrow_mut().ok()?;
         if !core.machine.accepts_files() {
@@ -122,10 +125,24 @@ pub fn start_run<W: HasWindowHandle>(parent: &W, options: RunOptions) -> Result<
         core,
         answers: HashMap::new(),
         leftover: None,
+        pending_events: Vec::new(),
     })
 }
 
 impl HeritageRunHandle {
+    /// Cancels navigation and transfers (`KaHeritageBrowser.cpp:479-489`).
+    /// The next frame reports cancellation and continues profile cleanup.
+    pub fn cancel(&mut self) {
+        if let Some(event) = self.core.borrow_mut().machine.cancel() {
+            self.pending_events.push(event);
+        }
+        self.answers.clear();
+        self.core.borrow_mut().host.wanted.clear();
+        if let Some(browser) = self.browser.take() {
+            self.leftover = Some(browser.shut_down());
+        }
+    }
+
     /// The stage the run is in.
     #[must_use]
     pub fn stage(&self) -> strata_net::heritage_auto::HeritageStage {
@@ -141,22 +158,22 @@ impl HeritageRunHandle {
     /// Whether the run is over and nothing of its session is left.
     #[must_use]
     pub fn finished(&self) -> bool {
-        self.browser.is_none() && self.leftover.is_none()
+        self.browser.is_none() && self.leftover.is_none() && self.pending_events.is_empty()
     }
 
     /// One frame: what the browser reports goes to the stage logic, what the logic wants goes
     /// to the browser. Returns what happened in the run.
     pub fn frame<W: HasWindowHandle>(&mut self, parent: &W) -> Vec<HeritageEvent> {
+        let mut events_extra = std::mem::take(&mut self.pending_events);
         if let Some(folder) = &self.leftover {
             if remove_session_folder(folder) {
                 self.leftover = None;
             }
         }
         let Some(browser) = self.browser.as_mut() else {
-            return Vec::new();
+            return events_extra;
         };
         let reported = browser.pump(parent);
-        let mut events_extra: Vec<HeritageEvent> = Vec::new();
         let mut core = self.core.borrow_mut();
         let now = core.now();
         let Core { machine, host, .. } = &mut *core;
@@ -182,7 +199,8 @@ impl HeritageRunHandle {
                     }
                 }
                 BrowserEvent::DownloadFailed { .. } => {
-                    events_extra.extend(machine.transfer_failed("파일을 끝까지 받지 못했습니다", now));
+                    events_extra
+                        .extend(machine.transfer_failed("파일을 끝까지 받지 못했습니다", now));
                 }
                 BrowserEvent::DownloadRefused { .. } => {
                     events_extra.extend(machine.transfer_failed("파일을 저장하지 못했습니다", now));
@@ -220,7 +238,11 @@ impl HeritageRunHandle {
         drop(core);
         for want in wanted.into_iter().chain(extra) {
             match want {
-                Wanted::Script { page, script, token } => {
+                Wanted::Script {
+                    page,
+                    script,
+                    token,
+                } => {
                     if let Ok(call) = browser.run_script(ViewId(page.0), &script) {
                         self.answers.insert(call, token);
                     }

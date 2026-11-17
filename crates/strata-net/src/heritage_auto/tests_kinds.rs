@@ -95,7 +95,10 @@ fn the_retry_waits_and_then_stops() {
     let Some(HeritageEvent::Stopped(words)) = third else {
         panic!("did not stop on the third failure: {third:?}");
     };
-    assert!(words.contains("3번"), "the words do not say how many tries: {words}");
+    assert!(
+        words.contains("3번"),
+        "the words do not say how many tries: {words}"
+    );
     assert_eq!(MAX_ATTEMPTS, 3);
     assert!(m.is_over());
 }
@@ -106,8 +109,15 @@ fn a_due_retry_asks_again() {
     let mut m = at(HeritageStage::Waiting);
     let _ = m.transfer_failed("깨진 파일", 1_000);
     let events = m.timers(6_000);
-    assert!(events.iter().any(|e| matches!(e, HeritageEvent::Note(_))), "{events:?}");
-    assert_eq!(m.stage(), &HeritageStage::Kind, "the kind is asked for again");
+    assert!(
+        events.iter().any(|e| matches!(e, HeritageEvent::Note(_))),
+        "{events:?}"
+    );
+    assert_eq!(
+        m.stage(),
+        &HeritageStage::Kind,
+        "the kind is asked for again"
+    );
 }
 
 /// A server that never builds the ZIP stops the run instead of waiting forever.
@@ -115,18 +125,25 @@ fn a_due_retry_asks_again() {
 fn a_wait_that_never_ends_stops() {
     let mut m = at(HeritageStage::DownloadAll);
     let _ = m.script_answered(m.current_token(), "all");
-    assert!(m.timers(super::machine_kinds::WAIT_LIMIT_MS + 1).iter().any(|e| matches!(e, HeritageEvent::Stopped(_))));
+    assert!(m
+        .timers(super::machine_kinds::WAIT_LIMIT_MS + 1)
+        .iter()
+        .any(|e| matches!(e, HeritageEvent::Stopped(_))));
     assert!(m.is_over());
 }
 
 /// The six kinds run in the C++ tab order, and the run finishes after the last.
 #[test]
 fn the_six_kinds_run_in_order_and_finish() {
-    let mut m = at(HeritageStage::Kind);
+    let mut m = at(HeritageStage::Waiting);
     let mut seen = Vec::new();
     for _ in 0..6 {
         seen.push(m.current_kind());
+        let _ = m.zip_arrived("fixture.zip".into());
         let _ = m.kind_done();
+        if !m.is_over() {
+            m.force_stage(HeritageStage::Waiting);
+        }
     }
     assert_eq!(
         seen,

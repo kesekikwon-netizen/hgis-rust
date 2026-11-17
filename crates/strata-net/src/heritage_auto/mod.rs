@@ -9,23 +9,26 @@
 
 pub mod scripts;
 
-#[path = "machine.rs"]
-mod machine;
-#[path = "machine_login.rs"]
-mod machine_login;
-#[path = "machine_kinds.rs"]
-mod machine_kinds;
-#[path = "machine_pages.rs"]
-mod machine_pages;
+mod lifecycle;
 #[path = "login_answers.rs"]
 mod login_answers;
+#[path = "machine.rs"]
+mod machine;
+#[path = "machine_kinds.rs"]
+mod machine_kinds;
+#[path = "machine_login.rs"]
+mod machine_login;
+#[path = "machine_pages.rs"]
+mod machine_pages;
 
-#[cfg(test)]
-#[path = "tests_login.rs"]
-mod tests_login;
 #[cfg(test)]
 #[path = "tests_kinds.rs"]
 mod tests_kinds;
+#[cfg(test)]
+mod tests_lifecycle;
+#[cfg(test)]
+#[path = "tests_login.rs"]
+mod tests_login;
 #[cfg(test)]
 #[path = "tests_pages.rs"]
 mod tests_pages;

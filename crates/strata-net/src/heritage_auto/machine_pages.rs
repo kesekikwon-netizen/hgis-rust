@@ -88,16 +88,16 @@ impl HeritageAutomation {
         if let Some(text) = pledge_text(value) {
             self.pledge = Some(text.clone());
             self.go(HeritageStage::Kind);
-            return Some(HeritageEvent::Note(format!("서약서에 동의했습니다({}자).", text.len())));
+            return Some(HeritageEvent::PledgeAgreed { terms: text });
         }
         match value {
             "not-found" => self.stop(
                 "서약서 동의 상자를 찾지 못했습니다. 인트라넷 화면이 바뀌었는지 확인해 주세요."
                     .to_owned(),
             ),
-            "checked-no-confirm" => self.stop(
-                "서약서에 동의는 했으나 「확인」 단추를 찾지 못했습니다.".to_owned(),
-            ),
+            "checked-no-confirm" => {
+                self.stop("서약서에 동의는 했으나 「확인」 단추를 찾지 못했습니다.".to_owned())
+            }
             other => self.stop(format!("서약서 동의 중 문제가 생겼습니다({other}).")),
         }
     }

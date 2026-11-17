@@ -23,7 +23,10 @@ fn a_tutorial_is_dismissed_and_its_absence_is_fine() {
     for answer in ["closed", "none"] {
         let mut m = at(HeritageStage::DismissTutorial);
         let ev = m.script_answered(m.current_token(), answer);
-        assert!(ev.is_none(), "「{answer}」 was treated as a problem: {ev:?}");
+        assert!(
+            ev.is_none(),
+            "「{answer}」 was treated as a problem: {ev:?}"
+        );
         assert_eq!(m.stage(), &HeritageStage::DownloadPage, "「{answer}」");
     }
 }
@@ -47,7 +50,10 @@ fn agreeing_keeps_the_pledge_text() {
     let mut m = at(HeritageStage::Terms);
     let answer = r#"{"status":"agreed","text":"국가유산 공간정보 원본자료 사용 서약서"}"#;
     let ev = m.script_answered(m.current_token(), answer);
-    assert!(matches!(ev, Some(HeritageEvent::Note(_))), "{ev:?}");
+    assert!(
+        matches!(ev, Some(HeritageEvent::PledgeAgreed { .. })),
+        "{ev:?}"
+    );
     assert_eq!(m.stage(), &HeritageStage::Kind);
     assert_eq!(
         m.pledge_text(),
@@ -75,7 +81,10 @@ fn an_unknown_sido_names_it() {
     let Some(HeritageEvent::Stopped(words)) = ev else {
         panic!("did not stop: {ev:?}");
     };
-    assert!(words.contains("경상북도"), "the words do not name the 시·도: {words}");
+    assert!(
+        words.contains("경상북도"),
+        "the words do not name the 시·도: {words}"
+    );
 }
 
 /// A 시·군 the site does not list stops, and the words name the city and say how many it has.
@@ -86,8 +95,14 @@ fn an_unknown_city_names_it_and_counts_the_rest() {
     let Some(HeritageEvent::Stopped(words)) = ev else {
         panic!("did not stop: {ev:?}");
     };
-    assert!(words.contains("경주시"), "the words do not name the city: {words}");
-    assert!(words.contains("22"), "the words do not say how many the site has: {words}");
+    assert!(
+        words.contains("경주시"),
+        "the words do not name the city: {words}"
+    );
+    assert!(
+        words.contains("22"),
+        "the words do not say how many the site has: {words}"
+    );
 }
 
 /// A region that lands moves on to the search.

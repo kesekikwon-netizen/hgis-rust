@@ -49,13 +49,20 @@ pub fn cases() -> Vec<Case> {
             // finishes. This is the only case that proves a file reaches the disk.
             expect: HeritageStage::Done,
         },
+        Case {
+            name: "cancelling a transfer emits once and finishes cleanup",
+            run_id: FIXTURE_ACCOUNT.0,
+            run_password: FIXTURE_ACCOUNT.1,
+            city: ("경상북도", "경주시"),
+            expect: HeritageStage::Cancelled,
+        },
     ]
 }
 
 /// Whether the case needs the fixture to answer with a ZIP.
 #[must_use]
 pub fn wants_zip(case: &Case) -> bool {
-    matches!(case.expect, HeritageStage::Done)
+    matches!(case.expect, HeritageStage::Done | HeritageStage::Cancelled)
 }
 
 /// A minimal but real ZIP: one entry, stored (not deflated), so `looks_like_zip` accepts it and
