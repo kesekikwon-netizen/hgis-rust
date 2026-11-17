@@ -64,25 +64,6 @@ fn an_already_open_panel_does_not_invent_an_agreement() {
 }
 
 #[test]
-fn the_last_zip_precedes_one_done_event() {
-    let mut machine = machine(HeritageStage::Waiting);
-    for _ in 0..5 {
-        let _ = machine.zip_arrived("fixture.zip".into());
-        let _ = machine.kind_done();
-        machine.force_stage(HeritageStage::Waiting);
-    }
-    assert!(matches!(
-        machine.zip_arrived("last.zip".into()),
-        Some(HeritageEvent::DatasetReady {
-            kind: "발굴조사구역",
-            ..
-        })
-    ));
-    assert_eq!(machine.kind_done(), Some(HeritageEvent::Done));
-    assert!(machine.kind_done().is_none());
-}
-
-#[test]
 fn a_stopped_run_cannot_finish_or_report_a_late_zip() {
     let mut machine = machine(HeritageStage::Stopped("fixture stop".to_owned()));
     assert!(machine.zip_arrived("late.zip".into()).is_none());

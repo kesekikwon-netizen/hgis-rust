@@ -9,8 +9,10 @@
 
 mod readiness;
 pub mod scripts;
+mod transfer_group;
 mod types;
 
+mod dataset;
 mod lifecycle;
 #[path = "login_answers.rs"]
 mod login_answers;
@@ -23,6 +25,8 @@ mod machine_login;
 #[path = "machine_pages.rs"]
 mod machine_pages;
 
+#[cfg(test)]
+mod tests_ack;
 #[cfg(test)]
 #[path = "tests_kinds.rs"]
 mod tests_kinds;
@@ -44,7 +48,6 @@ mod tests_region_wait;
 mod tests_transfers;
 
 pub use machine::{HeritageAutomation, HeritageConfig, HeritageEvent, HeritageStage};
-pub use machine_kinds::MAX_ATTEMPTS;
 pub use machine_login::NO_ACCOUNT;
 pub use types::DatasetOutcome;
 

@@ -18,7 +18,7 @@ impl HeritageAutomation {
             return None;
         }
         self.pending = None;
-        self.offered.clear();
+        self.group = super::transfer_group::TransferGroup::default();
         self.retry_at_ms = 0;
         self.queued_events.clear();
         self.go(HeritageStage::Cancelled);

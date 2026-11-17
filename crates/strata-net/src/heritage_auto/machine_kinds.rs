@@ -1,19 +1,6 @@
-//! Pressing 전체다운로드, waiting for the ZIP, and moving to the next kind.
-//!
-//! The site builds the ZIP on demand and answers with a page until it is ready (40–120 s in
-//! practice, `KaHeritageBrowser.cpp:1470-1524`). A kind with no rows is skipped; a kind that
-//! fails three times stops the run with words that say so.
-//!
-//! The C++ retries a broken transfer without limit, waiting 5, 10, 20 then 30 s between tries
-//! (`KaHeritageBrowser.cpp:1359-1372`). This port stops after three, because an unbounded retry
-//! loop against an account can lock it; the words say which try was the last.
+//! Download grouping (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:1150-1217,1271-1289`).
 
 use super::machine::{HeritageAutomation, HeritageEvent, HeritageStage};
-
-/// The waits between retries, as the C++ has them (`:1363`).
-const RETRY_DELAYS_MS: [u64; 4] = [5_000, 10_000, 20_000, 30_000];
-/// How many transfers of one kind may fail before the run stops.
-pub const MAX_ATTEMPTS: u8 = 3;
 
 impl HeritageAutomation {
     /// Whether a file the site offers should be kept right now.
@@ -31,7 +18,9 @@ impl HeritageAutomation {
 
     /// A file was offered and accepted; its path is known before it finishes.
     pub fn file_offered(&mut self, path: std::path::PathBuf) {
-        self.offered.push(path);
+        if self.accepts_files() {
+            self.group.offer(path);
+        }
     }
 
     /// The kind's 한국어 이름, for the words the user sees.
@@ -45,8 +34,6 @@ impl HeritageAutomation {
         match value {
             "all" => {
                 self.go(HeritageStage::Waiting);
-                self.wait_since_ms = self.asked_at_ms;
-                self.response_only_retry = false;
                 Some(HeritageEvent::Note(format!(
                     "{} — 서버가 파일을 만드는 중입니다.",
                     self.kind_name()
@@ -82,64 +69,22 @@ impl HeritageAutomation {
         if !self.accepts_files() {
             return None;
         }
-        let kind = self.kind_name();
-        self.retry_count = 0;
-        self.files_this_kind += 1;
-        Some(HeritageEvent::DatasetReady {
-            kind,
-            files: vec![path],
-        })
+        self.group.complete(&path, self.observed_at_ms);
+        None
     }
 
-    /// A transfer failed, or what came back was not a file.
-    ///
-    /// Waits the C++ delays, then presses download again. Stops on the [`MAX_ATTEMPTS`]th
-    /// failure, which the C++ does not do (`:1359-1372`).
-    pub fn transfer_failed(&mut self, reason: &str, now_ms: u64) -> Option<HeritageEvent> {
-        if self.is_over() {
-            return None;
-        }
-        self.retry_count = self.retry_count.saturating_add(1);
-        if self.retry_count >= MAX_ATTEMPTS {
-            let kind = self.kind_name();
-            return self.stop(format!(
-                "{kind}: {reason} — {MAX_ATTEMPTS}번 다시 받았지만 되지 않았습니다. \
-                 잠시 뒤 다시 눌러 주세요."
-            ));
-        }
-        let delay =
-            RETRY_DELAYS_MS[usize::from(self.retry_count - 1).min(RETRY_DELAYS_MS.len() - 1)];
-        self.retry_at_ms = now_ms.saturating_add(delay);
-        self.go(HeritageStage::Waiting);
-        Some(HeritageEvent::Note(format!(
-            "{reason} — {}초 뒤 다시 받습니다({}/{MAX_ATTEMPTS}).",
-            delay / 1000,
-            self.retry_count + 1
-        )))
-    }
-
-    /// Whether the wait for the current kind is over because the server is still building it.
-    ///
-    /// The C++ gives the server 40–120 s (`:1470-1524`); past that it asks the page again.
-    #[must_use]
-    pub fn wait_expired(&self, now_ms: u64) -> bool {
-        self.stage == HeritageStage::Waiting
-            && now_ms.saturating_sub(self.wait_since_ms) >= WAIT_LIMIT_MS
-    }
-
-    /// The current kind is done. Moves to the next, or finishes the run.
+    /// A transfer alone cannot advance the kind (`KaHeritageBrowser.cpp:1206-1217`).
+    /// Removed with the native runner caller once its separate bridge dependency is consumed.
     pub fn kind_done(&mut self) -> Option<HeritageEvent> {
-        if self.is_over() || self.files_this_kind == 0 {
-            return None;
-        }
-        self.advance_kind()
+        None
     }
 
     /// Both received files and proven absence end a kind (`KaHeritageBrowser.cpp:1108-1112,1271-1289`).
     pub(super) fn advance_kind(&mut self) -> Option<HeritageEvent> {
         self.kind_index += 1;
         self.retry_count = 0;
-        self.files_this_kind = 0;
+        self.group = super::transfer_group::TransferGroup::default();
+        self.retry_at_ms = 0;
         self.pledge_kept = self.pledge_kept || self.pledge.is_some();
         if self.kind_index >= super::scripts::KINDS.len() {
             self.go(HeritageStage::Done);
@@ -152,15 +97,30 @@ impl HeritageAutomation {
         )))
     }
 
-    /// The run's own timers, read once a frame: a retry that has come due, and a wait that has
-    /// run past [`WAIT_LIMIT_MS`].
-    ///
-    /// The C++ does both from its poll (`KaHeritageBrowser.cpp:1470-1524`).
+    /// Observes quiet groups and the navigation bound (KaHeritageBrowser.cpp:871-885,1150-1217).
     pub fn timers(&mut self, now_ms: u64) -> Vec<HeritageEvent> {
         self.observe_time(now_ms);
         let mut events = std::mem::take(&mut self.queued_events);
+        if matches!(
+            self.stage,
+            HeritageStage::DownloadAll | HeritageStage::Waiting
+        ) {
+            if self.group.ready(now_ms) {
+                let kind = self.kind_name();
+                let files = self.group.files();
+                self.go(HeritageStage::AwaitingImport);
+                events.push(HeritageEvent::DatasetReady { kind, files });
+            }
+            return events;
+        }
         if !self.is_over()
-            && !matches!(self.stage, HeritageStage::Waiting | HeritageStage::Idle)
+            && !matches!(
+                self.stage,
+                HeritageStage::Waiting
+                    | HeritageStage::Idle
+                    | HeritageStage::AwaitingImport
+                    | HeritageStage::RetryWait
+            )
             && now_ms.saturating_sub(self.phase_since_ms) > super::readiness::NAVIGATION_LIMIT_MS
         {
             events.extend(self.stop(format!(
@@ -169,38 +129,6 @@ impl HeritageAutomation {
             )));
             return events;
         }
-        if self.stage != HeritageStage::Waiting {
-            return events;
-        }
-        if self.retry_due(now_ms) {
-            self.retry_at_ms = 0;
-            // Pressing download again is the next ask; the wait stage hands it to the caller.
-            self.go(HeritageStage::Kind);
-            return vec![HeritageEvent::Note(format!(
-                "{} — 다시 받습니다.",
-                self.kind_name()
-            ))];
-        }
-        if self.wait_expired(now_ms) && self.files_this_kind == 0 {
-            // The C++ gives up on a kind whose file never came (`:1470-1524`).
-            let kind = self.kind_name();
-            let words =
-                format!("{kind}: 서버가 파일을 만들지 못했습니다. 잠시 뒤 다시 눌러 주세요.");
-            self.stage = HeritageStage::Stopped(words.clone());
-            return vec![HeritageEvent::Stopped(words)];
-        }
-        Vec::new()
-    }
-
-    /// The retry wait is over: press download again.
-    #[must_use]
-    pub fn retry_due(&self, now_ms: u64) -> bool {
-        self.stage == HeritageStage::Waiting && now_ms >= self.retry_at_ms && self.retry_at_ms > 0
+        events
     }
 }
-
-/// How long the site is given to build a ZIP before the page is asked again.
-///
-/// The C++ waits 40–120 s in practice (`KaHeritageBrowser.cpp:1470-1524`); 150 s leaves room
-/// for a slow day without hanging the run forever.
-pub const WAIT_LIMIT_MS: u64 = 150_000;

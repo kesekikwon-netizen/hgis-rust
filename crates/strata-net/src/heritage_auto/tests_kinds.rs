@@ -2,7 +2,7 @@
 //! kinds (`KaHeritageBrowser.cpp:1450-1524`, `:1359-1372`).
 
 use super::machine::{HeritageConfig, HeritageEvent, HeritageStage};
-use super::{HeritageAutomation, MAX_ATTEMPTS};
+use super::HeritageAutomation;
 
 fn at(stage: HeritageStage) -> HeritageAutomation {
     let mut m = HeritageAutomation::new(HeritageConfig {
@@ -57,90 +57,93 @@ fn two_download_buttons_stop_instead_of_guessing() {
     assert!(words.contains("여러 개"), "{words}");
 }
 
-/// A ZIP that arrives is reported with its kind and path.
+/// A completion waits for the whole group's quiet window (`KaHeritageBrowser.cpp:1150-1217`).
 #[test]
-fn a_zip_is_reported_with_its_kind() {
+fn a_completed_group_is_reported_with_its_kind() {
     let mut m = at(HeritageStage::Waiting);
-    let path = std::path::PathBuf::from("C:/x/지정유산_261025.zip");
-    let ev = m.zip_arrived(path.clone());
-    let Some(HeritageEvent::DatasetReady { kind, files: got }) = ev else {
-        panic!("not a DatasetReady: {ev:?}");
-    };
-    assert_eq!(kind, "지정유산", "the first kind is 지정유산");
-    assert_eq!(got, vec![path]);
-}
-
-/// The retry waits 5 s, then 10, then stops on the third failure — where the C++ retries
-/// without limit (`:1359-1372`).
-#[test]
-fn the_retry_waits_and_then_stops() {
-    let mut m = at(HeritageStage::Waiting);
-
-    let first = m.transfer_failed("깨진 파일", 1_000);
-    let Some(HeritageEvent::Note(words)) = first else {
-        panic!("no note on the first failure: {first:?}");
-    };
-    assert!(words.contains("5초"), "the first wait is 5 s: {words}");
-    assert_eq!(m.stage(), &HeritageStage::Waiting);
-    assert!(!m.retry_due(5_999), "retried before 5 s");
-    assert!(m.retry_due(6_000), "did not retry after 5 s");
-
-    let second = m.transfer_failed("깨진 파일", 7_000);
-    let Some(HeritageEvent::Note(words)) = second else {
-        panic!("no note on the second failure: {second:?}");
-    };
-    assert!(words.contains("10초"), "the second wait is 10 s: {words}");
-
-    let third = m.transfer_failed("깨진 파일", 20_000);
-    let Some(HeritageEvent::Stopped(words)) = third else {
-        panic!("did not stop on the third failure: {third:?}");
-    };
-    assert!(
-        words.contains("3번"),
-        "the words do not say how many tries: {words}"
-    );
-    assert_eq!(MAX_ATTEMPTS, 3);
-    assert!(m.is_over());
-}
-
-/// A retry that comes due asks for the kind again rather than stopping.
-#[test]
-fn a_due_retry_asks_again() {
-    let mut m = at(HeritageStage::Waiting);
-    let _ = m.transfer_failed("깨진 파일", 1_000);
-    let events = m.timers(6_000);
-    assert!(
-        events.iter().any(|e| matches!(e, HeritageEvent::Note(_))),
-        "{events:?}"
-    );
+    let path = std::path::PathBuf::from("fixture-first.zip");
+    m.file_offered(path.clone());
+    assert!(m.zip_arrived(path.clone()).is_none());
     assert_eq!(
-        m.stage(),
-        &HeritageStage::Kind,
-        "the kind is asked for again"
+        m.timers(4200),
+        vec![HeritageEvent::DatasetReady {
+            kind: "지정유산",
+            files: vec![path]
+        }]
     );
 }
 
-/// A server that never builds the ZIP stops the run instead of waiting forever.
+/// Retry three remains recoverable (`KaHeritageBrowser.cpp:504-562`).
 #[test]
-fn a_wait_that_never_ends_stops() {
+fn retries_reopen_the_current_kind_with_capped_delays_without_an_attempt_cap() {
+    let mut m = at(HeritageStage::Waiting);
+    let mut now = 1000;
+    for delay in [5000, 10000, 20000, 30000, 30000, 30000] {
+        assert!(matches!(
+            m.transfer_failed("fixture broken transfer", now),
+            Some(HeritageEvent::Note(_))
+        ));
+        assert!(!m.is_over());
+        assert!(!m.retry_due(now + delay - 1));
+        assert!(m.retry_due(now + delay));
+        assert!(!m.session_reopened(now + delay - 1));
+        now += delay;
+        assert!(m.session_reopened(now));
+        assert_eq!(m.stage(), &HeritageStage::Idle);
+        assert_eq!(m.current_kind(), "지정유산");
+        m.force_stage(HeritageStage::Waiting);
+    }
+}
+
+/// A retry requests a fresh authenticated session (`KaHeritageBrowser.cpp:533-562`).
+#[test]
+fn a_due_retry_requires_explicit_session_recreation() {
+    let mut m = at(HeritageStage::Waiting);
+    let _ = m.transfer_failed("fixture broken transfer", 1000);
+    assert!(m.session_restart_required());
+    let _ = m.timers(6000);
+    assert!(m.session_reopened(6000));
+    assert_eq!(m.stage(), &HeritageStage::Idle);
+}
+
+/// ZIP generation is separate from navigation bounds (`KaHeritageBrowser.cpp:848-869`).
+#[test]
+fn waiting_for_a_file_has_no_arbitrary_generation_deadline() {
     let mut m = at(HeritageStage::DownloadAll);
     let _ = m.script_answered(m.current_token(), "all");
-    assert!(m
-        .timers(super::machine_kinds::WAIT_LIMIT_MS + 1)
-        .iter()
-        .any(|e| matches!(e, HeritageEvent::Stopped(_))));
-    assert!(m.is_over());
+    assert!(m.timers(150001).is_empty());
+    assert!(m.timers(1000000).is_empty());
+    assert!(!m.is_over());
 }
 
-/// The six kinds run in the C++ tab order, and the run finishes after the last.
+/// The final kind completes only after actual import acceptance (`KaHeritageBrowser.cpp:1206-1217`).
 #[test]
-fn the_six_kinds_run_in_order_and_finish() {
+fn six_accepted_groups_finish_in_the_cpp_kind_order() {
     let mut m = at(HeritageStage::Waiting);
     let mut seen = Vec::new();
-    for _ in 0..6 {
+    let mut now = 0;
+    for index in 0..6 {
         seen.push(m.current_kind());
-        let _ = m.zip_arrived("fixture.zip".into());
-        let _ = m.kind_done();
+        let files = vec![std::path::PathBuf::from(format!(
+            "fixture-kind-{index}.zip"
+        ))];
+        m.file_offered(files[0].clone());
+        assert!(m.zip_arrived(files[0].clone()).is_none());
+        now += 4200;
+        assert!(matches!(
+            m.timers(now).as_slice(),
+            [HeritageEvent::DatasetReady { .. }]
+        ));
+        assert!(!m.is_over());
+        assert!(m.dataset_loaded(&files, super::DatasetOutcome::Accepted));
+        let events = m.timers(now);
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, HeritageEvent::Done))
+                .count(),
+            usize::from(index == 5)
+        );
         if !m.is_over() {
             m.force_stage(HeritageStage::Waiting);
         }
@@ -157,5 +160,4 @@ fn the_six_kinds_run_in_order_and_finish() {
         ]
     );
     assert_eq!(m.stage(), &HeritageStage::Done);
-    assert!(m.is_over());
 }

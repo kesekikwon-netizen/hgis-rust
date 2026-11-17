@@ -34,20 +34,12 @@ pub struct HeritageAutomation {
     /// so a receipt can hold it.
     pub(super) pledge: Option<String>,
     /// How many transfers of the current kind have failed since it started.
-    pub(super) retry_count: u8,
+    pub(super) retry_count: u64,
     /// When the next retry may happen (ms since the run began).
     pub(super) retry_at_ms: u64,
-    /// When the current kind asked the server for its ZIP.
-    pub(super) wait_since_ms: u64,
-    /// What came back was a page, not a file, so the same request is worth repeating.
-    pub(super) response_only_retry: bool,
-    /// Files received for the kind being fetched.
-    pub(super) files_this_kind: usize,
     /// Whether a pledge was agreed at any point in this run.
     pub(super) pledge_kept: bool,
-    /// Paths the site offered and the run accepted, in order, waiting for their transfer to
-    /// finish.
-    pub(super) offered: Vec<std::path::PathBuf>,
+    pub(super) group: super::transfer_group::TransferGroup,
     pub(super) phase_since_ms: u64,
     pub(super) baseline: Option<super::readiness::Baseline>,
     pub(super) queued_events: Vec<HeritageEvent>,
@@ -58,26 +50,6 @@ impl HeritageAutomation {
     #[must_use]
     pub fn accepts_script_token(&self, token: u64) -> bool {
         !self.is_over() && self.pending == Some(token)
-    }
-
-    /// Accepts only the exact pending import group (`KaHeritageBrowser.cpp:1206-1217`).
-    pub fn dataset_loaded(
-        &mut self,
-        _files: &[std::path::PathBuf],
-        _outcome: super::DatasetOutcome,
-    ) -> bool {
-        false
-    }
-
-    /// Whether the runner must close its current browser (`KaHeritageBrowser.cpp:533-562`).
-    #[must_use]
-    pub fn session_restart_required(&self) -> bool {
-        false
-    }
-
-    /// Confirms the runner created a fresh session after backoff (`:533-562`).
-    pub fn session_reopened(&mut self, _now_ms: u64) -> bool {
-        false
     }
 
     /// Observes the browser frame time before accepting its callbacks.
@@ -115,11 +87,8 @@ impl HeritageAutomation {
             pledge: None,
             retry_count: 0,
             retry_at_ms: 0,
-            wait_since_ms: 0,
-            response_only_retry: false,
-            files_this_kind: 0,
             pledge_kept: false,
-            offered: Vec::new(),
+            group: super::transfer_group::TransferGroup::default(),
             phase_since_ms: 0,
             baseline: None,
             queued_events: Vec::new(),

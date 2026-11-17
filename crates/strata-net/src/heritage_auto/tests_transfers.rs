@@ -3,7 +3,7 @@
 use super::{HeritageAutomation, HeritageConfig, HeritageEvent, HeritageStage};
 use std::path::PathBuf;
 
-fn waiting() -> HeritageAutomation {
+pub(super) fn waiting() -> HeritageAutomation {
     let mut run = HeritageAutomation::new(HeritageConfig {
         account_id: "fixture-user".into(),
         account_password: "fixture-password".into(),

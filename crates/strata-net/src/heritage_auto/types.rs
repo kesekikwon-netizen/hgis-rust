@@ -42,7 +42,7 @@ pub enum HeritageStage {
     Results,
     /// Press 전체다운로드 for the current kind (`:1450-1524`).
     DownloadAll,
-    /// The site is building the ZIP; probe until a file arrives or the retries run out.
+    /// Wait for actual transfers and six quiet polls (`KaHeritageBrowser.cpp:848-869,1150-1165`).
     Waiting,
     /// The completed archive group awaits the app's real import result (`:1206-1217`).
     AwaitingImport,
