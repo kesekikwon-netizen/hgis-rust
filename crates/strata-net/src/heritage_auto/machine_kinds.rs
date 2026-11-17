@@ -129,6 +129,11 @@ impl HeritageAutomation {
         if self.is_over() || self.files_this_kind == 0 {
             return None;
         }
+        self.advance_kind()
+    }
+
+    /// Both received files and proven absence end a kind (`KaHeritageBrowser.cpp:1108-1112,1271-1289`).
+    pub(super) fn advance_kind(&mut self) -> Option<HeritageEvent> {
         self.kind_index += 1;
         self.retry_count = 0;
         self.files_this_kind = 0;
@@ -149,8 +154,19 @@ impl HeritageAutomation {
     ///
     /// The C++ does both from its poll (`KaHeritageBrowser.cpp:1470-1524`).
     pub fn timers(&mut self, now_ms: u64) -> Vec<HeritageEvent> {
+        let mut events = std::mem::take(&mut self.queued_events);
+        if !self.is_over()
+            && !matches!(self.stage, HeritageStage::Waiting | HeritageStage::Idle)
+            && now_ms.saturating_sub(self.phase_since_ms) > super::readiness::NAVIGATION_LIMIT_MS
+        {
+            events.extend(self.stop(format!(
+                "「{}」 단계에서 화면이 예상과 달라 멈췄습니다. 아래 내용을 보고 알려 주세요.",
+                self.progress_words()
+            )));
+            return events;
+        }
         if self.stage != HeritageStage::Waiting {
-            return Vec::new();
+            return events;
         }
         if self.retry_due(now_ms) {
             self.retry_at_ms = 0;

@@ -65,17 +65,29 @@ fn the_run_opens_the_login_page_first() {
     let mut m = machine();
     let mut host = SilentHost::without_page();
     assert_eq!(m.stage(), &HeritageStage::Idle);
-    assert!(m.next_step(&mut host, 0).is_none(), "asked before a page existed");
+    assert!(
+        m.next_step(&mut host, 0).is_none(),
+        "asked before a page existed"
+    );
     assert!(host.navigated.is_empty(), "navigated before a page existed");
 
     let mut host = SilentHost::with_page();
-    assert!(m.next_step(&mut host, 0).is_none(), "the open is not a script");
+    assert!(
+        m.next_step(&mut host, 0).is_none(),
+        "the open is not a script"
+    );
     assert_eq!(host.navigated.len(), 1);
-    assert!(host.navigated[0].ends_with("/user/checkNet.do"), "{:?}", host.navigated);
+    assert!(
+        host.navigated[0].ends_with("/user/checkNet.do"),
+        "{:?}",
+        host.navigated
+    );
     assert_eq!(m.stage(), &HeritageStage::LoginProbe);
 
     // A second frame must not open it again, and asks a probe.
-    let probe = m.next_step(&mut host, LOGIN_POLL_MS).expect("no probe after the open");
+    let probe = m
+        .next_step(&mut host, LOGIN_POLL_MS)
+        .expect("no probe after the open");
     assert_eq!(host.navigated.len(), 1, "the portal was opened twice");
     let _ = probe;
 }
@@ -105,7 +117,10 @@ fn nothing_is_asked_while_an_answer_is_outstanding() {
     let _ = m.next_step(&mut host, 0);
     let first = m.next_step(&mut host, LOGIN_POLL_MS).expect("a probe");
     // Same instant, an answer still outstanding: no second ask.
-    assert!(m.next_step(&mut host, LOGIN_POLL_MS).is_none(), "asked again without an answer");
+    assert!(
+        m.next_step(&mut host, LOGIN_POLL_MS).is_none(),
+        "asked again without an answer"
+    );
     // After the interval but still unanswered: still no second ask.
     assert!(
         m.next_step(&mut host, LOGIN_POLL_MS * 10).is_none(),
@@ -146,30 +161,53 @@ fn a_page_with_logout_means_we_are_in() {
     let mut host = SilentHost::with_page();
     let _ = m.next_step(&mut host, 0);
     let call = m.next_step(&mut host, LOGIN_POLL_MS).expect("a probe");
-    assert!(call.script.contains("로그아웃"), "the probe does not read the logout mark");
+    assert!(
+        call.script.contains("로그아웃"),
+        "the probe does not read the logout mark"
+    );
     assert_eq!(call.page, PageId(1), "the ask did not go to the open page");
     let ev = m.script_answered(call.token, "past-login");
     assert!(matches!(ev, Some(HeritageEvent::Note(_))));
-    assert_eq!(m.stage(), &HeritageStage::DismissTutorial, "past-login goes to the tutorial, then the panel");
+    assert_eq!(
+        m.stage(),
+        &HeritageStage::TutorialProbe,
+        "past-login goes to the tutorial, then the panel"
+    );
 }
 
-/// `still-login` submits once; a second one gives up with the C++ words.
+/// A submitted login waits nine polls without a second submission (`KaHeritageBrowser.cpp:925-932`).
 #[test]
-fn a_form_that_comes_back_twice_gives_up() {
+fn a_persisting_form_stops_after_nine_probes_without_resubmitting() {
     let mut m = machine();
     let mut host = SilentHost::with_page();
     let _ = m.next_step(&mut host, 0);
 
     let probe = m.next_step(&mut host, LOGIN_POLL_MS).expect("a probe");
-    assert!(m.script_answered(probe.token, "still-login").is_none(), "stopped too early");
+    assert!(
+        m.script_answered(probe.token, "still-login").is_none(),
+        "stopped too early"
+    );
     assert_eq!(m.stage(), &HeritageStage::LoggingIn);
 
-    let login = m.next_step(&mut host, LOGIN_POLL_MS * 2).expect("the login script");
-    assert!(login.script.contains("goLogin()"), "does not call the page's own submit");
+    let login = m
+        .next_step(&mut host, LOGIN_POLL_MS * 2)
+        .expect("the login script");
+    assert!(
+        login.script.contains("goLogin()"),
+        "does not call the page's own submit"
+    );
     assert!(m.script_answered(login.token, "submitted").is_none());
-    assert_eq!(m.stage(), &HeritageStage::LoginProbe);
-
-    let probe = m.next_step(&mut host, LOGIN_POLL_MS * 3).expect("a second probe");
+    assert_eq!(m.stage(), &HeritageStage::AwaitLogin);
+    for tick in 3..11 {
+        let probe = m
+            .next_step(&mut host, LOGIN_POLL_MS * tick)
+            .expect("authentication probe");
+        assert!(m.script_answered(probe.token, "still-login").is_none());
+        assert!(!m.is_over());
+    }
+    let probe = m
+        .next_step(&mut host, LOGIN_POLL_MS * 11)
+        .expect("ninth probe");
     let ev = m.script_answered(probe.token, "still-login");
     let Some(HeritageEvent::Stopped(words)) = ev else {
         panic!("did not give up: {ev:?}");
@@ -186,21 +224,28 @@ fn a_blank_page_waits() {
     let _ = m.next_step(&mut host, 0);
     let probe = m.next_step(&mut host, LOGIN_POLL_MS).expect("a probe");
     assert!(m.script_answered(probe.token, "pending").is_none());
-    assert_eq!(m.stage(), &HeritageStage::LoginProbe, "a blank page moved the run on");
+    assert_eq!(
+        m.stage(),
+        &HeritageStage::LoginProbe,
+        "a blank page moved the run on"
+    );
 }
 
-/// `no-form` from the login script means the page was not the login page.
+/// A temporarily absent form keeps the login pending (`KaHeritageBrowser.cpp:909-910`).
 #[test]
-fn a_login_script_without_a_form_stops() {
+fn a_login_script_waits_when_the_form_is_still_loading() {
     let mut m = machine();
     let mut host = SilentHost::with_page();
     let _ = m.next_step(&mut host, 0);
     let probe = m.next_step(&mut host, LOGIN_POLL_MS).expect("a probe");
     let _ = m.script_answered(probe.token, "still-login");
-    let login = m.next_step(&mut host, LOGIN_POLL_MS * 2).expect("the login script");
+    let login = m
+        .next_step(&mut host, LOGIN_POLL_MS * 2)
+        .expect("the login script");
     let ev = m.script_answered(login.token, "no-form");
-    assert!(matches!(ev, Some(HeritageEvent::Stopped(_))), "{ev:?}");
-    assert!(m.is_over());
+    assert!(ev.is_none(), "{ev:?}");
+    assert_eq!(m.stage(), &HeritageStage::LoginProbe);
+    assert!(!m.is_over());
 }
 
 /// A late answer to a script we already moved past is ignored.
@@ -215,7 +260,7 @@ fn an_answer_to_an_old_script_is_ignored() {
         m.script_answered(first.token, "still-login").is_none(),
         "an old token changed the stage"
     );
-    assert_eq!(m.stage(), &HeritageStage::DismissTutorial);
+    assert_eq!(m.stage(), &HeritageStage::TutorialProbe);
 }
 
 /// The status line names the stage, so the user can see it moving.

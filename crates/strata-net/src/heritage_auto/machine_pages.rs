@@ -8,9 +8,6 @@
 
 use super::machine::{HeritageAutomation, HeritageEvent, HeritageStage};
 
-/// What `dismissTutorialScript` answers when there was nothing to dismiss (`:162-201`).
-const NO_TUTORIAL: &str = "none";
-
 impl HeritageAutomation {
     /// The script for the current stage, if that stage is one of these.
     pub(super) fn page_script(&self) -> Option<String> {
@@ -18,14 +15,23 @@ impl HeritageAutomation {
             // The tutorial hides the top menu; `none` means there was nothing to dismiss.
             HeritageStage::DismissTutorial => Some(super::scripts::dismiss_tutorial_script()),
             HeritageStage::DownloadPage => Some(super::scripts::open_download_page_script()),
+            HeritageStage::DownloadPageReady => Some(super::scripts::download_page_probe_script()),
             HeritageStage::Terms => Some(super::scripts::agree_terms_script()),
+            HeritageStage::TermsReady => Some(super::scripts::form_hint_script()),
             HeritageStage::Kind => Some(super::scripts::select_dataset_script(
                 super::scripts::KINDS[self.kind_index.min(super::scripts::KINDS.len() - 1)].0,
             )),
+            HeritageStage::KindReady => Some(super::scripts::dataset_ready_script(
+                super::scripts::KINDS[self.kind_index].0,
+            )),
+            HeritageStage::KindBaseline | HeritageStage::Results => {
+                Some(super::scripts::result_page_info_script())
+            }
             HeritageStage::Region => Some(super::scripts::select_region_script(
                 &self.config.sido,
                 &self.config.city,
             )),
+            HeritageStage::RegionReady => Some(super::scripts::verify_region_script()),
             HeritageStage::Search => Some(super::scripts::search_script()),
             _ => None,
         }
@@ -36,26 +42,27 @@ impl HeritageAutomation {
         match self.stage.clone() {
             HeritageStage::DismissTutorial => self.on_tutorial(value),
             HeritageStage::DownloadPage => self.on_download_page(value),
+            HeritageStage::DownloadPageReady => self.on_download_page_ready(value),
             HeritageStage::Terms => self.on_terms(value),
+            HeritageStage::TermsReady => self.on_terms_ready(value),
             HeritageStage::Kind => self.on_kind(value),
+            HeritageStage::KindReady => self.on_kind_ready(value),
+            HeritageStage::KindBaseline => self.on_baseline(value),
             HeritageStage::Region => self.on_region(value),
+            HeritageStage::RegionReady => self.on_region_ready(value),
             HeritageStage::Search => self.on_search(value),
+            HeritageStage::Results => self.on_results(value),
             _ => None,
         }
     }
 
-    /// `dismissTutorialScript`: `closed`, `none`, or `error:…`. Either way the download page is
-    /// opened next — a tutorial that was not there is not a problem (`:820-822`).
+    /// Only an absent tutorial permits the next action (`KaHeritageBrowser.cpp:935-944`).
     fn on_tutorial(&mut self, value: &str) -> Option<HeritageEvent> {
-        let _ = NO_TUTORIAL;
-        if value.starts_with("error:") {
-            // A page that cannot be read is worth saying, but the panel may still open.
+        if value == "none" {
             self.go(HeritageStage::DownloadPage);
-            return Some(HeritageEvent::Note(
-                "안내창을 닫지 못했습니다. 그대로 이어갑니다.".to_owned(),
-            ));
+        } else {
+            self.wait_for(HeritageStage::TutorialProbe);
         }
-        self.go(HeritageStage::DownloadPage);
         None
     }
 
@@ -65,13 +72,10 @@ impl HeritageAutomation {
     fn on_download_page(&mut self, value: &str) -> Option<HeritageEvent> {
         match value {
             "already-open" | "opening" => {
-                self.go(HeritageStage::Terms);
+                self.wait_for(HeritageStage::DownloadPageReady);
                 None
             }
-            "not-found" => self.stop(
-                "자료 받기 화면을 열지 못했습니다. 인트라넷 화면이 바뀌었는지 확인해 주세요."
-                    .to_owned(),
-            ),
+            "not-found" => None,
             other => self.stop(format!(
                 "자료 받기 화면을 여는 중 문제가 생겼습니다({other})."
             )),
@@ -87,7 +91,7 @@ impl HeritageAutomation {
         }
         if let Some(text) = pledge_text(value) {
             self.pledge = Some(text.clone());
-            self.go(HeritageStage::Kind);
+            self.wait_for(HeritageStage::TermsReady);
             return Some(HeritageEvent::PledgeAgreed { terms: text });
         }
         match value {
@@ -107,7 +111,7 @@ impl HeritageAutomation {
     fn on_kind(&mut self, value: &str) -> Option<HeritageEvent> {
         match value {
             "selected" => {
-                self.go(HeritageStage::Region);
+                self.wait_for(HeritageStage::KindReady);
                 None
             }
             "not-found" => self.stop(
@@ -129,10 +133,14 @@ impl HeritageAutomation {
     /// site, which is a fact about the survey, not a fault of the run.
     fn on_region(&mut self, value: &str) -> Option<HeritageEvent> {
         if value == "selected" {
-            self.go(HeritageStage::Search);
+            self.wait_for(HeritageStage::RegionReady);
             return None;
         }
         if let Some(count) = value.strip_prefix("sigungu:") {
+            self.quiet_ticks = self.quiet_ticks.saturating_add(1);
+            if self.quiet_ticks <= 12 || count == "0" {
+                return None;
+            }
             let city = self.config.city.clone();
             let sido = self.config.sido.clone();
             return self.stop(format!(
@@ -145,14 +153,7 @@ impl HeritageAutomation {
                 let sido = self.config.sido.clone();
                 self.stop(format!("「{sido}」 가 인트라넷 시·도 목록에 없습니다."))
             }
-            "sigungu-pending" => self.stop(
-                "시·도를 골랐지만 시·군 목록이 아직 나오지 않았습니다. 잠시 뒤 다시 눌러 주세요."
-                    .to_owned(),
-            ),
-            "not-found" => self.stop(
-                "지역 선택 상자를 찾지 못했습니다. 인트라넷 화면이 바뀌었는지 확인해 주세요."
-                    .to_owned(),
-            ),
+            "sigungu-pending" | "not-found" => None,
             other => self.stop(format!("지역을 고르는 중 문제가 생겼습니다({other}).")),
         }
     }
@@ -162,13 +163,17 @@ impl HeritageAutomation {
     fn on_search(&mut self, value: &str) -> Option<HeritageEvent> {
         match value {
             "searching" => {
-                self.go(HeritageStage::DownloadAll);
+                self.go(HeritageStage::Results);
                 None
             }
-            "not-found" => self.stop(
-                "「검색」 단추를 찾지 못했습니다. 인트라넷 화면이 바뀌었는지 확인해 주세요."
-                    .to_owned(),
-            ),
+            "not-found" => {
+                self.quiet_ticks = self.quiet_ticks.saturating_add(1);
+                if self.quiet_ticks > 15 {
+                    self.stop("다운로드 폼에서 「검색」을 찾지 못했습니다.".to_owned())
+                } else {
+                    None
+                }
+            }
             other => self.stop(format!("검색 중 문제가 생겼습니다({other}).")),
         }
     }

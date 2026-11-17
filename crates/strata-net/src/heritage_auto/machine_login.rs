@@ -18,13 +18,25 @@ impl HeritageAutomation {
     pub fn progress_words(&self) -> String {
         match &self.stage {
             HeritageStage::Idle => "인트라넷에 접속하는 중".to_owned(),
-            HeritageStage::LoginProbe | HeritageStage::LoggingIn => "인트라넷 로그인 중".to_owned(),
-            HeritageStage::DismissTutorial => "안내창을 닫는 중".to_owned(),
-            HeritageStage::DownloadPage => "자료 받기 화면을 여는 중".to_owned(),
-            HeritageStage::Terms => "서약서에 동의하는 중".to_owned(),
-            HeritageStage::Kind => format!("유산 종류 고르는 중 · {}", self.current_kind()),
-            HeritageStage::Region => format!("지역 고르는 중 · {}", self.config.city),
-            HeritageStage::Search => format!("검색 중 · {}", self.current_kind()),
+            HeritageStage::LoginProbe | HeritageStage::LoggingIn | HeritageStage::AwaitLogin => {
+                "인트라넷 로그인 중".to_owned()
+            }
+            HeritageStage::DismissTutorial | HeritageStage::TutorialProbe => {
+                "안내창을 닫는 중".to_owned()
+            }
+            HeritageStage::DownloadPage | HeritageStage::DownloadPageReady => {
+                "자료 받기 화면을 여는 중".to_owned()
+            }
+            HeritageStage::Terms | HeritageStage::TermsReady => "서약서에 동의하는 중".to_owned(),
+            HeritageStage::Kind | HeritageStage::KindReady | HeritageStage::KindBaseline => {
+                format!("유산 종류 고르는 중 · {}", self.current_kind())
+            }
+            HeritageStage::Region | HeritageStage::RegionReady => {
+                format!("지역 고르는 중 · {}", self.config.city)
+            }
+            HeritageStage::Search | HeritageStage::Results => {
+                format!("검색 중 · {}", self.current_kind())
+            }
             HeritageStage::DownloadAll | HeritageStage::Waiting => {
                 format!("받는 중 · {}", self.current_kind())
             }

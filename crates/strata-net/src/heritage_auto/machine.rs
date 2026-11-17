@@ -5,109 +5,8 @@
 //! press 전체다운로드, wait for the ZIP. One kind at a time, in the C++ tab order
 //! (`MainWindow.cpp:3135-3140` shows each kind as soon as it is ready).
 
-use std::path::PathBuf;
-
+pub use super::types::{HeritageConfig, HeritageEvent, HeritageStage};
 use super::{PageHost, PageId, ScriptCall};
-
-/// Where the run stands. The C++ keeps this in `m_stage` (`KaHeritageBrowser.cpp:96-121`).
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum HeritageStage {
-    /// Nothing started.
-    #[default]
-    Idle,
-    /// Ask the page whether we are past the login form (`:626-632`).
-    LoginProbe,
-    /// Dismiss the tutorial popup that hides the top menu (`KaHeritageBrowser.cpp:820-821`).
-    DismissTutorial,
-    /// Fill the form and call the site's `goLogin()` (`:898-933`).
-    LoggingIn,
-    /// Open the download panel through `showAgreePopup()` (`:1030-1100`).
-    DownloadPage,
-    /// Tick the pledge box and press 확인 (`:1100-1180`).
-    Terms,
-    /// Pick the kind's tab (`:1180-1260`).
-    Kind,
-    /// Pick 시·도 and 시·군 (`:1260-1360`).
-    Region,
-    /// Press 검색 and read how many rows came back (`:1360-1450`).
-    Search,
-    /// Press 전체다운로드 for the current kind (`:1450-1524`).
-    DownloadAll,
-    /// The site is building the ZIP; probe until a file arrives or the retries run out.
-    Waiting,
-    /// Every kind is through.
-    Done,
-    /// The caller cancelled this run (`KaHeritageBrowser.cpp:479-489`).
-    Cancelled,
-    /// The run stopped, with the words to show.
-    Stopped(String),
-}
-
-/// What the app must know about a step.
-#[derive(Debug, Clone, PartialEq)]
-pub enum HeritageEvent {
-    /// Words for the status line; the run goes on.
-    Note(String),
-    /// Exact terms returned after the site's agreement button ran.
-    PledgeAgreed { terms: String },
-    /// A completed filtered search proved this kind has no records.
-    KindAbsent { kind: &'static str },
-    /// All six kinds ended successfully.
-    Done,
-    /// The caller cancelled the run.
-    Cancelled,
-    /// A ZIP is complete on disk for `kind`.
-    ZipReady {
-        /// The kind's Korean name, one of [`super::scripts::KINDS`].
-        kind: &'static str,
-        /// Where the browser put it.
-        path: PathBuf,
-    },
-    /// The run stopped; the words to show the user.
-    Stopped(String),
-}
-
-/// What a run is for.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HeritageConfig {
-    /// The saved account id; never written to a log or a receipt.
-    pub account_id: String,
-    /// The saved password; never written to a log or a receipt.
-    pub account_password: String,
-    /// 시·도 of the survey's city (`HeritageRegionResolver`).
-    pub sido: String,
-    /// 시·군 of the survey's city.
-    pub city: String,
-    /// A fixture base address, when a test or `--snap` drives a local server instead of the
-    /// site. `None` means the real intranet.
-    pub fixture_base: Option<String>,
-}
-
-impl HeritageConfig {
-    /// The login landing page for this run: the fixture's when one was given.
-    #[must_use]
-    pub fn login_url(&self) -> String {
-        match &self.fixture_base {
-            Some(base) => format!("{}/user/checkNet.do", base.trim_end_matches('/')),
-            None => super::scripts::LOGIN_URL.to_owned(),
-        }
-    }
-
-    /// The download panel address for this run.
-    #[must_use]
-    pub fn download_url(&self) -> String {
-        match &self.fixture_base {
-            Some(base) => format!(
-                "{}/user/data/heritageDownload.do",
-                base.trim_end_matches('/')
-            ),
-            None => format!(
-                "https://intranet.gis-heritage.go.kr{}",
-                super::scripts::DOWNLOAD_PAGE_PATH
-            ),
-        }
-    }
-}
 
 /// One heritage run.
 #[derive(Debug)]
@@ -119,8 +18,6 @@ pub struct HeritageAutomation {
     pub(super) quiet_ticks: u8,
     /// How many times the browser was sent to the login page.
     pub(super) opens: u8,
-    /// Whether a submit was already tried, so a second "still-login" is a give-up.
-    pub(super) submitted: bool,
     /// The kind being fetched, as an index into [`super::scripts::KINDS`].
     pub(super) kind_index: usize,
     /// The token of a script still waiting for its answer.
@@ -149,6 +46,9 @@ pub struct HeritageAutomation {
     /// Paths the site offered and the run accepted, in order, waiting for their transfer to
     /// finish.
     pub(super) offered: Vec<std::path::PathBuf>,
+    pub(super) phase_since_ms: u64,
+    pub(super) baseline: Option<super::readiness::Baseline>,
+    pub(super) queued_events: Vec<HeritageEvent>,
 }
 
 impl HeritageAutomation {
@@ -161,7 +61,6 @@ impl HeritageAutomation {
             token: 0,
             quiet_ticks: 0,
             opens: 0,
-            submitted: false,
             kind_index: 0,
             pending: None,
             asked_at_ms: 0,
@@ -173,6 +72,9 @@ impl HeritageAutomation {
             files_this_kind: 0,
             pledge_kept: false,
             offered: Vec::new(),
+            phase_since_ms: 0,
+            baseline: None,
+            queued_events: Vec::new(),
         }
     }
 
@@ -221,6 +123,7 @@ impl HeritageAutomation {
         // The portal is opened once, as soon as the browser has a page to open it in. That is
         // a navigation, not a script, so this call answers `None`.
         if self.stage == HeritageStage::Idle {
+            self.asked_at_ms = now_ms;
             self.open_portal(host)?;
             return None;
         }
@@ -233,17 +136,16 @@ impl HeritageAutomation {
         }
         // The page the asks go to is the one the browser has open; without one there is
         // nothing to ask.
-        let page = host.pages().first().map(|p| p.id)?;
-        let script = match self.stage.clone() {
-            HeritageStage::LoginProbe => super::scripts::login_probe_script(),
-            HeritageStage::LoggingIn => super::scripts::login_script(
-                &self.config.account_id.clone(),
-                &self.config.account_password.clone(),
-            ),
-            _ if self.page_script().is_some() => self.page_script()?,
+        let page = host.pages().first().map(|page| page.id)?;
+        let script = match self.stage {
+            HeritageStage::LoginProbe
+            | HeritageStage::AwaitLogin
+            | HeritageStage::TutorialProbe => super::scripts::login_probe_script(),
+            HeritageStage::LoggingIn => {
+                super::scripts::login_script(&self.config.account_id, &self.config.account_password)
+            }
             HeritageStage::DownloadAll => super::scripts::download_all_script(),
-            HeritageStage::Done | HeritageStage::Stopped(_) | HeritageStage::Idle => return None,
-            _ => return None,
+            _ => self.page_script()?,
         };
         Some(self.ask_on(page, script, now_ms))
     }
@@ -255,8 +157,7 @@ impl HeritageAutomation {
         }
         host.navigate(&self.config.login_url());
         self.opens += 1;
-        self.stage = HeritageStage::LoginProbe;
-        self.quiet_ticks = 0;
+        self.go(HeritageStage::LoginProbe);
         Some(())
     }
 
@@ -274,6 +175,8 @@ impl HeritageAutomation {
         match self.stage.clone() {
             HeritageStage::LoginProbe => self.on_login_probe(value),
             HeritageStage::LoggingIn => self.on_login_submitted(value),
+            HeritageStage::AwaitLogin => self.on_login_wait(value),
+            HeritageStage::TutorialProbe => self.on_tutorial_probe(value),
             HeritageStage::DownloadAll => self.on_download_all(value),
             _ => self.on_page_answer(value),
         }

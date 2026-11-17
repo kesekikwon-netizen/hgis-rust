@@ -27,21 +27,33 @@ fn a_tutorial_is_dismissed_and_its_absence_is_fine() {
             ev.is_none(),
             "「{answer}」 was treated as a problem: {ev:?}"
         );
-        assert_eq!(m.stage(), &HeritageStage::DownloadPage, "「{answer}」");
+        assert_eq!(
+            m.stage(),
+            &if answer == "none" {
+                HeritageStage::DownloadPage
+            } else {
+                HeritageStage::TutorialProbe
+            },
+            "「{answer}」"
+        );
     }
 }
 
-/// The panel is opened through the site's own `showAgreePopup()`, and `not-found` stops.
+/// The opening click waits for the panel or the navigation bound (`KaHeritageBrowser.cpp:949-973`).
 #[test]
 fn the_panel_opens_or_the_run_stops() {
     let mut m = at(HeritageStage::DownloadPage);
     let _ = m.script_answered(m.current_token(), "opening");
-    assert_eq!(m.stage(), &HeritageStage::Terms);
+    assert_eq!(m.stage(), &HeritageStage::DownloadPageReady);
 
     let mut m = at(HeritageStage::DownloadPage);
     let ev = m.script_answered(m.current_token(), "not-found");
-    assert!(matches!(ev, Some(HeritageEvent::Stopped(_))), "{ev:?}");
-    assert!(m.is_over());
+    assert!(ev.is_none());
+    assert!(!m.is_over());
+    assert!(m
+        .timers(75 * super::LOGIN_POLL_MS + 1)
+        .iter()
+        .any(|event| matches!(event, HeritageEvent::Stopped(_))));
 }
 
 /// Agreeing answers the pledge text, which the run keeps for the receipt.
@@ -54,7 +66,7 @@ fn agreeing_keeps_the_pledge_text() {
         matches!(ev, Some(HeritageEvent::PledgeAgreed { .. })),
         "{ev:?}"
     );
-    assert_eq!(m.stage(), &HeritageStage::Kind);
+    assert_eq!(m.stage(), &HeritageStage::TermsReady);
     assert_eq!(
         m.pledge_text(),
         Some("국가유산 공간정보 원본자료 사용 서약서"),
@@ -91,6 +103,11 @@ fn an_unknown_sido_names_it() {
 #[test]
 fn an_unknown_city_names_it_and_counts_the_rest() {
     let mut m = at(HeritageStage::Region);
+    for _ in 0..12 {
+        let token = m.current_token();
+        assert!(m.script_answered(token, "sigungu:22").is_none());
+        m.force_stage(HeritageStage::Region);
+    }
     let ev = m.script_answered(m.current_token(), "sigungu:22");
     let Some(HeritageEvent::Stopped(words)) = ev else {
         panic!("did not stop: {ev:?}");
@@ -105,12 +122,12 @@ fn an_unknown_city_names_it_and_counts_the_rest() {
     );
 }
 
-/// A region that lands moves on to the search.
+/// Selection is followed by a readback (`KaHeritageBrowser.cpp:1042-1056`).
 #[test]
 fn a_chosen_region_moves_on_to_the_search() {
     let mut m = at(HeritageStage::Region);
     let _ = m.script_answered(m.current_token(), "selected");
-    assert_eq!(m.stage(), &HeritageStage::Search);
+    assert_eq!(m.stage(), &HeritageStage::RegionReady);
 }
 
 /// Pressing 검색 only means the button was pressed; the result probe is a later stage.
@@ -118,7 +135,7 @@ fn a_chosen_region_moves_on_to_the_search() {
 fn pressing_search_moves_on() {
     let mut m = at(HeritageStage::Search);
     let _ = m.script_answered(m.current_token(), "searching");
-    assert_eq!(m.stage(), &HeritageStage::DownloadAll);
+    assert_eq!(m.stage(), &HeritageStage::Results);
 }
 
 /// Every page stage asks its own script, so a stage can never run another stage's script.

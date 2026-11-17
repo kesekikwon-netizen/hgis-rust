@@ -11,15 +11,26 @@ impl HeritageAutomation {
         self.pending = None;
         self.offered.clear();
         self.retry_at_ms = 0;
+        self.queued_events.clear();
         self.go(HeritageStage::Cancelled);
         Some(HeritageEvent::Cancelled)
     }
 
     /// Moves the run on and invalidates the previous stage's callback (`:658-659`).
     pub(super) fn go(&mut self, stage: HeritageStage) {
+        self.phase_since_ms = self.asked_at_ms;
+        if stage == HeritageStage::Kind {
+            self.baseline = None;
+        }
         self.pending = None;
         self.stage = stage;
         self.quiet_ticks = 0;
+    }
+
+    /// A pending part of the same C++ stage retains its navigation deadline (`:871-875`).
+    pub(super) fn wait_for(&mut self, stage: HeritageStage) {
+        self.pending = None;
+        self.stage = stage;
     }
 
     /// Stops the run with the words the user should see (`:445-477`).

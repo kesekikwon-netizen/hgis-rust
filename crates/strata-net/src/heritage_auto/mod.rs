@@ -7,7 +7,9 @@
 //! ([`scripts`]), the same order, the same words. The pages are behind [`PageHost`], and what
 //! happened comes out as [`HeritageEvent`]s.
 
+mod readiness;
 pub mod scripts;
+mod types;
 
 mod lifecycle;
 #[path = "login_answers.rs"]
@@ -32,6 +34,8 @@ mod tests_login;
 #[cfg(test)]
 #[path = "tests_pages.rs"]
 mod tests_pages;
+#[cfg(test)]
+mod tests_readiness;
 
 pub use machine::{HeritageAutomation, HeritageConfig, HeritageEvent, HeritageStage};
 pub use machine_kinds::MAX_ATTEMPTS;
