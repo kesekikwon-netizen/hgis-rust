@@ -84,9 +84,8 @@ fn test_r9_align_move_needs_two_pairs_like_kaalignmaptool() {
             map: [200.0, 100.0],
         },
     ];
-    assert_eq!(app.apply_align_move(), Ok(()));
-    assert!(app.align.applied);
-    assert!(app.align.transform.is_some());
+    assert_eq!(app.apply_align_move(), Err("맞출 도면이 없습니다".to_owned()));
+    assert!(!app.align.applied);
 }
 
 /// R9 — 「점 지우기」는 `KaAlignMapTool.cpp:319-329` 대로 왼쪽 점만 있으면 그것부터 지운다.
@@ -128,7 +127,12 @@ fn test_r9_align_save_refuses_under_two_points_with_cpp_text() {
 #[test]
 fn test_r9_align_close_ends_session_and_returns_to_pan() {
     let mut app = StrataAppState::new_startup();
-    app.start_align_session("사진");
+    let temporary = tempfile::tempdir().expect("temporary source");
+    let picture = temporary.path().join("scan.png");
+    image::save_buffer(&picture, &[240; 32 * 16 * 3], 32, 16, image::ColorType::Rgb8).expect("actual picture");
+    app.add_raster_from_path(&picture).expect("real source row");
+    let key = app.pictures.layers[0].key.clone();
+    app.start_align_session(&key);
     assert!(app.ribbon.sub_toolbar_visible);
     assert_eq!(app.ribbon.sub_mode, SubToolsMode::Align);
     assert_eq!(app.active_tool, MapToolKind::GeorefAlign);
@@ -141,18 +145,14 @@ fn test_r9_align_close_ends_session_and_returns_to_pan() {
     assert!(app.align.target_layer.is_none());
 }
 
-/// R9 — 「정합」은 맞출 도면이 없으면 `MainWindowAlign.cpp:872-874` 원문으로 안내만 한다.
+// MainWindowAlign.cpp:847-851 requests an explicit source before any information message.
 #[test]
 fn test_r9_align_button_guides_when_no_alignable_layer() {
     let mut app = StrataAppState::new_startup();
     app.handle_ribbon_click("정합");
     assert!(!app.ribbon.sub_toolbar_visible);
-    assert_eq!(
-        app.home_map.draw_guide_message.as_deref(),
-        Some(
-            "맞추기 — JPG·PNG·DXF 도면을 고르거나, 목록에서 도면을 선택한 뒤 다시 누르세요."
-        )
-    );
+    assert!(app.align.picker.0.is_some());
+    assert!(app.home_map.draw_guide_message.is_none());
 }
 
 /// R9 — 맞출 수 있는 도면이 있으면 세션을 열고 상태줄에 statusText() 를 띄운다

@@ -5,10 +5,10 @@
 //! the paper white of a GeoTIFF is see-through (`knockOutRasterPaper`, BasemapOps.cpp:193-215).
 
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver, TryRecvError};
+use std::sync::mpsc::Receiver;
 
-use eframe::egui::{self, Color32, ColorImage, Mesh, Pos2, Rect, Shape, TextureHandle, TextureOptions};
-use strata_engine::{picture_info, read_picture, PictureInfo, Transformer};
+use eframe::egui::{self, Color32, Mesh, Pos2, Rect, Shape, TextureHandle};
+use strata_engine::{picture_info, PictureInfo, Transformer};
 use strata_types::crs::CrsCode;
 use strata_types::schema::LegendGroup;
 
@@ -55,6 +55,10 @@ pub(crate) struct PictureLayer {
 type Reading = (Wanted, Receiver<Result<Vec<u8>, String>>);
 
 impl PictureLayer {
+    pub(crate) fn clear_picture_cache(&mut self) {
+        self.shown = None;
+        self.reading = None;
+    }
     pub(crate) fn new(key: String, file: PathBuf, info: &PictureInfo, transform: [f64; 6], source_epsg: Option<u32>, align_pending: bool, knock_out_white: bool) -> Self {
         Self { key, file, size: [info.width, info.height], transform, source_epsg, align_pending, knock_out_white, shown: None, reading: None }
     }
@@ -75,7 +79,21 @@ pub(crate) struct PictureLayers {
 /// A copy of the app state knows which pictures there are; what is shown stays with the original.
 impl Clone for PictureLayers {
     fn clone(&self) -> Self {
-        let layers = self.layers.iter().map(|l| PictureLayer { key: l.key.clone(), file: l.file.clone(), size: l.size, transform: l.transform, source_epsg: l.source_epsg, align_pending: l.align_pending, knock_out_white: l.knock_out_white, shown: None, reading: None }).collect();
+        let layers = self
+            .layers
+            .iter()
+            .map(|l| PictureLayer {
+                key: l.key.clone(),
+                file: l.file.clone(),
+                size: l.size,
+                transform: l.transform,
+                source_epsg: l.source_epsg,
+                align_pending: l.align_pending,
+                knock_out_white: l.knock_out_white,
+                shown: None,
+                reading: None,
+            })
+            .collect();
         Self { layers }
     }
 }
@@ -120,78 +138,6 @@ pub(crate) fn looks_unreferenced(info: &PictureInfo) -> bool {
     }
     // A box of about one unit a pixel is a raw scan only near the pixel origin (1 m pixels in EPSG:5186 are not).
     ((max_x - min_x) - w).abs() < 2.0 && ((max_y - min_y) - h).abs() < 2.0 && min_x < w + 10.0 && min_y < h + 10.0
-}
-
-impl PictureLayer {
-    /// The part of the picture the view `[min x, min y, max x, max y]` (work CRS, `mpp` metres a screen pixel) needs,
-    /// with room around it so that a small move of the map needs no new reading; none when none of it is seen.
-    pub(crate) fn wanted(&self, view: [f64; 4], mpp: f64, work_epsg: u32) -> Option<Wanted> {
-        let in_source = match self.source_epsg {
-            Some(epsg) if epsg != work_epsg => Transformer::new(work_epsg, epsg).and_then(|carry| carry.transform_box(view)).ok()?,
-            _ => view,
-        };
-        let corners = [[in_source[0], in_source[1]], [in_source[2], in_source[1]], [in_source[2], in_source[3]], [in_source[0], in_source[3]]];
-        let pixels: Vec<[f64; 2]> = corners.iter().map(|c| pixel_at(&self.transform, *c)).collect::<Option<_>>()?;
-        let (lo_c, hi_c) = pixels.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p[0]), hi.max(p[0])));
-        let (lo_r, hi_r) = pixels.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p[1]), hi.max(p[1])));
-        let (pad_c, pad_r) = ((hi_c - lo_c) * 0.5, (hi_r - lo_r) * 0.5);
-        let (w, h) = (self.size[0] as f64, self.size[1] as f64);
-        let (c0, c1) = ((lo_c - pad_c).floor().max(0.0), (hi_c + pad_c).ceil().min(w));
-        let (r0, r1) = ((lo_r - pad_r).floor().max(0.0), (hi_r + pad_r).ceil().min(h));
-        if c1 <= c0 || r1 <= r0 {
-            return None;
-        }
-        // Screen pixels to a picture pixel; never more than the file has.
-        let pixel_m = (self.transform[1] * self.transform[5] - self.transform[2] * self.transform[4]).abs().sqrt();
-        let density = (pixel_m / mpp.max(1e-9)).min(1.0);
-        let (cols, rows) = (c1 - c0, r1 - r0);
-        let shrink = (MOST_SIDE as f64 / (cols * density).max(rows * density)).min(1.0);
-        // Pixel counts well inside usize: the picture's own size bounds them.
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let (window, size) = (
-            [c0 as usize, r0 as usize, cols as usize, rows as usize],
-            [((cols * density * shrink).ceil() as usize).max(1), ((rows * density * shrink).ceil() as usize).max(1)],
-        );
-        Some(Wanted { window, size })
-    }
-
-    /// Whether what is shown serves the view: it holds the wanted part, at least nearly as finely.
-    fn serves(&self, want: &Wanted) -> bool {
-        self.shown.as_ref().is_some_and(|(shown, _)| {
-            let holds = shown.window[0] <= want.window[0]
-                && shown.window[1] <= want.window[1]
-                && shown.window[0] + shown.window[2] >= want.window[0] + want.window[2]
-                && shown.window[1] + shown.window[3] >= want.window[1] + want.window[3];
-            let fine = |s: &Wanted| s.size[0] as f64 / s.window[2] as f64;
-            holds && fine(shown) >= fine(want) * 0.8
-        })
-    }
-
-    fn start_reading(&mut self, want: Wanted) {
-        let (send, receive) = channel();
-        let file = self.file.clone();
-        std::thread::spawn(move || drop(send.send(read_picture(&file, want.window, want.size).map_err(|e| e.0))));
-        self.reading = Some((want, receive));
-    }
-
-    /// What a reading brought, made a texture.
-    fn take_arrived(&mut self, ctx: &egui::Context) {
-        let Some((want, receive)) = &self.reading else { return };
-        match receive.try_recv() {
-            Ok(Ok(mut rgba)) => {
-                if self.knock_out_white {
-                    knock_out_paper(&mut rgba);
-                }
-                let image = ColorImage::from_rgba_unmultiplied(want.size, &rgba);
-                let texture = ctx.load_texture(format!("{}#{:?}", self.key, want.window), image, TextureOptions::LINEAR);
-                self.shown = Some((*want, texture));
-                self.reading = None;
-            }
-            // The file went away or broke: what was shown stays, nothing is asked again in every frame.
-            Ok(Err(_)) | Err(TryRecvError::Disconnected) => self.reading = None,
-            Err(TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(60)),
-        }
-    }
 }
 
 /// The paper white of a picture made see-through.
@@ -260,7 +206,16 @@ impl StrataAppState {
         if !self.left_layers.entries.iter().any(|e| e.layer_key == key) {
             let entries = &self.left_layers.entries;
             let at = entries.iter().position(|e| matches!(e.group, LegendGroup::ReferenceMap | LegendGroup::Basemap)).unwrap_or(entries.len());
-            let row = LayerTreeEntry { layer_key: key, label_ko: title.to_owned(), group: LegendGroup::ReferenceMap, visible: !waiting, opacity: 1.0, read_only: true, snap_enabled: false, feature_count: 0 };
+            let row = LayerTreeEntry {
+                layer_key: key,
+                label_ko: title.to_owned(),
+                group: LegendGroup::ReferenceMap,
+                visible: !waiting,
+                opacity: 1.0,
+                read_only: true,
+                snap_enabled: false,
+                feature_count: 0,
+            };
             self.left_layers.entries.insert(at, row);
         }
         self.home_map.real_survey.layer_visible.insert(title.to_owned(), !waiting);
@@ -273,10 +228,18 @@ impl StrataAppState {
         let (north_west, south_east) = (s2w(rect, &viewport, rect.left_top()), s2w(rect, &viewport, rect.right_bottom()));
         let view = [north_west[0], south_east[1], south_east[0], north_west[1]];
         let work_epsg = CrsCode::from(self.work_crs).epsg_number();
-        let rows: Vec<(String, f32)> = self.left_layers.entries.iter().rev().filter(|e| e.layer_key.starts_with(PICTURE_PREFIX) && self.home_map.real_survey.is_layer_visible(&e.label_ko)).map(|e| (e.layer_key.clone(), e.opacity)).collect();
+        let rows: Vec<(String, f32)> = self
+            .left_layers
+            .entries
+            .iter()
+            .rev()
+            .filter(|e| e.layer_key.starts_with(PICTURE_PREFIX) && self.home_map.real_survey.is_layer_visible(&e.label_ko))
+            .map(|e| (e.layer_key.clone(), e.opacity))
+            .collect();
         for (key, opacity) in rows {
             let Some(layer) = self.pictures.layers.iter_mut().find(|l| l.key == key) else { continue };
-            layer.take_arrived(ctx);
+            if layer.align_pending { continue; }
+            drop(layer.take_arrived(ctx));
             if let Some(want) = layer.wanted(view, viewport.meters_per_pixel, work_epsg) {
                 if layer.reading.is_none() && !layer.serves(&want) {
                     layer.start_reading(want);
@@ -325,3 +288,9 @@ impl StrataAppState {
 #[cfg(test)]
 #[path = "picture_layers_tests.rs"]
 mod tests;
+
+#[path = "picture_layers_read.rs"]
+mod read;
+
+#[path = "picture_layers_pixels.rs"]
+pub(crate) mod pixels;

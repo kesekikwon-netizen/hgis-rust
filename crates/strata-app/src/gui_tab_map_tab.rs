@@ -15,11 +15,13 @@ impl StrataAppState {
     pub(crate) fn render_map_tab_ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let tab_clip = ui.max_rect();
         ui.set_clip_rect(tab_clip);
-        {
+        if self.align_split_shown() {
+            self.render_align_source(ui);
+        } else {
             let _perf = crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::LeftPanel);
             self.render_cpp_left_layer_panel(ui, false);
         }
-        {
+        if !self.align_split_shown() {
             let _perf =
                 crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::RightPanel);
             self.render_cpp_right_inspector(ui);
@@ -70,6 +72,7 @@ impl StrataAppState {
                 );
             });
         // 방금 그린 지도 칸 크기로 한반도 전체 보기를 한 번 맞춘다(C++ ensureStartupViewReady).
+        self.paint_align_links(ctx);
         self.home_map.apply_pending_korea_view(self.work_crs);
         self.apply_pending_survey_view();
     }

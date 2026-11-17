@@ -66,7 +66,7 @@ impl StrataAppState {
                                 }
                                 if ui.button(ALIGN_SUBTOOLBAR_ITEMS[1]).clicked() {
                                     // MainWindowAlign.cpp:726-729 — 지운 뒤 상태줄에 statusText()
-                                    self.align.remove_last_pair();
+                                    self.delete_selected_align_point();
                                     self.status_bar_hint = self.align.status_text();
                                 }
                                 if ui.button(ALIGN_SUBTOOLBAR_ITEMS[2]).clicked() {

@@ -78,6 +78,7 @@ impl StrataAppState {
             ui.allocate_exact_size(avail_sz, egui::Sense::click_and_drag());
         self.home_map.viewport.screen_size_px =
             [f64::from(rect.width()), f64::from(rect.height())];
+        self.apply_pending_align_view(ctx);
         // Qt: a press on the canvas gives it the keyboard focus, so Delete is the map's again.
         if response.is_pointer_button_down_on() {
             self.home_map.legend_focus = false;
@@ -85,7 +86,8 @@ impl StrataAppState {
 
         // C++ 은 그리기 줄을 열어도 도구가 이동 그대로다 — 그릴 대상을 눌러야 그리기 도구가 켜진다.
         let effective_tool = self.active_tool;
-        let capture = self.handle_polygon_capture_input(ui, &response, rect);
+        let capture = self.handle_align_map_input(ui, &response, rect);
+        let capture = capture || self.handle_polygon_capture_input(ui, &response, rect);
         // A held handle of the selected shape: the map does not pan and the click selects nothing new.
         let capture = capture || self.handle_vertex_handles(ui, &response, rect);
         // A drag on bare map in 「도형선택」 draws the selection box.
@@ -285,5 +287,6 @@ impl StrataAppState {
         self.render_vertex_menu(ctx);
         self.render_merge_ask(ctx);
         self.paint_polygon_sketch(&p, rect, response.hover_pos());
+        self.paint_align_marks(&p, rect);
     }
 }

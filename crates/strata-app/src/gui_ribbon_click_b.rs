@@ -49,8 +49,7 @@ impl StrataAppState {
                 if let Some(target) = self.alignable_layer_name() {
                     self.start_align_session(&target);
                 } else {
-                    // :871-874 QMessageBox::information 원문
-                    self.home_map.draw_guide_message = Some("맞추기 — JPG·PNG·DXF 도면을 고르거나, 목록에서 도면을 선택한 뒤 다시 누르세요.".to_owned());
+                    self.request_align_file();
                 }
             }
             // MainWindowRibbon.cpp:552-557 「도면」 → MainWindow::openLayoutDesigner (Ctrl+L).

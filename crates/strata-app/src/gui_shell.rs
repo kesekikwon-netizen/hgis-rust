@@ -27,7 +27,10 @@ impl StrataAppState {
         // target/cpp-ref/src/app/MainWindowUndo.cpp:486-495 apply Esc, Enter, Backspace and Delete to capture.
         let capture = !wants_kb && self.modals.active.is_none() && self.capture_active();
         ctx.input(|i| {
-            if capture && i.key_pressed(egui::Key::Escape) {
+            if !wants_kb && self.active_tool == MapToolKind::GeorefAlign && i.key_pressed(egui::Key::Escape) {
+                self.align.pending_source = None;
+                self.status_bar_hint = self.align.status_text();
+            } else if capture && i.key_pressed(egui::Key::Escape) {
                 self.sketch_cancel();
             } else if i.key_pressed(egui::Key::Escape) && self.home_map.active_vertex.take().is_some() {
                 // KaFeatureSelectTool.cpp:164-170: Esc lets go of the picked vertex and keeps the tool.
@@ -77,7 +80,9 @@ impl StrataAppState {
                 self.active_tab = MainTab::Map;
                 self.active_tool = MapToolKind::Select;
             }
-            if capture && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+            if !wants_kb && self.active_tool == MapToolKind::GeorefAlign && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+                self.delete_selected_align_point();
+            } else if capture && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
                 self.sketch_undo_vertex();
             } else if !wants_kb && self.active_tab == MainTab::Drawing && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
                 // On the sheet both keys go to the sheet (KaDrawingStudio.cpp:3512-3522).

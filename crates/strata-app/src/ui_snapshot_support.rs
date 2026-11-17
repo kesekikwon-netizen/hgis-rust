@@ -29,6 +29,12 @@ fn collect_text(shape: &Shape, out: &mut Vec<String>) {
 }
 
 impl Rendered {
+    pub(crate) fn text_clips(&self) -> Vec<(String, Rect, Rect)> {
+        self.output.shapes.iter().filter_map(|clipped| match &clipped.shape {
+            Shape::Text(text) => Some((text.galley.text().to_owned(), text.galley.rect.translate(text.pos.to_vec2()), clipped.clip_rect)),
+            _ => None,
+        }).collect()
+    }
     pub(crate) fn text_rects(&self) -> Vec<(String, Rect)> {
         self.output
             .shapes

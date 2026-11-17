@@ -51,6 +51,7 @@ fn test_ribbon_buttons_change_state() {
                 app.status_bar_hint.clone(),
                 app.home_map.real_survey.layer_visible.len(),
                 app.ribbon.old_map_menu_open,
+                app.align.picker.0.is_some(),
             );
 
             app.handle_ribbon_click(label);
@@ -65,6 +66,7 @@ fn test_ribbon_buttons_change_state() {
                 app.status_bar_hint.clone(),
                 app.home_map.real_survey.layer_visible.len(),
                 app.ribbon.old_map_menu_open,
+                app.align.picker.0.is_some(),
             );
             if before == after {
                 silent.push(label);

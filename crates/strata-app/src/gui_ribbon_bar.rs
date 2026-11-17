@@ -15,6 +15,12 @@
 mod gui_ribbon_align;
 #[path = "gui_ribbon_align_actions.rs"]
 mod gui_ribbon_align_actions;
+#[path = "align_source_pane.rs"]
+mod align_source_pane;
+#[path = "align_map_input.rs"]
+mod align_map_input;
+#[path = "align_picker.rs"]
+pub(crate) mod align_picker;
 #[path = "gui_ribbon_appbar.rs"]
 mod gui_ribbon_appbar;
 #[path = "gui_ribbon_click_a.rs"]

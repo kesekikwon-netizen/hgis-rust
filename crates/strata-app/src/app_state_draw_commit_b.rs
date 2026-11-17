@@ -29,6 +29,11 @@ impl StrataAppState {
     /// Ctrl+Z — 그리던 점이 있으면 마지막 점, 없으면 가장 최근에 바꾼 레이어의 편집 하나
     /// (MainWindowUndo.cpp:325-363 undoMapAction), 레이어 삭제면 그 레이어들을 되돌린다(:369-389, 다시 실행은 없다).
     pub(crate) fn undo_map_action(&mut self) {
+        if self.active_tool == strata_canvas2d::map_tools::MapToolKind::GeorefAlign {
+            self.align.remove_last_pair();
+            self.status_bar_hint = self.align.status_text();
+            return;
+        }
         if self.sketch_undo_vertex() {
             return;
         }

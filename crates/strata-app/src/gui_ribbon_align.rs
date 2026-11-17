@@ -9,6 +9,9 @@ pub struct AlignPair {
 /// C++ `MainWindow::m_alignTool` + `m_alignApplied` — 정합 세션 상태 1:1.
 #[derive(Debug, Clone, Default)]
 pub struct AlignSessionState {
+    pub(crate) pending_view: Option<(u32, [f64; 4])>,
+    pub(crate) picker: super::align_picker::PickerSlot,
+    pub(crate) raster: Option<raster::RasterSession>,
     /// 맞출 도면 이름. `None` 이면 C++ `statusText()` 첫 줄(`맞출 도면을 고르세요`).
     pub target_layer: Option<String>,
     pub pairs: Vec<AlignPair>,
@@ -16,12 +19,44 @@ pub struct AlignSessionState {
     pub pending_source: Option<[f64; 2]>,
     /// C++ `m_alignApplied` — 「이동」을 이미 눌렀다
     pub applied: bool,
-    pub transform: Option<strata_geo::polygon_ops::HelmertTransform2D>,
+    pub transform: Option<strata_geo::align_fit::AlignAffine>,
     /// 「맞추기 저장」이 실제로 쓴 파일 (C++ `saveAligned` 의 `path`)
     pub saved_path: Option<String>,
 }
 
 impl AlignSessionState {
+    pub(crate) fn set_source(&mut self, xy: [f64; 2]) {
+        self.pending_source = Some(xy);
+    }
+    pub(crate) fn accept_map(&mut self, xy: [f64; 2]) -> bool {
+        let Some(src) = self.pending_source.take() else { return false };
+        self.pairs.push(AlignPair { src, map: xy });
+        self.invalidate();
+        true
+    }
+    pub(crate) fn move_pair(&mut self, index: usize, source: bool, xy: [f64; 2]) {
+        if let Some(pair) = self.pairs.get_mut(index) {
+            if source {
+                pair.src = xy;
+            } else {
+                pair.map = xy;
+            }
+            self.invalidate();
+        }
+    }
+    pub(crate) fn remove_pair_at(&mut self, index: usize) -> bool {
+        if index >= self.pairs.len() {
+            return false;
+        }
+        self.pairs.remove(index);
+        self.pending_source = None;
+        self.invalidate();
+        true
+    }
+    fn invalidate(&mut self) {
+        self.applied = false;
+        self.transform = None;
+    }
     /// C++ `KaAlignMapTool::statusText()` — `KaAlignMapTool.cpp:453-462`
     #[must_use]
     pub fn status_text(&self) -> String {
@@ -34,42 +69,17 @@ impl AlignSessionState {
         if self.pairs.is_empty() {
             return "왼쪽 도면 모서리 → 오른쪽 지적 모서리".to_owned();
         }
-        format!(
-            "왼쪽 → 오른쪽 · {}점{}",
-            self.pairs.len(),
-            self.quality_summary()
-        )
+        format!("왼쪽 → 오른쪽 · {}점{}", self.pairs.len(), self.quality_summary())
     }
 
-    /// C++ `GeorefQuality::summary()` — `GeorefQuality.cpp:87-94`.
-    /// C++ 은 4점부터 아핀 잔차를 재지만 여기서는 같은 점들로 유사변환(헬머트) 잔차를 잰다.
-    #[must_use]
+    // Raster source pixels grow downwards (target/cpp-ref/src/core/GeorefService.cpp:160-176).
+    pub(crate) fn report(&self) -> strata_geo::align_fit::AlignReport {
+        let pairs: Vec<_> = self.pairs.iter().map(|p| strata_geo::align_fit::AlignPair { src: p.src, map: p.map }).collect();
+        strata_geo::align_fit::assess(&pairs, true)
+    }
+
     fn quality_summary(&self) -> String {
-        match self.pairs.len() {
-            2 => " · 한 점 더 찍으면 기울기도 맞습니다".to_owned(),
-            3 => " · 한 점 더 찍으면 어긋남을 잽니다".to_owned(),
-            n if n < 4 => String::new(),
-            _ => {
-                let src: Vec<[f64; 2]> = self.pairs.iter().map(|p| p.src).collect();
-                let dst: Vec<[f64; 2]> = self.pairs.iter().map(|p| p.map).collect();
-                let Ok(transform) = strata_geo::polygon_ops::solve_helmert_georef(&src, &dst)
-                else {
-                    return String::new();
-                };
-                let max = self
-                    .pairs
-                    .iter()
-                    .map(|p| {
-                        let q = transform.apply(p.src);
-                        (q[0] - p.map[0]).hypot(q[1] - p.map[1])
-                    })
-                    .fold(0.0_f64, f64::max);
-                format!(
-                    " · 평균 어긋남 {:.2} m · 최대 {:.2} m",
-                    transform.rms_error_m, max
-                )
-            }
-        }
+        strata_geo::align_fit::summary(&self.report())
     }
 
     /// C++ `KaAlignMapTool::removeLastPair()` — `KaAlignMapTool.cpp:319-329`.
@@ -78,7 +88,11 @@ impl AlignSessionState {
         if self.pending_source.take().is_some() {
             return true;
         }
-        self.pairs.pop().is_some()
+        let removed = self.pairs.pop().is_some();
+        if removed {
+            self.invalidate();
+        }
+        removed
     }
 
     /// C++ `KaAlignMapTool::endSession()` — `KaAlignMapTool.cpp:177-198`
@@ -89,5 +103,15 @@ impl AlignSessionState {
         self.transform = None;
         self.target_layer = None;
         self.saved_path = None;
+        self.raster = None;
+        self.picker.0 = None;
+        self.pending_view = None;
     }
 }
+
+#[cfg(test)]
+#[path = "align_session_tests.rs"]
+mod tests;
+
+#[path = "align_raster_task.rs"]
+pub(crate) mod raster;
