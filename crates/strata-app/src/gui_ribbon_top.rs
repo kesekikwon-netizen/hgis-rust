@@ -93,9 +93,8 @@ impl StrataAppState {
 
         let groups: &[(&str, &[&str])] = &UX_RIBBON_GROUPS;
 
-        let chip_base_w = |g_idx: usize, label: &str| -> f32 {
-            ribbon_chip_base_width(g_idx, label)
-        };
+        let chip_base_w =
+            |g_idx: usize, label: &str| -> f32 { ribbon_chip_base_width(g_idx, label) };
 
         for (g_idx, (g_title, items)) in groups.iter().enumerate() {
             let gx = ribbon_rect.left() + group_xs[g_idx] * h_scale;
@@ -129,8 +128,14 @@ impl StrataAppState {
                     Vec2::new(cw, 69.0 + extra_h),
                 );
                 if std::env::var("KA_HGIS_DEBUG_RIBBON").is_ok() {
-                    eprintln!("[CHIP] {:<10} bx={:7.1} cw={:6.1} rect=({:.1}..{:.1})",
-                        label, bx, cw, btn_rect.left(), btn_rect.right());
+                    eprintln!(
+                        "[CHIP] {:<10} bx={:7.1} cw={:6.1} rect=({:.1}..{:.1})",
+                        label,
+                        bx,
+                        cw,
+                        btn_rect.left(),
+                        btn_rect.right()
+                    );
                 }
                 bx += cw;
                 // Deferred chips (GeoTIFF until R7) are muted on every tab.
@@ -168,7 +173,7 @@ impl StrataAppState {
                     warm_active,
                 );
                 if chip_clicked {
-                    if label == "더보기" {
+                    if label == "더보기" || label == "옛 지도" {
                         self.open_ribbon_context_menu(label, btn_rect);
                     } else {
                         self.handle_ribbon_click(label);

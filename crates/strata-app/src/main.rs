@@ -270,9 +270,6 @@ mod gui_shell_tests_a;
 mod gui_shell_tests_b;
 
 mod ri_body;
-
-mod ri_body_bottom;
-
 mod ri_body_cards;
 
 mod ri_attr_card;

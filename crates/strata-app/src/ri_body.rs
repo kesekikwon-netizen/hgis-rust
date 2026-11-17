@@ -2,9 +2,9 @@
 //!
 //! `right_inspector.rs` 가 300줄을 넘어 한 메서드의 본문을 옮겼다.
 //! 실행 순서는 호출부가 보장한다(진입 메서드가 이 함수만 부른다).
-use eframe::egui::{self, Color32, Pos2, Stroke, Vec2};
 use crate::app_state::StrataAppState;
-use crate::right_inspector::{InspectorCardTab};
+use crate::right_inspector::InspectorCardTab;
+use eframe::egui::{self, Color32, Pos2, Stroke, Vec2};
 
 impl StrataAppState {
     pub(crate) fn render_ri_body(&mut self, ui: &mut egui::Ui) {
@@ -15,7 +15,11 @@ impl StrataAppState {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(title).size(13.5).strong());
             if selected > 0 {
-                ui.label(egui::RichText::new(format!("{selected}개 선택")).size(11.5).color(Color32::from_rgb(105, 103, 96)));
+                ui.label(
+                    egui::RichText::new(format!("{selected}개 선택"))
+                        .size(11.5)
+                        .color(Color32::from_rgb(105, 103, 96)),
+                );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let b = egui::Button::new("›")
@@ -76,7 +80,5 @@ impl StrataAppState {
         ui.add_space(4.0);
 
         self.render_ri_body_cards(ui, is_attr);
-
-        self.render_ri_body_bottom(ui);
     }
 }

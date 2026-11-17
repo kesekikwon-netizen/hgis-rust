@@ -6,3 +6,7 @@ mod perf_tests;
 mod sound_tests;
 #[path = "sound_tests_ui.rs"]
 mod sound_tests_ui;
+#[path = "ui_snapshot_support.rs"]
+pub(crate) mod ui_snapshot_support;
+#[path = "ui_workspace_tests.rs"]
+mod ui_workspace_tests;
