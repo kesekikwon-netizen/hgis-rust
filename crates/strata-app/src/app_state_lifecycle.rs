@@ -87,6 +87,7 @@ impl StrataAppState {
             dem_zoom_wanted: false,
             sheet_numbers: crate::sheet_numbers::SheetNumbers::default(),
             heritage: crate::heritage_run::HeritageRun::default(),
+            heritage_run_requested: false,
             history_gis_key: String::new(),
             active_tool: MapToolKind::Pan,
             ribbon: KaBeginnerRibbon::default(),

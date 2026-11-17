@@ -13,7 +13,7 @@ use crate::dialogs_modal::render_strata_modal_header;
 use crate::dialogs_modal::ActiveModalDialog;
 
 #[path = "dlg_heritage_browser_footer.rs"]
-mod dlg_heritage_browser_footer;
+pub(crate) mod dlg_heritage_browser_footer;
 #[path = "dlg_heritage_browser_progress.rs"]
 mod dlg_heritage_browser_progress;
 

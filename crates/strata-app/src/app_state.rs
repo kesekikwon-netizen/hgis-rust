@@ -165,6 +165,9 @@ pub struct StrataAppState {
     pub(crate) sheet_numbers: crate::sheet_numbers::SheetNumbers,
     /// The run of the 「유산」 button (`heritage_run.rs`).
     pub(crate) heritage: crate::heritage_run::HeritageRun,
+    /// A 「받기」 press asked for a run; it starts on the next frame, where the window handle
+    /// exists (`KaHeritageBrowser.cpp:596-600` starts the session there).
+    pub(crate) heritage_run_requested: bool,
     /// The history-GIS key the tiles of the 1919 map are asked for with (ref_tile_history.rs); never shown.
     pub(crate) history_gis_key: String,
     pub active_tool: MapToolKind,

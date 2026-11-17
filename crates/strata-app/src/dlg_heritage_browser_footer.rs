@@ -9,9 +9,6 @@ use eframe::egui::{self, Color32, Stroke, Vec2};
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::ActiveModalDialog;
 
-/// Deferred until WB1 embeds the browser view (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:571-629`).
-const DEFERRED_WB1: &str = "아직 Rust 판에서 연결하지 않았습니다 (지시 WB1)";
-
 /// 상세 로그(켜져 있을 때)와 하단 단추 줄.
 pub(crate) fn render_heritage_footer(
     app: &mut StrataAppState,
@@ -72,12 +69,40 @@ ui.horizontal(|ui| {
         .fill(Color32::from_rgb(33, 33, 31))
         .corner_radius(6.0)
         .min_size(Vec2::new(96.0, 32.0));
-        // C++ runs this flow inside an embedded QWebEngineView with the user's login session
-        // (target/cpp-ref/src/app/KaHeritageBrowser.cpp:571-629); disabled until WB1 connects WB0.
-        ui.add_enabled(false, fetch_btn)
-            .on_disabled_hover_text(DEFERRED_WB1);
+        // The run needs an account and a survey to write the receipt into
+        // (`KaHeritageBrowser.cpp:596-600` checks the account before it starts).
+        let (enabled, why) = fetch_state(app);
+        let response = ui.add_enabled(enabled, fetch_btn);
+        if enabled {
+            if response.clicked() {
+                crate::heritage_run_start::start_heritage_fetch(app);
+            }
+        } else if let Some(why) = why {
+            response.on_disabled_hover_text(why);
+        }
     });
 });
+}
+
+/// Whether the 「받기」 button may be pressed, and the words to show when it may not.
+///
+/// The C++ checks the account before it starts a run (`KaHeritageBrowser.cpp:596-600`) and
+/// refuses to begin without a survey to write the receipt into (`MainWindow.cpp:3082-3099`).
+#[must_use]
+pub(crate) fn fetch_state(app: &StrataAppState) -> (bool, Option<&'static str>) {
+    if !app.accounts.heritage_configured {
+        return (
+            false,
+            Some("「설정」에서 국가유산 인트라넷 아이디·비밀번호를 먼저 넣어 주세요."),
+        );
+    }
+    if app.survey_path.is_none() {
+        return (false, Some("조사를 먼저 열거나 저장해 주세요. 받은 자료는 그 조사에 넣습니다."));
+    }
+    if app.modals.heritage_sido.is_empty() || app.modals.heritage_city.is_empty() {
+        return (false, Some("시·도와 시·군·구를 골라 주세요."));
+    }
+    (true, None)
 }
 
 #[cfg(test)]

@@ -114,10 +114,11 @@ fn window_frame(
     (nodes, texts.join("\n"))
 }
 
-/// NET0b — 「받기」 in 주변유적 받기 is disabled with the WB1 tooltip until the embedded browser view lands
-/// (target/cpp-ref/src/app/KaHeritageBrowser.cpp:571-629); clicking it changes no state.
+/// NET0b, replaced by HER7: 「받기」 used to be disabled with the WB1 tooltip. The run exists now
+/// (`strata-heritage-run`), so the button is live whenever the account, the survey and the city
+/// are in place, and a press asks for a run.
 #[test]
-fn heritage_start_button_is_deferred_wb1() {
+fn heritage_start_button_is_live_and_asks_for_a_run() {
     let dir = tempfile::tempdir().expect("temp dir");
     let survey = dir.path().join("현장.gpkg");
     std::fs::write(&survey, b"").expect("survey file");
@@ -145,7 +146,7 @@ fn heritage_start_button_is_deferred_wb1() {
         .find(|(l, _, _)| l == "받기")
         .cloned()
         .unwrap_or_else(|| panic!("fetch button missing: {nodes:?}"));
-    assert!(disabled, "받기 must be disabled until WB1: {nodes:?}");
+    assert!(!disabled, "받기 must be live when the account, survey and city are set: {nodes:?}");
     for enabled_btn in ["상세 보기", "설정", "취소"] {
         assert_eq!(
             nodes.iter().find(|(l, _, _)| l == enabled_btn).map(|(_, d, _)| *d),
@@ -154,15 +155,8 @@ fn heritage_start_button_is_deferred_wb1() {
         );
     }
 
+    assert!(!app.heritage_run_requested, "a run started before the press");
     let at = bounds.expect("bounds").center();
-    let (_, hover_text) = window_frame(&mut app, &ctx, &mut open, vec![Event::PointerMoved(at)]);
-    let (_, hover_text2) = window_frame(&mut app, &ctx, &mut open, vec![Event::PointerMoved(at)]);
-    let combined = format!("{hover_text}\n{hover_text2}");
-    assert!(
-        combined.contains("아직 Rust 판에서 연결하지 않았습니다 (지시 WB1)"),
-        "expected WB1 tooltip on hover:\n{combined}"
-    );
-
     let press = |pressed| Event::PointerButton {
         pos: at,
         button: PointerButton::Primary,
@@ -172,12 +166,45 @@ fn heritage_start_button_is_deferred_wb1() {
     window_frame(&mut app, &ctx, &mut open, vec![press(true)]);
     window_frame(&mut app, &ctx, &mut open, vec![press(false)]);
 
-    assert!(open);
-    assert_eq!(app.modals.active, Some(crate::dialogs_modal::ActiveModalDialog::HeritageBrowser));
-    assert_eq!(app.modals.heritage_stage_idx, 0);
-    assert_eq!(app.modals.heritage_progress_pct, 0.0);
-    assert_eq!(app.modals.heritage_status_detail, "");
-    assert!(app.modals.heritage_request_log.is_empty());
-    assert_eq!(app.home_map.draw_guide_message, None);
-    assert!(app.home_map.real_survey.layer_visible.is_empty());
+    assert!(open, "the modal closed on a press");
+    assert!(
+        app.heritage_run_requested,
+        "the press did not ask for a run: {}",
+        app.status_bar_hint
+    );
+    assert!(app.status_bar_hint.contains("경주시"), "{}", app.status_bar_hint);
+}
+
+/// With no account the button says which thing is missing instead of the old WB1 tooltip.
+#[test]
+fn without_an_account_the_button_names_what_is_missing() {
+    let mut app = StrataAppState::new_startup();
+    app.accounts.heritage_configured = false;
+    app.modals.active = Some(crate::dialogs_modal::ActiveModalDialog::HeritageBrowser);
+    app.modals.heritage_sido = "경상북도".to_owned();
+    app.modals.heritage_city = "경주시".to_owned();
+
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    ctx.style_mut(|s| {
+        s.interaction.tooltip_delay = 0.0;
+        s.interaction.show_tooltips_only_when_still = false;
+    });
+    let mut open = true;
+    let mut nodes = Vec::new();
+    for _ in 0..3 {
+        (nodes, _) = window_frame(&mut app, &ctx, &mut open, vec![]);
+    }
+    let (_, disabled, bounds) = nodes
+        .iter()
+        .find(|(l, _, _)| l == "받기")
+        .cloned()
+        .unwrap_or_else(|| panic!("fetch button missing: {nodes:?}"));
+    assert!(disabled, "받기 must be disabled without an account");
+
+    let at = bounds.expect("bounds").center();
+    let (_, hover1) = window_frame(&mut app, &ctx, &mut open, vec![Event::PointerMoved(at)]);
+    let (_, hover2) = window_frame(&mut app, &ctx, &mut open, vec![Event::PointerMoved(at)]);
+    let combined = format!("{hover1}\n{hover2}");
+    assert!(combined.contains("아이디"), "the tooltip does not say what is missing:\n{combined}");
 }
