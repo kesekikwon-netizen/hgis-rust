@@ -11,6 +11,7 @@ use strata_geo::polygon_erase::Rings;
 use strata_geo::polygon_split::{overlap, sliced};
 use strata_storage::wkb_codec::WkbGeometry;
 
+use super::app_state_draw_commit::TOO_FEW_TEXT;
 use super::app_state_merge::polygons;
 use crate::app_state::StrataAppState;
 use crate::app_state_layer_remove::UndoStep;
@@ -46,6 +47,8 @@ impl StrataAppState {
         if table.and_then(|t| t.layer.change_add_delete(changes, additions, &[])).is_none() {
             return false;
         }
+        // target/cpp-ref/src/app/MainWindowSession.cpp:1225-1228: modified split buffers are unsaved work.
+        self.is_dirty = true;
         self.redo_tables.clear();
         self.after_layer_edit(key);
         self.undo_tables.push(UndoStep::Table(key.to_owned()));
@@ -82,11 +85,15 @@ impl StrataAppState {
         let chosen: Vec<i64> = self.all_selected().into_iter().filter(|(table, _)| table == key).map(|(_, fid)| fid).collect();
         let Some(t) = self.survey_tables.iter().find(|t| t.table == key) else { return };
         let work = strata_types::crs::CrsCode::from(self.work_crs).epsg_number();
-        let line: Option<Vec<[f64; 2]>> = match u32::try_from(t.srs_id).ok().filter(|srs| *srs > 0 && *srs != work) {
-            Some(table_srs) => strata_engine::Transformer::new(work, table_srs).ok().and_then(|carry| line.iter().map(|p| carry.transform(*p).ok()).collect()),
-            None => Some(line),
+        // Owner CRS rule and target/cpp-ref/src/app/KaCaptureMapTool.cpp:437-448: unknown is not identity.
+        let line = match u32::try_from(t.srs_id) {
+            Ok(table_srs) if table_srs == work => Some(line),
+            Ok(table_srs) => strata_engine::Transformer::new(work, table_srs).ok().and_then(|carry| carry.transform_all(&line).ok()),
+            Err(_) => None,
         };
-        let Some(line) = line else { return };
+        let Some(line) = line else { return self.show_status_message(TOO_FEW_TEXT) };
+        // target/cpp-ref/src/app/KaCaptureMapTool.cpp:403-408,451-455: consume only an admitted capture.
+        self.draw_sketch = crate::draw_sketch::DrawSketch::default();
         let (mut changes, mut additions) = (Vec::new(), Vec::new());
         for f in t.layer.features.iter().filter(|f| chosen.is_empty() || chosen.contains(&f.fid)) {
             let Some(shape) = polygons(&f.wkt_geom) else { continue };
