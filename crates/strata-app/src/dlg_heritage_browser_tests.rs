@@ -36,7 +36,7 @@ fn no_invented_sites_before_any_download() {
     let mut app = StrataAppState::new_startup();
     let text = window_texts(&mut app);
     assert!(text.contains("주변유적 다운로드"), "{text}");
-    assert!(text.contains("대기"), "{text}");
+    assert!(!text.contains("단계:"), "{text}");
     for invented in ["경주", "월성", "첨성대", "황룡사지", "고분군", "인왕동", "사적 제", "국보 제", "기념물 제", "검색 결과", "위치 보기", "반경 1 km"] {
         assert!(!text.contains(invented), "{invented:?} is on screen:\n{text}");
     }

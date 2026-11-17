@@ -154,6 +154,10 @@ impl StrataAppState {
 pub(crate) mod startup_notice;
 
 impl eframe::App for StrataAppState {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.drop_heritage_run();
+    }
+
     /// See-through around the card of the startup notice.
     fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
         if self.startup_notice.is_some() { [0.0; 4] } else { visuals.panel_fill.to_normalized_gamma_f32() }

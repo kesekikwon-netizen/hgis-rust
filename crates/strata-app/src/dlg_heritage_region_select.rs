@@ -8,6 +8,11 @@ use crate::app_state::StrataAppState;
 use crate::dialogs_modal::render_strata_modal_header;
 
 pub(crate) fn render_heritage_region_select(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
+    if app.heritage.download.is_some() || app.heritage.browser_busy() || app.heritage.running.is_some() {
+        *open = false;
+        app.modals.active = None;
+        return;
+    }
     egui::Window::new("ka_modal_heritage_region")
         .title_bar(false)
         .resizable(false)
@@ -83,13 +88,20 @@ pub(crate) fn render_heritage_region_select(app: &mut StrataAppState, ctx: &egui
             match app.heritage_reuse_when(&sido, &city) {
                 Some(received) => {
                     ui.checkbox(&mut app.modals.heritage_reuse_recent, egui::RichText::new("최근 받은 자료 다시 쓰기").size(14.0));
-                    ui.label(egui::RichText::new(strata_refmap::heritage_recent::reuse_note(received)).size(12.5).color(Color32::from_rgb(110, 108, 100)));
+                    ui.label(egui::RichText::new(format!("{} 받음", received.format("%Y-%m-%d %H:%M"))).size(12.5).color(Color32::from_rgb(110, 108, 100)));
                 }
                 None => app.modals.heritage_reuse_recent = false,
             }
             ui.add_space(8.0);
             ui.label(egui::RichText::new("받기를 누르면 국가유산 인트라넷의 「원본자료 사용 서약서」에 자동으로 동의하고,\n동의 시각과 서약서 원문을 조사폴더 주변유적/receipts 에 남깁니다. 받은 자료는\n동국문화재연구원 소유입니다. 도면·보고서에 넣거나 밖으로 보내기 전에 서약 범위를\n확인하세요.").size(12.5).color(Color32::from_rgb(75, 74, 70)));
             ui.add_space(12.0);
+            // Account setup precedes the download (`target/cpp-ref/src/app/MainWindow.cpp:3162-3166`).
+            if !app.accounts.heritage_configured {
+                ui.label("받기를 시작하지 않았습니다. 국가유산 인트라넷 아이디·비밀번호를 저장한 뒤 다시 눌러 주세요.");
+                if ui.button("설정").clicked() {
+                    app.modals.active = Some(crate::dialogs_modal::ActiveModalDialog::AccountSettings);
+                }
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let cancel_b = egui::Button::new(egui::RichText::new("취소").size(14.0)).fill(Color32::WHITE).stroke(Stroke::new(1.0, Color32::from_rgb(145, 142, 134))).corner_radius(6.0).min_size(Vec2::new(66.0, 36.0));
                 if ui.add(cancel_b).clicked() {
@@ -99,7 +111,8 @@ pub(crate) fn render_heritage_region_select(app: &mut StrataAppState, ctx: &egui
                 }
                 // :149-152 — 시·도와 시·군·구를 다 고르기 전에는 열리지 않는다.
                 let ready = !app.modals.heritage_sido.is_empty()
-                    && !app.modals.heritage_city.is_empty();
+                    && !app.modals.heritage_city.is_empty()
+                    && (app.modals.heritage_reuse_recent || app.accounts.heritage_configured);
                 let ok_b = egui::Button::new(egui::RichText::new("이 지역 받기").color(Color32::WHITE).strong().size(14.0)).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(116.0, 36.0));
                 if ui.add_enabled(ready, ok_b).clicked() {
                     app.modals.active = None;

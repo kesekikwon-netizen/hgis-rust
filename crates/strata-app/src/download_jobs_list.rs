@@ -108,6 +108,9 @@ impl DownloadJobList {
     pub fn jobs(&self) -> &[DownloadJob] { &self.jobs }
 
     #[must_use]
+    pub(crate) fn current_time(&self) -> f64 { self.clock.now() }
+
+    #[must_use]
     pub fn get(&self, id: DownloadJobId) -> Option<&DownloadJob> { self.jobs.iter().find(|j| j.id == id) }
 
     pub fn add_job(

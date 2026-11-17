@@ -1,9 +1,8 @@
 //! `dialogs_download_print` 에서 옮긴 「HeritageBrowser」 대화상자.
 //!
 //! 분할 전에는 `render_download_and_print_dialogs` 의 match arm 이었다.
-//! 300줄 규칙에 맞춰 진행 카드(`dlg_heritage_browser_progress`)와
-//! 상세 로그·하단 단추(`dlg_heritage_browser_footer`)로 나눴다. 견본 유적 결과 표는 F1 에서 없앴다(C++ 에 없음).
-//! `crate::dlg_heritage_browser::render_heritage_browser` 경로와 위젯 순서는 그대로다.
+//! Initial setup only. Running downloads use the existing bottom gauge, as authorized
+//! by HER-CODEX-UI1 (`target/cpp-ref/src/app/MainWindow.cpp:3135-3148`).
 
 use eframe::egui::{self, Color32, Pos2, Stroke};
 
@@ -14,17 +13,19 @@ use crate::dialogs_modal::ActiveModalDialog;
 
 #[path = "dlg_heritage_browser_footer.rs"]
 pub(crate) mod dlg_heritage_browser_footer;
-#[path = "dlg_heritage_browser_progress.rs"]
-mod dlg_heritage_browser_progress;
 
 use dlg_heritage_browser_footer::render_heritage_footer;
-use dlg_heritage_browser_progress::render_heritage_progress;
 
 pub(crate) fn render_heritage_browser(
     app: &mut StrataAppState,
     ctx: &egui::Context,
     open: &mut bool,
 ) {
+    if app.heritage.is_busy() {
+        *open = false;
+        app.modals.active = None;
+        return;
+    }
     // KaHeritageBrowser.cpp:203-295, KaHeritageSetupDialogs.cpp:81-200, HeritagePledge.cpp:41-73
     // 창 크기를 정할 때 이미 DPI를 반영한 논리 픽셀을 쓴다. 여기서 다시 나누면
     // 150% 화면에서 대화상자가 2/3 크기로 줄어 글자가 넘친다.
@@ -122,30 +123,11 @@ pub(crate) fn render_heritage_browser(
                         );
                     });
 
-                    ui.add_space(4.0);
-                    // 3) 받을 항목 체크 목록 (7종)
-                    let ds_names = [
-                        ("국가등록문화유산", Color32::from_rgb(0x16, 0xA3, 0x4A)),
-                        ("국가지정유산", Color32::from_rgb(0x8E, 0x44, 0xAD)),
-                        ("국가지정유산보호구역", Color32::from_rgb(0x7C, 0x3A, 0xED)),
-                        ("시도지정유산", Color32::from_rgb(0xC2, 0x18, 0x7D)),
-                        ("시도지정유산보호구역", Color32::from_rgb(0xE6, 0x7E, 0x22)),
-                        ("매장유산유존지역", Color32::from_rgb(0x2E, 0x86, 0xC1)),
-                        ("문화유적분포지도", Color32::from_rgb(0x27, 0xAE, 0x60)),
-                    ];
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(egui::RichText::new("받을 항목:").size(12.0).strong());
-                        for (di, (d_name, d_col)) in ds_names.into_iter().enumerate() {
-                            ui.checkbox(
-                                &mut app.modals.heritage_dataset_checks[di],
-                                egui::RichText::new(d_name).size(11.5).color(d_col).strong(),
-                            );
-                        }
-                    });
                 });
 
-            render_heritage_progress(app, ui, modal_w);
-
+            // Owner-approved bottom gauge replaces the C++ progress card
+            // (`target/cpp-ref/src/app/MainWindow.cpp:3135-3148`, HER-API1).
+            ui.label("받기를 누르면 국가유산 인트라넷의 「원본자료 사용 서약서」에 자동으로 동의하고, 동의 시각과 서약서 원문을 조사폴더 주변유적/receipts 에 남깁니다. 받은 자료는 동국문화재연구원 소유입니다.");
 
             // F1: C++ 창에는 유적 결과 표가 없다(받은 자료는 지도에 올라간다) — 견본 유적 표를 없앴다.
 

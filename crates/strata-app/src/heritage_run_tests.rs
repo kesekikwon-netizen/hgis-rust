@@ -94,8 +94,8 @@ fn each_kind_is_said_and_the_end_closes_the_gauge() {
 
     let (_, job) = app.download_jobs.add_job("주변유적", DownloadJobState::Running { fraction: None, stage: None }, 0.0);
     assert!(app.take_heritage_step(&job, Step::End { missing: vec!["지표조사구역", "발굴조사구역"] }));
-    let DownloadJobState::Done { result } = last_state(&mut app) else { panic!("done") };
-    assert!(result.starts_with("주변유적 자료 처리를 마쳤습니다. 받은 자료는 「참조 지도」에 있습니다. 받아 둔 자료가 없는 종류: 지표조사구역, 발굴조사구역"), "{result}");
+    let DownloadJobState::Stopped { code: StopCode::None1, reason } = last_state(&mut app) else { panic!("incomplete cache must not claim success") };
+    assert_eq!(reason, "받아 둔 자료가 없는 종류: 지표조사구역, 발굴조사구역.");
 }
 
 /// A kind that cannot be loaded stops the run with its reason (`fail()`, `KaHeritageBrowser.cpp:445-477`);

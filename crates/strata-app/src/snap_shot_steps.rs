@@ -5,6 +5,18 @@ use crate::app_state::StrataAppState;
 impl StrataAppState {
     pub(crate) fn snap_apply_window_step(&mut self, action: &str) -> bool {
         match action {
+            "@new_survey_fixture" => {
+                self.modals.new_survey_name = "fixture".into();
+                self.modals.new_survey_crs = strata_types::crs::WorkCrs::Epsg5187;
+                self.snap_apply_action("@new_survey_go");
+            }
+            _ if action.starts_with("@heritage_fixture=") => {
+                self.snap_heritage_fixture(&action["@heritage_fixture=".len()..]);
+            }
+            "@heritage_cancel" => {
+                self.drop_heritage_run();
+                self.heritage.snap_capture_pending = false;
+            }
             // 열린 「이름·번호」 창에 종류(이름);시대[;번호]를 적고(번호를 안 주면 다음 번호), 「저장」·「건너뛰기」.
             _ if action.starts_with("@form=") => {
                 let mut parts = action["@form=".len()..].splitn(3, ';');
@@ -124,6 +136,30 @@ impl StrataAppState {
             _ => return false,
         }
         true
+    }
+
+    /// Offline screenshot of the real app runner, with a loopback fixture and a temporary
+    /// survey only (`target/cpp-ref/tests/test_heritage_browser.cpp:25-35`, HER-CODEX-UI1).
+    fn snap_heritage_fixture(&mut self, base: &str) {
+        let local = base.strip_prefix("http://").and_then(|address| address.parse::<std::net::SocketAddr>().ok())
+            .is_some_and(|address| address.ip().is_loopback());
+        let temporary = self.survey_path.as_ref().is_some_and(|path| path.starts_with(crate::snap_shot_run::snap_temp_dir()));
+        if self.snap.is_none() || !local || !temporary || strata_net::network::is_allowed() {
+            eprintln!("[SNAP] heritage fixture requires offline loopback and a temporary survey");
+            return;
+        }
+        self.accounts.config_dir = crate::snap_shot_run::snap_temp_dir().join("fixture-settings");
+        self.accounts.heritage_configured = true;
+        self.accounts.heritage_creds.username = "user1".into();
+        self.accounts.heritage_creds.password = "pass1".into();
+        self.heritage.archive_root = Some(crate::snap_shot_run::snap_temp_dir().join("fixture-archives"));
+        self.modals.heritage_sido = "경상북도".into();
+        self.modals.heritage_city = "경주시".into();
+        crate::heritage_run_start::start_heritage_fetch(self);
+        if let Some(download) = self.heritage.download.as_mut() {
+            download.set_fixture_base(base.to_owned());
+        }
+        self.heritage.snap_capture_pending = true;
     }
 
     fn snap_dem_look(&mut self, text: &str) {
