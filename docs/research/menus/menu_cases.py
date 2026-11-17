@@ -8,6 +8,11 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "crates/strata-app/src/feature_pick.rs": "9c447528a2ed904073eb7b186c3f56cfe1c04586281856c98f10c18a206f4c80",
+    "crates/strata-app/src/gui_tab_map_select_box.rs": "88749469a5b8951255995f05ec2d52f302910dd2347e20061aff38e702db1a74",
+    "crates/strata-app/src/vertex_crs_input_tests.rs": "e80e5b56a2afa9946e206a925909034109889845572f906d311f085c1a9e97f4",
+    "crates/strata-app/src/vertex_crs_boundary_tests.rs": "402db9986108cd79d44ac7977a91225e79507ac78f7522ae2566800993d13754",
+    "crates/strata-engine/src/crs.rs": "13d686ca704937b161e506a0cb66866f6f193d7bca0d256a520ade9d4b036050",
     "target/cpp-ref/src/app/KaClosePrompt.cpp": "021bedf877bdf48a831e443be4849073e145c68dff3645cc9f640f8cdd948239",
     "target/cpp-ref/src/app/KaFeatureCardEditors.cpp": "dee08bcfaa93e932c7d36b8b4122c852a035c503fbcefb777ee07fbf66f4611c",
     "crates/strata-app/src/shell_dialogs.rs": "7124bfa16caafa356a31b7cd661c7b985c50bc26cf16e2cb641ab956efb05ec1",
@@ -25,7 +30,7 @@ REVIEWED_DIGESTS = {
     "target/cpp-ref/src/app/KaVertexEditTool.cpp": "55d536e65c3e67cf4e4294dbe46b7f6361290573abcd7a274f368cb833d8d8c8",
     "crates/strata-app/src/vertex_key_rejection_tests.rs": "b99c96aae266debd7c8859affa684ee4f8bd8378050486ea091ff0ecbd51e186",
     "crates/strata-app/src/app_state_vertex_edit_tests.rs": "2b4304098e17bf9965bfce1e00135483efec3c679ad93a87533e6d3c3b0097c7",
-    "crates/strata-app/src/app_state_vertex_edit.rs": "5fb9a859682a9d095a046afeaec5f735781ac492080ddbc2e830e299e3512ea2",
+    "crates/strata-app/src/app_state_vertex_edit.rs": "47e19c3141c76ce214e3694bc3056926a2baf4bd11e9195f50004069787c5c20",
     "target/cpp-ref/src/app/MainWindowUndo.cpp": "2c11706d9c729bad7f54cca430f187d52558cb0787011e24351dd964817fe0c3",
     "target/cpp-ref/src/app/KaFeatureSelectTool.cpp": "0bc78d26e70186422c02204c0297aca181953671048efaa7a47ebecf70381a69",
     "target/cpp-ref/tests/test_save_open.cpp": "2f84bbad9cf53fca98f07fd98117f3234eeeb450f2864bef33bd20c5592fec2b",
@@ -34,7 +39,7 @@ REVIEWED_DIGESTS = {
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
     "crates/strata-app/src/popup_input_harness.rs": "a5afd08239bf3dec538c7eb2e3287ce2be8486d6474b2dadb97b0ac3d615099c",
     "crates/strata-app/src/shell_workspace.rs": "b2d833287f100313db7a19a66ebb4cb78b283b1ed123afbd5017471edccc8142",
-    "crates/strata-app/src/gui_shell.rs": "62e23e62b1d395ada3b24b0958c468cb3e09061bbaec44a11fe7b866d583f941",
+    "crates/strata-app/src/gui_shell.rs": "507c14a5f2b59e4a73a98168c4030e40de77416a093a4ac30e64bdbb72d90dd1",
     "crates/strata-app/src/gui_shell_escape.rs": "37a738f061a24b7bc01fac480a840e09dc93abf53162e56d1da0b70cbd2c45e7",
     "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
@@ -168,6 +173,17 @@ def build_cases(root):
          '반복 Delete·Backspace', '기존 거부 문구·기록·이력·변경 상태·파일 바이트'], [],
         '삭제 거부는 키를 소비해 전체 도형 삭제로 넘어가지 않음; Esc로 꼭짓점 선택 해제 후 의도적인 도형 삭제와 CtrlZ는 정상. 알고리즘·최소 점수는 변경하지 않음',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 꼭짓점 삭제 거부')}])
+    add('edit.vertex-crs-input', '도형선택 상태 > 좌표계 오류의 선택·꼭짓점 편집 진입 거부', 0, '완료',
+        [('KaVertexEditTool.cpp', 'QgsPointXY KaVertexEditTool::toLayer'), ('KaFeatureSelectTool.cpp', 'void KaFeatureSelectTool::selectInRect'),
+         ('target/cpp-ref/tests/test_editing_tools.cpp', 'void TestEditingTools::clickedHandleIsPickedAndDeleteRemovesOnlyThatVertex')],
+        ['app_state_vertex_edit.rs', 'feature_pick.rs', 'gui_tab_map_select_box.rs', 'gui_shell.rs', 'popup_input_harness.rs',
+         'vertex_crs_input_tests.rs', 'vertex_crs_boundary_tests.rs', 'crates/strata-engine/src/crs.rs'],
+        ['1680×960 생산 UI·추적 합성 데모 임시 사본·도형선택 상태', '메타데이터·머리말을 함께 미정의 0·-1로 바꾼 사본의 실제 열기·클릭·끌기·상자',
+         '양수 미등록 999999의 기존 포인터 거부', '표 EPSG:5186·5187과 작업 EPSG:5187의 실제 끌기·CtrlZ',
+         'C++의 1e-6 m 기준으로 두 국소 놓기 위치 확인·전체 영역 오차 상한 아님',
+         '직접 선택 상태의 내부 경계 5개는 별도 증거이며 UI 도달성으로 해석하지 않음'], [],
+        '거부는 기록·이력·변경 상태·사본 바이트 보존; 정상 끌기 뒤 CtrlZ는 원래 ID·WKT·속성 복원. 선택 모드 진입 단추·모든 CRS·작도·버퍼·분할·네이티브 UI는 범위 밖',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 꼭짓점 편집의 좌표계 오류')}])
     add('context.map', '지도 우클릭 > 기록·그리기·선택·보기·좌표 복사', 1, '검증 안 됨', [('MainWindowContextMenus.cpp', 'populateMapContextMenu')],
         ['gui_tab_map_context.rs'], ['도형 아래·빈 지도', '조사 없음·처리 중', '읽기 전용', '키보드 닫기'], ['별도 지도 메뉴 렌더러의 조건·경계·취소 확인; MENU2 레이어 메뉴와 구분'])
     add('context.layer', '레이어 우클릭 > 편집·표시·삭제·라벨·인코딩', 1, '부분 구현', [('MainWindowContextMenus.cpp', 'showLayerTreeContextMenu')],

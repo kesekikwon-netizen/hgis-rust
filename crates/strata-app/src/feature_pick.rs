@@ -62,13 +62,14 @@ impl StrataAppState {
         let mut layers: Vec<(PickLayer, [f64; 2], f64)> = Vec::new();
         for e in self.left_layers.entries.iter().filter(|e| self.home_map.real_survey.is_layer_visible(&e.label_ko)) {
             let Some(t) = self.survey_tables.iter().find(|t| t.table == e.layer_key) else { continue };
-            let (p, t_tol) = match u32::try_from(t.srs_id).ok().filter(|s| *s > 0 && *s != work) {
-                Some(src) => {
-                    let Ok(tr) = strata_engine::Transformer::new(work, src) else { continue };
-                    let (Ok(p), Ok(edge)) = (tr.transform(xy), tr.transform([xy[0] + tol, xy[1]])) else { continue };
-                    (p, (edge[0] - p[0]).hypot(edge[1] - p[1]))
-                }
-                None => (xy, tol),
+            // target/cpp-ref/src/app/KaVertexEditTool.cpp:110-116: only equal known CRSs permit identity.
+            let Ok(src) = u32::try_from(t.srs_id) else { continue };
+            let (p, t_tol) = if src == work {
+                (xy, tol)
+            } else {
+                let Ok(tr) = strata_engine::Transformer::new(work, src) else { continue };
+                let (Ok(p), Ok(edge)) = (tr.transform(xy), tr.transform([xy[0] + tol, xy[1]])) else { continue };
+                (p, (edge[0] - p[0]).hypot(edge[1] - p[1]))
             };
             let features = t.layer.features.iter().filter(|f| !f.wkt_geom.trim().is_empty()).map(|f| (f.fid, f.wkt_geom.clone())).collect();
             let polygons = t.geometry_type.to_ascii_uppercase().contains("POLYGON");

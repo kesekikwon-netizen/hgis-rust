@@ -68,10 +68,9 @@ impl StrataAppState {
             let Some(t) = self.survey_tables.iter().find(|t| t.table == e.layer_key) else { continue };
             // The box in the table's CRS: the box around its four corners there.
             let corners = [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]];
-            let carried: Option<Vec<[f64; 2]>> = match u32::try_from(t.srs_id).ok().filter(|srs| *srs > 0 && *srs != work) {
-                Some(table_srs) => strata_engine::Transformer::new(work, table_srs).ok().and_then(|carry| corners.iter().map(|c| carry.transform(*c).ok()).collect()),
-                None => Some(corners.to_vec()),
-            };
+            // target/cpp-ref/src/app/KaVertexEditTool.cpp:110-133: never interpret unknown source coordinates as work CRS.
+            let Ok(table_srs) = u32::try_from(t.srs_id) else { continue };
+            let carried: Option<Vec<[f64; 2]>> = if table_srs == work { Some(corners.to_vec()) } else { strata_engine::Transformer::new(work, table_srs).ok().and_then(|carry| corners.iter().map(|c| carry.transform(*c).ok()).collect()) };
             let Some(corners) = carried else { continue };
             let min = [corners.iter().map(|c| c[0]).fold(f64::INFINITY, f64::min), corners.iter().map(|c| c[1]).fold(f64::INFINITY, f64::min)];
             let max = [corners.iter().map(|c| c[0]).fold(f64::NEG_INFINITY, f64::max), corners.iter().map(|c| c[1]).fold(f64::NEG_INFINITY, f64::max)];

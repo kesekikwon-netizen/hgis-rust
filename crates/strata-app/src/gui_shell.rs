@@ -244,3 +244,11 @@ mod save_before_input_tests;
 #[cfg(test)]
 #[path = "close_prompt_input_tests.rs"]
 mod close_prompt_input_tests;
+
+#[cfg(test)]
+#[path = "vertex_crs_input_tests.rs"]
+mod vertex_crs_input_tests;
+
+#[cfg(test)]
+#[path = "vertex_crs_boundary_tests.rs"]
+mod vertex_crs_boundary_tests;

@@ -40,43 +40,48 @@ impl StrataAppState {
         handles.then(|| VertexTarget { table: table.clone(), fid: *fid, parts, srs_id: t.srs_id })
     }
 
-    fn carry(&self, srs_id: i32, into_table: bool) -> Option<Transformer> {
+    // target/cpp-ref/src/app/KaVertexEditTool.cpp:110-133: an error is not an identity conversion.
+    fn carry(&self, srs_id: i32, into_table: bool) -> Result<Option<Transformer>, strata_engine::EngineError> {
         let work = strata_types::crs::CrsCode::from(self.work_crs).epsg_number();
-        let table = u32::try_from(srs_id).ok().filter(|srs| *srs > 0 && *srs != work)?;
-        if into_table { Transformer::new(work, table).ok() } else { Transformer::new(table, work).ok() }
+        let table = u32::try_from(srs_id).map_err(|_| strata_engine::EngineError(format!("Unknown source CRS EPSG:{srs_id}")))?;
+        if table == work {
+            return Ok(None);
+        }
+        let carry = if into_table { Transformer::new(work, table)? } else { Transformer::new(table, work)? };
+        Ok(Some(carry))
     }
 
     /// The vertices of the target on the map (work CRS), for the handles.
     pub(crate) fn vertex_points_on_map(&self, target: &VertexTarget) -> Vec<[f64; 2]> {
         let points = vertices(&target.parts);
         match self.carry(target.srs_id, false) {
-            Some(to_map) => to_map.transform_all(&points).unwrap_or(points),
-            None => points,
+            Ok(Some(to_map)) => to_map.transform_all(&points).unwrap_or_default(),
+            Ok(None) => points,
+            Err(_) => Vec::new(),
         }
     }
 
     /// A place of the map and a reach of `px` screen points, as the table of the target counts them
     /// (`toLayer`, `layerTolerance`).
-    fn in_table(&self, target: &VertexTarget, work: [f64; 2], px: f64) -> ([f64; 2], f64) {
+    fn in_table(&self, target: &VertexTarget, work: [f64; 2], px: f64) -> Result<([f64; 2], f64), strata_engine::EngineError> {
         let reach = self.home_map.viewport.meters_per_pixel * px;
-        let Some(to_table) = self.carry(target.srs_id, true) else { return (work, reach) };
-        match (to_table.transform(work), to_table.transform([work[0] + reach, work[1]])) {
-            (Ok(place), Ok(edge)) => (place, (edge[0] - place[0]).hypot(edge[1] - place[1])),
-            _ => (work, reach),
-        }
+        let Some(to_table) = self.carry(target.srs_id, true)? else { return Ok((work, reach)) };
+        let place = to_table.transform(work)?;
+        let edge = to_table.transform([work[0] + reach, work[1]])?;
+        Ok((place, (edge[0] - place[0]).hypot(edge[1] - place[1])))
     }
 
     /// The handle under a place of the map, within `px` screen points (`vertexNear`).
     pub(crate) fn vertex_at(&self, work: [f64; 2], px: f64) -> Option<usize> {
         let target = self.vertex_target()?;
-        let (place, reach) = self.in_table(&target, work, px);
+        let (place, reach) = self.in_table(&target, work, px).ok()?;
         vertex_near(&target.parts, place, reach)
     }
 
     /// The side under a place of the map, within `px` screen points: whether there is one (`segmentNear`).
     pub(crate) fn side_at(&self, work: [f64; 2], px: f64) -> bool {
         self.vertex_target().is_some_and(|target| {
-            let (place, reach) = self.in_table(&target, work, px);
+            let Ok((place, reach)) = self.in_table(&target, work, px) else { return false };
             segment_near(&target.parts, place, reach).is_some()
         })
     }
@@ -104,7 +109,10 @@ impl StrataAppState {
     /// other shapes of the layer goes along in the same step.
     pub(crate) fn move_vertex_to(&mut self, index: usize, work: [f64; 2]) -> bool {
         let Some(target) = self.vertex_target() else { return false };
-        let (to, _) = self.in_table(&target, work, 0.0);
+        let Ok((to, _)) = self.in_table(&target, work, 0.0) else {
+            self.show_status_message("수정점을 옮기지 못했습니다.");
+            return false;
+        };
         let (Some(from), Some(moved)) = (vertices(&target.parts).get(index).copied(), with_vertex_moved(&target.parts, index, to)) else {
             self.show_status_message("수정점을 옮기지 못했습니다.");
             return false;
@@ -131,7 +139,7 @@ impl StrataAppState {
     /// 「점추가」: a vertex goes into the side under a place of the map (within 10 screen points).
     pub(crate) fn insert_vertex_at(&mut self, work: [f64; 2]) -> bool {
         let Some(target) = self.vertex_target() else { return false };
-        let (place, reach) = self.in_table(&target, work, 10.0);
+        let Ok((place, reach)) = self.in_table(&target, work, 10.0) else { return false };
         let Some(wider) = segment_near(&target.parts, place, reach).and_then(|(before, at)| with_vertex_inserted(&target.parts, before, at)) else { return false };
         let done = self.commit_vertex_edit(&target.table, &[(target.fid, parts_wkt(&wider))]);
         if done {
