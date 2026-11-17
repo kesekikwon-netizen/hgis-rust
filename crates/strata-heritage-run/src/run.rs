@@ -92,6 +92,7 @@ pub fn start_run<W: HasWindowHandle>(
             data_parent: options.data_parent.clone(),
             navigation: NavigationPolicy::new(options.network_allowed, local.as_deref()),
             document_ready_script: None,
+            confirm_policy: strata_webview::dialogs::ConfirmPolicy::Accept,
         },
     )?;
     let core = Rc::new(RefCell::new(Core {
