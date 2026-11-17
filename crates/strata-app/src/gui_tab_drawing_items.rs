@@ -36,7 +36,14 @@ impl StrataAppState {
     /// How far the user moved an item, in screen points; an item nobody moved stays exactly where the sheet
     /// places it.
     pub(crate) fn sheet_item_offset(&self, item: SheetItem, placed: Rect, f: &SheetFrame) -> Vec2 {
-        self.drawing.item_offsets_mm.get(&item).map_or(Vec2::ZERO, |[x, y]| kept_on_paper(Vec2::new(*x, *y) * f.px_per_mm, placed, f.sheet_rect))
+        self.drawing.item_offsets_mm.get(&item).map_or(Vec2::ZERO, |[x, y]| {
+            let wanted = Vec2::new(*x, *y) * f.px_per_mm;
+            if item == SheetItem::Legend {
+                wanted
+            } else {
+                kept_on_paper(wanted, placed, f.sheet_rect)
+            }
+        })
     }
 
     /// The shapes painted since `start` are the item, which the sheet placed at `placed`: moves them to
@@ -72,11 +79,24 @@ impl StrataAppState {
             return;
         }
         let pressed: Option<Pos2> = ui.input(|i| i.pointer.press_origin().filter(|_| i.pointer.primary_pressed()));
-        if pressed.is_some_and(|at| paper.contains(at) && !painted.iter().any(|(_, placed, moved)| placed.translate(*moved).contains(at))) {
+        if pressed.is_some_and(|at| {
+            paper.contains(at)
+                && !painted.iter().any(|(item, placed, moved)| {
+                    let rect = placed.translate(*moved);
+                    if self.drawing.selected_item == Some(*item) {
+                        rect.expand(9.0).contains(at)
+                    } else {
+                        rect.contains(at)
+                    }
+                })
+        }) {
             self.drawing.selected_item = None;
         }
         for (item, placed, moved) in painted {
             let now = placed.translate(moved);
+            if item == SheetItem::Legend && self.drawing.selected_item == Some(item) {
+                self.resize_legend_handles(ui, now, moved, px_per_mm);
+            }
             // Drags only: a drag starts at the press, so a click selects and a move is followed at once.
             let response = ui.interact(now, ui.id().with(("sheet_item", item)), egui::Sense::drag());
             if response.drag_started() {
@@ -90,8 +110,29 @@ impl StrataAppState {
                 ui.painter().rect_stroke(now.expand(2.0), 2.0, Stroke::new(1.0, Color32::from_rgb(181, 87, 58)), egui::StrokeKind::Middle);
             }
             if response.dragged_by(egui::PointerButton::Primary) {
-                let kept = kept_on_paper(moved + response.drag_delta(), placed, paper) / px_per_mm;
+                let wanted = moved + response.drag_delta();
+                let kept = if item == SheetItem::Legend { wanted } else { kept_on_paper(wanted, placed, paper) } / px_per_mm;
                 self.drawing.item_offsets_mm.insert(item, [kept.x, kept.y]);
+            }
+        }
+    }
+
+    // Four independent corner drags, as the C++ select tool (target/cpp-ref/src/app/KaDrawingStudio.cpp:3370-3407).
+    fn resize_legend_handles(&mut self, ui: &egui::Ui, now: Rect, moved: Vec2, px_per_mm: f32) {
+        for (index, corner) in [now.left_top(), now.right_top(), now.left_bottom(), now.right_bottom()].into_iter().enumerate() {
+            let sign = Vec2::new(if index % 2 == 0 { -1.0 } else { 1.0 }, if index < 2 { -1.0 } else { 1.0 });
+            let response = ui.interact(Rect::from_center_size(corner + sign * 3.0, Vec2::splat(12.0)), ui.id().with(("legend_resize", index)), egui::Sense::drag());
+            if response.hovered() || response.dragged() {
+                ui.ctx().set_cursor_icon(if index == 0 || index == 3 { egui::CursorIcon::ResizeNwSe } else { egui::CursorIcon::ResizeNeSw });
+            }
+            if response.dragged_by(egui::PointerButton::Primary) {
+                let delta = response.drag_delta();
+                let minimum = Vec2::new(16.0, 12.0) * px_per_mm;
+                let size = (now.size() + delta * sign).max(minimum);
+                let change = size - now.size();
+                let offset = moved + Vec2::new(if index % 2 == 0 { -change.x } else { 0.0 }, if index < 2 { -change.y } else { 0.0 });
+                self.drawing.legend_size_mm = Some([size.x / px_per_mm, size.y / px_per_mm]);
+                self.drawing.item_offsets_mm.insert(SheetItem::Legend, [offset.x / px_per_mm, offset.y / px_per_mm]);
             }
         }
     }

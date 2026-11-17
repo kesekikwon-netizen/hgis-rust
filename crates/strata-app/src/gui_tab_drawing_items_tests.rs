@@ -125,3 +125,81 @@ fn the_way_of_an_item_ends_at_the_edge_of_the_paper() {
     assert_eq!(kept_on_paper(vec2(300.0, 300.0), placed, paper), vec2(20.0, 50.0));
     assert_eq!(kept_on_paper(vec2(-900.0, -900.0), placed, paper), vec2(-300.0, -500.0));
 }
+
+// Free legend placement follows target/cpp-ref/src/app/KaDrawingStudio.cpp:3394-3401.
+#[test]
+fn legend_can_leave_paper_and_be_dragged_back() {
+    let (mut app, ctx) = sheet();
+    let at = place(&app, SheetItem::Legend);
+    let paper = app.drawing.paper_on_screen.expect("painted paper")[0];
+    let way = vec2(paper.right() - at.left() + 30.0, 0.0);
+    drag(&mut app, &ctx, at.center(), way);
+    let outside = place(&app, SheetItem::Legend);
+    assert!(outside.left() > paper.right(), "legend is clamped to paper: {outside:?}");
+    drag(&mut app, &ctx, outside.center(), -way);
+    assert!(near(place(&app, SheetItem::Legend).min, at.min), "off-page legend cannot be recovered");
+}
+
+// Real corner interactions, target/cpp-ref/src/app/KaDrawingStudio.cpp:3370-3407.
+#[test]
+fn legend_corner_resizes_both_dimensions_without_moving_the_other_corner() {
+    let (mut app, ctx) = sheet();
+    app.drawing.selected_item = Some(SheetItem::Legend);
+    frame(&mut app, &ctx, vec![]);
+    let at = place(&app, SheetItem::Legend);
+    drag(&mut app, &ctx, at.right_bottom() + vec2(3.0, 3.0), vec2(70.0, 50.0));
+    let bigger = place(&app, SheetItem::Legend);
+    assert!(near(bigger.min, at.min), "opposite corner moved");
+    assert!(near(bigger.max, at.max + vec2(70.0, 50.0)), "handle only moves the item: {at:?} -> {bigger:?}");
+    drag(&mut app, &ctx, bigger.right_bottom() + vec2(3.0, 3.0), vec2(-30.0, -20.0));
+    let smaller = place(&app, SheetItem::Legend);
+    assert!(near(smaller.max, bigger.max - vec2(30.0, 20.0)), "cannot shrink legend");
+    app.store_sheet("resized legend");
+    app.drawing.legend_size_mm = None;
+    app.drawing.item_offsets_mm.clear();
+    app.open_stored_sheet("resized legend");
+    frame(&mut app, &ctx, vec![]);
+    assert!(near(place(&app, SheetItem::Legend).max, smaller.max), "stored sheet lost the manual legend geometry");
+}
+
+#[test]
+fn drawing_properties_do_not_extend_past_their_available_width() {
+    for width in [230, 268, 320] {
+        let mut app = StrataAppState::new_startup();
+        let rendered = crate::test_mods::ui_snapshot_support::render([width, 720], |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.paint_drawing_right_panel(ui));
+        });
+        for (text, rect) in rendered.text_rects() {
+            assert!(rect.left() >= -0.5 && rect.right() <= width as f32 + 0.5, "{width}px: {text} extends outside panel: {rect:?}");
+        }
+        rendered.save_if_requested(&format!("drawing-properties-{width}"));
+    }
+}
+
+#[test]
+fn legend_letters_fit_the_resized_box_and_grow_with_it() {
+    let mut app = StrataAppState::new_startup();
+    for key in [strata_types::schema::DomainLayerKey::SurveyArea, strata_types::schema::DomainLayerKey::FeatureLine] {
+        app.left_layers.ensure_domain_layer(key);
+    }
+    let mut sizes = Vec::new();
+    for size in [[30.0, 18.0], [80.0, 60.0]] {
+        app.drawing.legend_size_mm = Some(size);
+        let rendered = crate::test_mods::ui_snapshot_support::render([1200, 900], |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.paint_drawing_sheet(ui));
+        });
+        let card = place(&app, SheetItem::Legend);
+        let (title, title_rect) = rendered.text_rects().into_iter().find(|(text, _)| text == "범례").expect("real legend title");
+        assert!(!title.is_empty());
+        sizes.push(title_rect.height());
+        assert!(card.contains_rect(title_rect), "title outside resized legend");
+        let px = app.drawing.screen_px_per_mm.expect("painted scale");
+        assert!((card.width() / px - size[0]).abs() < 0.1, "manual width ignored");
+        for name in app.sheet_legend_layer_names() {
+            let (_, rect) = rendered.text_rects().into_iter().find(|(text, _)| *text == name).expect("real layer name");
+            assert!(card.expand(0.5).contains_rect(rect), "{name} clips at the legend boundary: {rect:?}");
+        }
+        rendered.save_if_requested(&format!("legend-fit-{}", size[0]));
+    }
+    assert!(sizes[1] > sizes[0] * 1.2, "letters do not grow with the box: {sizes:?}");
+}

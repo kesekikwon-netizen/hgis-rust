@@ -19,6 +19,8 @@ pub struct DrawingTabState {
     /// Where the user put the items of the sheet: the way from where the sheet places them itself, in
     /// millimetres of paper.
     pub item_offsets_mm: std::collections::BTreeMap<SheetItem, [f32; 2]>,
+    /// Manual legend dimensions in paper mm (target/cpp-ref/src/app/KaDrawingStudio.cpp:3370-3407).
+    pub(crate) legend_size_mm: Option<[f32; 2]>,
     /// The items as they were painted last: where the sheet places each (screen points) and how far it is
     /// moved. For the mouse of the next frame.
     pub(crate) item_rects: Vec<(SheetItem, eframe::egui::Rect, eframe::egui::Vec2)>,
@@ -78,6 +80,7 @@ pub struct StoredSheet {
     pub drawing_title: String,
     pub sheet_center: Option<[f64; 2]>,
     pub item_offsets_mm: std::collections::BTreeMap<SheetItem, [f32; 2]>,
+    pub(crate) legend_size_mm: Option<[f32; 2]>,
     pub removed_items: std::collections::BTreeSet<SheetItem>,
     pub coord_callouts: Vec<CoordCallout>,
     pub layers_checked: std::collections::BTreeMap<String, bool>,
@@ -97,6 +100,7 @@ impl Default for DrawingTabState {
             coord_callouts: Vec::new(),
             sheet_center: None,
             item_offsets_mm: std::collections::BTreeMap::new(),
+            legend_size_mm: None,
             item_rects: Vec::new(),
             scale_entry: None,
             selected_item: None,
@@ -117,8 +121,7 @@ impl Default for DrawingTabState {
 impl DrawingTabState {
     pub fn set_paper_and_orientation(&mut self, size: SheetPaperSize, ori: SheetOrientation) {
         self.sheet.change_paper(size, ori);
-        self.last_findings =
-            ChecklistEngine::evaluate_sheet(&self.sheet, SubmitCrs::Epsg5179, true);
+        self.last_findings = ChecklistEngine::evaluate_sheet(&self.sheet, SubmitCrs::Epsg5179, true);
     }
 
     pub const HGIS_DPI_DRAFT: i32 = 150;
@@ -139,29 +142,11 @@ impl DrawingTabState {
 
     /// C++ `KaDrawingStudio::syncMapExtentToFrame(preserveScale)` — 축척 고정 잠금 시 프레임 크기 기준으로 지상 BBOX 재계산 1:1
     #[must_use]
-    pub fn sync_map_extent_to_frame(
-        center_xy: [f64; 2],
-        current_scale_denom: f64,
-        frame_w_mm: f64,
-        frame_h_mm: f64,
-        preserve_scale: bool,
-    ) -> ([f64; 4], f64) {
-        let scale = if preserve_scale && current_scale_denom > 0.0 {
-            current_scale_denom
-        } else {
-            1_000.0
-        };
+    pub fn sync_map_extent_to_frame(center_xy: [f64; 2], current_scale_denom: f64, frame_w_mm: f64, frame_h_mm: f64, preserve_scale: bool) -> ([f64; 4], f64) {
+        let scale = if preserve_scale && current_scale_denom > 0.0 { current_scale_denom } else { 1_000.0 };
         let half_w_m = scale * (frame_w_mm.max(1.0) / 1000.0) * 0.5;
         let half_h_m = scale * (frame_h_mm.max(1.0) / 1000.0) * 0.5;
-        (
-            [
-                center_xy[0] - half_w_m,
-                center_xy[1] - half_h_m,
-                center_xy[0] + half_w_m,
-                center_xy[1] + half_h_m,
-            ],
-            scale,
-        )
+        ([center_xy[0] - half_w_m, center_xy[1] - half_h_m, center_xy[0] + half_w_m, center_xy[1] + half_h_m], scale)
     }
 }
 
@@ -175,13 +160,7 @@ mod tests {
         assert_eq!(DrawingTabState::validate_export_dpi(200), 300);
         assert_eq!(DrawingTabState::validate_export_dpi(1200), 600);
 
-        let (bbox, scale) = DrawingTabState::sync_map_extent_to_frame(
-            [200_000.0, 500_000.0],
-            2_500.0,
-            200.0,
-            100.0,
-            true,
-        );
+        let (bbox, scale) = DrawingTabState::sync_map_extent_to_frame([200_000.0, 500_000.0], 2_500.0, 200.0, 100.0, true);
         assert!((scale - 2_500.0).abs() < 1e-6);
         assert!((bbox[2] - bbox[0] - 500.0).abs() < 1e-6);
         assert!((bbox[3] - bbox[1] - 250.0).abs() < 1e-6);

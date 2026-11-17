@@ -41,7 +41,6 @@ pub(crate) struct LegendCard {
     columns: usize,
     s: f32,
     leg_w: f32,
-    row_h: f32,
 }
 
 #[cfg(test)]
@@ -86,7 +85,7 @@ impl StrataAppState {
         let rows = self.sheet_legend_survey_rows().len() + site_rows;
         let s = (px_per_mm / 1.65).clamp(0.42, 1.3);
         let base_leg_r = f.mm_to_rect(self.drawing.sheet.legend_rect);
-        let row_h = 12.0 * s;
+        let row_h = (self.drawing.sheet.legend_font_pt as f32 * 1.35).max(12.0) * s;
         let leg_w = base_leg_r.width().clamp(42.0 * s, map_rect.width() * 0.42);
         let columns = legend_columns(leg_w / px_per_mm, self.drawing.sheet.legend_font_pt as f32, rows);
         // Each column is wide enough for the longest layer name (its symbol, the gap and the margin: 16
@@ -96,16 +95,22 @@ impl StrataAppState {
         let longest = widths.map(|name| f.sheet_p.layout_no_wrap(name, label.clone(), Color32::BLACK).size().x).fold(0.0, f32::max);
         let leg_w = leg_w.max(columns as f32 * (longest + 16.0 * s) + 10.0 * s).min(map_rect.width() * 0.42);
         // The frame keeps its width and takes the height its rows need (`LayoutService.cpp:1531-1534`).
-        let leg_h = (20.0 * s + (legend_column_rows(rows, columns) as f32) * row_h).max(24.0 * s);
+        let leg_h = (20.0 * s + (legend_column_rows(rows, columns) as f32) * row_h).max(24.0 * s).min(map_rect.height());
         let rect = Rect::from_min_size(Pos2::new((map_rect.right() - leg_w - 5.0 * s).max(map_rect.left() + 4.0), base_leg_r.top()), Vec2::new(leg_w, leg_h));
+        let (rect, columns, s) = if let Some([width, height]) = self.drawing.legend_size_mm {
+            let size = Vec2::new(width, height) * px_per_mm;
+            let scale = (size.x / rect.width()).min(size.y / rect.height());
+            (Rect::from_min_size(rect.min, size), legend_columns(width, self.drawing.sheet.legend_font_pt as f32, rows), s * scale)
+        } else {
+            (rect, columns, s)
+        };
         let moved = self.sheet_item_offset(crate::tab_drawing::SheetItem::Legend, rect, f);
-        Some(LegendCard { rect: rect.translate(moved), moved, columns, s, leg_w, row_h })
+        Some(LegendCard { rect: rect.translate(moved), moved, columns, s, leg_w: rect.width() })
     }
 
     /// 범례 상자와 항목들.
     pub(crate) fn paint_sheet_legend(&mut self, f: &SheetFrame) {
         let map_rect = f.map_rect;
-        let px_per_mm = f.px_per_mm;
         let ink = f.ink;
         let sheet_p = f.sheet_p.clone();
         // The sites the map of this sheet numbers (the same view as the badges: nothing is counted twice).
@@ -113,7 +118,7 @@ impl StrataAppState {
         let badges = self.sheet_heritage_badges([north_west[0], south_east[1], south_east[0], north_west[1]]);
         // With the names on the map the legend lists the kinds only (`:1207, 1281-1293`).
         let names = names_shown(f.scale_denom, self.drawing.sheet.show_site_names_under_5000);
-        let Some(LegendCard { rect: leg_r, moved, columns, s, leg_w, row_h }) = self.sheet_legend_card(f, legend_site_rows(&badges, names)) else {
+        let Some(LegendCard { rect: leg_r, moved, columns, s, leg_w, .. }) = self.sheet_legend_card(f, legend_site_rows(&badges, names)) else {
             return;
         };
         self.drawing.item_rects.push((crate::tab_drawing::SheetItem::Legend, leg_r.translate(-moved), moved));
@@ -125,14 +130,36 @@ impl StrataAppState {
             rows.extend(badges.into_iter().map(LegendRow::Site));
         }
         let font_pt = self.drawing.sheet.legend_font_pt as f32;
+        // Measure every real name, including numbered sites, before fitting the box. Linear font scaling
+        // is bounded in both dimensions (target/cpp-ref/src/core/LayoutService.cpp:1458-1534).
+        let row_width = rows
+            .iter()
+            .map(|row| {
+                let (symbol, name) = match row {
+                    LegendRow::Layer(_, name) => (10.0, name.as_str()),
+                    LegendRow::Kind(_, name) => (KIND_SQUARE_MM * 1.65, *name),
+                    LegendRow::Site(badge) => (badge_look(badge.number, badge.colour, 1.65).diameter, badge.name.as_str()),
+                };
+                symbol + 14.0 + sheet_p.layout_no_wrap(name.to_owned(), FontId::proportional(font_pt - 1.2), ink).size().x
+            })
+            .fold(1.0, f32::max);
+        let title_width = self.legend_title_galley(&sheet_p, font_pt, ink).size().x + 10.0;
+        let row_unit = (font_pt * 1.35).max(12.0);
+        let heading = (font_pt * 1.7).max(20.0);
+        let s =
+            s.min(leg_w / columns as f32 / row_width).min(leg_w / title_width).min(leg_r.height() / (heading + legend_column_rows(rows.len(), columns) as f32 * row_unit + 4.0));
+        let row_h = row_unit * s;
         sheet_p.rect_filled(leg_r, 1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 245));
         sheet_p.rect_stroke(leg_r, 1.0, Stroke::new(0.9, ink), egui::StrokeKind::Middle);
-        let title_pt = (font_pt * s).clamp(4.5, 11.5);
+        let title_pt = font_pt * s;
         let title = self.legend_title_galley(&sheet_p, title_pt, ink);
-        sheet_p.galley(Pos2::new(leg_r.left() + 5.0 * s, leg_r.top() + 9.0 * s - title.size().y * 0.5), title, ink);
-        sheet_p.line_segment([Pos2::new(leg_r.left() + 3.5 * s, leg_r.top() + 16.5 * s), Pos2::new(leg_r.right() - 3.5 * s, leg_r.top() + 16.5 * s)], Stroke::new(0.5, Color32::from_rgb(200, 198, 190)));
+        sheet_p.galley(Pos2::new(leg_r.left() + 5.0 * s, leg_r.top() + heading * s * 0.5 - title.size().y * 0.5), title, ink);
+        sheet_p.line_segment(
+            [Pos2::new(leg_r.left() + 3.5 * s, leg_r.top() + (heading - 2.0) * s), Pos2::new(leg_r.right() - 3.5 * s, leg_r.top() + (heading - 2.0) * s)],
+            Stroke::new(0.5, Color32::from_rgb(200, 198, 190)),
+        );
 
-        let label_font = FontId::proportional((title_pt - 1.2 * s).max(4.0));
+        let label_font = FontId::proportional((font_pt - 1.2) * s);
         let bold = FontFamily::Name(LABEL_FONT_FAMILY.into());
         let number_family = if sheet_p.ctx().fonts(|fonts| fonts.families().contains(&bold)) { bold } else { FontFamily::Proportional };
         let column_w = (leg_w - 10.0 * s) / columns as f32;
@@ -140,7 +167,7 @@ impl StrataAppState {
         for (index, row) in rows.into_iter().enumerate() {
             let (column, place) = legend_cell(index, count, columns);
             let left = leg_r.left() + 5.0 * s + column as f32 * column_w;
-            let ry = leg_r.top() + 23.5 * s + place as f32 * row_h;
+            let ry = leg_r.top() + heading * s + row_h * 0.5 + place as f32 * row_h;
             // A name longer than its column ends at the column.
             let cell = Rect::from_min_max(Pos2::new(left, ry - row_h * 0.5), Pos2::new(left + column_w - 2.0 * s, ry + row_h * 0.5));
             let p = sheet_p.with_clip_rect(cell.intersect(leg_r));
@@ -170,18 +197,24 @@ impl StrataAppState {
                     (swatch.width(), name)
                 }
                 LegendRow::Kind([red, green, blue], name) => {
-                    let side = KIND_SQUARE_MM * px_per_mm;
+                    let side = KIND_SQUARE_MM * 1.65 * s;
                     let swatch = Rect::from_center_size(Pos2::new(left + side * 0.5, ry), Vec2::splat(side));
                     p.rect_filled(swatch, 0.0, Color32::from_rgb(red, green, blue));
-                    p.rect_stroke(swatch, 0.0, Stroke::new(BADGE_EDGE_MM * px_per_mm, Color32::BLACK), egui::StrokeKind::Middle);
+                    p.rect_stroke(swatch, 0.0, Stroke::new(BADGE_EDGE_MM * 1.65 * s, Color32::BLACK), egui::StrokeKind::Middle);
                     (side, name.to_owned())
                 }
                 LegendRow::Site(badge) => {
-                    let look = badge_look(badge.number, badge.colour, px_per_mm);
+                    let look = badge_look(badge.number, badge.colour, 1.65 * s);
                     let ([red, green, blue], [ink_red, ink_green, ink_blue]) = (badge.colour, look.ink);
                     let centre = Pos2::new(left + look.diameter * 0.5, ry);
-                    p.circle(centre, look.diameter * 0.5, Color32::from_rgb(red, green, blue), Stroke::new(BADGE_EDGE_MM * px_per_mm, Color32::BLACK));
-                    p.text(centre, egui::Align2::CENTER_CENTER, badge.number.to_string(), FontId::new(look.letter, number_family.clone()), Color32::from_rgb(ink_red, ink_green, ink_blue));
+                    p.circle(centre, look.diameter * 0.5, Color32::from_rgb(red, green, blue), Stroke::new(BADGE_EDGE_MM * 1.65 * s, Color32::BLACK));
+                    p.text(
+                        centre,
+                        egui::Align2::CENTER_CENTER,
+                        badge.number.to_string(),
+                        FontId::new(look.letter, number_family.clone()),
+                        Color32::from_rgb(ink_red, ink_green, ink_blue),
+                    );
                     (look.diameter, badge.name)
                 }
             };

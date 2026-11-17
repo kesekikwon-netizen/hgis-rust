@@ -16,34 +16,16 @@ impl StrataAppState {
         let p = ui.painter_at(rect);
         p.rect_filled(rect, 0.0, Color32::from_rgb(245, 243, 236));
 
-        let hint_r = Rect::from_min_size(
-            Pos2::new(rect.left() + 18.0, rect.top() + 16.0),
-            Vec2::new(196.0, 30.0),
-        );
+        let hint_r = Rect::from_min_size(Pos2::new(rect.left() + 18.0, rect.top() + 16.0), Vec2::new(196.0, 30.0));
         p.rect_filled(hint_r, 6.0, Color32::WHITE);
-        p.rect_stroke(
-            hint_r,
-            6.0,
-            Stroke::new(1.0, Color32::from_rgb(190, 188, 178)),
-            egui::StrokeKind::Middle,
-        );
-        p.text(
-            hint_r.center(),
-            egui::Align2::CENTER_CENTER,
-            "투명도·밝기: 조절할 레이어를 고르세요",
-            egui::FontId::proportional(11.0),
-            Color32::from_rgb(75, 74, 70),
-        );
+        p.rect_stroke(hint_r, 6.0, Stroke::new(1.0, Color32::from_rgb(190, 188, 178)), egui::StrokeKind::Middle);
+        p.text(hint_r.center(), egui::Align2::CENTER_CENTER, "투명도·밝기: 조절할 레이어를 고르세요", egui::FontId::proportional(11.0), Color32::from_rgb(75, 74, 70));
 
         // 1. 용지(mm) 비율에 맞춘 화면 용지 사각형 (상단 힌트 알약과 하단 7버튼 툴바 사이에 100% 수용)
         let paper_w_mm = (self.drawing.sheet.width_mm.max(100.0)) as f32;
         let paper_h_mm = (self.drawing.sheet.height_mm.max(100.0)) as f32;
         let compact_v = rect.height() < 460.0;
-        let top_bound = if compact_v {
-            rect.top() + 8.0
-        } else {
-            rect.top() + 48.0
-        };
+        let top_bound = if compact_v { rect.top() + 8.0 } else { rect.top() + 48.0 };
         // 하단 7버튼 툴바는 bar_cy = rect.bottom() - bar_h/2 - 4 에 그려지므로
         // 그 위쪽(bottom_bound)까지만 용지를 쓴다. 예전 값 -52 는 툴바 높이(42)
         // 보다 작아서 용지 하단이 툴바를 덮었다 (실화면 확인).
@@ -57,32 +39,14 @@ impl StrataAppState {
         // 용지는 이 CentralPanel 안에서만 그린다. rect 는 이미 좌우 패널이
         // 빠진 영역이지만, 종이 비율 때문에 세로가 먼저 차면 가로가 남는다.
         // 넘칠 때 화면 밖으로 나가지 않도록 rect 로 자른다.
-        let raw_sheet_rect = Rect::from_center_size(
-            Pos2::new(rect.center().x, 0.5 * (top_bound + bottom_bound)),
-            Vec2::new(sheet_w, sheet_h),
-        );
+        let raw_sheet_rect = Rect::from_center_size(Pos2::new(rect.center().x, 0.5 * (top_bound + bottom_bound)), Vec2::new(sheet_w, sheet_h));
         let sheet_rect = Rect::from_min_max(
-            Pos2::new(
-                raw_sheet_rect.left().max(rect.left()),
-                raw_sheet_rect.top().max(rect.top()),
-            ),
-            Pos2::new(
-                raw_sheet_rect.right().min(rect.right()),
-                raw_sheet_rect.bottom().min(bottom_bound.min(rect.bottom())),
-            ),
+            Pos2::new(raw_sheet_rect.left().max(rect.left()), raw_sheet_rect.top().max(rect.top())),
+            Pos2::new(raw_sheet_rect.right().min(rect.right()), raw_sheet_rect.bottom().min(bottom_bound.min(rect.bottom()))),
         );
-        p.rect_filled(
-            sheet_rect.translate(Vec2::new(4.0, 5.0)),
-            1.0,
-            Color32::from_rgba_unmultiplied(0, 0, 0, 38),
-        );
+        p.rect_filled(sheet_rect.translate(Vec2::new(4.0, 5.0)), 1.0, Color32::from_rgba_unmultiplied(0, 0, 0, 38));
         p.rect_filled(sheet_rect, 1.0, Color32::WHITE);
-        p.rect_stroke(
-            sheet_rect,
-            1.0,
-            Stroke::new(1.0, Color32::from_rgb(185, 182, 172)),
-            egui::StrokeKind::Middle,
-        );
+        p.rect_stroke(sheet_rect, 1.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
 
         let chrome = self.drawing.sheet.standard_chrome();
         let map_rect = super::gui_tab_drawing_frame::mm_to_rect(sheet_rect, px_per_mm, chrome.map);
@@ -91,7 +55,9 @@ impl StrataAppState {
         // The size the sheet is seen at: its PDF is drawn at this size too, so that it looks as the screen.
         self.drawing.screen_px_per_mm = Some(px_per_mm);
         self.drawing.paper_on_screen = Some([sheet_rect, map_rect]);
-        let f = self.sheet_frame_for(rect, sheet_rect, px_per_mm, p, compact_v);
+        let mut f = self.sheet_frame_for(rect, sheet_rect, px_per_mm, p, compact_v);
+        // The editor includes the pasteboard; export keeps the paper clip (target/cpp-ref/src/app/KaDrawingStudio.cpp:3394-3401).
+        f.sheet_p = f.p.clone();
         // 원문 순서 그대로: 지도 레이어 → 도곽 격자 → 범례 → 장식띠(표제란·축척·방위)
         //                 → 7버튼 툴바 → 팝업
         self.paint_sheet_map_layers(&f);
@@ -112,9 +78,7 @@ impl StrataAppState {
         let map_rect = super::gui_tab_drawing_frame::mm_to_rect(sheet_rect, px_per_mm, chrome.map);
         let (map_bg, [scx, scy]) = {
             let rs = &self.home_map.real_survey;
-            let map_bg = if rs.is_layer_visible("지형 음영")
-                || rs.is_layer_visible("지표모델(DSM) 30m · Coperni...")
-            {
+            let map_bg = if rs.is_layer_visible("지형 음영") || rs.is_layer_visible("지표모델(DSM) 30m · Coperni...") {
                 Color32::from_rgb(241, 244, 235)
             } else {
                 Color32::from_rgb(252, 251, 248)

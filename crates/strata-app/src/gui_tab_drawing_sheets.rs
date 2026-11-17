@@ -48,6 +48,7 @@ impl StrataAppState {
             drawing_title: d.title_ko.clone(),
             sheet_center: d.sheet_center,
             item_offsets_mm: d.item_offsets_mm.clone(),
+            legend_size_mm: d.legend_size_mm,
             removed_items: d.removed_items.clone(),
             coord_callouts: d.coord_callouts.clone(),
             layers_checked: self.home_map.real_survey.layer_visible.clone(),
@@ -69,6 +70,7 @@ impl StrataAppState {
         d.title_ko = kept.drawing_title;
         d.sheet_center = kept.sheet_center;
         d.item_offsets_mm = kept.item_offsets_mm;
+        d.legend_size_mm = kept.legend_size_mm;
         d.removed_items = kept.removed_items;
         d.coord_callouts = kept.coord_callouts;
         (d.coord_callout_mode, d.selected_item, d.scale_entry) = (false, None, None);
@@ -144,7 +146,10 @@ impl StrataAppState {
         let (title, words) = match &ask {
             SheetAsk::Name(_) => ("도면 보관", "도면 이름 (예: 조사구역도 1:1000, 1호 주거지 실측도)".to_owned()),
             SheetAsk::Replace(name) => ("도면 보관", format!("「{name}」 도면이 이미 있습니다. 지금 도면으로 바꿀까요?")),
-            SheetAsk::Open(name) => ("도면 열기", format!("지금 용지를 보관한 도면 「{name}」로 바꿉니다. 지금 도면을 보관하지 않았다면 사라집니다. 레이어 켜짐도 그 도면의 세트로 바뀝니다. 바꿀까요?")),
+            SheetAsk::Open(name) => (
+                "도면 열기",
+                format!("지금 용지를 보관한 도면 「{name}」로 바꿉니다. 지금 도면을 보관하지 않았다면 사라집니다. 레이어 켜짐도 그 도면의 세트로 바뀝니다. 바꿀까요?"),
+            ),
             SheetAsk::Remove(name) => ("도면 목록", format!("보관한 도면 「{name}」과 같은 이름의 레이어 세트를 지울까요? 지금 열린 도면과 레이어는 그대로입니다.")),
         };
         let (mut yes, mut no) = (false, false);
