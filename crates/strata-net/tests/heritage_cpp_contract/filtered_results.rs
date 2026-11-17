@@ -94,7 +94,7 @@ fn nonpositive_kind_baseline_cannot_start_region_search() {
     for total in [-1, 0] {
         let reply = format!(r#"{{"rows":0,"lastPage":1,"total":{total},"searchReady":false}}"#);
         let _ = run.answer(Action::ResultInfo, &reply);
-        assert_eq!(*run.machine.stage(), HeritageStage::Kind);
+        assert_eq!(*run.machine.stage(), HeritageStage::KindBaseline);
         assert!(!run.requested.contains(&Action::SelectRegion));
     }
     let _ = run.answer(

@@ -43,7 +43,8 @@ fn closing_tutorial_waits_until_the_tutorial_is_observed_absent() {
     let mut run = Session::new();
     run.reach(HeritageStage::DismissTutorial);
     let _ = run.answer(Action::DismissTutorial, "closed");
-    assert_eq!(*run.machine.stage(), HeritageStage::DismissTutorial);
+    assert_eq!(*run.machine.stage(), HeritageStage::TutorialProbe);
+    let _ = run.answer(Action::ProbeLogin, "past-login");
     let _ = run.answer(Action::DismissTutorial, "none");
     assert_eq!(*run.machine.stage(), HeritageStage::DownloadPage);
 }
@@ -63,7 +64,7 @@ fn deferred_panel_opens_once_and_waits_for_ready() {
         let _ = run.machine.script_answered(call.token, "opening");
     }
     for _ in 0..2 {
-        assert_eq!(*run.machine.stage(), HeritageStage::DownloadPage);
+        assert_eq!(*run.machine.stage(), HeritageStage::DownloadPageReady);
         let _ = run.answer(Action::ProbePanel, "not-yet");
     }
     let _ = run.answer(Action::ProbePanel, "ready");
@@ -94,9 +95,9 @@ fn submitted_pledge_waits_for_the_download_form() {
         })
     );
     assert_eq!(run.machine.pledge_text(), Some("검증용 서약문"));
-    assert_eq!(*run.machine.stage(), HeritageStage::Terms);
+    assert_eq!(*run.machine.stage(), HeritageStage::TermsReady);
     let _ = run.answer(Action::FormHint, "other");
-    assert_eq!(*run.machine.stage(), HeritageStage::Terms);
+    assert_eq!(*run.machine.stage(), HeritageStage::TermsReady);
     let _ = run.answer(Action::FormHint, "codedeta");
     assert_eq!(*run.machine.stage(), HeritageStage::Kind);
 }
@@ -109,11 +110,11 @@ fn selected_kind_waits_for_replacement_form_and_positive_baseline() {
     run.reach(HeritageStage::Kind);
     let _ = run.answer(Action::SelectKind, "selected");
     for _ in 0..2 {
-        assert_eq!(*run.machine.stage(), HeritageStage::Kind);
+        assert_eq!(*run.machine.stage(), HeritageStage::KindReady);
         let _ = run.answer(Action::KindReady, "pending");
     }
     let _ = run.answer(Action::KindReady, "ready");
-    assert_eq!(*run.machine.stage(), HeritageStage::Kind);
+    assert_eq!(*run.machine.stage(), HeritageStage::KindBaseline);
     let _ = run.answer(
         Action::ResultInfo,
         r#"{"rows":10,"lastPage":4,"total":37,"searchReady":false}"#,
@@ -135,7 +136,7 @@ fn selected_region_requires_readback_before_search() {
     let mut run = Session::new();
     run.reach(HeritageStage::Region);
     let _ = run.answer(Action::SelectRegion, "selected");
-    assert_eq!(*run.machine.stage(), HeritageStage::Region);
+    assert_eq!(*run.machine.stage(), HeritageStage::RegionReady);
     let _ = run.answer(Action::ReadRegion, "empty");
     assert_eq!(*run.machine.stage(), HeritageStage::Region);
     let _ = run.answer(Action::SelectRegion, "selected");

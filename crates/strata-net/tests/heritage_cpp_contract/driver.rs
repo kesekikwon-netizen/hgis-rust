@@ -91,19 +91,58 @@ impl Session {
     }
 
     pub fn answer(&mut self, wanted: Action, reply: &str) -> Option<HeritageEvent> {
-        let (mut action, mut call) = self.request();
-        // C++ rechecks authenticated DOM before dismissing a tutorial, even when the
-        // previous login probe was positive: target/cpp-ref/src/app/KaHeritageBrowser.cpp:925-935.
-        if wanted == Action::DismissTutorial && action == Action::ProbeLogin {
-            let _ = self.machine.script_answered(call.token, "past-login");
-            (action, call) = self.request();
-        }
+        let (action, call) = self.request();
         assert_eq!(action, wanted, "unexpected action before replying {reply}");
         self.machine.script_answered(call.token, reply)
     }
 
     pub fn reach(&mut self, wanted: HeritageStage) {
-        for _ in 0..40 {
+        // Check every setup action in order. Missing readiness observations cannot be hidden
+        // by a later state's plausible reply: target/cpp-ref/src/app/KaHeritageBrowser.cpp:895-1147.
+        let transcript = [
+            (HeritageStage::LoginProbe, Action::ProbeLogin, "past-login"),
+            (
+                HeritageStage::TutorialProbe,
+                Action::ProbeLogin,
+                "past-login",
+            ),
+            (
+                HeritageStage::DismissTutorial,
+                Action::DismissTutorial,
+                "none",
+            ),
+            (
+                HeritageStage::DownloadPage,
+                Action::OpenPanel,
+                "already-open",
+            ),
+            (
+                HeritageStage::DownloadPageReady,
+                Action::ProbePanel,
+                "ready",
+            ),
+            (HeritageStage::Terms, Action::AgreeTerms, "already-open"),
+            (HeritageStage::Kind, Action::SelectKind, "selected"),
+            (HeritageStage::KindReady, Action::KindReady, "ready"),
+            (HeritageStage::KindBaseline, Action::ResultInfo, BASELINE),
+            (HeritageStage::Region, Action::SelectRegion, "selected"),
+            (
+                HeritageStage::RegionReady,
+                Action::ReadRegion,
+                "ok:47|47110",
+            ),
+            (HeritageStage::Search, Action::Search, "searching"),
+            (HeritageStage::Results, Action::ResultInfo, FILTERED),
+            (HeritageStage::DownloadAll, Action::Download, "all"),
+        ];
+        if *self.machine.stage() == wanted {
+            return;
+        }
+        let start = transcript
+            .iter()
+            .position(|(stage, _, _)| *stage == *self.machine.stage())
+            .unwrap_or_else(|| panic!("no setup transcript for {:?}", self.machine.stage()));
+        for (stage, action, reply) in &transcript[start..] {
             if *self.machine.stage() == wanted {
                 return;
             }
@@ -112,26 +151,17 @@ impl Session {
                 "setup stopped at {:?}",
                 self.machine.stage()
             );
-            let (action, call) = self.request();
-            let reply = match action {
-                Action::ProbeLogin => "past-login",
-                Action::SubmitLogin => "submitted",
-                Action::DismissTutorial => "none",
-                Action::ProbePanel | Action::KindReady => "ready",
-                Action::OpenPanel | Action::AgreeTerms => "already-open",
-                Action::FormHint => "codedeta",
-                Action::SelectKind | Action::SelectRegion => "selected",
-                Action::ReadRegion => "ok:47|47110",
-                Action::Search => "searching",
-                Action::ResultInfo if *self.machine.stage() == HeritageStage::Kind => BASELINE,
-                Action::ResultInfo => FILTERED,
-                Action::Download => "all",
-            };
-            let _ = self.machine.script_answered(call.token, reply);
+            assert_eq!(
+                *self.machine.stage(),
+                *stage,
+                "setup skipped a required phase"
+            );
+            let _ = self.answer(*action, reply);
         }
-        panic!(
-            "setup never reached {wanted:?}, got {:?}",
-            self.machine.stage()
+        assert_eq!(
+            *self.machine.stage(),
+            wanted,
+            "setup ended before its target"
         );
     }
 
@@ -156,6 +186,7 @@ impl Session {
                 Action::SelectRegion,
                 scripts::select_region_script("경상북도", "포항시"),
             ),
+            (Action::ReadRegion, scripts::verify_region_script()),
             (Action::Search, scripts::search_script()),
             (Action::ResultInfo, scripts::result_page_info_script()),
             (Action::Download, scripts::download_all_script()),
@@ -163,14 +194,6 @@ impl Session {
         if let Some((action, _)) = known.into_iter().find(|(_, script)| *script == call.script) {
             return action;
         }
-        // The baseline exports no verifyRegionScript builder. At this boundary the C++ asks
-        // for a readback, whose actual replies are "empty" and "ok:47|47110".
-        // Source: target/cpp-ref/src/core/HeritageIntranetFlow.cpp:622-639.
-        assert_eq!(
-            *self.machine.stage(),
-            HeritageStage::Region,
-            "unrecognized page request"
-        );
-        Action::ReadRegion
+        panic!("unrecognized page request at {:?}", self.machine.stage());
     }
 }
