@@ -8,6 +8,13 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "crates/strata-app/src/app_state_buffer.rs": "3a74acd42ca6c4c4e00bbe332407a5360452df20af2a400b530944ef302d4813",
+    "crates/strata-app/src/buffer_crs_input_tests.rs": "64fc108063a810c1a0fce5615a295929a9998882a77b312bcd19f001312ba27b",
+    "crates/strata-app/src/buffer_crs_input_tests_a.rs": "90f67775090b1407983d9337a6d22651b658051db9fd378134ad5622bec3b7f0",
+    "crates/strata-app/src/gui_ribbon_subtoolbar.rs": "467c2d2fdc9fe4f3a903fc4adce1bc76f42e611237ffab927262c57abbd67625",
+    "target/cpp-ref/src/app/MainWindowRibbon.cpp": "c954bede33a7ca5ae6bf09d461bcaa0bb258b0376164bdd5b9e9e587e9bbc39d",
+    "target/cpp-ref/src/core/BufferAnalysis.cpp": "9795f866d6fbc023a64c742a29e1a61bbb4922af04f900cf586935c961930f58",
+    "target/cpp-ref/src/core/NearbyHeritageCollect.cpp": "12623197b9872e362d5dd174dbdf7c1938e19d223ee2bbb8af1614645699b7fc",
     "target/cpp-ref/src/app/MainWindowEditing.cpp": "bf15c3e25220aae49894159fe0d314249ec82709e61dc9b5a5c60436bd33492c",
     "crates/strata-app/src/app_state_draw_commit.rs": "033d2c1f7207a56fc3369799df0b0b9b012758c8d0caf1586e82d744de846eba",
     "crates/strata-app/src/app_state_split.rs": "98b3643ea77207403f7c1ccb6c1f1d5e7966a9046fa0df4855828766d06fb233",
@@ -54,7 +61,7 @@ REVIEWED_DIGESTS = {
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
     "crates/strata-app/src/popup_input_harness.rs": "a5afd08239bf3dec538c7eb2e3287ce2be8486d6474b2dadb97b0ac3d615099c",
     "crates/strata-app/src/shell_workspace.rs": "b2d833287f100313db7a19a66ebb4cb78b283b1ed123afbd5017471edccc8142",
-    "crates/strata-app/src/gui_shell.rs": "1f8d352c364be2c6512a4e24cc3db608980982ebc0097fd68e7a6cf66212df6d",
+    "crates/strata-app/src/gui_shell.rs": "5c5b9dd913fa8e0ff0db0d2cc81037b76e4f88b61ea84527c1998c6ab39f235e",
     "crates/strata-app/src/gui_shell_escape.rs": "37a738f061a24b7bc01fac480a840e09dc93abf53162e56d1da0b70cbd2c45e7",
     "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
@@ -233,6 +240,44 @@ def build_cases(root):
          '준비한 범위 밖 화면은 모든 이동 제스처의 검증이 아님'], [],
         '좌표 변환 실패는 분할선·기록·기존 이력·변경 상태·사본 바이트 유지; Esc 뒤 다시 입력 가능. 유효한 선은 교차 여부와 무관하게 소비. 정상 분할은 저장 질문과 취소 후 Undo 보존. 확정 뒤 분할 모드 전체 복귀·겹침·멀티파트·작업5186·명시적 저장·네이티브 UI는 상위 행에 남음',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 분할선의 좌표계와 저장 전 질문')}])
+    add('buffer.rings', '버퍼 > 주변유적경계 > 500m·1000m', 0, '부분 구현',
+        [('MainWindowRibbon.cpp', 'void MainWindow::runSiteBuffer500'), ('NearbyHeritageCollect.cpp', 'resolveSourceLayer'),
+         ('BufferAnalysis.cpp', 'bool addDistanceRing')],
+        ['app_state_buffer.rs', 'gui_ribbon_subtoolbar.rs', 'buffer_crs_input_tests.rs', 'buffer_crs_input_tests_a.rs'],
+        ['고른 면·보이는 조사구역·첫 조사구역', '두 반경·재실행·기존 경계', '원본·작업 CRS와 잘못된 도형'],
+        ['MENU14의 좌표계 입구·반복·복귀는 별도 완료 행; 모든 소스 선택·작업5186·빈 자료·큰 자료·처리 중·네이티브 UI는 남음',
+         '저장·재열기와 엑셀 진입점은 개별 행으로 추적'])
+    add('buffer.crs-input', '버퍼 > 500m·1000m > 원본 CRS 오류·기존 경계 보존', 0, '완료',
+        [('MainWindowRibbon.cpp', 'void MainWindow::runSiteBuffer500'), ('NearbyHeritageCollect.cpp', 'resolveSourceLayer'),
+         ('BufferAnalysis.cpp', 'unionInCrs'), ('target/cpp-ref/tests/test_buffer.cpp', 'void TestBuffer::ringHasGapAndLabel')],
+        ['app_state_buffer.rs', 'gui_ribbon_subtoolbar.rs', 'gui_shell.rs', 'vertex_crs_input_tests.rs',
+         'buffer_crs_input_tests.rs', 'buffer_crs_input_tests_a.rs', 'crates/strata-engine/src/crs.rs'],
+        ['1680×960 생산 egui·추적 데모 임시 사본·실제 범례·버퍼·두 반경 단추',
+         '원본0·-1·999999 / 작업5187·새 경계와 기존500·1000 경계 각각·반복 거부',
+         '원본0의 준비한 다른 표 메모·Undo1·Redo1·실패 뒤 실제 CtrlY·CtrlZ',
+         '모든 기록·속성·FID·이력·변경 상태·사본 바이트·범례·경계 좌표와 라벨 보존',
+         '닫기·재열기·재시도·정상 조사구역 선택 후 복구',
+         '원본5186·5187 / 작업5187·각 반경의 정상 실행·반복·1경계와4라벨',
+         'C++80×60 사각형의500m 범위·유효 변환의 개별 실패 및 일부 유효 자료 유지',
+         '국소0.3m 범위 기준은 반경≤1000·사분원36분할의 최대 오차<0.239m에 반올림 여유·전체 영역 CRS 상한 아님'], [],
+        '오류는 하단 문구만 갱신하고 자료·기존 경계·이력·변경 상태를 유지. 실제 닫기·재열기 뒤 같은 거부, 정상 소스 복구는 이전 미저장 자료를 유지. 사전 상태 준비는 메모·도형 작성 UI 검증이 아님. 저장·재열기·다른 소스 선택·작업5186·네이티브 UI는 상위 또는 별도 행 범위',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 버퍼의 원본 좌표계와 기존 경계')}])
+    add('buffer.save-reopen', '버퍼 > 경계·거리 라벨의 명시적 저장·재열기', 0, '검증 안 됨',
+        [('target/cpp-ref/tests/test_buffer.cpp', 'void TestBuffer::ringLayers_bakeIntoSurveyOnlyOnSave')],
+        ['app_state_buffer.rs', 'app_state_projects.rs', 'real_survey_types.rs'],
+        ['500m·1000m·거리 라벨', '저장 전 질문·CtrlS·실패·재열기', '기존 경계 교체·도메인 키·원본 보존'],
+        ['C++ 저장 시 흡수 검사는 읽음; 현재 Rust 저장 미연결 주석만으로 실행 판정하지 않음. 실제 임시 사본 저장·재열기부터 재현'])
+    add('buffer.export-excel', '버퍼 > 엑셀 내보내기 진입점', 1, '미구현',
+        [('MainWindowRibbon.cpp', 'exportNearbyHeritageExcel'), ('MainWindowExport.cpp', 'void MainWindow::exportNearbyHeritageExcel')],
+        [('gui_ribbon_subtoolbar.rs', 'ui.add_enabled_ui(false')],
+        ['주변 경계·조사구역·유적', '활성 조건·방향·거리·파일 선택 취소'],
+        ['현재 W-H1로 항상 비활성인 단추와 MENU14 PNG를 확인. C++ 수집·저장기 연결 필요; 다른 내보내기 전체가 미구현이라는 뜻은 아님'])
+    add('map.scale-labels', '지도 > 축척 막대 > 숫자와 단위', 1, '부분 구현',
+        [('KaMapControls.cpp', 'void KaMapScaleBar::paintPlate'), ('KaMapControls.cpp', 'QStringList KaMapScaleBar::ticks')],
+        ['gui_tab_map_geom.rs', 'gui_tab_map_overlay.rs'],
+        ['화면4m/px의200m 막대·가운데100·끝200m', '확대·축소·소수 눈금·DPI'],
+        ['MENU14 실제 PNG에서 숫자 겹침 관찰; C++는 끝 눈금과 단위를 분리. 최소 수정 전 모든 관련 입력·범위를 별도 재현',
+         '소수 눈금 반올림 차이는 소스 단서이며 아직 실행 검증하지 않음'])
     add('context.map', '지도 우클릭 > 기록·그리기·선택·보기·좌표 복사', 1, '검증 안 됨', [('MainWindowContextMenus.cpp', 'populateMapContextMenu')],
         ['gui_tab_map_context.rs'], ['도형 아래·빈 지도', '조사 없음·처리 중', '읽기 전용', '키보드 닫기'], ['별도 지도 메뉴 렌더러의 조건·경계·취소 확인; MENU2 레이어 메뉴와 구분'])
     add('context.layer', '레이어 우클릭 > 편집·표시·삭제·라벨·인코딩', 1, '부분 구현', [('MainWindowContextMenus.cpp', 'showLayerTreeContextMenu')],

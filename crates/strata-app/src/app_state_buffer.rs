@@ -37,27 +37,33 @@ impl StrataAppState {
     }
 
     /// 면들을 작업 좌표계 WKT 로(unionInCrs 의 옮기기). 옮기지 못한 도형은 뺀다.
-    fn work_wkts(&self, t: &SurveyFileTable) -> Vec<String> {
+    /// `None` rejects the source CRS; `Some(empty)` retains valid-source per-feature failure handling
+    /// (target/cpp-ref/src/core/BufferAnalysis.cpp:54-87).
+    fn work_wkts(&self, t: &SurveyFileTable) -> Option<Vec<String>> {
         let work = strata_types::crs::CrsCode::from(self.work_crs).epsg_number();
-        let tr = u32::try_from(t.srs_id).ok().filter(|s| *s > 0 && *s != work).and_then(|s| strata_engine::Transformer::new(s, work).ok());
-        t.layer
-            .features
-            .iter()
-            .filter_map(|f| {
-                let parts = wkt_to_parts(&f.wkt_geom).ok().filter(|p| !p.is_empty())?;
-                let parts = match &tr {
-                    Some(tr) => crate::checklist_state_geometry::moved(&parts, tr)?,
-                    None => parts,
-                };
-                Some(crate::checklist_state_geometry::parts_wkt(&parts))
-            })
-            .collect()
+        // Owner CRS rule and target/cpp-ref/src/core/BufferAnalysis.cpp:54-78: failed conversion is not identity.
+        let source = u32::try_from(t.srs_id).ok()?;
+        let tr = if source == work { None } else { Some(strata_engine::Transformer::new(source, work).ok()?) };
+        Some(
+            t.layer
+                .features
+                .iter()
+                .filter_map(|f| {
+                    let parts = wkt_to_parts(&f.wkt_geom).ok().filter(|p| !p.is_empty())?;
+                    let parts = match &tr {
+                        Some(tr) => crate::checklist_state_geometry::moved(&parts, tr)?,
+                        None => parts,
+                    };
+                    Some(crate::checklist_state_geometry::parts_wkt(&parts))
+                })
+                .collect(),
+        )
     }
 
     /// `addDistanceRing` — 경계를 만들고 범례 맨 위에 「주변 Nm」·「주변 Nm 거리」를 (다시) 올린다. 실패하면 까닭.
     pub(crate) fn add_distance_ring(&mut self, meters: u32) -> Result<(), &'static str> {
         let Some(src) = self.buffer_source() else { return Err("면 레이어를 먼저 선택하세요") };
-        let wkts = self.work_wkts(src);
+        let wkts = self.work_wkts(src).ok_or("선택한 레이어에 도형이 없습니다")?;
         if wkts.is_empty() {
             return Err("선택한 레이어에 도형이 없습니다");
         }

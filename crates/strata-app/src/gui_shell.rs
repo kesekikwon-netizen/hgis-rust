@@ -260,3 +260,7 @@ mod capture_crs_input_tests;
 #[cfg(test)]
 #[path = "split_crs_input_tests.rs"]
 mod split_crs_input_tests;
+
+#[cfg(test)]
+#[path = "buffer_crs_input_tests.rs"]
+mod buffer_crs_input_tests;
