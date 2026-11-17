@@ -4,7 +4,7 @@ use eframe::egui::{Event, Key, Modifiers, PointerButton};
 use strata_canvas2d::map_tools::MapToolKind;
 use strata_storage::edit_buffer::FeatureRecord;
 
-fn key(h: &mut Harness, key: Key, modifiers: Modifiers) {
+pub(super) fn key(h: &mut Harness, key: Key, modifiers: Modifiers) {
     for pressed in [true, false] {
         h.frame_with_modifiers(vec![Event::Key { key, physical_key: None, pressed, repeat: false, modifiers }], modifiers);
     }
@@ -14,7 +14,7 @@ fn records(h: &Harness) -> Vec<FeatureRecord> {
     h.app.survey_tables.iter().find(|t| t.table == "feature_poly").expect("real survey polygon table").layer.features.to_vec()
 }
 
-fn selected(legend: bool) -> Harness {
+pub(super) fn selected(legend: bool) -> Harness {
     let mut h = Harness::drawing();
     h.app.sketch_cancel();
     h.app.active_tool = MapToolKind::Select;

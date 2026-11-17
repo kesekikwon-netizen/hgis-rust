@@ -232,3 +232,7 @@ mod menu_capture_keys_tests;
 #[cfg(test)]
 #[path = "menu_selection_keys_tests.rs"]
 mod menu_selection_keys_tests;
+
+#[cfg(test)]
+#[path = "vertex_key_rejection_tests.rs"]
+mod vertex_key_rejection_tests;

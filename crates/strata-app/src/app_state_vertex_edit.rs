@@ -160,14 +160,14 @@ impl StrataAppState {
         done
     }
 
-    /// Delete or Backspace with a picked vertex (`deleteActiveVertex`): `true` when the vertex was removed.
-    pub(crate) fn delete_active_vertex(&mut self) -> bool {
+    /// target/cpp-ref/src/app/KaFeatureSelectTool.cpp:71-82: an owned vertex key is consumed even if the edit fails.
+    pub(crate) fn handle_vertex_delete_key(&mut self) -> bool {
         let Some(index) = self.home_map.active_vertex.filter(|_| self.vertex_target().is_some()) else { return false };
         let done = self.delete_vertex(index);
         if done {
             self.show_status_message("점을 지웠습니다. Ctrl+Z로 되돌릴 수 있습니다.");
         }
-        done
+        true
     }
 }
 

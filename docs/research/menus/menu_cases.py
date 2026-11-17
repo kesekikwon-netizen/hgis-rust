@@ -8,16 +8,21 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "target/cpp-ref/tests/test_editing_tools.cpp": "1ec635252608aced322649d6b560cdd92a51d8ac9e423fe012f22eafe839d7df",
+    "target/cpp-ref/src/app/KaVertexEditTool.cpp": "55d536e65c3e67cf4e4294dbe46b7f6361290573abcd7a274f368cb833d8d8c8",
+    "crates/strata-app/src/vertex_key_rejection_tests.rs": "b99c96aae266debd7c8859affa684ee4f8bd8378050486ea091ff0ecbd51e186",
+    "crates/strata-app/src/app_state_vertex_edit_tests.rs": "2b4304098e17bf9965bfce1e00135483efec3c679ad93a87533e6d3c3b0097c7",
+    "crates/strata-app/src/app_state_vertex_edit.rs": "5fb9a859682a9d095a046afeaec5f735781ac492080ddbc2e830e299e3512ea2",
     "target/cpp-ref/src/app/MainWindowUndo.cpp": "2c11706d9c729bad7f54cca430f187d52558cb0787011e24351dd964817fe0c3",
     "target/cpp-ref/src/app/KaFeatureSelectTool.cpp": "0bc78d26e70186422c02204c0297aca181953671048efaa7a47ebecf70381a69",
     "target/cpp-ref/tests/test_save_open.cpp": "2f84bbad9cf53fca98f07fd98117f3234eeeb450f2864bef33bd20c5592fec2b",
     "target/cpp-ref/src/app/MainWindow.cpp": "017360b61d6204525a527591140169fc1fb64596335cdf920a5a8dd6fe75eb19",
-    "crates/strata-app/src/menu_selection_keys_tests.rs": "9d62f4066b779e2467b49cb3956866bb9b86f9806278ec4f3c34d3c169bbb2b6",
+    "crates/strata-app/src/menu_selection_keys_tests.rs": "c54de8904932f32f702074cdeec77f8d4ae33e118386ce66d5b7aff8e5d09021",
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
     "crates/strata-app/src/popup_input_harness.rs": "3dd639598970e668578415ff5d7702c37de47b4f850aa587c305b59970f1f6a2",
     "crates/strata-app/src/shell_workspace.rs": "253505e2b32e7124948be7f2d43265bcee90726da6bf7114e546e2010402a288",
-    "crates/strata-app/src/gui_shell.rs": "bfab5f7d15f242373c1c2823b757008646a716cea33dbb46f66a4862765446f4",
-    "crates/strata-app/src/gui_shell_escape.rs": "c62501e3c710799705cd115474241949246d45e77b87ee7f87a07f9c93c24df1",
+    "crates/strata-app/src/gui_shell.rs": "a5cdc21f9d0316b9f8135526e9fd5f2d227338b7ac96c99eef03eadb4211994d",
+    "crates/strata-app/src/gui_shell_escape.rs": "37a738f061a24b7bc01fac480a840e09dc93abf53162e56d1da0b70cbd2c45e7",
     "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
     "crates/strata-app/src/popup_escape_tests.rs": "2ea0dca3e1aaaf32e2deda81d43ce77a8613ab2cf543c0a8c3bea71e8fae5323",
@@ -74,7 +79,7 @@ def build_cases(root):
             ['MENU7 기본 레이어 메뉴의 지도 이력과 삭제 뒤 복원 확인; 정합·도면·다른 메뉴·입력칸·저장 전후 분기는 재대조'])
     add('edit.delete-focus', 'Delete / Backspace > 도형·레이어·그리던 점·정합점', 0, '부분 구현', ['MainWindow.cpp', 'MainWindowUndo.cpp'],
         [('gui_shell.rs', 'Key::Delete'), 'app_state_layer_remove.rs', 'menu_capture_keys_tests.rs'], ['메뉴 열림', '텍스트 입력', '선택 없음·여러 선택', '그리기 중'],
-        ['MENU6 작성 중 도형·검색칸과 MENU7 기본 레이어 메뉴·레이어 우클릭의 선택 자료 보호 확인; 지도 꼭짓점 Backspace와 기본 메뉴 CtrlZ/Y도 확인. 정합점·도면·다른 메뉴의 키와 포커스는 남음'])
+        ['MENU6 작성 중 도형·검색칸, MENU7 선택 자료·이력, MENU8 최소 꼭짓점의 삭제 거부 보존을 확인. 정합점·도면·다른 메뉴의 키와 포커스는 남음'])
     add('capture.real-snap', '그리기 > 자석 > 실제 점·선·면 캡처', 0, '미구현', [('KaCaptureMapTool.cpp', 'snapToMap')],
         [('gui_tab_map_capture.rs', 'self.sketch_press(s2w'), 'app_state_draw_commit.rs'], ['자석 켬·끔', '모든 조사·현재 레이어', '원본 CRS', '취소·조사 전환'],
         ['실제 캡처는 원래 좌표를 전달; 별도 legacy CAD 스냅과 연결되지 않음', 'SNAP1A 소유권 준비를 재사용해 실제 입력·미리보기·오래된 결과 폐기 연결'])
@@ -109,7 +114,7 @@ def build_cases(root):
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 메뉴의 편집 키')}])
     add('key.selection-menu', '기존 선택 자료 > 레이어 메뉴의 Delete·꼭짓점 Backspace / 우클릭 Delete', 0, '완료',
         [('MainWindow.cpp', 'auto* delAct'), ('KaFeatureSelectTool.cpp', 'void KaFeatureSelectTool::keyPressEvent'), ('target/cpp-ref/tests/test_save_open.cpp', 'void layerDeleteKeyPreservesSourceAndUndoRestoresPendingEdits')],
-        ['gui_shell.rs', 'gui_shell_escape.rs', 'native_menu_input.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'menu_selection_keys_tests.rs'],
+        ['gui_shell.rs', 'gui_shell_escape.rs', 'native_menu_input.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'menu_selection_keys_tests.rs', 'app_state_vertex_edit.rs'],
         ['1024×768 기본 레이어 메뉴', '1680×960 레이어 우클릭 Delete', '실제 범례 클릭·기존 피처 ID와 꼭짓점 선택 고정물', '저장 전 속성·반복 열기·파일 바이트', '같은 묶음 Delete+Backspace 한 번 편집·Esc+Backspace 편집 없음'], [],
         '메뉴 Delete는 자료 보존; 닫은 뒤 정상 삭제와 CtrlZ가 같은 ID·도형·속성을 복원하고 파일 유지. C++의 원본 보존 계약과 사용자 메뉴 격리 결정이며 Qt 전체 단축키 동일성은 미확인',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 메뉴의 선택 삭제')}])
@@ -119,6 +124,15 @@ def build_cases(root):
         ['1024×768 기본 레이어 메뉴', '저장 전 속성이 있는 기존 도형', '메뉴 닫은 뒤 실제 CtrlZ·CtrlY', '같은 묶음 Delete 뒤 CtrlZ가 같은 ID·WKT·속성 복원'], [],
         '메뉴 뒤 이력 유지; 닫은 뒤 정상 이력 명령 재개. 입력칸·도면·정합·다른 메뉴 전체와 Qt 단축키 내부 동일성은 이 행의 범위에 포함하지 않음',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 메뉴의 이력 소유권')}])
+    add('key.vertex-rejection', '꼭짓점 수정 > 삭제 거부 시 도형 보존·키 소비', 0, '완료',
+        [('KaFeatureSelectTool.cpp', 'bool KaFeatureSelectTool::deleteActiveVertex'), ('KaVertexEditTool.cpp', 'const int minCount'),
+         ('target/cpp-ref/tests/test_editing_tools.cpp', 'void TestEditingTools::clickedHandleIsPickedAndDeleteRemovesOnlyThatVertex')],
+        ['app_state_vertex_edit.rs', 'app_state_vertex_edit_tests.rs', 'gui_shell.rs', 'gui_shell_escape.rs', 'shell_workspace.rs',
+         'popup_input_harness.rs', 'menu_selection_keys_tests.rs', 'vertex_key_rejection_tests.rs'],
+        ['1680×960 생산 UI', '추적 데모의 삼각형·두 점 선', '표 CRS EPSG:5186·작업 EPSG:5187', '임시 저장한 조사·저장 전 속성',
+         '반복 Delete·Backspace', '기존 거부 문구·기록·이력·변경 상태·파일 바이트'], [],
+        '삭제 거부는 키를 소비해 전체 도형 삭제로 넘어가지 않음; Esc로 꼭짓점 선택 해제 후 의도적인 도형 삭제와 CtrlZ는 정상. 알고리즘·최소 점수는 변경하지 않음',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 꼭짓점 삭제 거부')}])
     add('context.map', '지도 우클릭 > 기록·그리기·선택·보기·좌표 복사', 1, '검증 안 됨', [('MainWindowContextMenus.cpp', 'populateMapContextMenu')],
         ['gui_tab_map_context.rs'], ['도형 아래·빈 지도', '조사 없음·처리 중', '읽기 전용', '키보드 닫기'], ['별도 지도 메뉴 렌더러의 조건·경계·취소 확인; MENU2 레이어 메뉴와 구분'])
     add('context.layer', '레이어 우클릭 > 편집·표시·삭제·라벨·인코딩', 1, '부분 구현', [('MainWindowContextMenus.cpp', 'showLayerTreeContextMenu')],

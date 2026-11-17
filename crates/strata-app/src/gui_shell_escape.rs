@@ -124,13 +124,13 @@ impl PendingCanvasInput {
             match action {
                 CanvasAction::DeleteMapSelection => {
                     // target/cpp-ref/src/app/MainWindow.cpp:256-268 and MainWindowUndo.cpp:497-500 preserve vertex/legend/map routing.
-                    if !app.delete_active_vertex() {
+                    if !app.handle_vertex_delete_key() {
                         app.delete_selected();
                     }
                 }
                 CanvasAction::BackspaceMap => {
                     // target/cpp-ref/src/app/KaFeatureSelectTool.cpp:158-170: the picked vertex owns Backspace.
-                    if !app.delete_active_vertex() {
+                    if !app.handle_vertex_delete_key() {
                         app.home_map.cad.on_backspace(&mut app.home_map.scene);
                     }
                 }

@@ -50,11 +50,11 @@ fn a_clicked_handle_is_picked_and_delete_removes_only_that_vertex() {
     app.pick_vertex(handle);
     assert_eq!((app.undo_tables.len(), app.status_left_message()), (steps, "점을 골랐습니다. Delete로 지우고, 끌면 옮깁니다."));
 
-    assert!(app.delete_active_vertex());
+    assert!(app.handle_vertex_delete_key());
     assert_eq!(points(&app, "feature_poly", fid).len(), 5);
     assert!(!points(&app, "feature_poly", fid).contains(&[200_060.0, 450_020.0]));
     assert_eq!((app.undo_tables.len(), app.status_left_message()), (steps + 1, "점을 지웠습니다. Ctrl+Z로 되돌릴 수 있습니다."));
-    assert!(!app.delete_active_vertex(), "no vertex is picked any more");
+    assert!(!app.handle_vertex_delete_key(), "no vertex is picked any more");
 
     let corner = app.vertex_at([200_070.0, 450_045.0], 10.0).unwrap();
     assert!(app.move_vertex_to(corner, [200_073.0, 450_043.8]));
