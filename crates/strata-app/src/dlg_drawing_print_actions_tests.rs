@@ -65,7 +65,7 @@ fn drawing_pdf_export_is_on() {
     ctx.enable_accesskit();
     let mut nodes = Vec::new();
     for _ in 0..3 {
-        nodes = frame(&mut app, &ctx, |app, ui| app.paint_drawing_right_items_b(ui), vec![]);
+        nodes = frame(&mut app, &ctx, |app, ui| app.paint_drawing_right_panel(ui), vec![]);
     }
     let (_, disabled, _) = nodes.iter().find(|(l, _, _)| l == "PDF 내보내기").cloned().unwrap_or_else(|| panic!("missing: {nodes:?}"));
     assert!(!disabled, "PDF 내보내기 can be pressed");

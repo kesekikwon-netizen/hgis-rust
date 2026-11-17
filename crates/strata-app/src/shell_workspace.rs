@@ -18,7 +18,9 @@ impl StrataAppState {
         self.poll_align_picker(ctx);
         self.poll_align_task(ctx);
         self.explorer.poll();
-        if self.explorer.busy() { ctx.request_repaint_after(std::time::Duration::from_millis(30)); }
+        if self.explorer.busy() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+        }
         self.sync_sheet_status();
         self.drop_sketch_when_tool_changed();
         self.resync_card_on_tool_change();
@@ -46,14 +48,15 @@ impl StrataAppState {
                     self.render_download_gauge(ctx, ui, now, budget);
                 });
             } else if self.download_jobs.is_empty() {
-                ui.horizontal_centered(|ui| {
-                    // 다른 알림이 없으면 C++ updateNextActionStatus 의 「다음에 할 일」.
-                    let msg = self.status_left_message().to_owned();
-                    ui.label(egui::RichText::new(msg).size(11.5).color(Color32::from_rgb(75, 74, 70)));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        self.render_status_right_cluster(ctx, ui);
-                    });
-                });
+                let bar_rect = ui.available_rect_before_wrap();
+                let mut right_ui = ui.new_child(egui::UiBuilder::new().max_rect(bar_rect).layout(egui::Layout::right_to_left(egui::Align::Center)));
+                self.render_status_right_cluster(ctx, &mut right_ui);
+                let left_max_x = (right_ui.min_rect().left() - 6.0).max(bar_rect.left());
+                let left_rect = egui::Rect::from_min_max(bar_rect.min, egui::Pos2::new(left_max_x, bar_rect.max.y));
+                let mut left_ui = ui.new_child(egui::UiBuilder::new().max_rect(left_rect).layout(egui::Layout::left_to_right(egui::Align::Center)));
+                let msg = self.status_left_message().to_owned();
+                left_ui.add(egui::Label::new(egui::RichText::new(&msg).size(11.5).color(Color32::from_rgb(75, 74, 70))).truncate()).on_hover_text(msg);
+                ui.advance_cursor_after_rect(bar_rect);
             } else {
                 // Paint right-hand cluster in its exact spot, then fit message + gauge to its left (`docs/RUST_PLAN.md` §2.8).
                 let bar_rect = ui.available_rect_before_wrap();
@@ -83,6 +86,8 @@ impl StrataAppState {
 
         let mut central_rect = egui::Rect::NOTHING;
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(Color32::from_rgb(243, 241, 232))).show(ctx, |ui| {
+            ui.spacing_mut().interact_size.y = 30.0;
+            ui.spacing_mut().button_padding = Vec2::new(10.0, 6.0);
             central_rect = ui.available_rect_before_wrap();
             match self.active_tab {
                 MainTab::Home => self.render_home_tab_ui(ui),
@@ -110,24 +115,15 @@ impl StrataAppState {
 
     fn render_status_right_cluster(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         ui.spacing_mut().item_spacing.x = 6.0;
-        if self.active_tab == MainTab::Map {
-            // KaStatusBar.cpp:121-134 renderToggle — 지도 다시 그리기를 잠시 멈춘다
-            let render_lbl = if self.map_rendering_enabled { "지도갱신 켜짐" } else { "지도갱신 멈춤" };
-            if ui
-                .add(egui::Button::new(egui::RichText::new(render_lbl).size(11.5).color(Color32::from_rgb(75, 74, 70))).frame(false))
-                .on_hover_text("지도 다시 그리기를 잠시 멈춥니다. 레이어를 여러 개 켜고 끌 때 편합니다.")
-                .clicked()
-            {
-                self.map_rendering_enabled = !self.map_rendering_enabled;
-            }
-            ui.separator();
-        }
-        if ui
-            .add(egui::Button::new(egui::RichText::new("→ 제출 5179").size(11.5).color(Color32::from_rgb(94, 93, 89))).frame(false))
-            .on_hover_text("제출 꾸러미는 EPSG:5179(UTM-K)로 자동 변환됩니다.")
-            .clicked()
-        {
-            self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
+        let compact = ctx.screen_rect().width() < 1100.0;
+        // target/cpp-ref/src/app/KaStatusBar.cpp:58-64,121-160; owner-requested narrow-screen overflow menu.
+        if compact {
+            ui.menu_button("⋯", |ui| {
+                self.render_status_actions(ui);
+                self.render_status_readouts(ui);
+            });
+        } else {
+            self.render_status_actions(ui);
         }
         let crs_lbl = match self.work_crs {
             WorkCrs::Epsg5187 => "작업 5187 · 동부원점 ▼",
@@ -204,6 +200,34 @@ impl StrataAppState {
             }
         }
         ui.label(egui::RichText::new("축척").size(11.5).color(Color32::from_rgb(94, 93, 89)));
+        if !compact {
+            self.render_status_readouts(ui);
+        }
+    }
+
+    fn render_status_actions(&mut self, ui: &mut egui::Ui) {
+        if self.active_tab == MainTab::Map {
+            // KaStatusBar.cpp:121-134 renderToggle — 지도 다시 그리기를 잠시 멈춘다
+            let render_lbl = if self.map_rendering_enabled { "지도갱신 켜짐" } else { "지도갱신 멈춤" };
+            if ui
+                .add(egui::Button::new(egui::RichText::new(render_lbl).size(11.5).color(Color32::from_rgb(75, 74, 70))).frame(false))
+                .on_hover_text("지도 다시 그리기를 잠시 멈춥니다. 레이어를 여러 개 켜고 끌 때 편합니다.")
+                .clicked()
+            {
+                self.map_rendering_enabled = !self.map_rendering_enabled;
+            }
+            ui.separator();
+        }
+        if ui
+            .add(egui::Button::new(egui::RichText::new("→ 제출 5179").size(11.5).color(Color32::from_rgb(94, 93, 89))).frame(false))
+            .on_hover_text("제출 꾸러미는 EPSG:5179(UTM-K)로 자동 변환됩니다.")
+            .clicked()
+        {
+            self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
+        }
+    }
+
+    fn render_status_readouts(&self, ui: &mut egui::Ui) {
         if self.active_tab == MainTab::Map {
             ui.separator();
             // KaStatusBar.cpp:58-64 xyReadout — 폭 240, 오른쪽 맞춤.

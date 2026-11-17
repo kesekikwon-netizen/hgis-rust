@@ -15,16 +15,29 @@ impl StrataAppState {
     pub(crate) fn render_map_tab_ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let tab_clip = ui.max_rect();
         ui.set_clip_rect(tab_clip);
+        let compact=ui.available_width()<1100.0 && !self.align_split_shown();
         if self.align_split_shown() {
             self.render_align_source(ui);
-        } else {
+        } else if !compact {
             let _perf = crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::LeftPanel);
             self.render_cpp_left_layer_panel(ui, false);
         }
-        if !self.align_split_shown() {
+        if !self.align_split_shown() && !compact {
             let _perf =
                 crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::RightPanel);
             self.render_cpp_right_inspector(ui);
+        }
+        if compact && !self.right_inspector.map_focused {
+            egui::TopBottomPanel::top("compact_map_panels").frame(egui::Frame::NONE).exact_height(36.0).show_inside(ui,|ui| {
+                ui.horizontal(|ui| {
+                    self.paint_compact_layer_menu(ui,false);
+                    ui.menu_button("선택한 유구",|ui| {
+                        ui.set_width(280.0);
+                        let height=(ui.ctx().screen_rect().height()-160.0).clamp(100.0,440.0);
+                        egui::ScrollArea::vertical().max_height(height).show(ui,|ui| self.render_ri_body(ui));
+                    });
+                });
+            });
         }
 
         let win_w = ctx.screen_rect().width();

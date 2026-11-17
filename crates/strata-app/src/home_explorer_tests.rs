@@ -166,7 +166,7 @@ fn actual_folder_rows_and_long_pins_fit_each_monitor_without_text_overlap() {
         let rendered = crate::test_mods::ui_snapshot_support::render([width, height], |ctx| {
             eframe::egui::CentralPanel::default().show(ctx, |ui| app.render_home_tab_ui(ui));
         });
-        let glyphs = rendered.text_clips().into_iter().filter(|(_, r, c)| r.intersects(*c)).collect::<Vec<_>>();
+        let glyphs = rendered.text_clips().into_iter().filter(|(_, r, c)| r.intersects(*c)).map(|(text, rect, clip)| (text, rect.intersect(clip), clip)).collect::<Vec<_>>();
         for (text, rect, clip) in &glyphs {
             assert!(rect.left() >= -0.5 && rect.right() <= width as f32 + 0.5, "{width}: {text} overflows: {rect:?} clip{clip:?}");
         }

@@ -17,5 +17,7 @@ pub(crate) mod gui_layer_panel_row_spec;
 mod gui_layer_panel_rows;
 #[path = "gui_layer_panel_tree.rs"]
 mod gui_layer_panel_tree;
+#[path = "gui_layer_panel_body.rs"]
+mod gui_layer_panel_body;
 
 pub use gui_layer_panel_consts::*;

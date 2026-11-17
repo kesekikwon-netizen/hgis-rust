@@ -59,5 +59,23 @@ pub fn apply_theme_tokens(ctx: &egui::Context, tokens: &ThemeTokens) {
             egui::Color32::from_rgba_unmultiplied(acc[0], acc[1], acc[2], 48);
         style.visuals.selection.stroke =
             egui::Stroke::new(1.2, egui::Color32::from_rgb(acc[0], acc[1], acc[2]));
+        let colour = |[r,g,b,a]: [u8;4]| egui::Color32::from_rgba_unmultiplied(r,g,b,a);
+        style.visuals.override_text_color = Some(colour(tokens.ink));
+        style.visuals.extreme_bg_color = colour(tokens.surface);
+        style.visuals.selection.bg_fill = colour(tokens.chosen_fill);
+        let widgets = &mut style.visuals.widgets;
+        for (visual, fill, border) in [
+            (&mut widgets.inactive, tokens.surface, tokens.border_strong),
+            (&mut widgets.hovered, tokens.hover, tokens.accent),
+            (&mut widgets.active, tokens.pressed, tokens.accent_deep),
+            (&mut widgets.open, tokens.chosen_fill, tokens.accent),
+        ] {
+            visual.bg_fill = colour(fill);
+            visual.weak_bg_fill = colour(fill);
+            visual.bg_stroke = egui::Stroke::new(1.0,colour(border));
+            visual.fg_stroke = egui::Stroke::new(1.0,colour(tokens.ink));
+            visual.corner_radius = egui::CornerRadius::same(5);
+            visual.expansion = 0.0;
+        }
     });
 }

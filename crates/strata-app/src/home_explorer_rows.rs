@@ -80,14 +80,22 @@ impl StrataAppState {
         let wide = ui.available_width() >= 650.0;
         let width = (ui.available_width() - 12.0).max(1.0);
         let name_width = if wide { width - 320.0 } else { width - 24.0 };
-        let (header, _) = ui.allocate_exact_size(Vec2::new(width, 28.0), egui::Sense::hover());
-        text(ui, header.min + Vec2::new(12.0, 4.0), name_width, "이름".to_owned(), true);
-        if wide {
-            text(ui, header.min + Vec2::new(width - 300.0, 4.0), 62.0, "종류".to_owned(), false);
-            text(ui, header.min + Vec2::new(width - 224.0, 4.0), 72.0, "크기".to_owned(), false);
-            text(ui, header.min + Vec2::new(width - 138.0, 4.0), 128.0, if self.explorer.location == Location::Recent { "마지막 열림" } else { "수정한 날짜" }.to_owned(), false);
+        if ui.available_height() > 110.0 {
+            let (header, _) = ui.allocate_exact_size(Vec2::new(width, 28.0), egui::Sense::hover());
+            text(ui, header.min + Vec2::new(12.0, 4.0), name_width, "이름".to_owned(), true);
+            if wide {
+                text(ui, header.min + Vec2::new(width - 300.0, 4.0), 62.0, "종류".to_owned(), false);
+                text(ui, header.min + Vec2::new(width - 224.0, 4.0), 72.0, "크기".to_owned(), false);
+                text(
+                    ui,
+                    header.min + Vec2::new(width - 138.0, 4.0),
+                    128.0,
+                    if self.explorer.location == Location::Recent { "마지막 열림" } else { "수정한 날짜" }.to_owned(),
+                    false,
+                );
+            }
+            ui.separator();
         }
-        ui.separator();
         if indices.is_empty() && !self.explorer.listing_busy() {
             ui.add(
                 egui::Label::new(if self.explorer.location == Location::Recent {
@@ -110,9 +118,11 @@ impl StrataAppState {
                 let fill = if selected {
                     ui.visuals().selection.bg_fill
                 } else if response.hovered() {
-                    Color32::from_rgb(238, 234, 225)
+                    let [r, g, b, a] = self.theme.hover;
+                    Color32::from_rgba_unmultiplied(r, g, b, a)
                 } else if index % 2 == 0 {
-                    Color32::from_rgb(250, 249, 246)
+                    let [r, g, b, a] = self.theme.alt_row;
+                    Color32::from_rgba_unmultiplied(r, g, b, a)
                 } else {
                     Color32::TRANSPARENT
                 };

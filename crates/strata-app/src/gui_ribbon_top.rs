@@ -29,6 +29,13 @@ pub(crate) struct RibbonFrame {
 impl StrataAppState {
     /// C++ `MainWindowRibbon.cpp` + `KaBeginnerRibbon.cpp` 1:1 (Images 1, 2, 4, 9, 10, 11, 12, 15)
     pub(crate) fn render_cpp_top_bars(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        if ui.available_width() < 1240.0 || ctx.screen_rect().height() < 600.0 {
+            self.paint_compact_ribbon(ui);
+            self.paint_ribbon_sub_toolbar(ctx, ui);
+            self.paint_ribbon_tab_bar(ctx, ui);
+            self.render_region_locator_popup(ctx);
+            return;
+        }
         let is_home = self.active_tab == MainTab::Home;
         let dirty_save = !is_home && self.is_dirty;
         let [pr, pg, pb, _] = self.theme.chrome;

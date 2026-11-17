@@ -1,16 +1,15 @@
 //! 스튜디오 탭바 — 홈·지도·도면·고고·3D 탭과 열린 도면 탭.
 
-use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+use eframe::egui::{self, Color32, Pos2, Stroke, Vec2};
 
-use crate::app_state::{MainTab, StrataAppState};
-use crate::ribbon_icons::paint_ribbon_icon;
+use crate::app_state::StrataAppState;
 
 use super::gui_ribbon_consts::UX_VIEW_TAB_BAR_HEIGHT;
 
 impl StrataAppState {
     /// 탭바 한 줄.
     pub(crate) fn paint_ribbon_tab_bar(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
-        let tabbar_h = if ctx.pixels_per_point() > 1.2 { 34.0 } else { UX_VIEW_TAB_BAR_HEIGHT };
+        let tabbar_h = if ui.available_width() < 1240.0 || ctx.pixels_per_point() > 1.2 { 34.0 } else { UX_VIEW_TAB_BAR_HEIGHT };
         let (tabbar_rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), tabbar_h), egui::Sense::hover());
         {
             let tbp = ui.painter_at(tabbar_rect);
@@ -23,45 +22,12 @@ impl StrataAppState {
         let tabbar_inner = tabbar_rect.shrink2(Vec2::new(12.0, 2.0));
         let mut tabbar_ui = ui.new_child(egui::UiBuilder::new().max_rect(tabbar_inner));
         tabbar_ui.horizontal_centered(|ui| {
-            ui.spacing_mut().item_spacing.x = 16.0;
-            for (tab, ico, txt) in [(MainTab::Home, "유산", "홈"), (MainTab::Map, "옛 지도", "지도")] {
-                let sel = self.active_tab == tab;
-                let (tr, resp) = ui.allocate_exact_size(Vec2::new(64.0, tabbar_h - 4.0), egui::Sense::click());
-                let tp = ui.painter_at(tr);
-                paint_ribbon_icon(&tp, Rect::from_center_size(Pos2::new(tr.left() + 12.0, tr.center().y), Vec2::new(26.0, 26.0)), ico, Color32::from_rgb(45, 44, 40));
-                tp.text(Pos2::new(tr.left() + 28.0, tr.center().y), egui::Align2::LEFT_CENTER, txt, egui::FontId::proportional(13.0), Color32::from_rgb(30, 30, 28));
-                if sel {
-                    tp.line_segment([Pos2::new(tr.left(), tr.bottom()), Pos2::new(tr.right(), tr.bottom())], Stroke::new(2.5, Color32::from_rgb(35, 35, 32)));
-                }
-                if resp.clicked() {
-                    self.active_tab = tab;
-                }
-            }
-            let open_tabs = self.open_studio_tabs.clone();
-            for (extra, ico, lbl) in
-                [(MainTab::Drawing, "도면", "도면"), (MainTab::Print, "인쇄", "인쇄"), (MainTab::Paleo, "고지형", "고지형"), (MainTab::Terrain3d, "검수·제출", "입체지형")]
-            {
-                if open_tabs.contains(&extra) || self.active_tab == extra {
-                    let sel = self.active_tab == extra;
-                    let (tr, resp) = ui.allocate_exact_size(Vec2::new(92.0, 36.0), egui::Sense::click());
-                    let tp = ui.painter_at(tr);
-                    paint_ribbon_icon(&tp, Rect::from_center_size(Pos2::new(tr.left() + 12.0, tr.center().y), Vec2::new(22.0, 22.0)), ico, Color32::from_rgb(35, 35, 32));
-                    tp.text(Pos2::new(tr.left() + 28.0, tr.center().y), egui::Align2::LEFT_CENTER, lbl, egui::FontId::proportional(13.0), Color32::from_rgb(30, 30, 28));
-                    let close_rect = Rect::from_min_max(Pos2::new(tr.right() - 18.0, tr.top()), tr.max);
-                    tp.text(close_rect.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(13.5), Color32::from_rgb(90, 89, 84));
-                    if sel {
-                        tp.line_segment([Pos2::new(tr.left(), tr.bottom()), Pos2::new(tr.right(), tr.bottom())], Stroke::new(2.5, Color32::from_rgb(35, 35, 32)));
-                    }
-                    if resp.clicked() {
-                        if resp.interact_pointer_pos().is_some_and(|p| close_rect.contains(p)) {
-                            self.close_studio_tab(extra);
-                        } else {
-                            self.active_tab = extra;
-                        }
-                    }
-                }
-            }
-
+            let compact = tabbar_rect.width() < 1000.0;
+            let tabs_width = (tabbar_inner.width() - if compact { 84.0 } else { 260.0 }).max(100.0);
+            egui::ScrollArea::horizontal().id_salt("workspace_tabs").max_width(tabs_width).max_height(tabbar_h - 4.0)
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
+                    ui.horizontal_centered(|ui| self.paint_workspace_tab_buttons(ui, tabbar_h, compact));
+                });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 let mut theme_popup_rect: Option<egui::Rect> = None;
@@ -132,13 +98,13 @@ impl StrataAppState {
                 }
                 // KaSurveyBadge.cpp:32-62 — 조사 파일이 열려 있을 때만 「<파일 이름> 저장됨」(새 모양).
                 let survey_name = self.survey_path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().trim().to_owned()).filter(|s| !s.is_empty());
-                if let Some(name) = survey_name {
+                if let Some(name) = survey_name.filter(|_| !compact) {
                     if self.is_dirty {
                         ui.label(egui::RichText::new("● 저장 안 됨").size(12.0).color(Color32::from_rgb(181, 87, 58)));
                     } else {
                         ui.label(egui::RichText::new("저장됨").size(12.0).color(Color32::from_rgb(94, 93, 89)));
                     }
-                    ui.label(egui::RichText::new(name).size(12.0).color(Color32::from_rgb(94, 93, 89))).on_hover_text("열려 있는 조사입니다. 누르면 지도 탭으로 갑니다.");
+                    ui.add(egui::Label::new(egui::RichText::new(name).size(12.0).color(Color32::from_rgb(94, 93, 89))).truncate()).on_hover_text("열려 있는 조사입니다. 누르면 지도 탭으로 갑니다.");
                 }
             });
         });

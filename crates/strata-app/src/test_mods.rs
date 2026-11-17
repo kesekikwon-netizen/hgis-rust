@@ -10,3 +10,7 @@ mod sound_tests_ui;
 pub(crate) mod ui_snapshot_support;
 #[path = "ui_workspace_tests.rs"]
 mod ui_workspace_tests;
+#[path = "ui_responsive_tests.rs"]
+mod ui_responsive_tests;
+#[path = "ui_responsive_actions_tests.rs"]
+mod ui_responsive_actions_tests;

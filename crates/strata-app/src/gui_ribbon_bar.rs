@@ -23,6 +23,10 @@ mod align_map_input;
 pub(crate) mod align_picker;
 #[path = "gui_ribbon_appbar.rs"]
 mod gui_ribbon_appbar;
+#[path = "gui_ribbon_compact.rs"]
+mod gui_ribbon_compact;
+#[path = "gui_ribbon_tabs.rs"]
+mod gui_ribbon_tabs;
 #[path = "gui_ribbon_click_a.rs"]
 mod gui_ribbon_click_a;
 #[path = "gui_ribbon_click_b.rs"]

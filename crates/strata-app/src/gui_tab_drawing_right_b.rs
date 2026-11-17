@@ -74,7 +74,10 @@ impl StrataAppState {
             }
         });
         ui.checkbox(&mut self.drawing.sheet.grid_follow_map, "지도 좌표격자와 같게 (20 m)");
-        ui.add_space(10.0);
+    }
+
+    pub(crate) fn paint_drawing_output_actions(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(4.0);
         ui.horizontal(|ui| {
             let room = (ui.available_width() - ui.spacing().item_spacing.x).max(0.0);
             let pdf_btn = egui::Button::new(egui::RichText::new("PDF 내보내기").color(Color32::WHITE).strong().size(13.0))

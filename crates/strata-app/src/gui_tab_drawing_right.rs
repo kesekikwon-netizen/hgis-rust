@@ -14,6 +14,7 @@ impl StrataAppState {
             .show_inside(ui, |ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                 ui.spacing_mut().interact_size.y = 28.0;
+                egui::TopBottomPanel::bottom("drawing_output_actions").exact_height(48.0).show_inside(ui, |ui| self.paint_drawing_output_actions(ui));
                 egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                     self.paint_drawing_right_items(ui);
                     self.paint_drawing_right_items_b(ui);

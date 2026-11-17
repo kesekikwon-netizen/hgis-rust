@@ -4,10 +4,12 @@ use crate::app_state::StrataAppState;
 use eframe::egui::{self, Button, Vec2};
 
 fn command(ui: &mut egui::Ui, text: &str) -> egui::Response {
-    ui.add(Button::new(text).min_size(Vec2::new(88.0, 32.0)).truncate())
+    ui.add(Button::new(text).min_size(Vec2::new(120.0, 32.0)).truncate())
 }
 impl StrataAppState {
     pub(crate) fn render_home_explorer(&mut self, ui: &mut egui::Ui) {
+        let compact_height = ui.available_height() < 390.0;
+        let short_height = ui.available_height() < 300.0;
         if let Some(file) = self.settings_ini.as_ref().and_then(|p| p.parent()).map(|p| p.join("strata-explorer.json")) {
             if self.snap.is_none() {
                 self.explorer.configure(file);
@@ -21,28 +23,31 @@ impl StrataAppState {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
             ui.spacing_mut().item_spacing = Vec2::new(8.0, 8.0);
             ui.spacing_mut().interact_size.y = 32.0;
-            ui.visuals_mut().selection.bg_fill = egui::Color32::from_rgb(226, 219, 203);
+            let [r, g, b, a] = self.theme.chosen_fill;
+            ui.visuals_mut().selection.bg_fill = egui::Color32::from_rgba_unmultiplied(r, g, b, a);
             ui.visuals_mut().selection.stroke.color = ui.visuals().text_color();
-            ui.horizontal_wrapped(|ui| {
-                ui.heading("Strata");
-                ui.strong("파일함");
-                ui.separator();
-                if command(ui, "새 조사").clicked() {
-                    self.request_new_survey();
-                }
-                if command(ui, "조사 열기").clicked() {
-                    self.open_survey_file_dialog();
-                }
-                if command(ui, "폴더 직접 찾기").clicked() {
-                    self.explorer.pick_folders();
-                }
-                if let Some(recent) = self.continue_survey().cloned() {
-                    if command(ui, "이어서 열기").on_hover_text(&recent.path).clicked() {
-                        self.request_open_recent(recent.path);
+            if !compact_height {
+                ui.horizontal_wrapped(|ui| {
+                    ui.heading("Strata");
+                    ui.strong("파일함");
+                    ui.separator();
+                    if command(ui, "새 조사").clicked() {
+                        self.request_new_survey();
                     }
-                }
-            });
-            ui.separator();
+                    if command(ui, "조사 열기").clicked() {
+                        self.open_survey_file_dialog();
+                    }
+                    if command(ui, "폴더 직접 찾기").clicked() {
+                        self.explorer.pick_folders();
+                    }
+                    if let Some(recent) = self.continue_survey().cloned() {
+                        if command(ui, "이어서 열기").on_hover_text(&recent.path).clicked() {
+                            self.request_open_recent(recent.path);
+                        }
+                    }
+                });
+                ui.separator();
+            }
             let wide = ui.available_width() >= 860.0;
             ui.horizontal(|ui| {
                 for (text, delta) in [("←", -1), ("→", 1)] {
@@ -59,7 +64,7 @@ impl StrataAppState {
                 if !wide {
                     ui.menu_button("폴더", |ui| {
                         ui.set_width(220.0);
-                        egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| self.render_explorer_places(ui));
+                        egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| self.render_explorer_places(ui, short_height));
                     });
                 }
                 ui.menu_button("정렬", |ui| {
@@ -81,17 +86,16 @@ impl StrataAppState {
                 };
                 ui.add(egui::Label::new(egui::RichText::new(caption).strong()).truncate());
             });
-            ui.horizontal(|ui| {
-                let width = (ui.available_width() - 64.0).max(20.0);
-                let address = ui.add_sized([width, 32.0], egui::TextEdit::singleline(&mut self.explorer.address).hint_text("경로"));
-                let enter = address.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if ui.add_sized([56.0, 32.0], Button::new("열기")).clicked() || enter {
-                    let path = std::path::PathBuf::from(self.explorer.address.trim());
-                    if !path.as_os_str().is_empty() {
-                        self.explorer.navigate(Location::Folder(path));
+            if !short_height {
+                ui.horizontal(|ui| {
+                    let width = (ui.available_width() - 64.0).max(20.0);
+                    let address = ui.add_sized([width, 32.0], egui::TextEdit::singleline(&mut self.explorer.address).hint_text("경로"));
+                    let enter = address.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    if ui.add_sized([56.0, 32.0], Button::new("열기")).clicked() || enter {
+                        self.open_explorer_address();
                     }
-                }
-            });
+                });
+            }
             ui.horizontal(|ui| {
                 let mut filter_text = self.explorer.filter.clone();
                 let filter = ui.add_sized([(ui.available_width() - 104.0).max(20.0), 32.0], egui::TextEdit::singleline(&mut filter_text).hint_text("이름·폴더로 찾기"));
@@ -131,14 +135,14 @@ impl StrataAppState {
             });
             if wide {
                 egui::SidePanel::left("home_explorer_places").default_width(206.0).width_range(160.0..=260.0).show_inside(ui, |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| self.render_explorer_places(ui));
+                    egui::ScrollArea::vertical().show(ui, |ui| self.render_explorer_places(ui, short_height));
                 });
             }
             egui::CentralPanel::default().frame(egui::Frame::NONE).show_inside(ui, |ui| self.render_explorer_entries(ui));
         });
     }
 
-    fn render_explorer_places(&mut self, ui: &mut egui::Ui) {
+    fn render_explorer_places(&mut self, ui: &mut egui::Ui, address_in_places: bool) {
         let mut places = vec![
             ("최근 조사".to_owned(), Location::Recent),
             ("내 PC".to_owned(), Location::Computer),
@@ -155,7 +159,22 @@ impl StrataAppState {
             }
         }
         ui.separator();
+        if address_in_places {
+            ui.horizontal(|ui| {
+                let width = (ui.available_width() - 56.0).max(20.0);
+                let address = ui.add_sized([width, 32.0], egui::TextEdit::singleline(&mut self.explorer.address).hint_text("경로"));
+                if ui.add_sized([48.0, 32.0], Button::new("열기")).clicked() || (address.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) {
+                    self.open_explorer_address();
+                    ui.close_menu();
+                }
+            });
+        }
+        ui.separator();
         ui.strong("폴더");
+        if ui.add_sized([ui.available_width(), 32.0], Button::new("폴더 직접 찾기").truncate()).clicked() {
+            self.explorer.pick_folders();
+            ui.close_menu();
+        }
         for path in self.explorer.pins.clone() {
             let title = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
             let response = ui
@@ -188,6 +207,12 @@ impl StrataAppState {
             } else {
                 self.explorer.notice = Some(self.status_left_message().to_owned());
             }
+        }
+    }
+    fn open_explorer_address(&mut self) {
+        let path = std::path::PathBuf::from(self.explorer.address.trim());
+        if !path.as_os_str().is_empty() {
+            self.explorer.navigate(Location::Folder(path));
         }
     }
 }
