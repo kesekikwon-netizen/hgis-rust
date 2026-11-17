@@ -146,6 +146,8 @@ target/release/ka-hgis.exe --smoke-quit           # 켜졌다 바로 꺼짐, 종
 
 ### 2026-11-18 기능 목록과 점검 연결
 
+`MENU10_CLOSE_PROMPT_MODAL`은 종료 질문 뒤의 편집과 첫 닫기 요청 프레임의 키·클릭을 막는다. 닫기 요청 전에 현재 카드 글을 메모리에 반영하고 기존 질문의 소유권을 유지한다. 질문에 답하기 전의 반복 요청은 계속 취소하며, 실패한 저장은 앱을 닫지 않는다. 추적 데모 임시 사본의 생산 egui 검사 17개와 1680×960·480×640 화면으로 확인했다. 실제 OS 종료·다운로드 정리·Tab 이동·C++ 메모리 참조 벡터 저장 후 재열기는 별도 미검증이다. 병렬 UI 검사에 의한 성능 기록 간섭은 결정적 실패 검사 뒤 테스트 빌드의 기록 소유권만 분리했다. 제품 성능 기록이나 기준은 바꾸지 않는다.
+
 현재 메뉴·키보드·선택 상태·취소 복귀의 추적 기준은 [CURRENT_MENU_AUDIT.md](research/menus/CURRENT_MENU_AUDIT.md)다. 기존 메뉴 키보드 구현을 다시 만들지 않고 근거를 연결한다. 현재 기능 판정은 `menu_cases.py`, 과거 조사와 원본 선언의 미분류 큐는 `python scripts/menu_audit.py --write`로 만든다. 컴파일 성공을 UI 완료로 보지 않으며, 생성 보고서·PNG는 `.codex/team/menu-audit/`와 `target/audit1-menu-ui/`에 둔다. 다음 우선 재현은 메뉴·텍스트 포커스와 Delete·Backspace·Enter의 편집 데이터 소유권이다.
 
 `MENU6_CAPTURE_KEY_OWNERSHIP`은 기본 메뉴·자석 대상 팝업 뒤에서 작성 중 도형이 Delete·Backspace로 줄거나 Enter로 확정되던 문제를 재현해 수정했다. 캔버스의 해당 키를 기존 Escape 대기 입력에 연결한다. 실제 검색칸의 포커스 보호와 기존 Escape 검사는 유지했다. 새 검사 6개와 기존 생산 UI 검사를 연결하며 화면은 `target/menu6-ui/`에 둔다. 다음 우선 점검은 작성 중 도형과 구분되는 기존 선택 도형·레이어의 삭제 및 취소 복귀다.

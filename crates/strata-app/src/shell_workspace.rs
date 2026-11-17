@@ -12,6 +12,7 @@ impl StrataAppState {
     pub fn render_workspace_egui(&mut self, ctx: &egui::Context) -> egui::Rect {
         let _perf_frame = crate::perf_recorder::begin_frame();
         self.poll_debug_remote_commands(ctx);
+        self.prepare_close_prompt(ctx);
         let pending_input = self.handle_cpp_keyboard_shortcuts(ctx);
         self.advance_sheet_pdf(ctx);
         self.advance_device_print(ctx);
@@ -31,6 +32,10 @@ impl StrataAppState {
 
         if !self.right_inspector.map_focused {
             egui::TopBottomPanel::top("ka_cpp_top_chrome").frame(egui::Frame::NONE).show_separator_line(false).show(ctx, |ui| {
+                // target/cpp-ref/src/app/MainWindow.cpp:341-352: no background click while the close question owns the frame.
+                if self.close_prompt_open {
+                    ui.disable();
+                }
                 let _perf_rib = crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::Ribbon);
                 self.render_cpp_top_bars(ctx, ui);
             });
@@ -40,6 +45,9 @@ impl StrataAppState {
         self.download_jobs.tick(now);
 
         egui::TopBottomPanel::bottom("ka_status_bar").exact_height(UX_STATUS_BAR_HEIGHT).show(ctx, |ui| {
+            if self.close_prompt_open {
+                ui.disable();
+            }
             let _perf_sb = crate::perf_recorder::begin_part(crate::perf_recorder::PerfPart::StatusBar);
             if self.active_tab == MainTab::Home {
                 ui.horizontal_centered(|ui| {
@@ -86,6 +94,9 @@ impl StrataAppState {
 
         let mut central_rect = egui::Rect::NOTHING;
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(Color32::from_rgb(243, 241, 232))).show(ctx, |ui| {
+            if self.close_prompt_open {
+                ui.disable();
+            }
             ui.spacing_mut().interact_size.y = 30.0;
             ui.spacing_mut().button_padding = Vec2::new(10.0, 6.0);
             central_rect = ui.available_rect_before_wrap();

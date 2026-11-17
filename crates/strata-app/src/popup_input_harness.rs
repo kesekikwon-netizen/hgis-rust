@@ -43,30 +43,34 @@ impl Harness {
         self.frame_with_modifiers(events, egui::Modifiers::default())
     }
     pub(super) fn frame_with_modifiers(&mut self, events: Vec<Event>, modifiers: egui::Modifiers) -> egui::FullOutput {
+        self.frame_input(RawInput { events, modifiers, ..Default::default() })
+    }
+    pub(super) fn frame_with_close_request(&mut self, events: Vec<Event>, modifiers: egui::Modifiers) -> egui::FullOutput {
+        // target/cpp-ref/src/app/MainWindow.cpp:333-352: closeEvent is a request, not a direct prompt-state assignment.
+        let mut input = RawInput { events, modifiers, ..Default::default() };
+        input.viewports.entry(egui::ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close);
+        self.frame_input(input)
+    }
+    fn frame_input(&mut self, mut input: RawInput) -> egui::FullOutput {
         self.time += 0.05;
-        let output = self.ctx.run(
-            RawInput {
-                time: Some(self.time),
-                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(self.size[0] as f32, self.size[1] as f32))),
-                events,
-                modifiers,
-                ..Default::default()
-            },
-            |ctx| {
-                self.app.render_workspace_egui(ctx);
-            },
-        );
+        input.time = Some(self.time);
+        input.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(self.size[0] as f32, self.size[1] as f32)));
+        let output = self.ctx.run(input, |ctx| {
+            self.app.render_workspace_egui(ctx);
+        });
         self.textures.apply(&output.textures_delta);
         output
     }
     pub(super) fn press(&mut self, at: Pos2, button: PointerButton) {
+        self.press_output(at, button);
+        self.frame(vec![]);
+    }
+    pub(super) fn press_output(&mut self, at: Pos2, button: PointerButton) -> egui::FullOutput {
         assert!(self.ctx.screen_rect().contains(at), "click outside app");
         self.time += 0.5;
         self.frame(vec![Event::PointerMoved(at)]);
-        for pressed in [true, false] {
-            self.frame(vec![Event::PointerButton { pos: at, button, pressed, modifiers: Default::default() }]);
-        }
-        self.frame(vec![]);
+        self.frame(vec![Event::PointerButton { pos: at, button, pressed: true, modifiers: Default::default() }]);
+        self.frame(vec![Event::PointerButton { pos: at, button, pressed: false, modifiers: Default::default() }])
     }
     pub(super) fn point_at(&mut self, title: &str) -> Pos2 {
         let output = self.frame(vec![]);

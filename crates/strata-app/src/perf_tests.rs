@@ -238,3 +238,34 @@ fn test_perf1_6_snap_step_writes_deterministic_json_offline_on_temp_demo_survey(
     assert_eq!(report.parts.len(), 8);
     let _ = DEFAULT_PERF_FRAMES;
 }
+
+#[test]
+fn test_perf1_7_foreign_ui_frames_cannot_steal_the_session_frame() {
+    let _session = crate::perf_bench::lock_perf_session();
+    let previous = crate::perf_recorder::is_enabled();
+    crate::perf_recorder::clear_global();
+    crate::perf_recorder::set_enabled(true);
+    let (observed, observations) = std::sync::mpsc::channel();
+    let (resume, resumed) = std::sync::mpsc::channel();
+    let foreign = std::thread::spawn(move || {
+        let frame = crate::perf_recorder::begin_frame();
+        observed.send(frame.is_some()).unwrap();
+        resumed.recv().unwrap();
+        let part = crate::perf_recorder::begin_part(PerfPart::Ribbon);
+        observed.send(part.is_some()).unwrap();
+        drop(part);
+        drop(frame);
+    });
+    let foreign_frame = observations.recv().unwrap();
+    let owner_frame = crate::perf_recorder::begin_frame();
+    let captured = owner_frame.is_some();
+    resume.send(()).unwrap();
+    let foreign_part = observations.recv().unwrap();
+    foreign.join().unwrap();
+    drop(owner_frame);
+    crate::perf_recorder::set_enabled(previous);
+    crate::perf_recorder::clear_global();
+    assert!(!foreign_frame, "foreign UI frame must not occupy the active session frame");
+    assert!(captured, "the session owner must capture its frame");
+    assert!(!foreign_part, "foreign UI parts must not contaminate the session frame");
+}

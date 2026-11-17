@@ -85,13 +85,13 @@ fn assert_overlay_visible(ctx: &egui::Context, label: &str) {
 fn assert_wheel_outcome(app: &mut crate::app_state::StrataAppState, ctx: &egui::Context, label: &str, want: Want) {
     let _ = run_frame(app, ctx, vec![Event::PointerMoved(OVER_UNCOVERED_MAP)]);
     assert_overlay_visible(ctx, label);
-    // The PDF's progress window holds the whole app (KaDrawingPdfProgress.cpp:14 ApplicationModal): the point
-    // lies under its backdrop, and the wheel is ignored all the same.
-    let under = if label == "PdfPreparing" { Order::Foreground } else { Order::Background };
+    // Application-modal backdrops own this point: KaDrawingPdfProgress.cpp:14,
+    // KaClosePrompt.cpp:52-56 (target/cpp-ref/src/app); wheel behavior is unchanged.
+    let under = if matches!(label, "PdfPreparing" | "ka_close_prompt") { Order::Foreground } else { Order::Background };
     assert_eq!(
         ctx.layer_id_at(OVER_UNCOVERED_MAP).map(|l| l.order),
         Some(under),
-        "{label}: {OVER_UNCOVERED_MAP:?} must sit over uncovered map background (the PDF window: its backdrop)"
+        "{label}: {OVER_UNCOVERED_MAP:?} must sit over the map background or application-modal backdrop"
     );
     app.home_map.viewport.meters_per_pixel = 12.0;
     let center0 = app.home_map.viewport.center_xy;

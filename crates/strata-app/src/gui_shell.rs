@@ -240,3 +240,7 @@ mod vertex_key_rejection_tests;
 #[cfg(test)]
 #[path = "save_before_input_tests.rs"]
 mod save_before_input_tests;
+
+#[cfg(test)]
+#[path = "close_prompt_input_tests.rs"]
+mod close_prompt_input_tests;

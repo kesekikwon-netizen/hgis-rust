@@ -12,6 +12,8 @@ impl StrataAppState {
         self.drawing.pdf.0.is_some()
             // target/cpp-ref/src/app/MainWindowSession.cpp:1186-1193: save-before question is modal too.
             || self.save_before.is_some()
+            // target/cpp-ref/src/app/KaClosePrompt.cpp:52-56: close confirmation owns input too.
+            || self.close_prompt_open
             || self.layer_set_question_open()
             || self.home_map.feature_form.is_some()
             || self.home_map.survey_area_setup.is_some()

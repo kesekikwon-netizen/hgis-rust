@@ -8,13 +8,18 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "target/cpp-ref/src/app/KaClosePrompt.cpp": "021bedf877bdf48a831e443be4849073e145c68dff3645cc9f640f8cdd948239",
+    "target/cpp-ref/src/app/KaFeatureCardEditors.cpp": "dee08bcfaa93e932c7d36b8b4122c852a035c503fbcefb777ee07fbf66f4611c",
+    "crates/strata-app/src/shell_dialogs.rs": "7124bfa16caafa356a31b7cd661c7b985c50bc26cf16e2cb641ab956efb05ec1",
+    "crates/strata-app/src/close_prompt_input_tests.rs": "3529546d1c7a0ba19e47aabf75d473c2b447f86e4b43f497462b16dcecc84a0f",
+    "crates/strata-app/src/close_prompt_input_tests_a.rs": "a30f97f722046d75d4b339b44cfa01651f61df92c0da9e58f0fc2f7b23b5b422",
     "target/cpp-ref/src/app/KaFeatureCard.cpp": "68c12c471bb1005b5df50e2101fefb5fa17f8032de080b440494607fe3a02a51",
     "target/cpp-ref/src/app/MainWindowSession.cpp": "db442da24cf55cee4c4c92c1b8a8dc170a9cdff32579b092b429f7a6d72d5600",
     "crates/strata-app/src/save_before_input_tests.rs": "4ac9700b2a45e6b89a1d8b529bf4bc856f2308acb26df733f3368ef0eb763624",
     "crates/strata-app/src/gui_tab_home_open.rs": "66e0e0fa5f53e758c1fb3d32439dbc7b2e794867a35b9945447de316824ac0af",
     "crates/strata-app/src/app_state_projects.rs": "93f4a91bc050fbc92d92e10c0904f4ad4e3faa2c1d3a8fb71d04094c6951b09d",
     "crates/strata-app/src/app_state_feature_card.rs": "632cc06bc925503098433bb043a469edfb824961970ae39b357ed06b5fd11633",
-    "crates/strata-app/src/app_state_feature_record.rs": "0e4e17cd4c44833c69b38020e2ea4c389dd4ddb01a8cf924748e3aaf223c6b23",
+    "crates/strata-app/src/app_state_feature_record.rs": "24cb20bba6a40851e47eee8d7f168a28146af90e60529f09c5ed2947501bd088",
     "crates/strata-app/src/app_state_save_before.rs": "c971003cf080619fbf81efa7a1a7ccd0ab209ab8534ac7626c08f372699c89c8",
     "target/cpp-ref/tests/test_editing_tools.cpp": "1ec635252608aced322649d6b560cdd92a51d8ac9e423fe012f22eafe839d7df",
     "target/cpp-ref/src/app/KaVertexEditTool.cpp": "55d536e65c3e67cf4e4294dbe46b7f6361290573abcd7a274f368cb833d8d8c8",
@@ -27,9 +32,9 @@ REVIEWED_DIGESTS = {
     "target/cpp-ref/src/app/MainWindow.cpp": "017360b61d6204525a527591140169fc1fb64596335cdf920a5a8dd6fe75eb19",
     "crates/strata-app/src/menu_selection_keys_tests.rs": "c54de8904932f32f702074cdeec77f8d4ae33e118386ce66d5b7aff8e5d09021",
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
-    "crates/strata-app/src/popup_input_harness.rs": "3dd639598970e668578415ff5d7702c37de47b4f850aa587c305b59970f1f6a2",
-    "crates/strata-app/src/shell_workspace.rs": "253505e2b32e7124948be7f2d43265bcee90726da6bf7114e546e2010402a288",
-    "crates/strata-app/src/gui_shell.rs": "3bd2f792a13896737757dc3083fbc1eafe01effc3faac96e7d2cb6f5fd77968a",
+    "crates/strata-app/src/popup_input_harness.rs": "a5afd08239bf3dec538c7eb2e3287ce2be8486d6474b2dadb97b0ac3d615099c",
+    "crates/strata-app/src/shell_workspace.rs": "b2d833287f100313db7a19a66ebb4cb78b283b1ed123afbd5017471edccc8142",
+    "crates/strata-app/src/gui_shell.rs": "62e23e62b1d395ada3b24b0958c468cb3e09061bbaec44a11fe7b866d583f941",
     "crates/strata-app/src/gui_shell_escape.rs": "37a738f061a24b7bc01fac480a840e09dc93abf53162e56d1da0b70cbd2c45e7",
     "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
@@ -79,8 +84,21 @@ def build_cases(root):
         ['기존 원자적 저장 검사 연결; 모든 실패 상태의 UI와 수정 표시 보존 확인'])
     add('file.save-as', '조사 > 다른 이름 / Ctrl+Shift+S', 0, '검증 안 됨', [('MainWindowRibbon.cpp', 'actSaveAs')],
         ['app_state_projects.rs', 'gui_shell.rs'], ['원본·새 경로', '대상 존재', '취소'], ['원본 보존·레이어 및 외부 자료 경로·저장 후 현재 조사 전환 재대조'])
-    add('file.close', '창 닫기 > 저장 / 버리기 / 취소', 0, '검증 안 됨', ['MainWindow.cpp'],
-        ['shell_workspace.rs', 'app_state_save_before.rs'], ['미저장·작업 중·모달', '저장 실패'], ['닫기 경로와 기존 새 조사·열기 저장 확인의 차이를 실제 UI로 확인'])
+    add('file.close', '창 닫기 > 저장 / 버리기 / 취소', 0, '부분 구현', [('MainWindow.cpp', 'void MainWindow::closeEvent'), 'KaClosePrompt.cpp'],
+        ['shell_workspace.rs', 'shell_dialogs.rs', 'app_state_feature_record.rs'], ['미저장·입력 중·작업 중·모달', '저장 실패·반복 닫기'],
+        ['MENU10 논리적 창 닫기와 질문 입력은 확인; 실제 OS 창 종료·다운로드 정리·다른 팝업 조합·Tab 이동은 남음',
+         'C++ 메모리 참조 벡터 저장·다시 열기 검사는 읽었으나 이 질문 검사로 이식한 것은 아님'])
+    add('file.close-input', '창 닫기 질문 > 첫 요청·입력 소유권·명시적 응답', 0, '완료',
+        [('MainWindow.cpp', 'void MainWindow::closeEvent'), 'KaClosePrompt.cpp',
+         ('KaFeatureCard.cpp', 'void KaFeatureCard::commitTyping'), ('KaFeatureCardEditors.cpp', 'QEvent::FocusOut')],
+        ['shell_dialogs.rs', 'app_state_feature_record.rs', 'shell_workspace.rs', 'gui_shell.rs', 'popup_input_harness.rs',
+         'close_prompt_input_tests.rs', 'close_prompt_input_tests_a.rs'],
+        ['1680×960·480×640 생산 UI의 실제 논리적 root Close 이벤트', '추적 데모 임시 사본·표 EPSG:5186·작업 EPSG:5187',
+         '첫 요청과 Delete·Backspace·Enter·CtrlN 및 진행 중 홈 클릭', '질문 중 Delete·CtrlZ·CtrlY·Esc·배경 클릭',
+         '저장·버리기·취소 실제 단추와 기본 Enter·실패 저장', '취소 뒤 정상 편집·반복 닫기와 기존 저장 질문의 단독 소유권',
+         '깨끗한 조사와 현재 메모 입력·명시적 저장 뒤 후속 Close 명령'], [],
+        '취소는 질문만 닫고 선택·도구·작성점·자료·이력을 보존. 명시적 저장만 임시 사본에 기록하며 저장 실패는 Close를 보내지 않음. 물리적 OS 종료·작업 정리·네이티브 선택기·Tab 순서는 범위 밖',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 닫기 질문의 입력')}])
     add('file.save-before-input', '새 조사·열기 전 저장 질문 > 입력 소유권·명시적 응답', 0, '완료',
         [('MainWindowSession.cpp', 'bool MainWindow::confirmSaveBeforeOpeningSurvey'), ('KaFeatureCard.cpp', 'void KaFeatureCard::commitTyping'),
          ('target/cpp-ref/tests/test_save_open.cpp', 'void open_unsavedWorkRespectsAnswer()')],

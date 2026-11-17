@@ -29,9 +29,12 @@ static SNAP_PERF_RUN: Mutex<Option<SnapPerfRun>> = Mutex::new(None);
 
 /// Serializes tests and verification gates that drive the process-wide `FrameRecorder`.
 pub(crate) fn lock_perf_session() -> std::sync::MutexGuard<'static, ()> {
-    PERF_SESSION_LOCK
+    let guard = PERF_SESSION_LOCK
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    #[cfg(test)]
+    crate::perf_recorder::claim_test_session();
+    guard
 }
 
 struct SnapPerfRun {

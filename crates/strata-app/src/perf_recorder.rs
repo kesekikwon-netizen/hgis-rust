@@ -14,6 +14,12 @@ pub use crate::perf_stats::{
     summarize_samples, FrameSample, PartStats, PerfPart, PerfReport, PART_COUNT,
 };
 
+#[cfg(test)]
+#[path = "perf_recorder_test_session.rs"]
+mod test_session;
+#[cfg(test)]
+pub(crate) use test_session::claim as claim_test_session;
+
 pub const DEFAULT_RING_CAPACITY: usize = 256;
 
 const STATE_UNINIT: u8 = 0;
@@ -237,6 +243,10 @@ fn init_global_from_env() -> bool {
 #[inline]
 #[must_use]
 pub fn begin_frame() -> Option<FrameGuard<'static>> {
+    #[cfg(test)]
+    if !test_session::is_owner() {
+        return None;
+    }
     let s = GLOBAL_STATE.load(Ordering::Relaxed);
     if s != STATE_ON && (s == STATE_OFF || !init_global_from_env()) {
         return None;
@@ -247,6 +257,10 @@ pub fn begin_frame() -> Option<FrameGuard<'static>> {
 #[inline]
 #[must_use]
 pub fn begin_part(part: PerfPart) -> Option<PartGuard<'static>> {
+    #[cfg(test)]
+    if !test_session::is_owner() {
+        return None;
+    }
     if GLOBAL_STATE.load(Ordering::Relaxed) != STATE_ON {
         return None;
     }
