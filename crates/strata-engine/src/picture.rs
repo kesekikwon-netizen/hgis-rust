@@ -44,7 +44,13 @@ pub fn picture_info(path: &Path) -> Result<PictureInfo, EngineError> {
         return Err(named(path, &"the file holds no band"));
     }
     let (width, height) = dataset.raster_size();
-    let epsg = dataset.spatial_ref().ok().filter(|s| s.auth_name().as_deref() == Some("EPSG")).and_then(|s| s.auth_code().ok()).and_then(|code| u32::try_from(code).ok());
+    let mut spatial_ref = dataset.spatial_ref().ok();
+    // Retain the persisted work CRS on reload; C++ writes this PRJ (GeorefService.cpp:252-265,304).
+    if spatial_ref.is_none() && path.with_extension("prj").is_file() {
+        let wkt = std::fs::read_to_string(path.with_extension("prj")).map_err(|e| named(path, &e))?;
+        spatial_ref = Some(gdal::spatial_ref::SpatialRef::from_wkt(&wkt).map_err(|e| named(path, &e))?);
+    }
+    let epsg = spatial_ref.filter(|s| s.auth_name().as_deref() == Some("EPSG")).and_then(|s| s.auth_code().ok()).and_then(|code| u32::try_from(code).ok());
     Ok(PictureInfo { width, height, bands, transform: dataset.geo_transform().ok(), epsg })
 }
 

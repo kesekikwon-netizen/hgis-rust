@@ -19,6 +19,8 @@ mod geom;
 mod geom_wkt;
 #[cfg(feature = "gdal")]
 mod picture;
+#[cfg(feature = "gdal")]
+mod raster_alignment;
 mod rings;
 mod scope;
 mod surface;
@@ -36,6 +38,8 @@ pub use dxf_lines::{dxf_layer_extents, read_dxf_lines, DxfFacts, DxfLayerExtent,
 pub use elevation::{check_elevation_file, read_elevation_grid, ElevationGrid};
 #[cfg(feature = "gdal")]
 pub use picture::{picture_info, read_picture, PictureInfo};
+#[cfg(feature = "gdal")]
+pub use raster_alignment::{create_aligned_raster, AlignedRaster};
 pub use geom::{make_valid_polygon_parts, normalized_wkt, polygon_area, polygon_is_valid, polygon_perimeter, PolygonRings};
 pub use geom_wkt::{union_area, wkt_area, wkt_is_valid, wkt_length, wkt_point_relation, SurveyArea};
 pub use rings::{distance_rings, ring_label_points};
