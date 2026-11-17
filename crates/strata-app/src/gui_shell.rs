@@ -34,7 +34,7 @@ impl StrataAppState {
         // KaCaptureMapTool::keyPressEvent (target/cpp-ref/src/app/KaCaptureMapTool.cpp:379-391) and
         // target/cpp-ref/src/app/MainWindowUndo.cpp:486-495 apply Esc, Enter, Backspace and Delete to capture.
         let capture = !wants_kb && self.modals.active.is_none() && self.capture_active();
-        ctx.input(|i| {
+        let history = ctx.input(|i| {
             if i.key_pressed(egui::Key::F9) {
                 self.right_inspector.left_panel_collapsed = !self.right_inspector.left_panel_collapsed;
                 self.home_map.draw_guide_message = Some(
@@ -81,14 +81,6 @@ impl StrataAppState {
                     if self.modals.active.is_none() && !self.modal_window_open() {
                         self.delete_sheet_selection();
                     }
-                } else if !wants_kb && i.key_pressed(egui::Key::Delete) {
-                    // QKeySequence::Delete (MainWindow.cpp:256-268). An open window keeps the key to itself.
-                    // A picked vertex is what Delete removes, not the whole shape (MainWindowUndo.cpp:497-500).
-                    if self.modals.active.is_none() && !self.modal_window_open() && !self.delete_active_vertex() {
-                        self.delete_selected();
-                    }
-                } else if !wants_kb && i.key_pressed(egui::Key::Backspace) && !self.delete_active_vertex() {
-                    self.home_map.cad.on_backspace(&mut self.home_map.scene);
                 }
             }
             if i.modifiers.ctrl {
@@ -116,15 +108,17 @@ impl StrataAppState {
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
                 } else if !wants_kb && i.key_pressed(egui::Key::Z) && self.active_tab == MainTab::Drawing && self.drawing.coord_callout_mode {
                     // While points are placed on the sheet, the last point (KaDrawingStudio.cpp:3480-3483).
-                    self.undo_last_coord_callout();
+                    return Some(escape::HistoryAction::UndoCoordinates);
                 } else if !wants_kb && i.key_pressed(egui::Key::Z) {
                     // undoMapAction — 그리던 점, 아니면 가장 최근 레이어 편집.
-                    self.undo_map_action();
+                    return Some(escape::HistoryAction::UndoMap);
                 } else if !wants_kb && i.key_pressed(egui::Key::Y) {
-                    self.redo_map_action();
+                    return Some(escape::HistoryAction::RedoMap);
                 }
             }
+            None
         });
+        let pending = pending.with_history(self, ctx, history);
         if open_requested {
             self.open_survey_file_dialog();
         }
@@ -234,3 +228,7 @@ mod native_popup_escape_tests;
 #[cfg(test)]
 #[path = "menu_capture_keys_tests.rs"]
 mod menu_capture_keys_tests;
+
+#[cfg(test)]
+#[path = "menu_selection_keys_tests.rs"]
+mod menu_selection_keys_tests;

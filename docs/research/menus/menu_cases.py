@@ -8,12 +8,17 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "target/cpp-ref/src/app/MainWindowUndo.cpp": "2c11706d9c729bad7f54cca430f187d52558cb0787011e24351dd964817fe0c3",
+    "target/cpp-ref/src/app/KaFeatureSelectTool.cpp": "0bc78d26e70186422c02204c0297aca181953671048efaa7a47ebecf70381a69",
+    "target/cpp-ref/tests/test_save_open.cpp": "2f84bbad9cf53fca98f07fd98117f3234eeeb450f2864bef33bd20c5592fec2b",
+    "target/cpp-ref/src/app/MainWindow.cpp": "017360b61d6204525a527591140169fc1fb64596335cdf920a5a8dd6fe75eb19",
+    "crates/strata-app/src/menu_selection_keys_tests.rs": "9d62f4066b779e2467b49cb3956866bb9b86f9806278ec4f3c34d3c169bbb2b6",
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
-    "crates/strata-app/src/popup_input_harness.rs": "75030c6dead3542613b121abf3786a80270a0069b5de8aac0edfd50fda2cd616",
+    "crates/strata-app/src/popup_input_harness.rs": "3dd639598970e668578415ff5d7702c37de47b4f850aa587c305b59970f1f6a2",
     "crates/strata-app/src/shell_workspace.rs": "253505e2b32e7124948be7f2d43265bcee90726da6bf7114e546e2010402a288",
-    "crates/strata-app/src/gui_shell.rs": "48ef1108e59ecd41c381bb17bbe916d01e012ff2f9568e9e81ce9f4b915ee5a1",
-    "crates/strata-app/src/gui_shell_escape.rs": "48264bd0c03f06421713cedaa86d1c787d09e664748618434f476a0e694b9fef",
-    "crates/strata-app/src/native_menu_input.rs": "af7ad1bd860d151340d54e906e5a3ca959fd5dac81e19b51413d092374d158d9",
+    "crates/strata-app/src/gui_shell.rs": "bfab5f7d15f242373c1c2823b757008646a716cea33dbb46f66a4862765446f4",
+    "crates/strata-app/src/gui_shell_escape.rs": "c62501e3c710799705cd115474241949246d45e77b87ee7f87a07f9c93c24df1",
+    "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
     "crates/strata-app/src/popup_escape_tests.rs": "2ea0dca3e1aaaf32e2deda81d43ce77a8613ab2cf543c0a8c3bea71e8fae5323",
     "target/cpp-ref/src/app/KaCaptureMapTool.cpp": "d0da08cc04d7cc2bd829a4586ebddd4b25edf2a230497460feb4010fac5e555c",
@@ -64,12 +69,12 @@ def build_cases(root):
     add('file.close', '창 닫기 > 저장 / 버리기 / 취소', 0, '검증 안 됨', ['MainWindow.cpp'],
         ['shell_workspace.rs', 'app_state_save_before.rs'], ['미저장·작업 중·모달', '저장 실패'], ['닫기 경로와 기존 새 조사·열기 저장 확인의 차이를 실제 UI로 확인'])
     for id, key, label in [('undo', 'Undo', 'Ctrl+Z'), ('redo', 'Redo', 'Ctrl+Y')]:
-        add('edit.' + id, '편집 > ' + label, 0, '검증 안 됨', ['MainWindowUndo.cpp', ('MainWindowRibbon.cpp', 'act' + key)],
+        add('edit.' + id, '편집 > ' + label, 0, '부분 구현', ['MainWindowUndo.cpp', ('MainWindowRibbon.cpp', 'act' + key)],
             ['gui_shell.rs', 'app_state_layer_remove.rs'], ['선택 도형·레이어', '그리기·정합·도면', '텍스트 포커스', '되돌릴 항목 없음'],
-            ['기존 편집 검사 재사용; 포커스별 되돌리기 소유권·도형 ID·저장 전후 분기 재대조'])
+            ['MENU7 기본 레이어 메뉴의 지도 이력과 삭제 뒤 복원 확인; 정합·도면·다른 메뉴·입력칸·저장 전후 분기는 재대조'])
     add('edit.delete-focus', 'Delete / Backspace > 도형·레이어·그리던 점·정합점', 0, '부분 구현', ['MainWindow.cpp', 'MainWindowUndo.cpp'],
         [('gui_shell.rs', 'Key::Delete'), 'app_state_layer_remove.rs', 'menu_capture_keys_tests.rs'], ['메뉴 열림', '텍스트 입력', '선택 없음·여러 선택', '그리기 중'],
-        ['MENU6에서 작성 중 도형·검색칸 보호 확인; 기존 선택 도형·레이어·정합점·도면의 메뉴별 삭제와 포커스는 남음'])
+        ['MENU6 작성 중 도형·검색칸과 MENU7 기본 레이어 메뉴·레이어 우클릭의 선택 자료 보호 확인; 지도 꼭짓점 Backspace와 기본 메뉴 CtrlZ/Y도 확인. 정합점·도면·다른 메뉴의 키와 포커스는 남음'])
     add('capture.real-snap', '그리기 > 자석 > 실제 점·선·면 캡처', 0, '미구현', [('KaCaptureMapTool.cpp', 'snapToMap')],
         [('gui_tab_map_capture.rs', 'self.sketch_press(s2w'), 'app_state_draw_commit.rs'], ['자석 켬·끔', '모든 조사·현재 레이어', '원본 CRS', '취소·조사 전환'],
         ['실제 캡처는 원래 좌표를 전달; 별도 legacy CAD 스냅과 연결되지 않음', 'SNAP1A 소유권 준비를 재사용해 실제 입력·미리보기·오래된 결과 폐기 연결'])
@@ -102,6 +107,18 @@ def build_cases(root):
         ['1024×768 레이어·기록 메뉴', '1680×960 자석 대상·실제 검색칸', 'EPSG:5187 그리던 세 점', '메뉴 열기 클릭 해제+Delete 같은 묶음'], [],
         '메뉴에서는 점·도형 수·변경 상태 유지; 닫은 뒤 캔버스 키 재개. 검색칸은 기존 포커스 보호 유지. 사용자 데이터 보존 결정이며 Qt 메뉴 내부 단축키와의 동일성 주장이 아님',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 메뉴의 편집 키')}])
+    add('key.selection-menu', '기존 선택 자료 > 레이어 메뉴의 Delete·꼭짓점 Backspace / 우클릭 Delete', 0, '완료',
+        [('MainWindow.cpp', 'auto* delAct'), ('KaFeatureSelectTool.cpp', 'void KaFeatureSelectTool::keyPressEvent'), ('target/cpp-ref/tests/test_save_open.cpp', 'void layerDeleteKeyPreservesSourceAndUndoRestoresPendingEdits')],
+        ['gui_shell.rs', 'gui_shell_escape.rs', 'native_menu_input.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'menu_selection_keys_tests.rs'],
+        ['1024×768 기본 레이어 메뉴', '1680×960 레이어 우클릭 Delete', '실제 범례 클릭·기존 피처 ID와 꼭짓점 선택 고정물', '저장 전 속성·반복 열기·파일 바이트', '같은 묶음 Delete+Backspace 한 번 편집·Esc+Backspace 편집 없음'], [],
+        '메뉴 Delete는 자료 보존; 닫은 뒤 정상 삭제와 CtrlZ가 같은 ID·도형·속성을 복원하고 파일 유지. C++의 원본 보존 계약과 사용자 메뉴 격리 결정이며 Qt 전체 단축키 동일성은 미확인',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 메뉴의 선택 삭제')}])
+    add('key.history-native', '지도 편집 이력 > 기본 레이어 메뉴의 CtrlZ·CtrlY / Delete+CtrlZ 순서', 0, '완료',
+        [('MainWindowUndo.cpp', 'void MainWindow::undoMapAction'), ('MainWindowUndo.cpp', 'void MainWindow::redoMapAction')],
+        ['gui_shell.rs', 'gui_shell_escape.rs', 'native_menu_input.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'menu_selection_keys_tests.rs'],
+        ['1024×768 기본 레이어 메뉴', '저장 전 속성이 있는 기존 도형', '메뉴 닫은 뒤 실제 CtrlZ·CtrlY', '같은 묶음 Delete 뒤 CtrlZ가 같은 ID·WKT·속성 복원'], [],
+        '메뉴 뒤 이력 유지; 닫은 뒤 정상 이력 명령 재개. 입력칸·도면·정합·다른 메뉴 전체와 Qt 단축키 내부 동일성은 이 행의 범위에 포함하지 않음',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 메뉴의 이력 소유권')}])
     add('context.map', '지도 우클릭 > 기록·그리기·선택·보기·좌표 복사', 1, '검증 안 됨', [('MainWindowContextMenus.cpp', 'populateMapContextMenu')],
         ['gui_tab_map_context.rs'], ['도형 아래·빈 지도', '조사 없음·처리 중', '읽기 전용', '키보드 닫기'], ['별도 지도 메뉴 렌더러의 조건·경계·취소 확인; MENU2 레이어 메뉴와 구분'])
     add('context.layer', '레이어 우클릭 > 편집·표시·삭제·라벨·인코딩', 1, '부분 구현', [('MainWindowContextMenus.cpp', 'showLayerTreeContextMenu')],
@@ -177,6 +194,10 @@ def build_cases(root):
     cpp_file = 'target/cpp-ref/src/app/MainWindowContextMenus.cpp'
     cpp_text = (root / cpp_file).read_text(encoding='utf-8')
     action_ids = sorted(set(re.findall(r'"((?:map|layer)\.[A-Za-z0-9]+)"', cpp_text)))
+    missing_context = {
+        'layer.clear': '현재 메뉴는 deferred(CM2a-2)로 항상 비활성; C++ clearDrawnFeaturesOfCurrentLayer 연결이 남음',
+        'layer.export': '현재 우클릭 메뉴는 deferred(R2)로 항상 비활성; 상위 제출 메뉴의 구현과 구분해 연결해야 함',
+    }
     for action_id in action_ids:
         is_layer = action_id.startswith('layer.')
         model = 'layer_menu_model.rs' if is_layer else 'map_context_menu_model.rs'
@@ -184,8 +205,9 @@ def build_cases(root):
         model_text = (root / 'crates/strata-app/src' / model).read_text(encoding='utf-8')
         add('context.action.' + action_id, ('레이어' if is_layer else '지도') + ' 우클릭 > ' + titles.get(action_id, action_id),
             0 if action_id in ['layer.clear', 'layer.remove', 'layer.merge', 'layer.draw', 'layer.vertices'] else 1,
-            '검증 안 됨', [('MainWindowContextMenus.cpp', needle)], [(model, needle)] if needle in model_text else [model],
+            '미구현' if action_id in missing_context else '검증 안 됨', [('MainWindowContextMenus.cpp', needle)], [(model, needle)] if needle in model_text else [model],
             conditions.get(action_id, ['레이어 종류·선택·도형 유무·처리 중 조건을 원본 분기와 대조']),
+            [missing_context[action_id]] if action_id in missing_context else
             ['표시·활성 조건·작업 결과·취소 UI를 개별 검증; 상위 메뉴의 Esc 통과를 이 동작 완료로 확대하지 않음'])
         rows[-1]['cpp'] = [cpp_file + ':' + str(i) for i, line in enumerate(cpp_text.splitlines(), 1) if needle in line]
     for row in rows:

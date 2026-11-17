@@ -40,12 +40,16 @@ impl Harness {
         h
     }
     pub(super) fn frame(&mut self, events: Vec<Event>) -> egui::FullOutput {
+        self.frame_with_modifiers(events, egui::Modifiers::default())
+    }
+    pub(super) fn frame_with_modifiers(&mut self, events: Vec<Event>, modifiers: egui::Modifiers) -> egui::FullOutput {
         self.time += 0.05;
         let output = self.ctx.run(
             RawInput {
                 time: Some(self.time),
                 screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(self.size[0] as f32, self.size[1] as f32))),
                 events,
+                modifiers,
                 ..Default::default()
             },
             |ctx| {

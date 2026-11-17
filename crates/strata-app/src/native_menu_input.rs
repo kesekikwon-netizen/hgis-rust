@@ -28,5 +28,9 @@ pub(crate) fn popup_below_widget<R>(
 }
 
 fn consume_canvas_keys(ui: &Ui) {
-    ui.input_mut(|input| input.events.retain(|event| !matches!(event, Event::Key { key: Key::Escape | Key::Enter | Key::Delete | Key::Backspace, pressed: true, .. })));
+    ui.input_mut(|input| {
+        input.events.retain(|event| {
+            !matches!(event, Event::Key { key: Key::Escape | Key::Enter | Key::Delete | Key::Backspace, pressed: true, .. }) && !matches!(event, Event::Key { key: Key::Z | Key::Y, pressed: true, modifiers, .. } if modifiers.ctrl)
+        })
+    });
 }
