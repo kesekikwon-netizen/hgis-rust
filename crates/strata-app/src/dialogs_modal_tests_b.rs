@@ -107,10 +107,10 @@ fn test_modal_exclusive_guard_blocks_duplicate_popup_and_dirty_reject_confirmati
 // D11 KaPaperDialog.cpp:90-186 + KaPrintDialog.cpp:126-208
 #[test]
 fn test_d11_paper_dialog_scale_note_and_print_tile_options() {
-    let ctrl = ModalDialogController::default();
-    assert!((ctrl.print_overlap_mm - 10.0).abs() < 1e-9);
-    assert!(ctrl.print_marks);
-    assert!(ctrl.print_overview);
+    let printing = crate::dlg_drawing_print::print_state::PrintTabState::default();
+    assert!((printing.overlap_mm - 10.0).abs() < 1e-9);
+    assert!(printing.marks);
+    assert!(printing.overview);
 
     // 「직접 입력」 only swaps the reading line for an entry field; the other presets
     // take their size from the paper (KaPaperDialog.cpp:161-175).

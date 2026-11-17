@@ -150,6 +150,11 @@ fn paint_triangle(picture: &mut Picture, texture: &Texture, cut: [usize; 4], cor
 
 /// Paints `primitives` (in points) on white paper of `size` pixels, `scale` pixels to the point.
 pub(crate) fn paint(primitives: &[ClippedPrimitive], textures: &Textures, scale: f32, size: [usize; 2]) -> Picture {
+    paint_region(primitives, textures, scale, size, [0.0, 0.0])
+}
+
+// Bounded output windows, target/cpp-ref/src/core/TilePrint.cpp:24-26. O(triangles + painted pixels).
+pub(crate) fn paint_region(primitives: &[ClippedPrimitive], textures: &Textures, scale: f32, size: [usize; 2], origin: [f32; 2]) -> Picture {
     let mut picture = Picture { size, rgb: vec![255; size[0] * size[1] * 3], unknown_pictures: 0 };
     for clipped in primitives {
         let Primitive::Mesh(mesh) = &clipped.primitive else { continue };
@@ -159,11 +164,21 @@ pub(crate) fn paint(primitives: &[ClippedPrimitive], textures: &Textures, scale:
         };
         // The box a mesh is cut to, in whole pixels as a renderer rounds it.
         let edge = |points: f32, most: usize| ((points * scale).round().max(0.0) as usize).min(most);
-        let cut = [edge(clipped.clip_rect.min.x, size[0]), edge(clipped.clip_rect.min.y, size[1]), edge(clipped.clip_rect.max.x, size[0]), edge(clipped.clip_rect.max.y, size[1])];
+        let cut = [
+            edge(clipped.clip_rect.min.x - origin[0], size[0]),
+            edge(clipped.clip_rect.min.y - origin[1], size[1]),
+            edge(clipped.clip_rect.max.x - origin[0], size[0]),
+            edge(clipped.clip_rect.max.y - origin[1], size[1]),
+        ];
         for corner in mesh.indices.chunks_exact(3) {
             let found = [corner[0], corner[1], corner[2]].map(|index| mesh.vertices.get(index as usize).copied());
             if let [Some(a), Some(b), Some(c)] = found {
-                paint_triangle(&mut picture, texture, cut, [a, b, c], scale);
+                let corners = [a, b, c].map(|mut vertex| {
+                    vertex.pos.x -= origin[0];
+                    vertex.pos.y -= origin[1];
+                    vertex
+                });
+                paint_triangle(&mut picture, texture, cut, corners, scale);
             }
         }
     }

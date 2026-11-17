@@ -12,15 +12,8 @@ use strata_layout::sheet_composer::SheetPaperSize;
 // D19 KaTrenchDialog 하단 버튼·개별편집 + KaDrawingStudio SpinBox 범위
 #[test]
 fn test_r10_print_paper_defaults_follow_printer_a3_support() {
-    // 이 PC 에 실제로 설치된 프린터로 계산한다. 값은 환경에 따라 A3/A4 둘 중 하나다.
-    let paper = default_print_paper_for_printer();
-    assert!(
-        paper == SheetPaperSize::A3 || paper == SheetPaperSize::A4,
-        "용지 기본값은 A3 또는 A4 여야 한다"
-    );
-    // 프린터 목록을 못 읽거나 지원 목록이 비면 지원으로 본다(C++ :352).
-    // 그래서 이 호출이 패닉하지 않고 항상 A3/A4 를 돌려주는 것이 계약이다.
-    assert_eq!(ModalDialogController::default().print_paper, SheetPaperSize::A4);
+    // Recorded catalog: target/cpp-ref/src/app/KaPrintDialog.cpp:124,348-354; no physical printer query.
+    assert_eq!(crate::dlg_drawing_print::print_state::PrintTabState::default().paper, SheetPaperSize::A4);
 }
 
 #[test]

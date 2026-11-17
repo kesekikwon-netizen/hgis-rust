@@ -58,6 +58,8 @@ pub(crate) mod sheet_coord_points;
 mod sheet_pdf_file;
 #[path = "sheet_raster.rs"]
 pub(crate) mod sheet_raster;
+#[path = "sheet_scene.rs"]
+pub(crate) mod sheet_scene;
 
 impl StrataAppState {
     /// C++ `KaDrawingStudio.cpp` 도면 스튜디오 (좌측 레이어/파일함 + 중앙 도면 용지 & 하단 7버튼 툴바 + 우측 도면 항목/방위/도면 정보) 1:1 재현

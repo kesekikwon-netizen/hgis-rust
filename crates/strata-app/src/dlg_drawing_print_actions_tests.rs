@@ -37,7 +37,7 @@ fn modified(p: &Path) -> Option<SystemTime> {
 /// Renders `paint`, checks `label` is disabled, clicks it, and checks nothing was written or said.
 fn assert_deferred(paint: Paint, label: &str) {
     let mut app = StrataAppState::new_startup();
-    app.modals.print_single_sheet = false;
+    app.printing.single_sheet = false;
     let temp_pdf = std::env::temp_dir().join("조사도면.pdf");
     let before = modified(&temp_pdf);
     let ctx = egui::Context::default();

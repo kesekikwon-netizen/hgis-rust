@@ -3,8 +3,6 @@
 //! `modal_types.rs` 가 300줄을 넘어 나눴다. `dialogs_modal` 이 재수출한다.
 
 use strata_geo::trench_grid::{TrenchShapeKind, TrenchStandardLength};
-use strata_layout::sheet_composer::{SheetPaperSize};
-use strata_layout::tile_print::HGIS_PRINT_OVERLAP_DEFAULT_MM;
 use strata_types::crs::WorkCrs;
 use crate::dialogs_modal::ActiveModalDialog;
 
@@ -49,13 +47,6 @@ pub struct ModalDialogController {
     // D6 KaSurveyContourDialog.cpp — 파일 좌표계 선택 (5개 라벨)
     pub contour_file_crs_idx: usize,
     pub custom_paper_mode: bool,
-    pub print_single_sheet: bool,
-    pub print_paper: SheetPaperSize,
-    pub print_dpi: u32,
-    // D11 KaPrintDialog.cpp:126-166 — 나눠 찍기 겹침 폭·자름 표시·순서 안내
-    pub print_overlap_mm: f64,
-    pub print_marks: bool,
-    pub print_overview: bool,
     // T6 (1) KaControlPointDialog 상태
     pub cp_id: String,
     pub cp_x: String,
@@ -163,14 +154,6 @@ impl Default for ModalDialogController {
             trench_prefix: "Tr-".to_owned(),
             contour_file_crs_idx: 0,
             custom_paper_mode: false,
-            print_single_sheet: true,
-            // KaPrintDialog.cpp:124 — 기본은 A4 다. A3 는 프린터가 A3 를 지원할 때만
-            // 인쇄 창을 열 때 고른다 (`refresh_print_paper_for_printer`).
-            print_paper: SheetPaperSize::A4,
-            print_dpi: 300,
-            print_overlap_mm: HGIS_PRINT_OVERLAP_DEFAULT_MM,
-            print_marks: true,
-            print_overview: true,
             // target/cpp-ref/src/app/KaControlPointDialog.cpp:16-19,60-71 — id, x, y, z and origin start empty.
             cp_id: String::new(),
             cp_x: String::new(),

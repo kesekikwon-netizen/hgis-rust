@@ -2,7 +2,6 @@
 //!
 //! `modal_types.rs` 가 300줄을 넘어 나눴다. `dialogs_modal` 이 재수출한다.
 
-use strata_layout::sheet_composer::{SheetPaperSize};
 
 /// C++ `KaTopographicImportDialog::recordKey` — 같은 자료를 알아보는 열쇠.
 /// C++ 은 원본·레이어·서명·CAD 레이어·도형 갈래를 SHA-256 으로 묶는다(`:401-404`).
@@ -96,52 +95,4 @@ pub fn topo_default_crs_idx(epsg: Option<u32>) -> usize {
     } else {
         0
     }
-}
-
-/// `KaPrintDialog.cpp:124` — 용지 기본값은 `printerSupports(A3) && !printers.isEmpty()`
-/// 일 때만 A3, 아니면 A4 다. `:348-354` 대로 프린터 이름이 없거나 지원 목록이 비면 지원으로 본다.
-#[must_use]
-pub fn default_print_paper_for_printer() -> SheetPaperSize {
-    if windows_a3_printer_supports() {
-        SheetPaperSize::A3
-    } else {
-        SheetPaperSize::A4
-    }
-}
-
-/// 설치된 프린터 중 하나라도 A3 를 지원하는지 본다. `KaPrintDialog.cpp:83-91` 처럼
-/// 프린터 목록을 훑고, 목록을 못 읽으면 `:352` 대로 지원으로 친다.
-#[cfg(windows)]
-fn windows_a3_printer_supports() -> bool {
-    // PowerShell 로 프린터 이름과 용지만 읽는다. 인쇄는 하지 않는다.
-    let script = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; \
-         Get-Printer | ForEach-Object { $_.Name + '|' + (($_.PrinterPaperNames) -join ',') }";
-    let mut cmd = std::process::Command::new("powershell");
-    cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
-    strata_types::process::no_window(&mut cmd);
-    let Ok(out) = cmd.output() else {
-        return true; // 목록을 못 읽으면 지원으로 본다 (`:352` sizes.isEmpty() 와 같은 뜻)
-    };
-    if !out.status.success() {
-        return true;
-    }
-    let text = String::from_utf8_lossy(&out.stdout);
-    let rows: Vec<&str> = text
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .collect();
-    if rows.is_empty() {
-        return false; // 설치된 프린터 없음 (`:85-87`)
-    }
-    rows.iter().any(|row| {
-        row.split_once('|')
-            .is_some_and(|(_, papers)| papers.to_ascii_uppercase().contains("A3"))
-    })
-}
-
-#[cfg(not(windows))]
-fn windows_a3_printer_supports() -> bool {
-    // 다른 OS 에는 이 확인 경로가 없다. C++ `:352` 처럼 지원으로 친다.
-    true
 }

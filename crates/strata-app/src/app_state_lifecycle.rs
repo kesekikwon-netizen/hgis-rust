@@ -26,6 +26,7 @@ impl StrataAppState {
         let (basemap_fetch, cadastral_fetch) = crate::basemap_cadastral_jobs::shared_tile_fetchers();
         let default_opts = DisplayOptions { paper_look: true, ..DisplayOptions::default() };
         let mut app = Self {
+            printing: crate::dlg_drawing_print::print_state::PrintTabState::default(),
             active_tab: MainTab::Home,
             open_studio_tabs: Vec::new(),
             scale_menu_open: false,
@@ -116,6 +117,9 @@ impl StrataAppState {
 
     /// C++ `MainWindowChrome::openDrawingStudio` 등 스튜디오 탭 열기 생명주기 1:1
     pub fn open_studio_tab(&mut self, tab: MainTab) {
+        if tab == MainTab::Print {
+            self.printing.ensure_catalog();
+        }
         if matches!(tab, MainTab::Drawing | MainTab::Print | MainTab::Paleo | MainTab::Terrain3d) && !self.open_studio_tabs.contains(&tab) {
             self.open_studio_tabs.push(tab);
         }

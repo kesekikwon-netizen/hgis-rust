@@ -25,6 +25,22 @@ fn near(got: [u8; 3], want: [u8; 3]) -> bool {
 
 const WHITE: [u8; 3] = [255, 255, 255];
 
+#[test]
+fn a_print_region_keeps_its_source_position_and_clip_without_a_whole_page_buffer() {
+    let ctx = egui::Context::default();
+    let out = ctx.run(RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(80.0, 40.0))), ..Default::default() }, |ctx| {
+        let p = ctx.layer_painter(LayerId::background()).with_clip_rect(Rect::from_min_max(pos2(32.0, 6.0), pos2(62.0, 26.0)));
+        p.rect_filled(Rect::from_min_max(pos2(30.0, 4.0), pos2(65.0, 30.0)), 0.0, Color32::from_rgb(200, 30, 30));
+    });
+    let mut textures = Textures::default();
+    textures.apply(&out.textures_delta);
+    let primitives = ctx.tessellate(out.shapes, out.pixels_per_point);
+    let region = super::paint_region(&primitives, &textures, 2.0, [40, 40], [30.0, 4.0]);
+    assert_eq!(region.size, [40, 40]);
+    assert!(near(region.at([20, 20]), [200, 30, 30]), "source offset ignored: {:?}", region.at([20, 20]));
+    assert_eq!(region.at([1, 1]), WHITE, "clip moved incorrectly");
+}
+
 /// A filled box covers its pixels with its colour and leaves the paper white around it.
 #[test]
 fn a_filled_box_has_its_colour_inside_and_white_paper_outside() {

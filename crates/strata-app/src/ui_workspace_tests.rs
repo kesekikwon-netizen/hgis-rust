@@ -68,3 +68,14 @@ fn print_tab_controls_fit_narrow_and_wide_screens() {
         rendered.save_if_requested(&format!("print-tab-{width}"));
     }
 }
+
+#[test]
+fn compact_print_tab_keeps_the_actual_sheet_visible_next_to_settings() {
+    let mut app = StrataAppState::new_startup();
+    app.drawing.sheet.legend_title = "VISIBLE-SHEET-640".to_owned();
+    let rendered = render([640, 480], |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| crate::dlg_drawing_print::render_drawing_print(&mut app, ui));
+    });
+    let (_, title) = rendered.text_rects().into_iter().find(|(text, _)| text == "VISIBLE-SHEET-640").expect("actual sheet preview must be visible before scrolling");
+    assert!(title.top() >= 0.0 && title.bottom() <= 480.0, "preview fell below the screen: {title:?}");
+}

@@ -9,51 +9,16 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::sync::Arc;
-use std::time::Instant;
 
-use eframe::egui::{self, epaint::ClippedShape, Pos2, RawInput, Rect, Vec2, ViewportId};
+#[cfg(test)]
+use super::sheet_scene::ready;
+use super::sheet_scene::SheetScene;
+use eframe::egui;
 
 pub(crate) use super::sheet_pdf_file::CANCELLED;
-use super::sheet_pdf_file::{pack_pdf, picture_size, print_dpi, put_pdf, render_note, DESIGN_PX_PER_MM, TILE_WAIT_SECONDS};
-use super::sheet_raster::{paint, Textures};
+use super::sheet_pdf_file::{pack_pdf, print_dpi, put_pdf, render_note, DESIGN_PX_PER_MM};
 use crate::app_state::StrataAppState;
-use crate::basemap_cadastral_jobs::{shared_tile_fetchers, BasemapFetcher, CadastralFetcher};
-use crate::basemap_paint::{CadastralCellCache, TileTextureCache};
 use crate::dialogs_modal::ActiveModalDialog;
-use crate::ref_vector::print::PictureSet;
-
-/// Whether the PDF can be made after `passes` passes, the last `quiet` of which asked for nothing new and had
-/// nothing on the way, `waited` after it began: the tiles had time to be asked for (a tile is asked for once
-/// the view has rested, basemap_tile_key.rs `VIEW_REST_TIME`), or the longest wait is over.
-fn ready(passes: u32, quiet: u32, waited: std::time::Duration) -> bool {
-    let asked = waited >= crate::basemap_tile_key::VIEW_REST_TIME * 3;
-    (passes >= 3 && quiet >= 2 && asked) || waited.as_secs_f32() > TILE_WAIT_SECONDS
-}
-
-/// The tile stores and fetchers of one side: the screen's, or those of a PDF being drawn.
-struct TileSide {
-    basemap: TileTextureCache,
-    cadastral: CadastralCellCache,
-    basemap_fetch: BasemapFetcher,
-    cadastral_fetch: CadastralFetcher,
-    painted: usize,
-}
-
-impl TileSide {
-    fn fresh() -> Self {
-        let (basemap_fetch, cadastral_fetch) = shared_tile_fetchers();
-        Self { basemap: TileTextureCache::default(), cadastral: CadastralCellCache::default(), basemap_fetch, cadastral_fetch, painted: 0 }
-    }
-
-    /// Nothing on the way and nothing waiting to be shown (the two fetchers share one count).
-    fn settled(&self) -> bool {
-        self.basemap_fetch.in_flight_count() == 0 && !self.basemap_fetch.take_done_limited(0).1 && !self.cadastral_fetch.take_done_limited(0).1
-    }
-
-    fn requests(&self) -> usize {
-        self.basemap_fetch.requests_started() + self.cadastral_fetch.requests_started()
-    }
-}
 
 enum Stage {
     Painting,
@@ -80,19 +45,7 @@ pub(crate) fn saved_words(target: &std::path::Path, left_out: usize) -> String {
 /// A PDF of the sheet being made.
 pub(crate) struct SheetPdf {
     target: PathBuf,
-    ctx: egui::Context,
-    textures: Textures,
-    paper_mm: [f64; 2],
-    px_per_mm: f32,
-    pixels_per_point: f32,
-    dpi: f32,
-    tiles: TileSide,
-    pictures: PictureSet,
-    passes: u32,
-    quiet: u32,
-    requests: usize,
-    started: Instant,
-    shapes: Vec<ClippedShape>,
+    scene: SheetScene,
     stage: Stage,
     /// The background work is writing the file.
     saving: bool,
@@ -106,24 +59,17 @@ impl SheetPdf {
             Stage::Painting => "도면을 정리하는 중…".to_owned(),
             // KaDrawingStudio.cpp:3813.
             Stage::Making(_) if self.saving => "파일을 저장하는 중…".to_owned(),
-            Stage::Making(_) => render_note(self.paper_mm, self.dpi),
+            Stage::Making(_) => render_note(self.scene.paper_mm, self.scene.dpi),
         }
-    }
-
-    fn ready(&self) -> bool {
-        ready(self.passes, self.quiet, self.started.elapsed())
     }
 
     /// Tessellates the last pass and makes, packs and writes the picture in the background.
     fn make(&mut self, title: String) {
-        let primitives = self.ctx.tessellate(std::mem::take(&mut self.shapes), self.pixels_per_point);
-        let textures = std::mem::take(&mut self.textures);
+        let raster = self.scene.raster();
         let (send, receive) = channel();
-        let (target, paper_mm, cancel, scale) = (self.target.clone(), self.paper_mm, Arc::clone(&self.cancel), self.pixels_per_point);
-        let size = picture_size(paper_mm, self.dpi);
+        let (target, paper_mm, cancel) = (self.target.clone(), self.scene.paper_mm, Arc::clone(&self.cancel));
         std::thread::spawn(move || {
-            let picture = paint(&primitives, &textures, scale, size);
-            drop((primitives, textures));
+            let picture = raster.paint();
             let written = pack_pdf(paper_mm, &title, &picture).and_then(|pdf| {
                 drop(send.send(Made::Saving));
                 put_pdf(&target, &pdf, &cancel)
@@ -170,27 +116,7 @@ impl StrataAppState {
         let paper_mm = [self.drawing.sheet.width_mm, self.drawing.sheet.height_mm];
         let px_per_mm = self.drawing.screen_px_per_mm.unwrap_or(DESIGN_PX_PER_MM);
         let dpi = print_dpi(paper_mm);
-        let ctx = egui::Context::default();
-        ctx.set_fonts(crate::gui_theme_fonts::font_definitions());
-        let job = SheetPdf {
-            target,
-            ctx,
-            textures: Textures::default(),
-            paper_mm,
-            px_per_mm,
-            pixels_per_point: dpi / 25.4 / px_per_mm,
-            dpi,
-            tiles: TileSide::fresh(),
-            pictures: PictureSet::made_at_once(),
-            passes: 0,
-            quiet: 0,
-            requests: 0,
-            started: Instant::now(),
-            shapes: Vec::new(),
-            stage: Stage::Painting,
-            saving: false,
-            cancel: Arc::new(AtomicBool::new(false)),
-        };
+        let job = SheetPdf { target, scene: SheetScene::new(paper_mm, px_per_mm, dpi), stage: Stage::Painting, saving: false, cancel: Arc::new(AtomicBool::new(false)) };
         self.drawing.pdf.0 = Some(Box::new(job));
         self.modals.active = Some(ActiveModalDialog::PdfPreparing);
     }
@@ -203,8 +129,8 @@ impl StrataAppState {
         let ended = match &job.stage {
             Stage::Painting if cancelled => Some(Err(CANCELLED.to_owned())),
             Stage::Painting => {
-                self.print_pass(&mut job);
-                if job.ready() {
+                job.scene.pass(self);
+                if job.scene.ready() {
                     job.make(self.drawing.title_ko.clone());
                 }
                 None
@@ -243,34 +169,6 @@ impl StrataAppState {
                 self.modals.active = None;
             }
         }
-    }
-
-    /// One pass of the sheet on the PDF's own context, with the PDF's own tiles and pictures.
-    fn print_pass(&mut self, job: &mut SheetPdf) {
-        let paper = Rect::from_min_size(Pos2::ZERO, Vec2::new(job.paper_mm[0] as f32, job.paper_mm[1] as f32) * job.px_per_mm);
-        let mut raw = RawInput { screen_rect: Some(paper), max_texture_side: Some(16_384), time: Some(f64::from(job.passes) * 0.1), ..Default::default() };
-        raw.viewports.entry(ViewportId::ROOT).or_default().native_pixels_per_point = Some(job.pixels_per_point);
-        self.swap_tiles(&mut job.tiles);
-        self.ref_vectors.swap_pictures(&mut job.pictures);
-        let px_per_mm = job.px_per_mm;
-        let out = job.ctx.run(raw, |ctx| self.paint_sheet_for_print(ctx, paper, px_per_mm));
-        self.ref_vectors.swap_pictures(&mut job.pictures);
-        self.swap_tiles(&mut job.tiles);
-        job.textures.apply(&out.textures_delta);
-        job.shapes = out.shapes;
-        job.passes += 1;
-        let requests = job.tiles.requests();
-        let quiet = requests == job.requests && job.tiles.settled() && !job.pictures.still_drawing();
-        job.quiet = if quiet { job.quiet + 1 } else { 0 };
-        job.requests = requests;
-    }
-
-    fn swap_tiles(&mut self, side: &mut TileSide) {
-        std::mem::swap(&mut self.basemap_textures, &mut side.basemap);
-        std::mem::swap(&mut self.cadastral_cells, &mut side.cadastral);
-        std::mem::swap(&mut self.basemap_fetch, &mut side.basemap_fetch);
-        std::mem::swap(&mut self.cadastral_fetch, &mut side.cadastral_fetch);
-        std::mem::swap(&mut self.basemap_tiles_painted, &mut side.painted);
     }
 }
 

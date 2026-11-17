@@ -33,7 +33,7 @@ pub enum ActiveModalDialog {
     CadImportNotice,
 }
 
-pub use crate::modal_types::{default_print_paper_for_printer, topo_crs_label_ko, topo_default_crs_idx, topo_record_key, TOPO_CRS_CANDIDATES, TOPO_CRS_UNKNOWN};
+pub use crate::modal_types::{topo_crs_label_ko, topo_default_crs_idx, topo_record_key, TOPO_CRS_CANDIDATES, TOPO_CRS_UNKNOWN};
 pub use crate::modal_types::{ModalDialogController, TopoTableRow};
 
 pub fn render_strata_modal_header(ui: &mut egui::Ui, title: &str, open: &mut bool) {

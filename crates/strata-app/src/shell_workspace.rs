@@ -14,6 +14,7 @@ impl StrataAppState {
         self.poll_debug_remote_commands(ctx);
         self.handle_cpp_keyboard_shortcuts(ctx);
         self.advance_sheet_pdf(ctx);
+        self.advance_device_print(ctx);
         self.sync_sheet_status();
         self.drop_sketch_when_tool_changed();
         self.resync_card_on_tool_change();
