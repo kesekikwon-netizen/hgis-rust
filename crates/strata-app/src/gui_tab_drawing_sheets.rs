@@ -51,8 +51,8 @@ impl StrataAppState {
             legend_size_mm: d.legend_size_mm,
             removed_items: d.removed_items.clone(),
             coord_callouts: d.coord_callouts.clone(),
-            layers_checked: self.home_map.real_survey.layer_visible.clone(),
         };
+        self.store_layer_set(name);
         self.drawing.stored_sheets.retain(|other| other.title != name);
         self.drawing.stored_sheets.push(kept);
         self.drawing.sheet_ask = None;
@@ -74,14 +74,16 @@ impl StrataAppState {
         d.removed_items = kept.removed_items;
         d.coord_callouts = kept.coord_callouts;
         (d.coord_callout_mode, d.selected_item, d.scale_entry) = (false, None, None);
-        self.home_map.real_survey.layer_visible.extend(kept.layers_checked);
-        self.show_status_message(format!("도면 「{name}」을 열고 그때의 레이어 켜짐을 적용했습니다."));
+        let layers_applied = self.apply_layer_set(name);
+        self.show_status_message(if layers_applied { format!("도면 「{name}」을 열고 그때의 레이어 켜짐을 적용했습니다.") } else { format!("도면 「{name}」을 열었습니다.") });
     }
 
     /// Takes the kept sheet `name` and its layer set out of the list; the working sheet stays (`:158-170`).
     pub(crate) fn remove_stored_sheet(&mut self, name: &str) {
         self.drawing.sheet_ask = None;
+        if !self.drawing.stored_sheets.iter().any(|kept| kept.title==name) { return; }
         self.drawing.stored_sheets.retain(|kept| kept.title != name);
+        self.remove_layer_set(name);
         self.show_status_message(format!("보관한 도면 「{name}」을 지웠습니다."));
     }
 

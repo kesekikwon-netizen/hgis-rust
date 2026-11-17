@@ -64,14 +64,18 @@ impl Rendered {
     }
 
     pub(crate) fn save_if_requested(&self, name: &str) {
-        let Some(directory) = std::env::var_os("STRATA_UI_SNAP_DIR") else {
-            return;
-        };
-        let directory = std::path::PathBuf::from(directory);
-        std::fs::create_dir_all(&directory).expect("snapshot directory");
-        let primitives = self.ctx.tessellate(self.output.shapes.clone(), self.output.pixels_per_point);
-        let picture = crate::gui_tab_drawing::sheet_raster::paint(&primitives, &self.textures, self.output.pixels_per_point, self.size.map(|v| v as usize));
-        assert_eq!(picture.unknown_pictures, 0, "snapshot omitted a real texture");
-        image::save_buffer(directory.join(format!("{name}.png")), &picture.rgb, self.size[0], self.size[1], image::ColorType::Rgb8).expect("actual UI PNG");
+        save_frame_if_requested(&self.ctx, &self.output, &self.textures, self.size, name);
     }
+}
+
+pub(crate) fn save_frame_if_requested(ctx: &Context, output: &FullOutput, textures: &crate::gui_tab_drawing::sheet_raster::Textures, size: [u32; 2], name: &str) {
+    let Some(directory) = std::env::var_os("STRATA_UI_SNAP_DIR") else {
+        return;
+    };
+    let directory = std::path::PathBuf::from(directory);
+    std::fs::create_dir_all(&directory).expect("snapshot directory");
+    let primitives = ctx.tessellate(output.shapes.clone(), output.pixels_per_point);
+    let picture = crate::gui_tab_drawing::sheet_raster::paint(&primitives, textures, output.pixels_per_point, size.map(|v| v as usize));
+    assert_eq!(picture.unknown_pictures, 0, "snapshot omitted a real texture");
+    image::save_buffer(directory.join(format!("{name}.png")), &picture.rgb, size[0], size[1], image::ColorType::Rgb8).expect("actual UI PNG");
 }

@@ -44,11 +44,14 @@ fn opening_a_kept_sheet_brings_it_all_back() {
     app.drawing.removed_items.insert(SheetItem::CrsLabel);
     app.drawing.coord_callouts.push(CoordCallout { ground: [220_010.0, 330_020.0] });
     app.drawing.title_ko = "1호 주거지 실측도".to_owned();
+    app.left_layers.ensure_domain_layer(strata_types::schema::DomainLayerKey::SurveyArea);
+    app.left_layers.entries[0].visible = false;
     app.home_map.real_survey.layer_visible.insert("조사구역".to_owned(), false);
     app.store_sheet("실측도");
 
     app.drawing = crate::tab_drawing::DrawingTabState { stored_sheets: app.drawing.stored_sheets.clone(), ..Default::default() };
     app.home_map.real_survey.layer_visible.insert("조사구역".to_owned(), true);
+    app.left_layers.entries[0].visible = true;
     app.open_stored_sheet("실측도");
 
     let d = &app.drawing;

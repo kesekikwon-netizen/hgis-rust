@@ -91,6 +91,10 @@ impl StrataAppState {
     /// 조사 데이터 그룹만 지운다(사용자 지적 2026-11-09: 레이어가 남아 있었다).
     pub(super) fn reset_survey_workspace(&mut self, name: &str) {
         self.project_title = name.to_owned();
+        self.layer_sets = Default::default();
+        self.drawing.stored_sheets.clear();
+        self.drawing.sheet_ask = None;
+        self.drawing.sheet_set_menu_open = false;
         self.survey_path = None;
         self.survey_tables.clear();
         // C++ newSurvey·openSurveyGpkg 의 m_editLayer = nullptr — 이전 조사의 그리기 대상을 남기지 않는다.

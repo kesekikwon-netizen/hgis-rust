@@ -7,7 +7,7 @@ impl StrataAppState {
         ui.menu_button("레이어", |ui| {
             ui.set_width(340.0);
             let height = (ui.ctx().screen_rect().height() - 160.0).clamp(100.0, 440.0);
-            egui::ScrollArea::vertical().id_salt("compact_layer_pane").max_height(height).auto_shrink([false, false]).show(ui, |ui| {
+            egui::ScrollArea::vertical().id_salt("compact_layer_pane").drag_to_scroll(false).max_height(height).auto_shrink([false, false]).show(ui, |ui| {
                 ui.set_height(UX_LAYER_CARD_HEIGHT + UX_FILE_DRAWER_HEIGHT + 8.0);
                 self.paint_layer_pane_body(ui, show_set_btn);
             });

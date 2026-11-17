@@ -19,5 +19,10 @@ mod gui_layer_panel_rows;
 mod gui_layer_panel_tree;
 #[path = "gui_layer_panel_body.rs"]
 mod gui_layer_panel_body;
+#[path = "layer_sets.rs"]
+pub(crate) mod layer_sets;
+#[cfg(test)]
+#[path = "layer_sets_ui_tests.rs"]
+mod layer_sets_ui_tests;
 
 pub use gui_layer_panel_consts::*;

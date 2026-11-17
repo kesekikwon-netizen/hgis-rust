@@ -28,6 +28,7 @@ impl StrataAppState {
         let mut app = Self {
             explorer: crate::gui_tab_home::explorer::ExplorerState::default(),
             printing: crate::dlg_drawing_print::print_state::PrintTabState::default(),
+            layer_sets: crate::gui_layer_panel::layer_sets::LayerSetState::default(),
             active_tab: MainTab::Home,
             open_studio_tabs: Vec::new(),
             scale_menu_open: false,

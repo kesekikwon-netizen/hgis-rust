@@ -174,34 +174,6 @@ impl LeftLayerPanel {
     }
 }
 
-/// C++ `LayerPresetType` 레이어 세트 프리셋 4종 1:1 대응
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LayerPresetType {
-    SurveyGridMode,
-    FeatureDetailedMode,
-    TopographyAnalysis,
-    CadastralOverlay,
-}
-
-impl LayerPresetType {
-    pub const ALL: [Self; 4] = [
-        Self::SurveyGridMode,
-        Self::FeatureDetailedMode,
-        Self::TopographyAnalysis,
-        Self::CadastralOverlay,
-    ];
-
-    #[must_use]
-    pub const fn label_ko(self) -> &'static str {
-        match self {
-            Self::SurveyGridMode => "시굴·조사구역 중심",
-            Self::FeatureDetailedMode => "유구·유물 정밀도면",
-            Self::TopographyAnalysis => "등고선·지형·수계 분석",
-            Self::CadastralOverlay => "지적도·항공사진 중첩",
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

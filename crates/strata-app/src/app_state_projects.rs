@@ -209,6 +209,9 @@ impl StrataAppState {
 
         // 카드에 적던 글도 함께 쓴다(C++ 은 「저장」 단추를 누르면 칸을 떠나며 먼저 쓴다 — Ctrl+S 때도 잃지 않게).
         self.commit_card_typing();
+        if path.exists() {
+            if let Err(e) = crate::gui_layer_panel::layer_sets::persistence::read(path) { self.report_save_failure(&e); return false; }
+        }
         if !path.exists() {
             if let Err(e) = strata_storage::gpkg::GpkgRepository::create_new_survey(path, self.work_crs) {
                 let detail = crate::dlg_new_survey::new_survey_error_text(&e);
@@ -248,6 +251,7 @@ impl StrataAppState {
         self.record_survey_facts(&written);
         // The received maps of the legend, for the next open (survey_map_list.rs).
         let maps_kept = self.write_survey_map_list(&written).is_ok();
+        if let Err(e) = crate::gui_layer_panel::layer_sets::persistence::write(&self.layer_sets, &written) { self.report_save_failure(&e); return false; }
         self.survey_path = Some(written);
         self.is_dirty = false;
         self.home_map.draw_guide_message = Some(if maps_kept {

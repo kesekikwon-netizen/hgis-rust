@@ -22,7 +22,8 @@ impl StrataAppState {
             )
             .show_inside(ui, |ui| {
                 let height = ui.available_height();
-                egui::ScrollArea::vertical().id_salt("layer_pane_contents").max_height(height).auto_shrink([false, false]).show(ui, |ui| {
+                // target/cpp-ref/src/app/KaDrawingStudio.cpp:795: desktop controls do not drag-scroll their containing pane.
+                egui::ScrollArea::vertical().id_salt("layer_pane_contents").drag_to_scroll(false).max_height(height).auto_shrink([false, false]).show(ui, |ui| {
                     ui.set_height(height.max(683.0));
                     self.paint_layer_pane_body(ui, show_set_btn);
                 });
@@ -56,26 +57,7 @@ impl StrataAppState {
                 ui.with_layout(
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    egui::RichText::new("세트 ▼").size(11.5),
-                                )
-                                .frame(false),
-                            )
-                            .on_hover_text(
-                                "레이어 가시성 프리셋 전환 (시굴격자 작업 · 유구 정밀 실측 · 지형·등고 분석 · 지적·주변유산 대조)",
-                            )
-                            .clicked()
-                        {
-                            let next_idx = (self.left_layers.entries.len()) % 4;
-                            let preset =
-                                crate::left_layer_panel::LayerPresetType::ALL[next_idx];
-                            self.home_map.draw_guide_message = Some(format!(
-                                "레이어 세트 프리셋 「{}」을(를) 적용했습니다.",
-                                preset.label_ko()
-                            ));
-                        }
+                        self.paint_layer_set_menu(ui);
                     },
                 );
             }

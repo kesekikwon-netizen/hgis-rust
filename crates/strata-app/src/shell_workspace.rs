@@ -110,6 +110,7 @@ impl StrataAppState {
         self.render_feature_form(ctx);
         self.render_feature_record(ctx);
         self.render_rename_layer(ctx);
+        self.render_layer_set_question(ctx);
         central_rect
     }
 

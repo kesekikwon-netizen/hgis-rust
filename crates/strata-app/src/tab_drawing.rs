@@ -83,7 +83,6 @@ pub struct StoredSheet {
     pub(crate) legend_size_mm: Option<[f32; 2]>,
     pub removed_items: std::collections::BTreeSet<SheetItem>,
     pub coord_callouts: Vec<CoordCallout>,
-    pub layers_checked: std::collections::BTreeMap<String, bool>,
 }
 
 impl Default for DrawingTabState {

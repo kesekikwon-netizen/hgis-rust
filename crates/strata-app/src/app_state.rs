@@ -65,6 +65,7 @@ pub use app_state_types::*;
 pub struct StrataAppState {
     pub(crate) explorer: crate::gui_tab_home::explorer::ExplorerState,
     pub(crate) printing: crate::dlg_drawing_print::print_state::PrintTabState,
+    pub(crate) layer_sets: crate::gui_layer_panel::layer_sets::LayerSetState,
     pub active_tab: MainTab,
     pub open_studio_tabs: Vec<MainTab>,
     pub scale_menu_open: bool,

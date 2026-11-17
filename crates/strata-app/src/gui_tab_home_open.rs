@@ -42,9 +42,12 @@ impl StrataAppState {
             target = companion;
         }
         // C++ :246-251 — 바꾸기 전에 검사하고, 실패하면 「조사 열기 실패」만 알린다.
-        let read = validate_survey_for_open(&target)
-            .and_then(|()| read_survey_tables(&target).map_err(|e| e.to_string()));
-        let tables = match read {
+        let read = validate_survey_for_open(&target).and_then(|()| {
+            let sets = crate::gui_layer_panel::layer_sets::persistence::read(&target)?;
+            let tables = read_survey_tables(&target).map_err(|e| e.to_string())?;
+            Ok((tables, sets))
+        });
+        let (tables, sets) = match read {
             Ok(t) => t,
             Err(msg) => {
                 self.home_map.draw_guide_message = Some(format!("조사 열기 실패: {msg}"));
@@ -54,6 +57,7 @@ impl StrataAppState {
         // C++ :389 kaSafeClearQgisProject — 이전 조사를 비운다. 작업 좌표계는 바꾸지 않는다(:770).
         let title = target.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         self.reset_survey_workspace(&title);
+        self.layer_sets = sets;
         // C++ 은 이 길에서 상태줄에 아무 말도 띄우지 않는다(빈 글 = 기본 안내도 없음).
         self.home_map.draw_guide_message = Some(String::new());
         // C++ :775 addNonEmptyDomainLayers — 도형이 있는 표만 올린다.
