@@ -8,6 +8,14 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "target/cpp-ref/src/app/KaFeatureCard.cpp": "68c12c471bb1005b5df50e2101fefb5fa17f8032de080b440494607fe3a02a51",
+    "target/cpp-ref/src/app/MainWindowSession.cpp": "db442da24cf55cee4c4c92c1b8a8dc170a9cdff32579b092b429f7a6d72d5600",
+    "crates/strata-app/src/save_before_input_tests.rs": "4ac9700b2a45e6b89a1d8b529bf4bc856f2308acb26df733f3368ef0eb763624",
+    "crates/strata-app/src/gui_tab_home_open.rs": "66e0e0fa5f53e758c1fb3d32439dbc7b2e794867a35b9945447de316824ac0af",
+    "crates/strata-app/src/app_state_projects.rs": "93f4a91bc050fbc92d92e10c0904f4ad4e3faa2c1d3a8fb71d04094c6951b09d",
+    "crates/strata-app/src/app_state_feature_card.rs": "632cc06bc925503098433bb043a469edfb824961970ae39b357ed06b5fd11633",
+    "crates/strata-app/src/app_state_feature_record.rs": "0e4e17cd4c44833c69b38020e2ea4c389dd4ddb01a8cf924748e3aaf223c6b23",
+    "crates/strata-app/src/app_state_save_before.rs": "c971003cf080619fbf81efa7a1a7ccd0ab209ab8534ac7626c08f372699c89c8",
     "target/cpp-ref/tests/test_editing_tools.cpp": "1ec635252608aced322649d6b560cdd92a51d8ac9e423fe012f22eafe839d7df",
     "target/cpp-ref/src/app/KaVertexEditTool.cpp": "55d536e65c3e67cf4e4294dbe46b7f6361290573abcd7a274f368cb833d8d8c8",
     "crates/strata-app/src/vertex_key_rejection_tests.rs": "b99c96aae266debd7c8859affa684ee4f8bd8378050486ea091ff0ecbd51e186",
@@ -21,7 +29,7 @@ REVIEWED_DIGESTS = {
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
     "crates/strata-app/src/popup_input_harness.rs": "3dd639598970e668578415ff5d7702c37de47b4f850aa587c305b59970f1f6a2",
     "crates/strata-app/src/shell_workspace.rs": "253505e2b32e7124948be7f2d43265bcee90726da6bf7114e546e2010402a288",
-    "crates/strata-app/src/gui_shell.rs": "a5cdc21f9d0316b9f8135526e9fd5f2d227338b7ac96c99eef03eadb4211994d",
+    "crates/strata-app/src/gui_shell.rs": "3bd2f792a13896737757dc3083fbc1eafe01effc3faac96e7d2cb6f5fd77968a",
     "crates/strata-app/src/gui_shell_escape.rs": "37a738f061a24b7bc01fac480a840e09dc93abf53162e56d1da0b70cbd2c45e7",
     "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
@@ -59,10 +67,10 @@ def build_cases(root):
 
     add('file.new', '조사 > 새 조사 / Ctrl+N', 0, '부분 구현', [('MainWindowRibbon.cpp', 'actNew')],
         ['app_state_save_before.rs', 'app_state_save_before_tests.rs'], ['미저장 변경 유무', '저장 성공·실패', '처리 중 중복 요청'],
-        ['기존 보존 검사 연결; 파일 선택 취소·저장 실패·반복 전환의 실제 UI 전체 확인'])
+        ['MENU9 저장 질문의 입력 소유권·응답·미저장 글 보존 확인; 새 조사 작성·파일 선택 취소·반복 전환의 전체 UI는 남음'])
     add('file.open', '조사 > 열기 / Ctrl+O / 파일 끌어놓기', 0, '부분 구현', [('MainWindowRibbon.cpp', 'actOpen')],
         ['gui_tab_home_open.rs', 'app_state_save_before.rs', 'user_files.rs'], ['정상·잘못된 GPKG', '미저장 변경', '읽기 전용·없는 경로'],
-        ['열기 실패 시 기존 조사 유지와 모든 진입점의 동일한 저장 확인 UI 재대조'])
+        ['MENU9 저장 질문의 입력·응답과 임시 파일 열기 요청의 버리기·취소 확인; 저장 후 열기·파일 선택기·모든 진입점·열기 실패 UI는 남음'])
     add('file.recent', '홈 > 최근 조사 / 이어서 열기', 0, '부분 구현', ['KaHomeRecentCard.cpp'],
         ['gui_tab_home.rs', 'app_state_save_before_tests.rs'], ['원본 존재·없음', '미저장 변경', '폴더 이동'],
         ['홈 탐색기 현재 UI와 기존 최근 조사 검사 연결; 원본 없음·복귀 상태 확인'])
@@ -73,6 +81,15 @@ def build_cases(root):
         ['app_state_projects.rs', 'gui_shell.rs'], ['원본·새 경로', '대상 존재', '취소'], ['원본 보존·레이어 및 외부 자료 경로·저장 후 현재 조사 전환 재대조'])
     add('file.close', '창 닫기 > 저장 / 버리기 / 취소', 0, '검증 안 됨', ['MainWindow.cpp'],
         ['shell_workspace.rs', 'app_state_save_before.rs'], ['미저장·작업 중·모달', '저장 실패'], ['닫기 경로와 기존 새 조사·열기 저장 확인의 차이를 실제 UI로 확인'])
+    add('file.save-before-input', '새 조사·열기 전 저장 질문 > 입력 소유권·명시적 응답', 0, '완료',
+        [('MainWindowSession.cpp', 'bool MainWindow::confirmSaveBeforeOpeningSurvey'), ('KaFeatureCard.cpp', 'void KaFeatureCard::commitTyping'),
+         ('target/cpp-ref/tests/test_save_open.cpp', 'void open_unsavedWorkRespectsAnswer()')],
+        ['app_state_save_before.rs', 'app_state_feature_record.rs', 'app_state_feature_card.rs', 'app_state_projects.rs', 'gui_tab_home_open.rs',
+         'gui_shell.rs', 'gui_shell_escape.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'menu_selection_keys_tests.rs', 'save_before_input_tests.rs'],
+        ['1680×960·480×640 생산 UI', '추적 데모 사본·미저장 속성과 실제 메모 입력', 'Delete·CtrlZ·CtrlY·Esc·Enter',
+         '임시 파일 열기 요청·중복 CtrlN과 직접 요청', '창 밖 홈 탭 클릭', '새 조사 요청 저장·취소·저장 실패 / 임시 파일 열기 요청 버리기·취소'], [],
+        '질문 중 자료·이력·도구·선택 유지; Esc는 질문만 취소하며 정상 키가 재개됨. 명시적 저장만 임시 파일에 기록; 저장 실패는 현재 Rust 질문을 유지. 네이티브 파일 선택기·닫기 질문·Tab 순서·모든 입력 조합은 이 행의 범위 밖',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 저장 전 질문의 입력')}])
     for id, key, label in [('undo', 'Undo', 'Ctrl+Z'), ('redo', 'Redo', 'Ctrl+Y')]:
         add('edit.' + id, '편집 > ' + label, 0, '부분 구현', ['MainWindowUndo.cpp', ('MainWindowRibbon.cpp', 'act' + key)],
             ['gui_shell.rs', 'app_state_layer_remove.rs'], ['선택 도형·레이어', '그리기·정합·도면', '텍스트 포커스', '되돌릴 항목 없음'],
@@ -93,13 +110,13 @@ def build_cases(root):
             ['기존 실제 캡처 입력 검사 연결; 스냅·그리기 행 작은 화면·모든 복귀 상태 포함한 최종 대조'])
     add('key.escape-native', '레이어·작은 리본 메뉴 > 첫 Esc / 다음 Esc', 0, '완료',
         [('MainWindowContextMenus.cpp', 'menu.exec'), ('KaCaptureMapTool.cpp', 'Qt::Key_Escape')],
-        ['native_menu_input.rs', 'gui_shell_escape.rs', 'gui_shell.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'popup_escape_tests.rs'],
+        ['native_menu_input.rs', 'gui_shell_escape.rs', 'gui_shell.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'app_state_feature_record.rs', 'popup_escape_tests.rs'],
         ['1024×768 생산 UI', '그리던 점 3개', '반복 열기·하위 메뉴', '별도 메뉴 없는 캔버스의 같은 입력 묶음 Esc+Enter'], [],
         '첫 Esc는 메뉴만 닫고 점 보존; 다음 Esc는 정상 캔버스 취소. 이 행은 검사한 두 루트에 한정',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 기본 메뉴 Esc')}])
     add('key.escape-target', '자석 대상 선택 > 선택 유지·Esc·다시 열기', 0, '완료',
         ['KaSnapSettingsWidget.cpp', ('KaCaptureMapTool.cpp', 'Qt::Key_Escape')],
-        ['native_menu_input.rs', 'gui_shell.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'native_popup_escape_tests.rs'],
+        ['native_menu_input.rs', 'gui_shell.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'app_state_feature_record.rs', 'native_popup_escape_tests.rs'],
         ['1680×960 생산 UI', '현재·모든 조사 실제 선택', '같은 묶음의 클릭 해제+Esc'], [],
         '팝업 닫기 뒤 그리던 점과 선택값 유지; 다음 Esc는 캔버스 취소. 실제 스냅 계산 완료를 뜻하지 않음',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 그리기 대상 팝업')}])
@@ -108,19 +125,19 @@ def build_cases(root):
         ['메뉴 종류별', '포커스·기록 입력·그리기 중', '반복 열기'], ['기존 MENU3·MENU4·MENU5와 겹치지 않는 종류만 재현'])
     add('key.capture-menu', '작성 중 도형 > 기본 메뉴·자석 대상·검색칸의 Enter / Delete / Backspace', 0, '완료',
         [('KaCaptureMapTool.cpp', 'void KaCaptureMapTool::keyPressEvent')],
-        ['gui_shell.rs', 'gui_shell_escape.rs', 'shell_workspace.rs', 'native_menu_input.rs', 'popup_input_harness.rs', 'menu_capture_keys_tests.rs'],
+        ['gui_shell.rs', 'gui_shell_escape.rs', 'shell_workspace.rs', 'native_menu_input.rs', 'popup_input_harness.rs', 'app_state_feature_record.rs', 'menu_capture_keys_tests.rs'],
         ['1024×768 레이어·기록 메뉴', '1680×960 자석 대상·실제 검색칸', 'EPSG:5187 그리던 세 점', '메뉴 열기 클릭 해제+Delete 같은 묶음'], [],
         '메뉴에서는 점·도형 수·변경 상태 유지; 닫은 뒤 캔버스 키 재개. 검색칸은 기존 포커스 보호 유지. 사용자 데이터 보존 결정이며 Qt 메뉴 내부 단축키와의 동일성 주장이 아님',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 메뉴의 편집 키')}])
     add('key.selection-menu', '기존 선택 자료 > 레이어 메뉴의 Delete·꼭짓점 Backspace / 우클릭 Delete', 0, '완료',
         [('MainWindow.cpp', 'auto* delAct'), ('KaFeatureSelectTool.cpp', 'void KaFeatureSelectTool::keyPressEvent'), ('target/cpp-ref/tests/test_save_open.cpp', 'void layerDeleteKeyPreservesSourceAndUndoRestoresPendingEdits')],
-        ['gui_shell.rs', 'gui_shell_escape.rs', 'native_menu_input.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'menu_selection_keys_tests.rs', 'app_state_vertex_edit.rs'],
+        ['gui_shell.rs', 'gui_shell_escape.rs', 'native_menu_input.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'app_state_feature_record.rs', 'menu_selection_keys_tests.rs', 'app_state_vertex_edit.rs'],
         ['1024×768 기본 레이어 메뉴', '1680×960 레이어 우클릭 Delete', '실제 범례 클릭·기존 피처 ID와 꼭짓점 선택 고정물', '저장 전 속성·반복 열기·파일 바이트', '같은 묶음 Delete+Backspace 한 번 편집·Esc+Backspace 편집 없음'], [],
         '메뉴 Delete는 자료 보존; 닫은 뒤 정상 삭제와 CtrlZ가 같은 ID·도형·속성을 복원하고 파일 유지. C++의 원본 보존 계약과 사용자 메뉴 격리 결정이며 Qt 전체 단축키 동일성은 미확인',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 메뉴의 선택 삭제')}])
     add('key.history-native', '지도 편집 이력 > 기본 레이어 메뉴의 CtrlZ·CtrlY / Delete+CtrlZ 순서', 0, '완료',
         [('MainWindowUndo.cpp', 'void MainWindow::undoMapAction'), ('MainWindowUndo.cpp', 'void MainWindow::redoMapAction')],
-        ['gui_shell.rs', 'gui_shell_escape.rs', 'native_menu_input.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'menu_selection_keys_tests.rs'],
+        ['gui_shell.rs', 'gui_shell_escape.rs', 'native_menu_input.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'app_state_feature_record.rs', 'menu_selection_keys_tests.rs'],
         ['1024×768 기본 레이어 메뉴', '저장 전 속성이 있는 기존 도형', '메뉴 닫은 뒤 실제 CtrlZ·CtrlY', '같은 묶음 Delete 뒤 CtrlZ가 같은 ID·WKT·속성 복원'], [],
         '메뉴 뒤 이력 유지; 닫은 뒤 정상 이력 명령 재개. 입력칸·도면·정합·다른 메뉴 전체와 Qt 단축키 내부 동일성은 이 행의 범위에 포함하지 않음',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 메뉴의 이력 소유권')}])
@@ -128,7 +145,7 @@ def build_cases(root):
         [('KaFeatureSelectTool.cpp', 'bool KaFeatureSelectTool::deleteActiveVertex'), ('KaVertexEditTool.cpp', 'const int minCount'),
          ('target/cpp-ref/tests/test_editing_tools.cpp', 'void TestEditingTools::clickedHandleIsPickedAndDeleteRemovesOnlyThatVertex')],
         ['app_state_vertex_edit.rs', 'app_state_vertex_edit_tests.rs', 'gui_shell.rs', 'gui_shell_escape.rs', 'shell_workspace.rs',
-         'popup_input_harness.rs', 'menu_selection_keys_tests.rs', 'vertex_key_rejection_tests.rs'],
+         'popup_input_harness.rs', 'app_state_feature_record.rs', 'menu_selection_keys_tests.rs', 'vertex_key_rejection_tests.rs'],
         ['1680×960 생산 UI', '추적 데모의 삼각형·두 점 선', '표 CRS EPSG:5186·작업 EPSG:5187', '임시 저장한 조사·저장 전 속성',
          '반복 Delete·Backspace', '기존 거부 문구·기록·이력·변경 상태·파일 바이트'], [],
         '삭제 거부는 키를 소비해 전체 도형 삭제로 넘어가지 않음; Esc로 꼭짓점 선택 해제 후 의도적인 도형 삭제와 CtrlZ는 정상. 알고리즘·최소 점수는 변경하지 않음',

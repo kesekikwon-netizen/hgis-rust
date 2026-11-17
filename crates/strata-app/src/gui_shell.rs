@@ -236,3 +236,7 @@ mod menu_selection_keys_tests;
 #[cfg(test)]
 #[path = "vertex_key_rejection_tests.rs"]
 mod vertex_key_rejection_tests;
+
+#[cfg(test)]
+#[path = "save_before_input_tests.rs"]
+mod save_before_input_tests;

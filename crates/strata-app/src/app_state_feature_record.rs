@@ -10,6 +10,8 @@ impl StrataAppState {
     pub(crate) fn modal_window_open(&self) -> bool {
         // The PDF of the sheet holds the app while it is made (KaDrawingPdfProgress.cpp:14 ApplicationModal).
         self.drawing.pdf.0.is_some()
+            // target/cpp-ref/src/app/MainWindowSession.cpp:1186-1193: save-before question is modal too.
+            || self.save_before.is_some()
             || self.layer_set_question_open()
             || self.home_map.feature_form.is_some()
             || self.home_map.survey_area_setup.is_some()
