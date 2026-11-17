@@ -16,6 +16,8 @@ pub struct HeritageAutomation {
     pub(super) token: u64,
     /// Ticks spent in the current stage without an answer moving it on.
     pub(super) quiet_ticks: u8,
+    pub(super) observed_at_ms: u64,
+    pub(super) region_poll_at_ms: u64,
     /// How many times the browser was sent to the login page.
     pub(super) opens: u8,
     /// The kind being fetched, as an index into [`super::scripts::KINDS`].
@@ -52,6 +54,24 @@ pub struct HeritageAutomation {
 }
 
 impl HeritageAutomation {
+    /// Observes the browser frame time before accepting its callbacks.
+    pub fn observe_time(&mut self, now_ms: u64) {
+        self.observed_at_ms = self.observed_at_ms.max(now_ms);
+        if matches!(
+            self.stage,
+            HeritageStage::Region | HeritageStage::RegionReady
+        ) {
+            // C++ counts timer polls before its in-flight return, not completed answers
+            // (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:871-885`).
+            let polls =
+                self.observed_at_ms.saturating_sub(self.region_poll_at_ms) / super::LOGIN_POLL_MS;
+            self.quiet_ticks = self
+                .quiet_ticks
+                .saturating_add(u8::try_from(polls).unwrap_or(u8::MAX));
+            self.region_poll_at_ms += polls * super::LOGIN_POLL_MS;
+        }
+    }
+
     /// Starts a run in [`HeritageStage::Idle`]; the first `next_step` opens the portal.
     #[must_use]
     pub fn new(config: HeritageConfig) -> Self {
@@ -60,6 +80,8 @@ impl HeritageAutomation {
             stage: HeritageStage::Idle,
             token: 0,
             quiet_ticks: 0,
+            observed_at_ms: 0,
+            region_poll_at_ms: 0,
             opens: 0,
             kind_index: 0,
             pending: None,
@@ -120,6 +142,7 @@ impl HeritageAutomation {
     /// `host` is used to open the portal; every later step is a script whose answer comes
     /// back through [`Self::script_answered`].
     pub fn next_step(&mut self, host: &mut dyn PageHost, now_ms: u64) -> Option<ScriptCall> {
+        self.observe_time(now_ms);
         // The portal is opened once, as soon as the browser has a page to open it in. That is
         // a navigation, not a script, so this call answers `None`.
         if self.stage == HeritageStage::Idle {

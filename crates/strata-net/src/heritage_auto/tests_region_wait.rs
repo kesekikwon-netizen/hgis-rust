@@ -5,7 +5,7 @@ use super::{
     LOGIN_POLL_MS,
 };
 
-struct Host;
+pub(super) struct Host;
 impl PageHost for Host {
     fn pages(&self) -> Vec<PageRef> {
         vec![PageRef {
@@ -20,12 +20,12 @@ impl PageHost for Host {
     fn navigate(&mut self, _: &str) {}
 }
 
-struct Run {
-    machine: HeritageAutomation,
+pub(super) struct Run {
+    pub(super) machine: HeritageAutomation,
     clock: u64,
 }
 impl Run {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let mut machine = HeritageAutomation::new(HeritageConfig {
             account_id: "fixture-user".into(),
             account_password: "fixture-password".into(),
@@ -38,6 +38,7 @@ impl Run {
     }
     fn reply(&mut self, value: &str) -> Option<HeritageEvent> {
         self.clock += LOGIN_POLL_MS;
+        self.machine.observe_time(self.clock);
         let token = if self.clock == LOGIN_POLL_MS {
             self.machine.current_token()
         } else {

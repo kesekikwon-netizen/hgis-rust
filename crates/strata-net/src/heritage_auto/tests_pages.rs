@@ -103,11 +103,13 @@ fn an_unknown_sido_names_it() {
 #[test]
 fn an_unknown_city_names_it_and_counts_the_rest() {
     let mut m = at(HeritageStage::Region);
-    for _ in 0..12 {
+    for poll in 1..=12 {
+        m.observe_time(poll * super::LOGIN_POLL_MS);
         let token = m.current_token();
         assert!(m.script_answered(token, "sigungu:22").is_none());
         m.force_stage(HeritageStage::Region);
     }
+    m.observe_time(13 * super::LOGIN_POLL_MS);
     let ev = m.script_answered(m.current_token(), "sigungu:22");
     let Some(HeritageEvent::Stopped(words)) = ev else {
         panic!("did not stop: {ev:?}");

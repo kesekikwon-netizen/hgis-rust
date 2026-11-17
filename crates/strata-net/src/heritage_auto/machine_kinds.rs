@@ -154,6 +154,7 @@ impl HeritageAutomation {
     ///
     /// The C++ does both from its poll (`KaHeritageBrowser.cpp:1470-1524`).
     pub fn timers(&mut self, now_ms: u64) -> Vec<HeritageEvent> {
+        self.observe_time(now_ms);
         let mut events = std::mem::take(&mut self.queued_events);
         if !self.is_over()
             && !matches!(self.stage, HeritageStage::Waiting | HeritageStage::Idle)

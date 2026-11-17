@@ -184,6 +184,7 @@ impl HeritageRunHandle {
         let mut core = self.core.borrow_mut();
         let now = core.now();
         let Core { machine, host, .. } = &mut *core;
+        machine.observe_time(now);
         host.pages = pages(browser);
         for event in reported {
             match event {

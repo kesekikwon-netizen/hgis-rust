@@ -28,6 +28,9 @@ impl HeritageAutomation {
     /// Moves the run on and invalidates the previous stage's callback (`:658-659`).
     pub(super) fn go(&mut self, stage: HeritageStage) {
         self.phase_since_ms = self.asked_at_ms;
+        if stage == HeritageStage::Region {
+            self.region_poll_at_ms = self.observed_at_ms.max(self.asked_at_ms);
+        }
         if stage == HeritageStage::Kind {
             self.baseline = None;
         }

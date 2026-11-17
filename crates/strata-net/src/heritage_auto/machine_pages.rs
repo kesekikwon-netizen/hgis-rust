@@ -39,13 +39,6 @@ impl HeritageAutomation {
 
     /// One answer to a page stage. Each arm is one C++ callback's body.
     pub(super) fn on_page_answer(&mut self, value: &str) -> Option<HeritageEvent> {
-        // Readback and reselection share SelectRegion's budget (`KaHeritageBrowser.cpp:1036-1079`).
-        if matches!(
-            self.stage,
-            HeritageStage::Region | HeritageStage::RegionReady
-        ) {
-            self.quiet_ticks = self.quiet_ticks.saturating_add(1);
-        }
         match self.stage.clone() {
             HeritageStage::DismissTutorial => self.on_tutorial(value),
             HeritageStage::DownloadPage => self.on_download_page(value),
