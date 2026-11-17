@@ -17,6 +17,10 @@ pub(crate) fn download_page(city: &(String, String), delay: u64, empty: bool) ->
 <script>
 var fixtureReady=false;
 function mark(path){{fetch('/fixture/'+path);}}
+// target/cpp-ref/src/core/HeritageIntranetFlow.cpp:306-315: exact label alternatives.
+function cityPlaceholder(code){{
+  return code==='B'?'시군구선택':code==='U'?'시·군·구선택':'시/군/구선택';
+}}
 function resetResult(){{
   fixtureReady=false;
   document.getElementById('count').textContent='검색결과 37 건';
@@ -26,7 +30,15 @@ function resetResult(){{
 function installForm(code){{
   var old=document.getElementById('searchForm');
   var fresh=document.getElementById('formTemplate').content.firstElementChild.cloneNode(true);
-  fresh.querySelector('#mode').value=code;old.replaceWith(fresh);resetResult();
+  fresh.querySelector('#mode').value=code;
+  // target/cpp-ref/tests/test_heritage_browser.cpp:248-283: municipal B/U/R/E fields.
+  var sido=fresh.querySelector('[name=codedetaCd]'),city=fresh.querySelector('[name=codeCdSg]');
+  if('BURE'.indexOf(code)>=0){{
+    sido.id='bjdcd1_bcheF';sido.name='bjdCd';city.id='bjdcd2_bcheF';city.name='bjdCd1';
+    sido.options[0].text=code==='B'?'시·도선택':code==='U'?'시/도선택':'시도선택';
+  }}
+  city.options[0].text=cityPlaceholder(code);
+  old.replaceWith(fresh);resetResult();
 }}
 function changeTab(code){{
   mark('kind-request');
@@ -34,8 +46,8 @@ function changeTab(code){{
   setTimeout(function(){{installForm(code);}},{delay});
 }}
 function loadCities(){{
-  var city=document.getElementById('codeCdSg0');
-  city.innerHTML='<option value="">시군구선택</option>';
+  var city=document.querySelector('#searchForm select[name=codeCdSg],#searchForm select[name=bjdCd1]');
+  city.innerHTML='<option value="">'+cityPlaceholder(document.getElementById('mode').value)+'</option>';
   setTimeout(function(){{var option=document.createElement('option');
     option.value='4713';option.text='{sgg}';city.appendChild(option);}},{delay});
 }}
@@ -65,7 +77,7 @@ function downloadAll(){{
   <select id="codedetaCd0" name="codedetaCd" onchange="loadCities()">
     <option value="">시도선택</option><option value="47">{sido}</option>
   </select>
-  <select id="codeCdSg0" name="codeCdSg"><option value="">시군구선택</option></select>
+  <select id="codeCdSg0" name="codeCdSg"><option value="">시/군/구선택</option></select>
   <select id="pageSize" name="pageSize"><option>10개씩 보기</option><option>100개씩 보기</option></select>
   <button type="button" id="searchGisChaRirList" onclick="search()">검색</button>
   <button type="button" id="downloadFilesAll" onclick="downloadAll()">전체다운로드</button>

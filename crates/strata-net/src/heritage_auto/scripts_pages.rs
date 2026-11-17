@@ -64,14 +64,14 @@ pub fn select_region_script(sido: &str, city: &str) -> String {
          if(sidoAt<0){{for(var i=0;i<all.length;i++){{\
          if(!df&&key(all[i]).indexOf('bjdcd')>=0)continue;\
          var f=firstOption(all[i]);\
-         if(f.indexOf('시도선택')>=0||f.indexOf('광역시선택')>=0||f.indexOf('전체선택')>=0){{sidoAt=i;break;}}}}}}\
+         if(f.indexOf('시도선택')>=0||f.indexOf('시·도선택')>=0||f.indexOf('시/도선택')>=0){{sidoAt=i;break;}}}}}}\
          if(sidoAt<0)return 'not-found';\
          var sidoSel=all[sidoAt];\
          var citySel=null;\
          for(var i=sidoAt+1;i<all.length;i++){{\
          if(sidoSel.form&&all[i].form!==sidoSel.form)continue;\
          var f=firstOption(all[i]);\
-         if(f.indexOf('시군구선택')>=0||f.indexOf('시군선택')>=0||f.indexOf('시·군·구선택')>=0){{citySel=all[i];break;}}}}\
+         if(f.indexOf('시/군/구선택')>=0||f.indexOf('시군구선택')>=0||f.indexOf('시·군·구선택')>=0){{citySel=all[i];break;}}}}\
          function pick(sel,text,exact){{if(!sel)return false;\
          for(var i=0;i<sel.options.length;i++){{\
          if(exact?squash(sel.options[i].text)!==squash(text):!same(sel.options[i].text,text))continue;\
