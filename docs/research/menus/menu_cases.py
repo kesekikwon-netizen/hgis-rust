@@ -1,0 +1,187 @@
+"""Reviewed functional cases. Generated discovery/reports stay under .codex.
+
+File-level references in unverified cases are starting points, not parity proof.
+Conditions and return behavior describe the scope still needing investigation.
+Only explicitly scoped production-UI cases can be complete; digests are frozen
+when their evidence is reviewed, never recomputed by the report generator.
+"""
+import re
+
+REVIEWED_DIGESTS = {
+    "crates/strata-app/src/popup_input_harness.rs": "75030c6dead3542613b121abf3786a80270a0069b5de8aac0edfd50fda2cd616",
+    "crates/strata-app/src/shell_workspace.rs": "bf6452ffd90c72863fb7444d076114c1bcd2c8e2fbc06248e6d83dcc28898c1a",
+    "crates/strata-app/src/gui_shell.rs": "0509bb52b81117d8786d2497f97234522dc5efb2fe6255e2b6e93b714213569a",
+    "crates/strata-app/src/gui_shell_escape.rs": "ac2f5a41fbb0be04085562e79bd8e47d17ca54ef9853942644dc63dab34dd620",
+    "crates/strata-app/src/native_menu_input.rs": "e085b1bc120a9e1d178fc396f07fed26d350d94191f1336387ca8fa539c77993",
+    "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
+    "crates/strata-app/src/popup_escape_tests.rs": "2ea0dca3e1aaaf32e2deda81d43ce77a8613ab2cf543c0a8c3bea71e8fae5323",
+    "target/cpp-ref/src/app/KaCaptureMapTool.cpp": "d0da08cc04d7cc2bd829a4586ebddd4b25edf2a230497460feb4010fac5e555c",
+    "target/cpp-ref/src/app/KaSnapSettingsWidget.cpp": "865ded2f58213293eff9a0522a89bf58362a496ab0d8c1a7dac0824fd8b7e990",
+    "target/cpp-ref/src/app/MainWindowContextMenus.cpp": "674a137ae3530ba8811d7d519d91954ce451ac3b8887a93ae40006b0ed7f4362"
+}
+
+
+def build_cases(root):
+    def ref(file, needle=None):
+        if '/' not in file:
+            folder = 'target/cpp-ref/src' if file.endswith(('.cpp', '.h')) else 'crates/strata-app/src'
+            found = list((root / folder).rglob(file))
+            if len(found) != 1:
+                raise ValueError('ambiguous/absent reference: ' + file)
+            path = found[0]
+        else:
+            path = root / file
+        lines = path.read_text(encoding='utf-8-sig').splitlines()
+        number = 1 if needle is None else next((i for i, line in enumerate(lines, 1) if needle in line), None)
+        if number is None:
+            raise ValueError('absent anchor: ' + file + ' / ' + needle)
+        return path.relative_to(root).as_posix() + ':' + str(number)
+
+    rows = []
+
+    def add(id, path, priority, status, cpp, rust, conditions, remaining, cancel='취소·닫기·이전 도구 복귀 및 데이터 보존 재대조 필요', runtime=None):
+        rows.append({'id': id, 'path': path, 'priority': priority, 'status': status,
+                     'cpp': [ref(*x) if isinstance(x, tuple) else ref(x) for x in cpp],
+                     'rust': [ref(*x) if isinstance(x, tuple) else ref(x) for x in rust],
+                     'conditions': conditions, 'cancel_return': [cancel], 'remaining': remaining,
+                     'runtime': runtime or [], 'candidate_ids': []})
+
+    add('file.new', '조사 > 새 조사 / Ctrl+N', 0, '부분 구현', [('MainWindowRibbon.cpp', 'actNew')],
+        ['app_state_save_before.rs', 'app_state_save_before_tests.rs'], ['미저장 변경 유무', '저장 성공·실패', '처리 중 중복 요청'],
+        ['기존 보존 검사 연결; 파일 선택 취소·저장 실패·반복 전환의 실제 UI 전체 확인'])
+    add('file.open', '조사 > 열기 / Ctrl+O / 파일 끌어놓기', 0, '부분 구현', [('MainWindowRibbon.cpp', 'actOpen')],
+        ['gui_tab_home_open.rs', 'app_state_save_before.rs', 'user_files.rs'], ['정상·잘못된 GPKG', '미저장 변경', '읽기 전용·없는 경로'],
+        ['열기 실패 시 기존 조사 유지와 모든 진입점의 동일한 저장 확인 UI 재대조'])
+    add('file.recent', '홈 > 최근 조사 / 이어서 열기', 0, '부분 구현', ['KaHomeRecentCard.cpp'],
+        ['gui_tab_home.rs', 'app_state_save_before_tests.rs'], ['원본 존재·없음', '미저장 변경', '폴더 이동'],
+        ['홈 탐색기 현재 UI와 기존 최근 조사 검사 연결; 원본 없음·복귀 상태 확인'])
+    add('file.save', '조사 > 저장 / Ctrl+S', 0, '부분 구현', [('MainWindowRibbon.cpp', 'actSave')],
+        ['app_state_projects.rs', 'app_state_save_tests.rs'], ['편집 유무', '임시 FID', '저장 실패·디스크 부족'],
+        ['기존 원자적 저장 검사 연결; 모든 실패 상태의 UI와 수정 표시 보존 확인'])
+    add('file.save-as', '조사 > 다른 이름 / Ctrl+Shift+S', 0, '검증 안 됨', [('MainWindowRibbon.cpp', 'actSaveAs')],
+        ['app_state_projects.rs', 'gui_shell.rs'], ['원본·새 경로', '대상 존재', '취소'], ['원본 보존·레이어 및 외부 자료 경로·저장 후 현재 조사 전환 재대조'])
+    add('file.close', '창 닫기 > 저장 / 버리기 / 취소', 0, '검증 안 됨', ['MainWindow.cpp'],
+        ['shell_workspace.rs', 'app_state_save_before.rs'], ['미저장·작업 중·모달', '저장 실패'], ['닫기 경로와 기존 새 조사·열기 저장 확인의 차이를 실제 UI로 확인'])
+    for id, key, label in [('undo', 'Undo', 'Ctrl+Z'), ('redo', 'Redo', 'Ctrl+Y')]:
+        add('edit.' + id, '편집 > ' + label, 0, '검증 안 됨', ['MainWindowUndo.cpp', ('MainWindowRibbon.cpp', 'act' + key)],
+            ['gui_shell.rs', 'app_state_layer_remove.rs'], ['선택 도형·레이어', '그리기·정합·도면', '텍스트 포커스', '되돌릴 항목 없음'],
+            ['기존 편집 검사 재사용; 포커스별 되돌리기 소유권·도형 ID·저장 전후 분기 재대조'])
+    add('edit.delete-focus', 'Delete / Backspace > 도형·레이어·그리던 점·정합점', 0, '검증 안 됨', ['MainWindow.cpp', 'MainWindowUndo.cpp'],
+        [('gui_shell.rs', 'Key::Delete'), 'app_state_layer_remove.rs'], ['메뉴 열림', '텍스트 입력', '선택 없음·여러 선택', '그리기 중'],
+        ['우선 재현: 메뉴가 Delete를 처리하기 전에 캔버스 삭제가 실행되는지; 기존 Esc 점검에 연결'])
+    add('capture.real-snap', '그리기 > 자석 > 실제 점·선·면 캡처', 0, '미구현', [('KaCaptureMapTool.cpp', 'snapToMap')],
+        [('gui_tab_map_capture.rs', 'self.sketch_press(s2w'), 'app_state_draw_commit.rs'], ['자석 켬·끔', '모든 조사·현재 레이어', '원본 CRS', '취소·조사 전환'],
+        ['실제 캡처는 원래 좌표를 전달; 별도 legacy CAD 스냅과 연결되지 않음', 'SNAP1A 소유권 준비를 재사용해 실제 입력·미리보기·오래된 결과 폐기 연결'])
+    add('edit.nearest-lines-crs', '그리기 > 가까운 선에 붙이기 > CRS 오류', 0, '부분 구현', [('SnapTraceOps.cpp', 'snapGeometryToNearestLines')],
+        ['app_state_snap_lines.rs', 'app_state_snap_lines_tests.rs'], ['EPSG:-1·0·999999', '기준 선·점', '정상 대상', '5186→5187'],
+        ['SNAP1B 실제 모델 검사와 정상 변환 확인 완료; 해당 메뉴에서의 오류 안내·반복 UI 확인 남음'],
+        '잘못된 대상은 도형·이력·변경 상태를 유지; 잘못된 기준 표는 제외')
+    for key, title in [('poly', '유구 면'), ('line', '유구 선'), ('point', '유물 위치')]:
+        add('capture.' + key, '그리기 > ' + title, 0, '부분 구현', ['KaCaptureMapTool.cpp', 'MainWindowEditing.cpp'],
+            ['gui_tab_map_capture.rs', 'app_state_draw_commit.rs'], ['새 조사·기존 조사', '단발·연속', 'Enter·우클릭·더블클릭', '기록 창 취소'],
+            ['기존 실제 캡처 입력 검사 연결; 스냅·그리기 행 작은 화면·모든 복귀 상태 포함한 최종 대조'])
+    add('key.escape-native', '레이어·작은 리본 메뉴 > 첫 Esc / 다음 Esc', 0, '완료',
+        [('MainWindowContextMenus.cpp', 'menu.exec'), ('KaCaptureMapTool.cpp', 'Qt::Key_Escape')],
+        ['native_menu_input.rs', 'gui_shell_escape.rs', 'gui_shell.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'popup_escape_tests.rs'],
+        ['1024×768 생산 UI', '그리던 점 3개', '반복 열기·하위 메뉴', '별도 메뉴 없는 캔버스의 같은 입력 묶음 Esc+Enter'], [],
+        '첫 Esc는 메뉴만 닫고 점 보존; 다음 Esc는 정상 캔버스 취소. 이 행은 검사한 두 루트에 한정',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 기본 메뉴 Esc')}])
+    add('key.escape-target', '자석 대상 선택 > 선택 유지·Esc·다시 열기', 0, '완료',
+        ['KaSnapSettingsWidget.cpp', ('KaCaptureMapTool.cpp', 'Qt::Key_Escape')],
+        ['native_menu_input.rs', 'gui_shell.rs', 'shell_workspace.rs', 'popup_input_harness.rs', 'native_popup_escape_tests.rs'],
+        ['1680×960 생산 UI', '현재·모든 조사 실제 선택', '같은 묶음의 클릭 해제+Esc'], [],
+        '팝업 닫기 뒤 그리던 점과 선택값 유지; 다음 Esc는 캔버스 취소. 실제 스냅 계산 완료를 뜻하지 않음',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 그리기 대상 팝업')}])
+    add('key.escape-other', '속성 팝업·선택 상자·색 선택기 > Esc·Enter·Delete', 0, '검증 안 됨', ['MainWindowContextMenus.cpp'],
+        ['dlg_feature_form.rs', 'dlg_feature_record.rs', 'ri_attr_card_rows.rs', 'gui_shell.rs'],
+        ['메뉴 종류별', '포커스·기록 입력·그리기 중', '반복 열기'], ['기존 MENU3·MENU4·MENU5와 겹치지 않는 종류만 재현'])
+    add('context.map', '지도 우클릭 > 기록·그리기·선택·보기·좌표 복사', 1, '검증 안 됨', [('MainWindowContextMenus.cpp', 'populateMapContextMenu')],
+        ['gui_tab_map_context.rs'], ['도형 아래·빈 지도', '조사 없음·처리 중', '읽기 전용', '키보드 닫기'], ['별도 지도 메뉴 렌더러의 조건·경계·취소 확인; MENU2 레이어 메뉴와 구분'])
+    add('context.layer', '레이어 우클릭 > 편집·표시·삭제·라벨·인코딩', 1, '부분 구현', [('MainWindowContextMenus.cpp', 'showLayerTreeContextMenu')],
+        ['app_state_layer_menu.rs', 'menu_popup.rs'], ['조사·지적·참조·래스터', '읽기 전용', '하나·여러 선택', '파일 없음'], ['MENU2 경계·긴 이름·하위 메뉴 검사 연결; 각 작업의 활성 조건·실제 결과는 개별 추적'])
+    add('layer.sets', '레이어 세트 > 이름 지정·덮어쓰기·적용·삭제', 1, '부분 구현', ['KaDrawingLayerSets.cpp'],
+        ['layer_sets.rs', 'layer_sets_io.rs', 'layer_sets_ui.rs', 'layer_sets_ui_tests.rs'], ['같은 이름', '취소·기본 No', '명시적 저장·재열기'],
+        ['MENU1 구현·UI 근거 연결; 전체 도면 저장·QGZ 세트 가져오기는 별도'], '취소는 기존 세트 유지; 명시적 저장만 디스크 반영')
+    add('layer.sets-qgz', '레이어 세트 > C++ QGZ 세트 가져오기', 1, '미구현', ['KaDrawingLayerSets.cpp'],
+        ['layer_sets_io.rs'], ['C++ 조사', '같은 이름·없는 레이어'], ['현재 Rust 저장 형식과 C++ QGZ 세트 가져오기 연결 없음'])
+    add('sheet.persist', '도면 목록 > 보관·열기·삭제 > 저장 후 재열기', 1, '부분 구현', ['KaDrawingSheetSet.cpp'],
+        ['gui_tab_drawing_sheets.rs', 'tab_drawing.rs'], ['도면 여러 장', '같은 이름', '레이어 세트 연결', '조사 재열기'], ['StoredSheet 메모리 목록은 있으나 도면 전체 디스크 보관 없음'])
+    add('export.pdf', '도면 > PDF 내보내기', 1, '부분 구현', ['MainWindowExport.cpp'],
+        ['gui_ribbon_click_b.rs', 'tab_drawing.rs'], ['용지·축척·범례', '내보내기 중 취소', '대상 경로 실패'], ['기존 PDF 근거 연결; 모든 용지·항목·실패·복귀 UI 대조'])
+    add('export.print', '인쇄 / Ctrl+P > 전용 탭·설정·실행', 1, '부분 구현', ['MainWindowExport.cpp'],
+        ['gui_ribbon_click_b.rs', 'print_job.rs'], ['용지·DPI·분할', '인쇄기 없음', '취소·반복'], ['UI 작업 근거 연결; 실제 인쇄기 출력 미검증, 허가 없이 물리 인쇄하지 않음'])
+    add('export.submit', '검수·제출 / Ctrl+E > 검사·꾸러미', 1, '검증 안 됨', ['KaSubmitFlow.cpp'],
+        ['modal_export.rs', 'modal_export_footer.rs'], ['검수 통과·실패', '변경 중', '경로 실패·취소'], ['원본 보존·EPSG:5179·출력 무결성 및 모든 차단 조건 UI 재대조'])
+    add('home.explorer', '홈 탐색기 > 고정 폴더·탐색·검색·우클릭', 1, '부분 구현', ['KaHomeRecentCard.cpp'],
+        ['home_explorer_ui.rs', 'home_explorer_rows.rs', 'gui_tab_home.rs'], ['여러 폴더', '없는 경로·권한', '화면 크기·DPI', '선택 유지'], ['UI6 탐색기 구현 근거 연결; 우클릭 키보드 소유권과 모든 폴더 이동 상태 재대조'])
+    for key, title in [('align', '정합'), ('cad', '벡터·CAD 정합')]:
+        add('align.' + key, title + ' > 대상 선택·짝점·이동·저장·되돌리기', 0, '부분 구현' if key == 'align' else '미구현',
+            ['MainWindowAlign.cpp', 'KaAlignMapTool.cpp'], ['align_map_input.rs', 'gui_ribbon_align.rs', ('align_picker.rs', '.add_filter')],
+            ['래스터·CAD', '원본 보존', '진행 중·점 선택', '다른 조사 전환'], ['래스터 UI 근거 연결; 스캔/사진 표현·벡터 CAD 및 전체 취소/복귀 재대조'])
+    for key, title in [('topo', '수치지형'), ('dem', 'DEM'), ('soil', '토양'), ('cadastral', '지적')]:
+        add('fetch.' + key, '자료 받기 > ' + title + ' > 왼쪽·우클릭·하위 설정', 1, '검증 안 됨', ['MainWindowRibbon.cpp'],
+            ['gui_ribbon_menus_a.rs', 'gui_ribbon_menu_actions.rs'], ['조사구역·계정 유무', '받는 중·캐시 있음', '설정 취소·실패'], ['MENU0·CADMENU0의 각 하위 행을 현 소스에서 재대조; 실제 사이트 성공으로 로컬 검사를 확대하지 않음'])
+    add('fetch.heritage', '자료 받기 > 유산 > 지역·내려받기·취소·재시도', 1, '부분 구현', ['HeritageIntranetFlow.cpp', 'KaHeritageBrowser.cpp'],
+        ['dlg_heritage_browser.rs', 'heritage_download_worker_tests.rs'], ['폼 필드 종류', '부모 창 숨김', '전송 실패·재시작·조사 전환'], ['유산 로컬 WebView 근거 연결; 실제 사이트 로그인·완료 미검증'])
+    add('map.old', '배경 지도 > 옛 지도 > 대동여지도 / 1919 조선지형도', 2, '부분 구현', [('MainWindowRibbon.cpp', 'old_map')],
+        ['gui_ribbon_menus_b.rs', 'gui_ribbon_click_b.rs'], ['첫 클릭', '선택·해제', '지도·도면 탭', '우측 중복 항목 제거'], ['UI1 근거 연결; 새 목록의 선택·활성·취소 조건 최종 재대조'])
+    for key, title in [('legend', '범례 이동·크기·글자'), ('paper', '용지·축척'), ('north', '방위표'), ('coords', '좌표점·격자')]:
+        add('sheet.' + key, '도면 > ' + title, 2, '부분 구현', ['KaDrawingStudio.cpp'],
+            ['gui_tab_drawing.rs', 'tab_drawing.rs'], ['선택 없음·한 항목·여러 항목', '용지 안·밖', '작은 화면·DPI'], ['SHEET0와 UI1~UI6의 기존 근거 연결; 항목별 속성·취소·저장 상태 재대조'])
+    for key, title in [('F9', '왼쪽 패널'), ('F10', '오른쪽 패널'), ('F11', '전체 화면·지도 넓게 보기')]:
+        add('key.' + key.lower(), title + ' / ' + key, 2, '검증 안 됨', ['MainWindowRibbon.cpp', 'MainWindowChrome.cpp'],
+            ['gui_shell.rs'], ['메뉴·모달·텍스트 포커스', '축소·확대 후 복귀', 'Ctrl 등 수식키'], ['MORE0의 과거 판정을 갱신하고 현재 키 처리·복귀 UI 대조'])
+    add('chrome.compact', '그리기 도구 줄·작은 메뉴 > 화면 넘침·클릭 영역', 2, '부분 구현', ['MainWindowRibbon.cpp'],
+        ['gui_ribbon_draw_row.rs', 'gui_ribbon_compact.rs'], ['480~1920 너비', '200% DPI', '그리기 진행 중'], ['기존 UI6 공통 반응형 근거 연결; 그리기 도구 줄 넘침과 세트 버튼 글꼴 의존 표시 남음'])
+    # First-party named actions: target/cpp-ref/src/app/MainWindowContextMenus.cpp:112-448.
+    titles = {
+        'layer.zoom': '이 레이어로 이동', 'layer.draw': '그리기·편집 시작', 'layer.vertices': '꼭짓점 수정',
+        'layer.attributes': '도형 속성', 'layer.rename': '이름 바꾸기', 'layer.style': '면·외곽선 색',
+        'layer.labels': '라벨·명칭 속성', 'layer.labelsVisible': '라벨 보이기·숨기기',
+        'layer.labelField': '표시할 항목', 'layer.labelFields': '항목 10개씩 묶기', 'layer.labelFieldsNext': '90개 이후 다음 항목',
+        'layer.labelFieldValue': '데이터 필드별 선택 항목', 'layer.labelArea': '면적 함께 표시',
+        'layer.labelSize': '글자 크기', 'layer.labelSizeValue': '3·4·5·6·7·8·9·10·12·14 pt',
+        'layer.encoding': '깨진 한글 바로잡기', 'layer.encodingValue': 'CP949·EUC-KR·UTF-8·이 컴퓨터 설정',
+        'layer.area': '면적·조사 비율 확인', 'layer.export': '제출 꾸러미 만들기', 'layer.import': '레이어 불러오기',
+        'layer.opacity': '투명도', 'layer.opacityValue': '0·20·40·50·60·80% 투명도', 'layer.bottom': '같은 묶음 맨 아래',
+        'layer.offline': '배경 오프라인 저장', 'layer.fullExtent': '전체 범위', 'layer.merge': '조사구역 합치기',
+        'layer.clear': '그린 도형 모두 지우기', 'layer.remove': '레이어 삭제', 'layer.trenchCreate': '시굴격자',
+        'layer.trench2': '시굴격자 2×2', 'layer.trench10': '시굴격자 2×10', 'layer.trenchCustom': '시굴격자 사용자 설정',
+        'map.attributes': '이 도형 기록 입력', 'map.draw': '조사 도형 그리기', 'map.drawArea': '조사구역',
+        'map.drawFeature': '유구 면', 'map.drawLine': '유구 선', 'map.drawSection': '단면선',
+        'map.previous': '이전 화면', 'map.next': '다음 화면', 'map.full': '전체 범위',
+        'map.layerZoom': '선택한 레이어로 이동', 'map.refresh': '새로 고침', 'map.copyCoordinates': '이 위치 좌표 복사',
+    }
+    conditions = {
+        'layer.draw': ['처리 중 금지', '현재 조사 소유', '추가 기능 지원·읽기 전용'],
+        'layer.vertices': ['선·면만', '도형 있음', '현재 조사 소유·변경 기능 지원'],
+        'layer.attributes': ['벡터·도형 있음', '현재 조사 소유', '속성 변경 가능'],
+        'layer.labels': ['벡터·지원하는 이름/번호 필드'],
+        'layer.labelFieldValue': ['현재 선택 체크', '필드별 동적 생성', '10·90개 경계'],
+        'layer.labelSizeValue': ['도면 유적 번호는 고정 크기', '현재 크기 체크'],
+        'layer.export': ['빈 레이어도 조사 전체 내보내기 허용', '조사 없음·처리 중 금지'],
+        'layer.clear': ['조사 도메인·현재 조사 소유', '도형 있음·처리 중 금지'],
+        'layer.opacityValue': ['자료·색 보존', '지도 표시만 변경', '현재 값 체크'],
+        'layer.remove': ['기존 선택과 다른 우클릭 대상', '다중 선택·그룹·처리 중'],
+        'map.attributes': ['클릭 위치의 조사 도형', '조사 소유·읽기 전용·처리 중'],
+        'map.previous': ['이전 보기 이력 유무'], 'map.next': ['다음 보기 이력 유무'],
+        'map.copyCoordinates': ['작업 CRS', 'x·y 순서와 소수 셋째 자리', '우클릭 위치 유지'],
+    }
+    cpp_file = 'target/cpp-ref/src/app/MainWindowContextMenus.cpp'
+    cpp_text = (root / cpp_file).read_text(encoding='utf-8')
+    action_ids = sorted(set(re.findall(r'"((?:map|layer)\.[A-Za-z0-9]+)"', cpp_text)))
+    for action_id in action_ids:
+        is_layer = action_id.startswith('layer.')
+        model = 'layer_menu_model.rs' if is_layer else 'map_context_menu_model.rs'
+        needle = '"' + action_id + '"'
+        model_text = (root / 'crates/strata-app/src' / model).read_text(encoding='utf-8')
+        add('context.action.' + action_id, ('레이어' if is_layer else '지도') + ' 우클릭 > ' + titles.get(action_id, action_id),
+            0 if action_id in ['layer.clear', 'layer.remove', 'layer.merge', 'layer.draw', 'layer.vertices'] else 1,
+            '검증 안 됨', [('MainWindowContextMenus.cpp', needle)], [(model, needle)] if needle in model_text else [model],
+            conditions.get(action_id, ['레이어 종류·선택·도형 유무·처리 중 조건을 원본 분기와 대조']),
+            ['표시·활성 조건·작업 결과·취소 UI를 개별 검증; 상위 메뉴의 Esc 통과를 이 동작 완료로 확대하지 않음'])
+        rows[-1]['cpp'] = [cpp_file + ':' + str(i) for i, line in enumerate(cpp_text.splitlines(), 1) if needle in line]
+    for row in rows:
+        if row['status'] == '완료':
+            row['reviewed_digests'] = REVIEWED_DIGESTS
+    return rows

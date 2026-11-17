@@ -143,3 +143,7 @@ target/release/ka-hgis.exe --smoke-quit           # 켜졌다 바로 꺼짐, 종
 `SNAP1A_SHARED_FEATURE_SNAPSHOTS`는 `LayerEditBuffer::snapshot()`으로 작업 스레드에 읽기 전용 피처 자료를 넘기는 준비 작업이다. `SharedFeatureRows`는 수정 때 복사하며 기존 배열 저장 형식과 되돌리기 값을 유지한다. 스냅샷의 동일 판정은 보유한 레코드 자료만 비교한다. 후속 인덱스 요청은 표 식별자·원본/작업 CRS·스냅 대상 조건도 별도로 소유하고 확인해야 한다. 실제 캡처의 스냅 계산과 연결, 기본 허용 거리 및 설정 저장은 이 작업에 포함하지 않는다.
 
 `SNAP1B_FAIL_CLOSED_SOURCE_CRS`는 기존 조사 표 스냅 자료와 「가까운 선에 붙이기」의 좌표 변환 실패 처리를 수정한다. `table_transformers`는 성공한 같은 좌표계와 오류를 구분한다. 좌표계를 모르거나 변환을 만들 수 없는 기준 표는 후보에서 제외하고, 그런 대상 도형은 편집 전에 거부한다. 정합·도면 좌표점이 호출하는 `survey_snap_parts`에도 적용된다. 기존 C++ 상태줄 문구와 정상 좌표계의 값은 유지하며, 실제 캡처 스냅 연결은 여전히 별도 작업이다.
+
+### 2026-11-18 기능 목록과 점검 연결
+
+현재 메뉴·키보드·선택 상태·취소 복귀의 추적 기준은 [CURRENT_MENU_AUDIT.md](research/menus/CURRENT_MENU_AUDIT.md)다. 기존 메뉴 키보드 구현을 다시 만들지 않고 근거를 연결한다. 현재 기능 판정은 `menu_cases.py`, 과거 조사와 원본 선언의 미분류 큐는 `python scripts/menu_audit.py --write`로 만든다. 컴파일 성공을 UI 완료로 보지 않으며, 생성 보고서·PNG는 `.codex/team/menu-audit/`와 `target/audit1-menu-ui/`에 둔다. 다음 우선 재현은 메뉴·텍스트 포커스와 Delete·Backspace·Enter의 편집 데이터 소유권이다.
