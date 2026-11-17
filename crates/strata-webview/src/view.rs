@@ -14,7 +14,7 @@ use wry::{
     WebViewBuilderExtWindows, WebViewExtWindows,
 };
 
-use crate::dialogs::QUIET_DIALOGS_SCRIPT;
+use crate::dialogs::{quiet_dialogs_script, ConfirmPolicy};
 use crate::downloads::{held_back_without_click, plan_download, DownloadRefusal, PlannedFile};
 use crate::events::{BrowserError, DownloadDecider, DownloadId, DownloadOffer, ScriptCall, ViewId};
 use crate::names::safe_file_name;
@@ -40,6 +40,7 @@ pub(crate) enum Signal {
 /// State the callbacks of all views share.
 pub(crate) struct Shared {
     pub(crate) policy: NavigationPolicy,
+    pub(crate) confirm_policy: ConfirmPolicy,
     /// Spare views, built ahead: a page that opens a window must get its view at once.
     pub(crate) spare: RefCell<Vec<(ViewId, WebView)>>,
     /// Spare views a page has just taken as its popup, with the opener; `pump` moves them to the session.
@@ -108,7 +109,7 @@ pub(crate) fn build_hidden_view<W: HasWindowHandle>(
         .with_default_context_menus(false)
         .with_browser_accelerator_keys(false)
         .with_general_autofill_enabled(false)
-        .with_initialization_script_for_main_only(QUIET_DIALOGS_SCRIPT, false)
+        .with_initialization_script_for_main_only(quiet_dialogs_script(shared.confirm_policy), false)
         // The engine asks before a page may hand over a second file without a click, and a hidden view
         // cannot show that question: the transfer page of the NGII site sends the files of an order one
         // after another (KaTopographicBrowser.cpp:789-793). Each file still passes the host's decider.

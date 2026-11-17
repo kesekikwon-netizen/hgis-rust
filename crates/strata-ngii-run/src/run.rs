@@ -91,6 +91,7 @@ impl NgiiRun {
                 data_parent: options.data_parent,
                 navigation: NavigationPolicy::new(options.network_allowed, local.as_deref()),
                 document_ready_script: Some(ready),
+                confirm_policy: strata_webview::dialogs::ConfirmPolicy::Reject,
             },
         )?;
         let core = Rc::new(RefCell::new(Core { machine: NgiiAutomation::new(options.config), host: QueuedHost::default(), began: Instant::now(), accepted: VecDeque::new() }));

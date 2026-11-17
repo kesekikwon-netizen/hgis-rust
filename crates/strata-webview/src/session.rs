@@ -11,7 +11,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use raw_window_handle::HasWindowHandle;
 use wry::{WebContext, WebView};
 
-use crate::dialogs::parse_page_message;
+use crate::dialogs::{parse_page_message, ConfirmPolicy};
 use crate::downloads::{received_bytes, PlannedFile};
 use crate::events::{BrowserError, BrowserEvent, DownloadDecider, DownloadId, ScriptCall, ViewId, ViewInfo};
 use crate::policy::{Navigation, NavigationPolicy};
@@ -29,6 +29,8 @@ pub struct BrowserOptions {
     /// Folder under which the session makes its own data folder (see `profile`).
     pub data_parent: PathBuf,
     pub navigation: NavigationPolicy,
+    /// Site-specific answer (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:124-127`).
+    pub confirm_policy: ConfirmPolicy,
     /// Script run in the main frame of every page once its document is parsed.
     pub document_ready_script: Option<String>,
 }
@@ -87,6 +89,7 @@ impl HiddenBrowser {
         let arguments = options.navigation.offline_engine_arguments();
         let shared = Rc::new(Shared {
             policy: options.navigation,
+            confirm_policy: options.confirm_policy,
             spare: RefCell::new(Vec::new()),
             adopted: RefCell::new(Vec::new()),
             decider: RefCell::new(None),

@@ -1,15 +1,31 @@
 //! Page dialogs. A hidden view must never put a window on the screen, so `alert`, `confirm` and `prompt` are
 //! replaced before any page script runs and answered as the C++ page answers them while it suppresses dialogs:
-//! nothing for an alert, "no" for a confirm, "cancel" for a prompt
-//! (`target/cpp-ref/src/app/KaTopographicBrowser.cpp:61-69`). The page tells the host that a dialog was asked
+//! nothing for an alert, the session's answer for a confirm, "cancel" for a prompt
+//! (`target/cpp-ref/src/app/KaTopographicBrowser.cpp:61-69`, `KaHeritageBrowser.cpp:119-131`). The page tells the host that a dialog was asked
 //! for. That message comes from the page and is treated as such: it can only say "a dialog of this kind with
 //! this text", it carries no secret and nothing is done on its strength but showing the user a notice.
 
 /// Longest dialog text that is passed on (characters).
 pub const MAX_DIALOG_TEXT: usize = 500;
 
-/// Runs in every frame when its document is created.
-pub const QUIET_DIALOGS_SCRIPT: &str = r#"(function () {
+/// The site's confirm answer (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:124-127`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConfirmPolicy {
+    #[default]
+    Reject,
+    Accept,
+}
+
+/// Runs at document creation in every frame (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:119-131`).
+pub(crate) fn quiet_dialogs_script(policy: ConfirmPolicy) -> String {
+    let response = match policy {
+        ConfirmPolicy::Reject => "false",
+        ConfirmPolicy::Accept => "true",
+    };
+    QUIET_DIALOGS_TEMPLATE.replace("__CONFIRM_RESPONSE__", response)
+}
+
+const QUIET_DIALOGS_TEMPLATE: &str = r#"(function () {
   if (window.__strataQuietDialogs) { return; }
   window.__strataQuietDialogs = true;
   var tell = function (kind, text) {
@@ -19,7 +35,7 @@ pub const QUIET_DIALOGS_SCRIPT: &str = r#"(function () {
   };
   var quiet = function (target) {
     target.alert = function (text) { tell('alert', text); };
-    target.confirm = function (text) { tell('confirm', text); return false; };
+    target.confirm = function (text) { tell('confirm', text); return __CONFIRM_RESPONSE__; };
     target.prompt = function (text) { tell('prompt', text); return null; };
   };
   quiet(window);
@@ -103,7 +119,7 @@ mod tests {
     /// The script answers as the C++ page does while it suppresses dialogs (:61-69) and replaces all three.
     #[test]
     fn the_script_replaces_all_three_dialogs_with_the_cpp_answers() {
-        let s = QUIET_DIALOGS_SCRIPT;
+        let s = quiet_dialogs_script(ConfirmPolicy::Reject);
         assert!(s.contains("target.alert = function (text) { tell('alert', text); };"));
         assert!(s.contains("target.confirm = function (text) { tell('confirm', text); return false; };"));
         assert!(s.contains("target.prompt = function (text) { tell('prompt', text); return null; };"));

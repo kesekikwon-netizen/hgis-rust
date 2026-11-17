@@ -28,6 +28,15 @@ window.onload = function () { document.title = 'onload saw ' + window.__early + 
 
 const FRAME: &str = "<html><body>frame</body></html>";
 
+// Inline scripts exercise document-start suppression (target/cpp-ref/src/app/KaHeritageBrowser.cpp:119-131).
+const DIALOGS: &str = r#"<html><head><script>
+window.__dialogs = [confirm('main confirm'), prompt('main prompt')]; alert('main alert');
+</script></head><body><iframe src='/dialogs/nested'></iframe></body></html>"#;
+const NESTED_DIALOGS: &str = "<html><body><iframe src='/dialogs/leaf'></iframe></body></html>";
+const LEAF_DIALOGS: &str = r#"<html><head><script>
+window.__dialogs = [confirm('nested confirm'), prompt('nested prompt')]; alert('nested alert');
+</script></head><body>leaf</body></html>"#;
+
 pub struct Site {
     addr: SocketAddr,
     hits: Arc<Mutex<Vec<String>>>,
@@ -109,6 +118,9 @@ fn answer(mut stream: TcpStream, log: &Mutex<Vec<String>>) -> Option<TcpStream> 
         "/pop" => page(&mut stream, POP),
         "/ready" => page(&mut stream, READY),
         "/frame" => page(&mut stream, FRAME),
+        "/dialogs" => page(&mut stream, DIALOGS),
+        "/dialogs/nested" => page(&mut stream, NESTED_DIALOGS),
+        "/dialogs/leaf" => page(&mut stream, LEAF_DIALOGS),
         "/file.zip" | "/file.zip?again" => {
             // The offered name tries to leave the folder and holds characters Windows does not take.
             let _ = write!(

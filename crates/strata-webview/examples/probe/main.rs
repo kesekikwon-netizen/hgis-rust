@@ -13,6 +13,8 @@ mod site;
 #[cfg(windows)]
 mod steps;
 #[cfg(windows)]
+mod steps_dialogs;
+#[cfg(windows)]
 mod steps_end;
 #[cfg(windows)]
 mod steps_more;

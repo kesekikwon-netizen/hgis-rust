@@ -105,6 +105,7 @@ impl Probe {
             // The network switch is off for the whole probe: only the local site can be reached.
             navigation: NavigationPolicy::new(Arc::new(|| false), Some(&self.site.origin())),
             document_ready_script: Some("window.__early = 'ready-script';".to_owned()),
+            confirm_policy: strata_webview::dialogs::ConfirmPolicy::Reject,
         };
         let mut browser = HiddenBrowser::start(frame, options)?;
         let (accept, offered, folder) = (Rc::clone(&self.accept), Rc::clone(&self.offered), self.work.join("files"));
@@ -238,34 +239,13 @@ impl Probe {
             }
             10..=16 => crate::steps_more::advance(self, enter),
             17..=19 => crate::steps_end::advance(self, enter, frame),
+            20..=27 => crate::steps_dialogs::advance(self, enter, frame),
             _ => {
                 self.step = 99;
                 return;
             }
         };
-        const NAMES: [&str; 20] = [
-            "the local site loads in a hidden view with the network switch off",
-            "a script's value comes back as JSON",
-            "a popup becomes a second hidden view with its opener",
-            "the popup page sees its window name and its opener's data",
-            "confirm, alert and prompt are answered silently and reported",
-            "a file is written to a part file and put in place under a safe name",
-            "a refused file leaves nothing behind",
-            "a non-web address is refused and reported",
-            "a page cannot leave for a web address while the switch is off",
-            "the ready script runs when the document is parsed, in the main frame only",
-            "a hidden view lays its page out at desktop size",
-            "a popup that closes itself is reported and its view is gone",
-            "a new popup opens afterwards and its opener can close it",
-            "no request reaches another address while the switch is off",
-            "the first empty page of a popup has quiet dialogs too",
-            "a javascript: link runs in its page and is no navigation",
-            "a second file from the same page arrives complete as well",
-            "a refused second offer leaves the running transfer alone, then the session is shut down",
-            "shut down leaves no part file and the data folder can be removed",
-            "a session that is simply dropped lets go of its folder too",
-        ];
-        let name = NAMES[self.step as usize];
+        let name = crate::steps_dialogs::NAMES[self.step as usize];
         match done {
             Some(ok) => {
                 self.check(name, ok);
