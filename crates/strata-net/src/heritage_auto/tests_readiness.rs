@@ -247,3 +247,27 @@ fn an_unchanged_nationwide_count_never_authorizes_a_download() {
     }
     assert!(matches!(machine.stage(), HeritageStage::Stopped(_)));
 }
+
+/// C++ checks rows<=0 before total<0 (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:1113-1115`).
+#[test]
+fn an_empty_table_with_an_unreadable_count_keeps_the_navigation_bound() {
+    let mut machine = machine();
+    let mut tick = 0;
+    through_search(&mut machine, &mut tick);
+    let results_at = tick * super::LOGIN_POLL_MS;
+    for _ in 0..24 {
+        tick += 1;
+        let event = answer(
+            &mut machine,
+            r#"{"rows":0,"total":-1,"lastPage":1,"searchReady":true}"#,
+            tick,
+        );
+        assert!(event.is_none());
+        assert!(!machine.is_over());
+        assert!(!machine.accepts_files());
+    }
+    assert!(machine
+        .timers(results_at + 75 * super::LOGIN_POLL_MS + 1)
+        .iter()
+        .any(|event| matches!(event, HeritageEvent::Stopped(_))));
+}
