@@ -19,7 +19,7 @@ pub struct FixtureState {
     pub hits: HashMap<String, usize>,
     /// The ZIP `downloadFilesAll.do` answers with, per kind name.
     pub zips: HashMap<String, Vec<u8>>,
-    /// Milliseconds `downloadFilesAll.do` waits before answering; 0 for a fast run.
+    /// Milliseconds the ZIP body waits before completion; 0 for a fast run.
     pub download_delay_ms: u64,
     /// Whether the logged-in content frame must show the site's agreement first.
     pub require_pledge: bool,
@@ -105,8 +105,7 @@ impl Fixture {
         }
     }
 
-    /// Makes `downloadFilesAll.do` wait `ms` before answering, standing in for the
-    /// 40–120 s the site takes to build a ZIP.
+    /// Delays ZIP body completion by `ms` (`KaHeritageBrowser.cpp:1150-1165`).
     pub fn set_download_delay(&self, ms: u64) {
         if let Ok(mut s) = self.state.lock() {
             s.download_delay_ms = ms;

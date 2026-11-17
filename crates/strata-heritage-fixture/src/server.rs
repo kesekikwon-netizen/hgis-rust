@@ -32,7 +32,6 @@ pub(crate) fn spawn(state: FixtureState) -> Fixture {
         }
     });
 
-
     Fixture {
         base_url,
         stop,
@@ -104,7 +103,16 @@ fn handle(mut stream: TcpStream, state: Arc<Mutex<FixtureState>>) {
     if let Ok(mut s) = state.lock() {
         s.count(&req.path);
     }
-    let (status, content_type, body) = crate::routes::respond(&req.method, &req.path, &req.body, &state);
+    let (status, content_type, body) =
+        crate::routes::respond(&req.method, &req.path, &req.body, &state);
+    let delay_ms = if req.path == crate::pages::DOWNLOAD_FILES_ALL {
+        state
+            .lock()
+            .map(|state| state.download_delay_ms)
+            .unwrap_or(0)
+    } else {
+        0
+    };
     // A redirect needs its Location: a Spring login answers the POST with one.
     let location = if status == crate::routes::STATUS_302 {
         "\r\nLocation: /user/checkNet.do"
@@ -116,13 +124,32 @@ fn handle(mut stream: TcpStream, state: Arc<Mutex<FixtureState>>) {
         body.len()
     );
     let _ = stream.write_all(response.as_bytes());
-    let _ = stream.write_all(&body);
+    // Expose a prefix before completion waits (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:1150-1165`).
+    // Only this connection waits; the state guard has already been released.
+    let prefix = if delay_ms > 0 { body.len().min(4) } else { 0 };
+    let _ = stream.write_all(&body[..prefix]);
+    let _ = stream.flush();
+    if delay_ms > 0 {
+        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+    }
+    let _ = stream.write_all(&body[prefix..]);
     let _ = stream.flush();
 }
 
 pub(crate) fn http_get(url: &str, _body: Option<&str>) -> String {
-    let host_port = url.trim_start_matches("http://").split('/').next().unwrap_or("");
-    let path = format!("/{}", url.trim_start_matches("http://").split('/').skip(1).collect::<Vec<_>>().join("/"));
+    let host_port = url
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .unwrap_or("");
+    let path = format!(
+        "/{}",
+        url.trim_start_matches("http://")
+            .split('/')
+            .skip(1)
+            .collect::<Vec<_>>()
+            .join("/")
+    );
     let mut stream = match TcpStream::connect(host_port) {
         Ok(s) => s,
         Err(_) => return String::new(),
@@ -134,8 +161,19 @@ pub(crate) fn http_get(url: &str, _body: Option<&str>) -> String {
 }
 
 pub(crate) fn http_post_form(url: &str, body: &str) -> String {
-    let host_port = url.trim_start_matches("http://").split('/').next().unwrap_or("");
-    let path = format!("/{}", url.trim_start_matches("http://").split('/').skip(1).collect::<Vec<_>>().join("/"));
+    let host_port = url
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .unwrap_or("");
+    let path = format!(
+        "/{}",
+        url.trim_start_matches("http://")
+            .split('/')
+            .skip(1)
+            .collect::<Vec<_>>()
+            .join("/")
+    );
     let mut stream = match TcpStream::connect(host_port) {
         Ok(s) => s,
         Err(_) => return String::new(),
