@@ -74,42 +74,48 @@ pub fn write_pledge_receipt(
     Ok(path)
 }
 
-/// Writes `recent.json` beside the received archives, in the shape the C++ reader expects
-/// (`HeritageRecentDownloads.cpp:47-49`). Used by the run-finish path in HER9.
+/// Writes one kind's entry into `recent.json` beside the received archives.
+///
+/// The C++ keeps a **map from the kind's Korean name to its entry**
+/// (`HeritageRecentDownloads.cpp:record`): `{"지정유산": {"when": "…", "files": ["…"]}}`.
+/// The reader both sides use (`heritage_recent.rs:usable`) reads exactly that, so an array of
+/// records would be invisible to it and the received files would never be offered again.
+///
+/// `region_folder` is the **`원본` folder itself** — what `heritage_recent::region_folder`
+/// returns. Appending another `원본` puts the record where no reader looks.
 ///
 /// # Errors
 ///
 /// When the folder cannot be made or the file cannot be written.
-#[allow(dead_code)]
-pub fn write_recent(
+pub fn record_recent(
     region_folder: &Path,
-    entries: &[RecentEntry],
+    kind: &str,
+    files: &[PathBuf],
+    when: chrono::NaiveDateTime,
 ) -> std::io::Result<PathBuf> {
-    let folder = region_folder.join("원본");
-    std::fs::create_dir_all(&folder)?;
-    let path = folder.join("recent.json");
-    let files: Vec<serde_json::Value> = entries
+    std::fs::create_dir_all(region_folder)?;
+    let path = region_folder.join("recent.json");
+    // Read what is there so kinds received earlier are kept (`record` merges into the object).
+    let mut manifest: serde_json::Map<String, serde_json::Value> = std::fs::read(&path)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    let list: Vec<String> = files
         .iter()
-        .map(|e| {
-            serde_json::json!({
-                "kind": e.kind,
-                "name": e.name,
-                "receivedAt": e.received_at,
-            })
-        })
+        .map(|f| f.to_string_lossy().into_owned())
         .collect();
-    let body = serde_json::json!({ "files": files });
-    std::fs::write(&path, serde_json::to_string_pretty(&body).unwrap_or_default())?;
+    manifest.insert(
+        kind.to_owned(),
+        serde_json::json!({
+            "when": when.format("%Y-%m-%dT%H:%M:%S").to_string(),
+            "files": list,
+        }),
+    );
+    std::fs::write(
+        &path,
+        serde_json::to_string_pretty(&serde_json::Value::Object(manifest)).unwrap_or_default(),
+    )?;
     Ok(path)
-}
-
-/// One received archive, as `recent.json` records it.
-#[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RecentEntry {
-    pub kind: String,
-    pub name: String,
-    pub received_at: String,
 }
 
 #[cfg(test)]
@@ -171,23 +177,60 @@ mod tests {
         assert_eq!(AccountState::Stored.words(), "저장된 계정 사용");
     }
 
-    /// `recent.json` has the shape the C++ reader reads back.
+    /// **The point of this file**: what the run writes must be what the existing loader reads.
+    ///
+    /// `heritage_recent::find` is the function the app calls to put received files back on the
+    /// map. Writing a shape it cannot read means the files are on the disk and never shown —
+    /// which is exactly the symptom HER9 exists to remove.
     #[test]
-    fn recent_json_holds_what_the_cpp_reader_expects() {
+    fn what_the_run_writes_the_existing_loader_can_read() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let region = dir.path().join("주변유적").join("경상북도 경주시");
-        let entries = vec![RecentEntry {
-            kind: "지정유산".to_owned(),
-            name: "지정유산_261117093015.zip".to_owned(),
-            received_at: "2026-11-17T09:30:15".to_owned(),
-        }];
-        let path = write_recent(&region, &entries).expect("written");
+        let root = dir.path();
+        let region = strata_refmap::heritage_recent::region_folder(root, "경상북도", "경주시")
+            .expect("a region folder");
+        std::fs::create_dir_all(&region).expect("mkdir");
+
+        // A received archive that exists and is not empty, as the reader requires.
+        let archive = region.join("지정유산_261117100000.zip");
+        std::fs::write(&archive, b"PK\x03\x04data").expect("archive");
+
+        let dataset = strata_refmap::heritage::DATASETS
+            .iter()
+            .find(|d| d.name == "지정유산")
+            .expect("the kind");
+
+        // Before the record: the loader finds nothing.
+        let now = when();
+        assert!(
+            strata_refmap::heritage_recent::find(&region, dataset, now).is_empty(),
+            "found a file with no record"
+        );
+
+        record_recent(&region, "지정유산", std::slice::from_ref(&archive), now).expect("recorded");
+
+        // After: the loader finds the archive, which is what puts it on the map.
+        let found = strata_refmap::heritage_recent::find(&region, dataset, now + chrono::Duration::seconds(30));
+        assert_eq!(found, vec![archive], "the loader cannot read what the run wrote");
+    }
+
+    /// A second kind is added without losing the first (`record` merges into the object).
+    #[test]
+    fn a_second_kind_keeps_the_first() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let region = dir.path().join("주변유적").join("경상북도 경주시").join("원본");
+        std::fs::create_dir_all(&region).expect("mkdir");
+        let a = region.join("지정유산_1.zip");
+        let b = region.join("지표조사구역_1.zip");
+        std::fs::write(&a, b"PK\x03\x04a").expect("a");
+        std::fs::write(&b, b"PK\x03\x04b").expect("b");
+
+        record_recent(&region, "지정유산", std::slice::from_ref(&a), when()).expect("first");
+        let path = record_recent(&region, "지표조사구역", std::slice::from_ref(&b), when()).expect("second");
         let text = std::fs::read_to_string(&path).expect("read");
         let parsed: serde_json::Value = serde_json::from_str(&text).expect("json");
 
-        assert_eq!(parsed["files"][0]["kind"], "지정유산", "{text}");
-        assert_eq!(parsed["files"][0]["name"], "지정유산_261117093015.zip", "{text}");
-        assert_eq!(parsed["files"][0]["receivedAt"], "2026-11-17T09:30:15", "{text}");
-        assert!(path.ends_with("원본/recent.json"), "{}", path.display());
+        assert!(parsed["지정유산"]["files"].is_array(), "the first kind was lost: {text}");
+        assert!(parsed["지표조사구역"]["files"].is_array(), "{text}");
+        assert_eq!(parsed["지정유산"]["files"][0].as_str(), a.to_str(), "{text}");
     }
 }

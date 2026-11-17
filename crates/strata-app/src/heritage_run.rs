@@ -150,6 +150,8 @@ impl StrataAppState {
         }
         self.drive_heritage_words();
         self.drive_heritage_steps(ctx);
+        #[cfg(windows)]
+        self.drive_heritage_browser(frame);
     }
 
     /// Everything the frame loop does except opening a browser session: a test calls this,
@@ -169,6 +171,37 @@ impl StrataAppState {
         // (`MainWindow.cpp:3228-3244`).
         if let Some(terms) = self.heritage_pledge_agreed.take() {
             self.status_bar_hint = crate::heritage_run_start::write_receipt_after_pledge(self, &terms);
+        }
+    }
+
+    /// Drives the hidden-browser run one frame and puts what it received on the map.
+    ///
+    /// A received ZIP is recorded and handed to the existing loader, so the kinds appear as
+    /// soon as each one arrives (`MainWindow.cpp:3135-3140` shows each as it is ready).
+    #[cfg(windows)]
+    pub(crate) fn drive_heritage_browser(&mut self, frame: &eframe::Frame) {
+        let Some(run) = self.heritage.browser_run.as_mut() else {
+            return;
+        };
+        let events = run.frame(frame);
+        let finished = run.finished();
+        for event in events {
+            match event {
+                strata_heritage_run::HeritageEvent::Note(words) => {
+                    self.status_bar_hint = words;
+                }
+                strata_heritage_run::HeritageEvent::ZipReady { kind, path } => {
+                    // `kind` is `&'static str` from the run's own table.
+                    self.status_bar_hint =
+                        crate::heritage_run_start::show_received(self, kind, &path);
+                }
+                strata_heritage_run::HeritageEvent::Stopped(words) => {
+                    self.status_bar_hint = words;
+                }
+            }
+        }
+        if finished {
+            self.heritage.browser_run = None;
         }
     }
 

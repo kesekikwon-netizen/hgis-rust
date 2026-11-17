@@ -107,6 +107,34 @@ pub(crate) fn begin_run_in_window(app: &mut StrataAppState, _frame: &eframe::Fra
         "이 판에서는 인트라넷 창을 열 수 없습니다(Windows 전용).".to_owned();
 }
 
+/// Records a received archive for `kind` and asks the existing loader to show it.
+///
+/// This is the join HER9 exists for: the run puts a ZIP on the disk, `record_recent` writes the
+/// entry the loader reads, and `begin_heritage_run` puts the files on the map — no second
+/// unpacking, no second loader.
+///
+/// Returns the words for the status line. The words never say a layer was added unless the
+/// loader was actually asked.
+pub(crate) fn show_received(app: &mut StrataAppState, kind: &str, path: &std::path::Path) -> String {
+    let Some(region) =
+        strata_refmap::heritage_recent::region_folder(&app.heritage_archive_root(), &app.modals.heritage_sido, &app.modals.heritage_city)
+    else {
+        return format!("{kind}: 받은 파일을 둘 곳을 찾지 못했습니다.");
+    };
+    let when = chrono::Local::now().naive_local();
+    if let Err(why) = crate::heritage_receipt::record_recent(&region, kind, &[path.to_path_buf()], when) {
+        return format!("{kind}: 받은 파일을 기록하지 못했습니다({why}).");
+    }
+    // The loader reads `recent.json` and unpacks; it does the map rows
+    // (`heritage_reuse.rs:load_plan`).
+    app.heritage.wanted = Some(crate::heritage_run::reuse::Wanted {
+        sido: app.modals.heritage_sido.clone(),
+        city: app.modals.heritage_city.clone(),
+        reuse: true,
+    });
+    format!("{kind}: 받은 자료를 지도에 올립니다.")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,7 +228,7 @@ mod tests {
         assert!(words.contains("남기지 못했습니다"), "{words}");
     }
 
-    /// The three account states come from what is stored, and none carries the id.
+    /// The account state is read from what is stored, and none carries the id.
     #[test]
     fn the_account_state_is_read_from_what_is_stored() {
         let mut app = StrataAppState::new_startup();
@@ -213,5 +241,46 @@ mod tests {
 
         app.accounts.heritage_creds.password = "pass1".to_owned();
         assert_eq!(receipt_account_state(&app).words(), "저장된 계정 사용");
+    }
+
+    /// A received ZIP is recorded and the loader is asked to show it — the join HER9 is for.
+    #[test]
+    fn a_received_zip_is_recorded_and_handed_to_the_loader() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut app = StrataAppState::new_startup();
+        app.survey_path = Some(dir.path().join("현장.gpkg"));
+        std::fs::write(app.survey_path.as_ref().expect("survey"), b"").expect("survey file");
+        app.modals.heritage_sido = "경상북도".to_owned();
+        app.modals.heritage_city = "경주시".to_owned();
+        app.heritage.archive_root = Some(dir.path().to_path_buf());
+
+        let region = strata_refmap::heritage_recent::region_folder(
+            dir.path(),
+            "경상북도",
+            "경주시",
+        )
+        .expect("region");
+        std::fs::create_dir_all(&region).expect("mkdir");
+        let zip = region.join("지정유산_261117100000.zip");
+        std::fs::write(&zip, b"PK\x03\x04data").expect("zip");
+
+        let words = show_received(&mut app, "지정유산", &zip);
+        assert!(words.contains("지도에 올립니다"), "{words}");
+
+        let dataset = strata_refmap::heritage::DATASETS
+            .iter()
+            .find(|d| d.name == "지정유산")
+            .expect("kind");
+        let found = strata_refmap::heritage_recent::find(
+            &region,
+            dataset,
+            chrono::Local::now().naive_local(),
+        );
+        assert_eq!(found, vec![zip], "the loader cannot find the file just received");
+
+        let wanted = app.heritage.wanted.as_ref().expect("the loader was not asked");
+        assert_eq!(wanted.sido, "경상북도");
+        assert_eq!(wanted.city, "경주시");
+        assert!(wanted.reuse, "the loader was asked without reuse");
     }
 }
