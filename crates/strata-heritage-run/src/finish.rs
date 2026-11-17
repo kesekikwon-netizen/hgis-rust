@@ -39,17 +39,6 @@ fn allocate_in(parent: &Path, next: &AtomicU64) -> std::io::Result<PathBuf> {
     }
 }
 
-/// Legacy path formula retained for the runner until its caller migration.
-/// This serial is not the UUID used by `target/cpp-ref/src/app/KaHeritageBrowser.cpp:1308-1315`;
-/// this function only names a path and does not allocate a directory.
-#[must_use]
-pub fn received_folder(root: &Path, sido: &str, city: &str, serial: u64) -> PathBuf {
-    root.join("주변유적")
-        .join(format!("{sido} {city}"))
-        .join("원본")
-        .join(format!("{serial:032x}"))
-}
-
 #[cfg(test)]
 #[path = "finish_allocation_tests.rs"]
 mod allocation_tests;
@@ -145,12 +134,5 @@ mod tests {
         std::fs::write(&page, b"<!doctype html>").expect("write");
         assert!(!looks_like_zip(&page));
         assert!(!looks_like_zip(&dir.path().join("missing.zip")));
-    }
-
-    #[test]
-    fn the_received_folder_follows_the_cpp_layout() {
-        let root = Path::new("C:/data");
-        let got = received_folder(root, "경상북도", "경주시", 7);
-        assert!(got.ends_with("주변유적/경상북도 경주시/원본/00000000000000000000000000000007"));
     }
 }

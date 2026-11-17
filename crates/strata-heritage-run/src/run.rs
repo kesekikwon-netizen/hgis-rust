@@ -111,9 +111,15 @@ pub fn start_run<W: HasWindowHandle>(
         if !core.machine.accepts_files() {
             return None;
         }
-        let serial = core.now();
-        let directory = crate::finish::received_folder(&root, &sido, &city, serial);
-        std::fs::create_dir_all(&directory).ok()?;
+        let directory = match crate::finish::allocate_received_folder(&root, &sido, &city) {
+            Ok(directory) => directory,
+            Err(error) => {
+                core.machine.storage_failed(format!(
+                    "저장할 폴더가 없어 내려받기를 취소했습니다. ({error})"
+                ));
+                return None;
+            }
+        };
         let file_name = crate::finish::safe_name(&offer.suggested_name);
         core.machine.file_offered(directory.join(&file_name));
         Some(DownloadPlace {

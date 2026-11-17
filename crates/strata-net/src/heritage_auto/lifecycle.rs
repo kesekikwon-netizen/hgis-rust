@@ -3,6 +3,15 @@
 use super::{HeritageAutomation, HeritageEvent, HeritageStage};
 
 impl HeritageAutomation {
+    /// Records an allocation refusal (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:1303-1306`).
+    pub fn storage_failed(&mut self, reason: String) {
+        if self.is_over() {
+            return;
+        }
+        let event = self.stop(reason);
+        self.queued_events.extend(event);
+    }
+
     /// Cancels the run, returning its single cancellation event.
     pub fn cancel(&mut self) -> Option<HeritageEvent> {
         if self.is_over() {

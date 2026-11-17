@@ -115,3 +115,31 @@ fn cancellation_happens_once_and_discards_late_answers_and_files() {
     assert!(machine.transfer_failed("late failure", 0).is_none());
     assert!(machine.timers(u64::MAX).is_empty());
 }
+
+#[test]
+fn storage_failure_keeps_the_io_reason_and_stops_once_without_retry() {
+    let mut machine = machine(HeritageStage::Waiting);
+    machine.storage_failed("fixture allocation I/O error".into());
+    assert_eq!(
+        machine.stage(),
+        &HeritageStage::Stopped("fixture allocation I/O error".into())
+    );
+    assert_eq!(
+        machine.timers(0),
+        vec![HeritageEvent::Stopped(
+            "fixture allocation I/O error".into()
+        )]
+    );
+    assert!(machine.timers(u64::MAX).is_empty());
+    assert!(machine.transfer_failed("late refusal", 1).is_none());
+    assert!(machine.kind_done().is_none());
+}
+
+#[test]
+fn a_storage_failure_after_cancel_cannot_replace_the_outcome() {
+    let mut machine = machine(HeritageStage::Waiting);
+    assert_eq!(machine.cancel(), Some(HeritageEvent::Cancelled));
+    machine.storage_failed("late allocation error".into());
+    assert_eq!(machine.stage(), &HeritageStage::Cancelled);
+    assert!(machine.timers(u64::MAX).is_empty());
+}
