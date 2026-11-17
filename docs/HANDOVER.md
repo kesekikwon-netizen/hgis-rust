@@ -147,3 +147,5 @@ target/release/ka-hgis.exe --smoke-quit           # 켜졌다 바로 꺼짐, 종
 ### 2026-11-18 기능 목록과 점검 연결
 
 현재 메뉴·키보드·선택 상태·취소 복귀의 추적 기준은 [CURRENT_MENU_AUDIT.md](research/menus/CURRENT_MENU_AUDIT.md)다. 기존 메뉴 키보드 구현을 다시 만들지 않고 근거를 연결한다. 현재 기능 판정은 `menu_cases.py`, 과거 조사와 원본 선언의 미분류 큐는 `python scripts/menu_audit.py --write`로 만든다. 컴파일 성공을 UI 완료로 보지 않으며, 생성 보고서·PNG는 `.codex/team/menu-audit/`와 `target/audit1-menu-ui/`에 둔다. 다음 우선 재현은 메뉴·텍스트 포커스와 Delete·Backspace·Enter의 편집 데이터 소유권이다.
+
+`MENU6_CAPTURE_KEY_OWNERSHIP`은 기본 메뉴·자석 대상 팝업 뒤에서 작성 중 도형이 Delete·Backspace로 줄거나 Enter로 확정되던 문제를 재현해 수정했다. 캔버스의 해당 키를 기존 Escape 대기 입력에 연결한다. 실제 검색칸의 포커스 보호와 기존 Escape 검사는 유지했다. 새 검사 6개와 기존 생산 UI 검사를 연결하며 화면은 `target/menu6-ui/`에 둔다. 다음 우선 점검은 작성 중 도형과 구분되는 기존 선택 도형·레이어의 삭제 및 취소 복귀다.

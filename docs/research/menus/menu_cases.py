@@ -8,11 +8,12 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
     "crates/strata-app/src/popup_input_harness.rs": "75030c6dead3542613b121abf3786a80270a0069b5de8aac0edfd50fda2cd616",
-    "crates/strata-app/src/shell_workspace.rs": "bf6452ffd90c72863fb7444d076114c1bcd2c8e2fbc06248e6d83dcc28898c1a",
-    "crates/strata-app/src/gui_shell.rs": "0509bb52b81117d8786d2497f97234522dc5efb2fe6255e2b6e93b714213569a",
-    "crates/strata-app/src/gui_shell_escape.rs": "ac2f5a41fbb0be04085562e79bd8e47d17ca54ef9853942644dc63dab34dd620",
-    "crates/strata-app/src/native_menu_input.rs": "e085b1bc120a9e1d178fc396f07fed26d350d94191f1336387ca8fa539c77993",
+    "crates/strata-app/src/shell_workspace.rs": "253505e2b32e7124948be7f2d43265bcee90726da6bf7114e546e2010402a288",
+    "crates/strata-app/src/gui_shell.rs": "48ef1108e59ecd41c381bb17bbe916d01e012ff2f9568e9e81ce9f4b915ee5a1",
+    "crates/strata-app/src/gui_shell_escape.rs": "48264bd0c03f06421713cedaa86d1c787d09e664748618434f476a0e694b9fef",
+    "crates/strata-app/src/native_menu_input.rs": "af7ad1bd860d151340d54e906e5a3ca959fd5dac81e19b51413d092374d158d9",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
     "crates/strata-app/src/popup_escape_tests.rs": "2ea0dca3e1aaaf32e2deda81d43ce77a8613ab2cf543c0a8c3bea71e8fae5323",
     "target/cpp-ref/src/app/KaCaptureMapTool.cpp": "d0da08cc04d7cc2bd829a4586ebddd4b25edf2a230497460feb4010fac5e555c",
@@ -66,9 +67,9 @@ def build_cases(root):
         add('edit.' + id, '편집 > ' + label, 0, '검증 안 됨', ['MainWindowUndo.cpp', ('MainWindowRibbon.cpp', 'act' + key)],
             ['gui_shell.rs', 'app_state_layer_remove.rs'], ['선택 도형·레이어', '그리기·정합·도면', '텍스트 포커스', '되돌릴 항목 없음'],
             ['기존 편집 검사 재사용; 포커스별 되돌리기 소유권·도형 ID·저장 전후 분기 재대조'])
-    add('edit.delete-focus', 'Delete / Backspace > 도형·레이어·그리던 점·정합점', 0, '검증 안 됨', ['MainWindow.cpp', 'MainWindowUndo.cpp'],
-        [('gui_shell.rs', 'Key::Delete'), 'app_state_layer_remove.rs'], ['메뉴 열림', '텍스트 입력', '선택 없음·여러 선택', '그리기 중'],
-        ['우선 재현: 메뉴가 Delete를 처리하기 전에 캔버스 삭제가 실행되는지; 기존 Esc 점검에 연결'])
+    add('edit.delete-focus', 'Delete / Backspace > 도형·레이어·그리던 점·정합점', 0, '부분 구현', ['MainWindow.cpp', 'MainWindowUndo.cpp'],
+        [('gui_shell.rs', 'Key::Delete'), 'app_state_layer_remove.rs', 'menu_capture_keys_tests.rs'], ['메뉴 열림', '텍스트 입력', '선택 없음·여러 선택', '그리기 중'],
+        ['MENU6에서 작성 중 도형·검색칸 보호 확인; 기존 선택 도형·레이어·정합점·도면의 메뉴별 삭제와 포커스는 남음'])
     add('capture.real-snap', '그리기 > 자석 > 실제 점·선·면 캡처', 0, '미구현', [('KaCaptureMapTool.cpp', 'snapToMap')],
         [('gui_tab_map_capture.rs', 'self.sketch_press(s2w'), 'app_state_draw_commit.rs'], ['자석 켬·끔', '모든 조사·현재 레이어', '원본 CRS', '취소·조사 전환'],
         ['실제 캡처는 원래 좌표를 전달; 별도 legacy CAD 스냅과 연결되지 않음', 'SNAP1A 소유권 준비를 재사용해 실제 입력·미리보기·오래된 결과 폐기 연결'])
@@ -95,6 +96,12 @@ def build_cases(root):
     add('key.escape-other', '속성 팝업·선택 상자·색 선택기 > Esc·Enter·Delete', 0, '검증 안 됨', ['MainWindowContextMenus.cpp'],
         ['dlg_feature_form.rs', 'dlg_feature_record.rs', 'ri_attr_card_rows.rs', 'gui_shell.rs'],
         ['메뉴 종류별', '포커스·기록 입력·그리기 중', '반복 열기'], ['기존 MENU3·MENU4·MENU5와 겹치지 않는 종류만 재현'])
+    add('key.capture-menu', '작성 중 도형 > 기본 메뉴·자석 대상·검색칸의 Enter / Delete / Backspace', 0, '완료',
+        [('KaCaptureMapTool.cpp', 'void KaCaptureMapTool::keyPressEvent')],
+        ['gui_shell.rs', 'gui_shell_escape.rs', 'shell_workspace.rs', 'native_menu_input.rs', 'popup_input_harness.rs', 'menu_capture_keys_tests.rs'],
+        ['1024×768 레이어·기록 메뉴', '1680×960 자석 대상·실제 검색칸', 'EPSG:5187 그리던 세 점', '메뉴 열기 클릭 해제+Delete 같은 묶음'], [],
+        '메뉴에서는 점·도형 수·변경 상태 유지; 닫은 뒤 캔버스 키 재개. 검색칸은 기존 포커스 보호 유지. 사용자 데이터 보존 결정이며 Qt 메뉴 내부 단축키와의 동일성 주장이 아님',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 메뉴의 편집 키')}])
     add('context.map', '지도 우클릭 > 기록·그리기·선택·보기·좌표 복사', 1, '검증 안 됨', [('MainWindowContextMenus.cpp', 'populateMapContextMenu')],
         ['gui_tab_map_context.rs'], ['도형 아래·빈 지도', '조사 없음·처리 중', '읽기 전용', '키보드 닫기'], ['별도 지도 메뉴 렌더러의 조건·경계·취소 확인; MENU2 레이어 메뉴와 구분'])
     add('context.layer', '레이어 우클릭 > 편집·표시·삭제·라벨·인코딩', 1, '부분 구현', [('MainWindowContextMenus.cpp', 'showLayerTreeContextMenu')],

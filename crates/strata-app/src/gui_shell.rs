@@ -22,11 +22,11 @@ pub const KA_STATUS_SCALE_PRESETS: [u32; 13] = [100, 200, 250, 500, 1_000, 2_000
 
 impl StrataAppState {
     /// C++ `MainWindow.cpp` + `MainWindowRibbon.cpp` + `KaShellFocus.h` 단축키 1:1 처리
-    pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) -> escape::PendingCanvasEscape {
-        let escape = self.pending_canvas_escape(ctx);
+    pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) -> escape::PendingCanvasInput {
+        let pending = self.pending_canvas_input(ctx);
         // C++ 모달 창(KaFeatureFormDialog·조사구역 설정·도형 속성) 뒤에서는 주 창 단축키가 듣지 않는다 — 창이 Enter·Esc 를 맡는다.
         if self.modal_window_open() {
-            return escape;
+            return pending;
         }
         let wants_kb = ctx.wants_keyboard_input();
         let mut save_requested: Option<bool> = None;
@@ -35,10 +35,6 @@ impl StrataAppState {
         // target/cpp-ref/src/app/MainWindowUndo.cpp:486-495 apply Esc, Enter, Backspace and Delete to capture.
         let capture = !wants_kb && self.modals.active.is_none() && self.capture_active();
         ctx.input(|i| {
-            // target/cpp-ref/src/app/KaCaptureMapTool.cpp:379-386: keep cancellation ahead of a batched Enter.
-            if capture && i.key_pressed(egui::Key::Enter) && !i.key_pressed(egui::Key::Escape) {
-                self.sketch_finish();
-            }
             if i.key_pressed(egui::Key::F9) {
                 self.right_inspector.left_panel_collapsed = !self.right_inspector.left_panel_collapsed;
                 self.home_map.draw_guide_message = Some(
@@ -76,23 +72,24 @@ impl StrataAppState {
                 self.active_tab = MainTab::Map;
                 self.active_tool = MapToolKind::Select;
             }
-            if !wants_kb && self.active_tool == MapToolKind::GeorefAlign && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
-                self.delete_selected_align_point();
-            } else if capture && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
-                self.sketch_undo_vertex();
-            } else if !wants_kb && self.active_tab == MainTab::Drawing && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
-                // On the sheet both keys go to the sheet (KaDrawingStudio.cpp:3512-3522).
-                if self.modals.active.is_none() && !self.modal_window_open() {
-                    self.delete_sheet_selection();
+            // target/cpp-ref/src/app/KaCaptureMapTool.cpp:379-391: capture keys run after menu owners.
+            if !capture {
+                if !wants_kb && self.active_tool == MapToolKind::GeorefAlign && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+                    self.delete_selected_align_point();
+                } else if !wants_kb && self.active_tab == MainTab::Drawing && (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+                    // On the sheet both keys go to the sheet (KaDrawingStudio.cpp:3512-3522).
+                    if self.modals.active.is_none() && !self.modal_window_open() {
+                        self.delete_sheet_selection();
+                    }
+                } else if !wants_kb && i.key_pressed(egui::Key::Delete) {
+                    // QKeySequence::Delete (MainWindow.cpp:256-268). An open window keeps the key to itself.
+                    // A picked vertex is what Delete removes, not the whole shape (MainWindowUndo.cpp:497-500).
+                    if self.modals.active.is_none() && !self.modal_window_open() && !self.delete_active_vertex() {
+                        self.delete_selected();
+                    }
+                } else if !wants_kb && i.key_pressed(egui::Key::Backspace) && !self.delete_active_vertex() {
+                    self.home_map.cad.on_backspace(&mut self.home_map.scene);
                 }
-            } else if !wants_kb && i.key_pressed(egui::Key::Delete) {
-                // QKeySequence::Delete (MainWindow.cpp:256-268). An open window keeps the key to itself.
-                // A picked vertex is what Delete removes, not the whole shape (MainWindowUndo.cpp:497-500).
-                if self.modals.active.is_none() && !self.modal_window_open() && !self.delete_active_vertex() {
-                    self.delete_selected();
-                }
-            } else if !wants_kb && i.key_pressed(egui::Key::Backspace) && !self.delete_active_vertex() {
-                self.home_map.cad.on_backspace(&mut self.home_map.scene);
             }
             if i.modifiers.ctrl {
                 if i.key_pressed(egui::Key::N) {
@@ -141,7 +138,7 @@ impl StrataAppState {
             }
             None => {}
         }
-        escape
+        pending
     }
 }
 
@@ -233,3 +230,7 @@ mod popup_input_harness;
 #[cfg(test)]
 #[path = "native_popup_escape_tests.rs"]
 mod native_popup_escape_tests;
+
+#[cfg(test)]
+#[path = "menu_capture_keys_tests.rs"]
+mod menu_capture_keys_tests;

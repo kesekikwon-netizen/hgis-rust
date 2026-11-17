@@ -12,7 +12,7 @@ impl StrataAppState {
     pub fn render_workspace_egui(&mut self, ctx: &egui::Context) -> egui::Rect {
         let _perf_frame = crate::perf_recorder::begin_frame();
         self.poll_debug_remote_commands(ctx);
-        let escape = self.handle_cpp_keyboard_shortcuts(ctx);
+        let pending_input = self.handle_cpp_keyboard_shortcuts(ctx);
         self.advance_sheet_pdf(ctx);
         self.advance_device_print(ctx);
         self.poll_align_picker(ctx);
@@ -111,7 +111,7 @@ impl StrataAppState {
         self.render_feature_record(ctx);
         self.render_rename_layer(ctx);
         self.render_layer_set_question(ctx);
-        escape.apply(self, ctx);
+        pending_input.apply(self, ctx);
         central_rect
     }
 
