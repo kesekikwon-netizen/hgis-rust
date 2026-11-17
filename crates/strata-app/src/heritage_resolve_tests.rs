@@ -48,7 +48,7 @@ fn gyeongju(_: &Request) -> Result<Vec<u8>, TransferFailure> {
 
 fn press(bench: &mut Bench) {
     bench.app.press_heritage();
-    bench.app.drive_heritage(&egui::Context::default(), 0.0);
+    bench.app.drive_heritage_no_window(&egui::Context::default(), 0.0);
 }
 
 /// One point inside the survey area is asked of the address service, in degrees, with the stored key; the
@@ -60,7 +60,7 @@ fn a_press_asks_for_the_city_and_opens_the_dialog_with_it() {
     assert_eq!(bench.app.home_map.draw_guide_message.as_deref(), Some("조사구역이 속한 시·군을 찾는 중입니다…"));
     assert_eq!(bench.app.modals.active, None, "the dialog waits for the answer");
 
-    bench.app.drive_heritage(&egui::Context::default(), 0.0);
+    bench.app.drive_heritage_no_window(&egui::Context::default(), 0.0);
     assert_eq!(bench.app.modals.active, Some(ActiveModalDialog::HeritageRegionSelect));
     assert_eq!(bench.app.home_map.draw_guide_message, None, "the search is over: the status line no longer says it runs");
     assert_eq!((bench.app.modals.heritage_sido.as_str(), bench.app.modals.heritage_city.as_str()), ("경상북도", "경주시"));

@@ -168,6 +168,10 @@ pub struct StrataAppState {
     /// A 「받기」 press asked for a run; it starts on the next frame, where the window handle
     /// exists (`KaHeritageBrowser.cpp:596-600` starts the session there).
     pub(crate) heritage_run_requested: bool,
+    /// The pledge text the site showed once the box was ticked, waiting for the receipt write.
+    /// `Some` only after the pledge was actually agreed, so the receipt never claims more than
+    /// happened (`MainWindow.cpp:3228-3244`).
+    pub(crate) heritage_pledge_agreed: Option<String>,
     /// The history-GIS key the tiles of the 1919 map are asked for with (ref_tile_history.rs); never shown.
     pub(crate) history_gis_key: String,
     pub active_tool: MapToolKind,

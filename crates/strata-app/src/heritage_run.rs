@@ -59,6 +59,10 @@ pub(crate) struct HeritageRun {
     pub(crate) region_note: Option<String>,
     /// The city the dialog last asked about, and when its newest usable data was received.
     pub(crate) asked: Option<((String, String), Option<NaiveDateTime>)>,
+    /// The hidden-browser run, once a 「받기」 press has started one
+    /// (`heritage_run_start.rs`). `None` until then, and again when it ends.
+    #[cfg(windows)]
+    pub(crate) browser_run: Option<strata_heritage_run::HeritageRunHandle>,
 }
 
 impl std::fmt::Debug for HeritageRun {
@@ -132,9 +136,44 @@ impl StrataAppState {
     }
 
     /// Every frame: the wishes, and the words of a running worker.
-    pub(crate) fn drive_heritage(&mut self, ctx: &eframe::egui::Context, now: f64) {
+    ///
+    /// `frame` is needed only when a 「받기」 press has to open the browser session, which a test
+    /// cannot do; [`Self::drive_heritage_words`] runs everything a test needs without it.
+    pub(crate) fn drive_heritage(&mut self, ctx: &eframe::egui::Context, frame: &eframe::Frame, now: f64) {
         self.drive_heritage_region(ctx);
         self.drive_heritage_wishes(now);
+        // A 「받기」 press asked for a run; the window handle exists only here
+        // (`heritage_run_start.rs`).
+        if self.heritage_run_requested {
+            self.heritage_run_requested = false;
+            crate::heritage_run_start::begin_run_in_window(self, frame);
+        }
+        self.drive_heritage_words();
+        self.drive_heritage_steps(ctx);
+    }
+
+    /// Everything the frame loop does except opening a browser session: a test calls this,
+    /// because a test has no window to give a hidden view.
+    #[cfg(test)]
+    pub(crate) fn drive_heritage_no_window(&mut self, ctx: &eframe::egui::Context, now: f64) {
+        self.drive_heritage_region(ctx);
+        self.drive_heritage_wishes(now);
+        self.drive_heritage_words();
+        self.drive_heritage_steps(ctx);
+    }
+
+    /// The pledge receipt, which needs no window.
+    pub(crate) fn drive_heritage_words(&mut self) {
+        // The pledge was agreed on the site: write the receipt now, and say where it went.
+        // The words are the result of the write, never a promise made in advance
+        // (`MainWindow.cpp:3228-3244`).
+        if let Some(terms) = self.heritage_pledge_agreed.take() {
+            self.status_bar_hint = crate::heritage_run_start::write_receipt_after_pledge(self, &terms);
+        }
+    }
+
+    /// Reads what the worker thread sent, until it has nothing left.
+    fn drive_heritage_steps(&mut self, ctx: &eframe::egui::Context) {
         loop {
             let Some((steps, job)) = self.heritage.running.as_ref() else {
                 return;

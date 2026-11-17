@@ -83,7 +83,10 @@ egui::Frame::NONE
             Color32::WHITE,
         );
         ui.add_space(3.0);
-        // HeritagePledge::preDisclosure()
+        // HeritagePledge::preDisclosure(). The receipt words match what `heritage_receipt.rs`
+        // writes: `<survey folder>/주변유적/receipts/서약서-<yyyyMMdd-HHmmss>.txt`, holding the
+        // time, the account state (never the id) and the pledge text
+        // (`MainWindow.cpp:3228-3244`).
         ui.label(
             egui::RichText::new(
                 "받기를 누르면 국가유산 인트라넷의 「원본자료 사용 서약서」에 자동으로 동의하고, 동의 시각과 서약서 원문을 조사폴더 주변유적/receipts 에 남깁니다. 받은 자료는 동국문화재연구원 소유입니다.",

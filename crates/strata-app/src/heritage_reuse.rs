@@ -18,8 +18,12 @@ use super::{Step, HERITAGE_JOB_TITLE};
 use crate::app_state::StrataAppState;
 use crate::download_jobs::{DownloadJobHandle, DownloadJobState, StopCode};
 
-/// This app's own words: the C++ goes to the intranet when nothing can be used again.
-const NOTHING_RECEIVED: &str = "이 시·군은 최근 30일 안에 받아 둔 주변유적 자료가 없습니다. 인트라넷에서 새로 받기는 준비 중입니다.";
+/// This app's own words, for the case where the intranet run cannot be started here.
+///
+/// It used to say "인트라넷에서 새로 받기는 준비 중입니다", which was true when no run existed.
+/// The run exists now (`heritage_run_start.rs`), so the words say what actually blocks: the
+/// account, a survey, or the city. The C++ goes straight to the intranet in this case.
+const NOTHING_RECEIVED: &str = "이 시·군은 최근 30일 안에 받아 둔 주변유적 자료가 없습니다.";
 
 /// What the dialog asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]

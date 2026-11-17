@@ -9,6 +9,7 @@ name = "ka-hgis"
 path = "src/main.rs"
 
 [dependencies]
+strata-heritage-run = { path = "../strata-heritage-run" }
 strata-types = { workspace = true }
 strata-secrets = { workspace = true }
 strata-storage = { workspace = true }

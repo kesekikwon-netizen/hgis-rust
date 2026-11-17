@@ -45,8 +45,9 @@ fn fetch_click_writes_no_pledge_receipt() {
     std::fs::write(&survey, b"").expect("survey file");
     let mut app = StrataAppState::new_startup();
     app.survey_path = Some(survey);
-    // An account lets the click reach the old receipt write; an empty region stops the request in
-    // heritage_preflight before any network thread starts.
+    // An empty region leaves the button disabled (`fetch_state`), so a press cannot start a run.
+    // The receipt is written only after the pledge was actually agreed on the site
+    // (`MainWindow.cpp:3228-3244`), which cannot happen without a run.
     app.accounts.heritage_configured = true;
     app.modals.heritage_sido.clear();
     app.modals.heritage_city.clear();
