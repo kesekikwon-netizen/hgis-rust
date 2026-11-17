@@ -262,7 +262,6 @@ impl StrataAppState {
         let cx = base.x + 641.0 * PX;
         chevron(&p, Pos2::new(cx, spin.center().y - 4.5), false, MUTED, 3.5, 3.0);
         chevron(&p, Pos2::new(cx, spin.center().y + 4.5), true, MUTED, 3.5, 3.0);
-
         let combo = at(base, 670.0, 13.0, 206.0, 48.0);
         field_box(&p, combo);
         let combo_resp = ui.interact(combo, ui.id().with("ka_draw_combo"), egui::Sense::click()).on_hover_text("조사 도형과 지적 선에 붙습니다. 위성 그림은 제외");
@@ -274,7 +273,7 @@ impl StrataAppState {
         if combo_resp.clicked() {
             ui.memory_mut(|m| m.toggle_popup(popup_id));
         }
-        egui::popup::popup_below_widget(ui, popup_id, &combo_resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
+        crate::gui_shell::native_popup_below_widget(ui, popup_id, &combo_resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
             ui.set_min_width(combo.width());
             for (value, label) in [(false, "모든 조사 레이어"), (true, "현재 레이어")] {
                 if ui.selectable_label(current_only == value, label).clicked() && current_only != value {
@@ -290,7 +289,6 @@ impl StrataAppState {
                 "자석 꺼짐"
             });
         }
-
         let assist = at(base, 886.0, 10.0, 43.0, 55.0);
         let assist_tip = "자석 보조 — 선 따라 자동채움 · 근접 자석점 표시 · 가까운 선에 붙이기";
         if button(ui, assist, "assist", Look::Plain, assist_tip).clicked() {

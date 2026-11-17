@@ -7,7 +7,26 @@ pub(crate) fn menu_button<R>(ui: &mut Ui, title: impl Into<WidgetText>, contents
     let response = ui.menu_button(title, contents);
     // egui0.31.1 menu.rs:379-390 closes before rendering; a child must leave Escape for that root.
     if root && (was_open || response.response.clicked()) {
-        ui.input_mut(|input| input.events.retain(|event| !matches!(event, Event::Key { key: Key::Escape, pressed: true, .. })));
+        consume_escape(ui);
     }
     response
+}
+
+pub(crate) fn popup_below_widget<R>(
+    ui: &Ui,
+    popup_id: egui::Id,
+    response: &egui::Response,
+    close_behavior: egui::PopupCloseBehavior,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> Option<R> {
+    let inner = egui::popup::popup_below_widget(ui, popup_id, response, close_behavior, contents);
+    // target/cpp-ref/src/app/KaSnapSettingsWidget.cpp:24-28; egui0.31.1 popup.rs closes after the rendered body.
+    if inner.is_some() {
+        consume_escape(ui);
+    }
+    inner
+}
+
+fn consume_escape(ui: &Ui) {
+    ui.input_mut(|input| input.events.retain(|event| !matches!(event, Event::Key { key: Key::Escape, pressed: true, .. })));
 }

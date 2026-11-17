@@ -9,6 +9,7 @@ mod escape;
 #[path = "native_menu_input.rs"]
 mod native_menu_input;
 pub(crate) use native_menu_input::menu_button as native_menu_button;
+pub(crate) use native_menu_input::popup_below_widget as native_popup_below_widget;
 
 /// UX_LAYOUT_SPEC.md 1절: 세로 5단 골격 (창 1600×900 기준, 상태줄 y=839, h=32)
 pub const UX_STATUS_BAR_Y: f32 = 839.0;
@@ -224,3 +225,11 @@ mod keys_tests;
 #[cfg(test)]
 #[path = "popup_escape_tests.rs"]
 mod popup_escape_tests;
+
+#[cfg(test)]
+#[path = "popup_input_harness.rs"]
+mod popup_input_harness;
+
+#[cfg(test)]
+#[path = "native_popup_escape_tests.rs"]
+mod native_popup_escape_tests;
