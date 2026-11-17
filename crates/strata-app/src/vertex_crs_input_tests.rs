@@ -5,30 +5,35 @@ use strata_canvas2d::map_tools::MapToolKind;
 use strata_storage::edit_buffer::FeatureRecord;
 
 pub(super) fn fixture(source: i32) -> Harness {
+    fixture_table("feature_poly", source)
+}
+
+pub(super) fn fixture_table(table: &str, source: i32) -> Harness {
+    let table = strata_types::schema::DomainLayerKey::from_id(table).expect("known demo domain table").id();
     let mut h = Harness::drawing();
     let path = h.app.survey_path.clone().expect("temporary survey");
     let conn = rusqlite::Connection::open(&path).expect("open temporary copy");
     strata_storage::gpkg_sql_functions::register_gpkg_sql_functions(&conn).expect("real spatial functions");
-    let blobs: Vec<(i64, Vec<u8>)> = conn.prepare("SELECT fid, geom FROM feature_poly ORDER BY fid").expect("prepare").query_map([], |row| Ok((row.get(0)?, row.get(1)?))).expect("query").collect::<Result<_, _>>().expect("rows");
+    let blobs: Vec<(i64, Vec<u8>)> = conn.prepare(&format!("SELECT fid, geom FROM \"{table}\" ORDER BY fid")).expect("prepare").query_map([], |row| Ok((row.get(0)?, row.get(1)?))).expect("query").collect::<Result<_, _>>().expect("rows");
     // target/cpp-ref/src/app/KaVertexEditTool.cpp:110-116: relabel only this copied fixture, retaining stored coordinates.
     conn.execute("INSERT OR IGNORE INTO gpkg_spatial_ref_sys (srs_name,srs_id,organization,organization_coordsys_id,definition,description) VALUES ('test source',?1,'NONE',?1,'undefined','test-only source')", (source,))
         .expect("fixture CRS");
-    conn.execute("UPDATE gpkg_geometry_columns SET srs_id=?1 WHERE table_name='feature_poly'", (source,)).expect("geometry metadata");
-    conn.execute("UPDATE gpkg_contents SET srs_id=?1 WHERE table_name='feature_poly'", (source,)).expect("contents metadata");
+    conn.execute("UPDATE gpkg_geometry_columns SET srs_id=?1 WHERE table_name=?2", (source, table)).expect("geometry metadata");
+    conn.execute("UPDATE gpkg_contents SET srs_id=?1 WHERE table_name=?2", (source, table)).expect("contents metadata");
     for (fid, mut blob) in blobs {
         assert_eq!(&blob[..2], b"GP");
         assert_eq!(blob[3] & 1, 1, "tracked demo header is little endian");
         blob[4..8].copy_from_slice(&source.to_le_bytes());
-        conn.execute("UPDATE feature_poly SET geom=?1 WHERE fid=?2", (&blob, fid)).expect("consistent fixture header");
+        conn.execute(&format!("UPDATE \"{table}\" SET geom=?1 WHERE fid=?2"), (&blob, fid)).expect("consistent fixture header");
     }
     drop(conn);
     assert!(h.app.open_survey_gpkg(&path), "actual production open");
-    assert_eq!(h.app.survey_tables.iter().find(|t| t.table == "feature_poly").expect("opened table").srs_id, source);
+    assert_eq!(h.app.survey_tables.iter().find(|t| t.table == table).expect("opened table").srs_id, source);
     h.app.active_tab = crate::app_state::MainTab::Map;
     h.app.active_tool = MapToolKind::Select;
     h.app.ribbon.sub_toolbar_visible = false;
     for entry in h.app.left_layers.entries.clone() {
-        h.app.home_map.real_survey.layer_visible.insert(entry.label_ko, entry.layer_key == "feature_poly");
+        h.app.home_map.real_survey.layer_visible.insert(entry.label_ko, entry.layer_key == table);
     }
     for _ in 0..3 {
         h.frame(vec![]);

@@ -177,7 +177,12 @@ impl StrataAppState {
             return;
         };
         let work = CrsCode::from(self.work_crs).epsg_number();
-        let dst_crs = u32::try_from(self.survey_tables[idx].srs_id).ok().filter(|&d| d > 0 && d != work);
+        // Owner CRS rule and target/cpp-ref/src/app/KaCaptureMapTool.cpp:437-448: identity is distinct from conversion failure.
+        let dst_crs = u32::try_from(self.survey_tables[idx].srs_id).map(|dst| (dst != work).then_some(dst));
+        let Ok(dst_crs) = dst_crs else {
+            self.show_status_message(TOO_FEW_TEXT.to_owned());
+            return;
+        };
         let built = match raw {
             RawGeom::Point(pt) => match dst_crs {
                 Some(dst) => Transformer::new(work, dst).and_then(|t| t.transform(pt)).map(|p| (point_wkt(p), None)),
@@ -199,9 +204,7 @@ impl StrataAppState {
             }
         };
         let Ok((wkt, notice)) = built else {
-            if tool == MapToolKind::PlacePoint {
-                self.draw_sketch.points.clear();
-            }
+            // target/cpp-ref/src/app/KaCaptureMapTool.cpp:403-408: failed conversion keeps the draft for retry or cancel.
             self.show_status_message(TOO_FEW_TEXT.to_owned());
             return;
         };

@@ -8,9 +8,17 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "target/cpp-ref/src/app/MainWindowEditing.cpp": "bf15c3e25220aae49894159fe0d314249ec82709e61dc9b5a5c60436bd33492c",
+    "crates/strata-app/src/app_state_draw_commit.rs": "38321c4cb82daead025c5650afec2952b6f5facf859fe336f569b633e8cc5ff7",
+    "crates/strata-app/src/app_state_draw_commit_b.rs": "5bbaafac5122c0e71f7ea0d04a08c25d550cbf6eac2148bf5717376d91102bc6",
+    "crates/strata-app/src/app_state_draw_entry.rs": "51eaffd7e767f9f2d09c34b9aed575ac8c6468a46328ab23352d0a6cfe749454",
+    "crates/strata-app/src/gui_tab_map_capture.rs": "b474189a44b9865429f5cbf07e8c22a5800f8330741f8435566e517f2760e530",
+    "crates/strata-app/src/app_state_feature_form.rs": "f5fbe97534c6feee1c3f329352cf782c94be126ad2caff390310030ddd05e999",
+    "crates/strata-app/src/dlg_feature_form.rs": "a15cc6b65ee56af0b436034fb7cd4d878b1c461360c83913fa612a165cb262bb",
+    "crates/strata-app/src/capture_crs_input_tests.rs": "6d8bbc6ab7f292ebb32d85f7bb526600119ef4751c0ae3cd29dfae8088968a1f",
     "crates/strata-app/src/feature_pick.rs": "9c447528a2ed904073eb7b186c3f56cfe1c04586281856c98f10c18a206f4c80",
     "crates/strata-app/src/gui_tab_map_select_box.rs": "88749469a5b8951255995f05ec2d52f302910dd2347e20061aff38e702db1a74",
-    "crates/strata-app/src/vertex_crs_input_tests.rs": "e80e5b56a2afa9946e206a925909034109889845572f906d311f085c1a9e97f4",
+    "crates/strata-app/src/vertex_crs_input_tests.rs": "83912408f3dafe361155c53d84afa04302d19c71c0f65817befb6695771ffdf5",
     "crates/strata-app/src/vertex_crs_boundary_tests.rs": "402db9986108cd79d44ac7977a91225e79507ac78f7522ae2566800993d13754",
     "crates/strata-engine/src/crs.rs": "13d686ca704937b161e506a0cb66866f6f193d7bca0d256a520ade9d4b036050",
     "target/cpp-ref/src/app/KaClosePrompt.cpp": "021bedf877bdf48a831e443be4849073e145c68dff3645cc9f640f8cdd948239",
@@ -39,7 +47,7 @@ REVIEWED_DIGESTS = {
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
     "crates/strata-app/src/popup_input_harness.rs": "a5afd08239bf3dec538c7eb2e3287ce2be8486d6474b2dadb97b0ac3d615099c",
     "crates/strata-app/src/shell_workspace.rs": "b2d833287f100313db7a19a66ebb4cb78b283b1ed123afbd5017471edccc8142",
-    "crates/strata-app/src/gui_shell.rs": "507c14a5f2b59e4a73a98168c4030e40de77416a093a4ac30e64bdbb72d90dd1",
+    "crates/strata-app/src/gui_shell.rs": "a5a0f15fdc9684110f39f045fff1a743e64b459ba43e22448ba10eeeef29d15a",
     "crates/strata-app/src/gui_shell_escape.rs": "37a738f061a24b7bc01fac480a840e09dc93abf53162e56d1da0b70cbd2c45e7",
     "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
@@ -184,6 +192,18 @@ def build_cases(root):
          '직접 선택 상태의 내부 경계 5개는 별도 증거이며 UI 도달성으로 해석하지 않음'], [],
         '거부는 기록·이력·변경 상태·사본 바이트 보존; 정상 끌기 뒤 CtrlZ는 원래 ID·WKT·속성 복원. 선택 모드 진입 단추·모든 CRS·작도·버퍼·분할·네이티브 UI는 범위 밖',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 꼭짓점 편집의 좌표계 오류')}])
+    add('edit.capture-crs-input', '점·선·면 작도 상태 > 대상 좌표계 오류 거부·초안·취소·되돌리기', 0, '완료',
+        [('KaCaptureMapTool.cpp', 'void KaCaptureMapTool::finish'), ('MainWindowEditing.cpp', '&KaCaptureMapTool::captureCanceled'),
+         ('target/cpp-ref/tests/test_editing_tools.cpp', 'void TestEditingTools::clickedHandleIsPickedAndDeleteRemovesOnlyThatVertex')],
+        ['app_state_draw_commit.rs', 'app_state_draw_commit_b.rs', 'app_state_draw_entry.rs', 'gui_tab_map_capture.rs',
+         'app_state_feature_form.rs', 'dlg_feature_form.rs', 'gui_shell.rs', 'gui_shell_escape.rs', 'native_menu_input.rs',
+         'popup_input_harness.rs', 'vertex_crs_input_tests.rs', 'capture_crs_input_tests.rs', 'crates/strata-engine/src/crs.rs'],
+        ['1680×960 생산 UI·추적 합성 데모 사본·유효한 편집 대상과 작도 상태', '대상 0·-1의 점·선·면 실제 클릭·Enter 거부는 사용자 좌표계 규칙에 따름',
+         '미등록 999999 생성 실패와 유효한 5187→5186 변환의 범위 밖 점 실패를 구분', '반복 Enter의 오류 갱신·Esc·실제 재입력·재취소',
+         '정상 표 EPSG:5186·5187 / 작업 EPSG:5187의 점·선·면 위치와 실제 속성 창 건너뛰기·CtrlZ',
+         'C++ 1e-6 m 국소 위치 기준·전체 영역 오차 상한 아님', '범위 밖 화면 준비는 고정물이며 그 화면에 이르는 모든 이동 제스처 검사는 아님'], [],
+        '실패는 초안·기록·이력·변경 상태·사본 바이트 유지; Esc 뒤 같은 도구로 다시 입력 가능. 정상 CtrlZ는 원래 ID·WKT·속성 복원. 상위 단추 전체 진입·속성 저장 조합·다른 작업 CRS·분할 확정·네이티브 입력은 범위 밖',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 작도 확정의 좌표계 오류')}])
     add('context.map', '지도 우클릭 > 기록·그리기·선택·보기·좌표 복사', 1, '검증 안 됨', [('MainWindowContextMenus.cpp', 'populateMapContextMenu')],
         ['gui_tab_map_context.rs'], ['도형 아래·빈 지도', '조사 없음·처리 중', '읽기 전용', '키보드 닫기'], ['별도 지도 메뉴 렌더러의 조건·경계·취소 확인; MENU2 레이어 메뉴와 구분'])
     add('context.layer', '레이어 우클릭 > 편집·표시·삭제·라벨·인코딩', 1, '부분 구현', [('MainWindowContextMenus.cpp', 'showLayerTreeContextMenu')],

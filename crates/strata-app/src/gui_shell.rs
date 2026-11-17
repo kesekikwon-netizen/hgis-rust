@@ -252,3 +252,7 @@ mod vertex_crs_input_tests;
 #[cfg(test)]
 #[path = "vertex_crs_boundary_tests.rs"]
 mod vertex_crs_boundary_tests;
+
+#[cfg(test)]
+#[path = "capture_crs_input_tests.rs"]
+mod capture_crs_input_tests;
