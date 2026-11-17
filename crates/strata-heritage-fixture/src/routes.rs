@@ -48,12 +48,16 @@ pub(crate) fn respond(
         // Before login: the form. After login: the frames page, whose child frame holds
         // the download panel — the frame walker in the scripts needs that layout.
         "/user/checkNet.do" => html(&login_or_main(state)),
-        "/main.do" => html(&pages::main_frames(&city(state))),
+        "/main.do" => html(&frames(state)),
         "/left.do" => html(pages::left_menu()),
+        "/user/data/heritageAgreement.do" => html(pages::agreement()),
         "/user/data/heritageDownload.do" => html(&pages::download_page(&city(state))),
         "/user/data/heritageDownloadList.do" => html(&pages::search_result(&city(state))),
         "/user/data/heritageDownload/downloadFilesAll.do" => {
-            let zip = state.lock().ok().and_then(|s| s.zips.values().next().cloned());
+            let zip = state
+                .lock()
+                .ok()
+                .and_then(|s| s.zips.values().next().cloned());
             match zip {
                 Some(bytes) => (STATUS_200, CT_ZIP, bytes),
                 None => (STATUS_404, CT_HTML, b"no zip".to_vec()),
@@ -73,15 +77,19 @@ fn city(state: &Arc<Mutex<FixtureState>>) -> (String, String) {
 }
 
 fn login_or_main(state: &Arc<Mutex<FixtureState>>) -> String {
-    let (logged_in, city) = state
-        .lock()
-        .map(|s| (s.logged_in, s.city.clone()))
-        .unwrap_or((false, (String::new(), String::new())));
+    let logged_in = state.lock().map(|s| s.logged_in).unwrap_or(false);
     if logged_in {
-        pages::main_frames(&city)
+        frames(state)
     } else {
         pages::login().to_owned()
     }
+}
+
+fn frames(state: &Arc<Mutex<FixtureState>>) -> String {
+    state
+        .lock()
+        .map(|s| pages::main_frames(&s.city, s.require_pledge))
+        .unwrap_or_default()
 }
 
 /// `USER_ID=…&USER_PW=…` matching the fixture's account.

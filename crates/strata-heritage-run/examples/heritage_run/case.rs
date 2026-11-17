@@ -20,6 +20,8 @@ pub struct Case {
     pub city: (&'static str, &'static str),
     /// Where the run must be when the case is over.
     pub expect: HeritageStage,
+    /// Requires the actual agreement script and its browser callback.
+    pub pledge: bool,
 }
 
 /// The cases, in the order they run.
@@ -32,6 +34,7 @@ pub fn cases() -> Vec<Case> {
             run_password: FIXTURE_ACCOUNT.1,
             city: ("경상북도", "경주시"),
             expect: HeritageStage::DownloadAll,
+            pledge: false,
         },
         Case {
             name: "wrong password stops and says so",
@@ -39,6 +42,7 @@ pub fn cases() -> Vec<Case> {
             run_password: "not-the-password",
             city: ("경상북도", "경주시"),
             expect: HeritageStage::Stopped(String::new()),
+            pledge: false,
         },
         Case {
             name: "a kind with a ZIP runs to the end of the six kinds",
@@ -48,6 +52,7 @@ pub fn cases() -> Vec<Case> {
             // The fixture answers every kind with the same ZIP, so all six arrive and the run
             // finishes. This is the only case that proves a file reaches the disk.
             expect: HeritageStage::Done,
+            pledge: false,
         },
         Case {
             name: "cancelling a transfer emits once and finishes cleanup",
@@ -55,6 +60,15 @@ pub fn cases() -> Vec<Case> {
             run_password: FIXTURE_ACCOUNT.1,
             city: ("경상북도", "경주시"),
             expect: HeritageStage::Cancelled,
+            pledge: false,
+        },
+        Case {
+            name: "actual pledge callback delivers its terms and completes all kinds",
+            run_id: FIXTURE_ACCOUNT.0,
+            run_password: FIXTURE_ACCOUNT.1,
+            city: ("경상북도", "경주시"),
+            expect: HeritageStage::Done,
+            pledge: true,
         },
     ]
 }

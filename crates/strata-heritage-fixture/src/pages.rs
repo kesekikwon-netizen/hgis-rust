@@ -51,17 +51,30 @@ function goLogin(){
 /// live here; it lives in the left menu frame, which is where the real site puts it. The probe
 /// walks every frame, so it finds it there.
 #[must_use]
-pub fn main_frames(city: &(String, String)) -> String {
+pub fn main_frames(city: &(String, String), require_pledge: bool) -> String {
     let (sido, sgg) = city;
+    let content = if require_pledge {
+        "/user/data/heritageAgreement.do"
+    } else {
+        "/user/data/heritageDownload.do"
+    };
     format!(
         r#"<!doctype html><html lang="ko"><head><meta charset="utf-8"></head>
 <frameset cols="220,*">
   <frame src="/left.do" name="left">
-  <frame src="/user/data/heritageDownload.do" name="content">
+  <frame src="{content}" name="content">
 </frameset>
 </html>
 <!-- city:{sido} {sgg} -->"#
     )
+}
+
+/// A checkbox and its actual confirmation (`HeritageIntranetFlow.cpp:230-243`).
+#[must_use]
+pub fn agreement() -> &'static str {
+    r#"<!doctype html><html lang="ko"><head><meta charset="utf-8"></head><body>
+<section><p>국가유산 공간정보 원본자료 사용 서약서 "사용" \자료</p><label><input type="checkbox">서약서에 동의</label><button onclick="if(document.querySelector('input').checked)location.href='/user/data/heritageDownload.do'">확인</button></section>
+</body></html>"#
 }
 
 /// What a wrong password gets: the login form again, with the browser's credential refused.

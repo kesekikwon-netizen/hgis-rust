@@ -29,6 +29,33 @@ fn an_actual_agreement_emits_the_exact_terms_once() {
 }
 
 #[test]
+fn a_browser_json_string_delivers_the_exact_pledge_terms() {
+    let mut machine = machine(HeritageStage::Terms);
+    let answer =
+        r#""{\"status\":\"agreed\",\"text\":\"원본자료 \\\"사용\\\"\\n서약서 \\\\자료\"}""#;
+    let token = machine.current_token();
+    assert_eq!(
+        machine.script_answered(token, answer),
+        Some(HeritageEvent::PledgeAgreed {
+            terms: "원본자료 \"사용\"\n서약서 \\자료".to_owned(),
+        })
+    );
+}
+
+#[test]
+fn malformed_browser_pledges_never_invent_agreement() {
+    for answer in ["", "null", r#""{broken}""#, r#""{\"status\":\"agreed\"}""#] {
+        let mut machine = machine(HeritageStage::Terms);
+        let token = machine.current_token();
+        assert!(!matches!(
+            machine.script_answered(token, answer),
+            Some(HeritageEvent::PledgeAgreed { .. })
+        ));
+        assert!(machine.pledge_text().is_none());
+    }
+}
+
+#[test]
 fn an_already_open_panel_does_not_invent_an_agreement() {
     let mut machine = machine(HeritageStage::Terms);
     let token = machine.current_token();

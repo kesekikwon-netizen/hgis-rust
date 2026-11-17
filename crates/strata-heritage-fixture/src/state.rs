@@ -21,6 +21,8 @@ pub struct FixtureState {
     pub zips: HashMap<String, Vec<u8>>,
     /// Milliseconds `downloadFilesAll.do` waits before answering; 0 for a fast run.
     pub download_delay_ms: u64,
+    /// Whether the logged-in content frame must show the site's agreement first.
+    pub require_pledge: bool,
 }
 
 impl Default for FixtureState {
@@ -33,6 +35,7 @@ impl Default for FixtureState {
             hits: HashMap::new(),
             zips: HashMap::new(),
             download_delay_ms: 0,
+            require_pledge: false,
         }
     }
 }
@@ -92,6 +95,13 @@ impl Fixture {
     pub fn give_zip(&self, kind_name: &str, bytes: Vec<u8>) {
         if let Ok(mut s) = self.state.lock() {
             s.zips.insert(kind_name.to_owned(), bytes);
+        }
+    }
+
+    /// Shows a real checkbox and confirmation before the download form (`KaHeritageBrowser.cpp:985-1001`).
+    pub fn require_pledge(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.require_pledge = true;
         }
     }
 

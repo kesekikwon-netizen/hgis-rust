@@ -267,7 +267,10 @@ impl HeritageAutomation {
             return None;
         }
         self.pending = None;
-        let value = value.trim().trim_matches('"');
+        // Qt delivered a decoded QVariant string (`KaHeritageBrowser.cpp:661-663`).
+        // WebView2 returns JSON, including escapes inside JSON.stringify results.
+        let decoded = serde_json::from_str::<String>(value).ok();
+        let value = decoded.as_deref().unwrap_or(value).trim();
         match self.stage.clone() {
             HeritageStage::LoginProbe => self.on_login_probe(value),
             HeritageStage::LoggingIn => self.on_login_submitted(value),

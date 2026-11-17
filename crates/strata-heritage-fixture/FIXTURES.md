@@ -13,6 +13,7 @@ Dropping the `Fixture` stops the listener.
 | GET | `/user/checkNet.do` | Before login: the login form (`#userId`, `#pwd`, `goLogin()`). After login: `<frameset>` whose `content` frame is `heritageDownload.do` and whose body carries `로그아웃`. |
 | POST | `/j_spring_security_check` | Sets the session when `USER_ID`/`USER_PW` match the fixture's account, then answers the `checkNet.do` page. A wrong pair leaves the login form. |
 | GET | `/main.do` | The frames page. |
+| GET | `/user/data/heritageAgreement.do` | With `Fixture::require_pledge()`, the content frame first shows a real pledge checkbox and confirmation. Its click navigates to the download form. |
 | GET | `/user/data/heritageDownload.do` | The download panel: `#searchForm`, `#mode` = `S`, `#codedetaCd0`/`name=codedetaCd`, `#codeCdSg0`/`name=codeCdSg`, `#searchGisChaRirList`, `#downloadFilesAll`, `#tabContentDiv`, six `changeTab('S'|'P'|'B'|'U'|'R'|'E')` links, and a `pageSize` select with 「N개씩 보기」 options. The 지적 pair `#bjdcd1_newJbn` / `name=bjdCdNewAddr` comes **first in the DOM**, as on the site, so a region script that takes the first select pair fails here too. |
 | GET/POST | `/user/data/heritageDownloadList.do` | Two rows and `검색결과 2 건`. |
 | GET | `/user/data/heritageDownload/downloadFilesAll.do` | The ZIP given by `Fixture::give_zip`, or 404 when none was given. `Fixture::set_download_delay` makes it wait, standing in for the site's 40–120 s. |

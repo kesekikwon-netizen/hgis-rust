@@ -46,6 +46,9 @@ impl Runner {
     fn begin(&mut self, frame: &eframe::Frame) -> Result<Live, String> {
         let case = &self.cases[self.at];
         let fixture = Fixture::start(crate::case::FIXTURE_ACCOUNT, case.city);
+        if case.pledge {
+            fixture.require_pledge();
+        }
         if crate::case::wants_zip(case) {
             fixture.give_zip("지정유산", crate::case::sample_zip()?);
         }
@@ -132,7 +135,21 @@ impl eframe::App for Runner {
         if over || timed_out || live.run.finished() {
             let _ = &live.fixture;
             let case = &self.cases[self.at];
-            let held = matches(&stage, &case.expect)
+            let agreements: Vec<_> = live
+                .events
+                .iter()
+                .filter_map(|event| match event {
+                    HeritageEvent::PledgeAgreed { terms } => Some(terms),
+                    _ => None,
+                })
+                .collect();
+            let pledge_held = if case.pledge {
+                agreements.len() == 1 && agreements[0] == "국가유산 공간정보 원본자료 사용 서약서 \"사용\" \\자료\n\n서약서에 동의확인"
+            } else {
+                agreements.is_empty()
+            };
+            let held = pledge_held
+                && matches(&stage, &case.expect)
                 && match case.expect {
                     HeritageStage::Done => {
                         live.events
