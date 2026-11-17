@@ -12,7 +12,7 @@ use raw_window_handle::HasWindowHandle;
 use strata_net::heritage_auto::{HeritageAutomation, HeritageConfig, HeritageEvent, PageId};
 use strata_webview::policy::NavigationPolicy;
 use strata_webview::profile::{remove_session_folder, sweep_abandoned_sessions};
-use strata_webview::{BrowserError, BrowserEvent, BrowserOptions, HiddenBrowser, ScriptCall, ViewId};
+use strata_webview::{BrowserError, BrowserEvent, BrowserOptions, DownloadPlace, HiddenBrowser, ScriptCall, ViewId};
 
 use crate::host::{QueuedHost, Wanted};
 
@@ -25,6 +25,9 @@ pub struct RunOptions {
     pub config: HeritageConfig,
     /// The app's network switch.
     pub network_allowed: Arc<dyn Fn() -> bool + Send + Sync>,
+    /// Where received files go: `<this>/주변유적/<시도> <시군>/원본/…`. The app's own data
+    /// folder, never the survey folder (`MainWindow.cpp:3168-3170`).
+    pub download_root: PathBuf,
 }
 
 impl std::fmt::Debug for RunOptions {
@@ -77,18 +80,42 @@ pub fn start_run<W: HasWindowHandle>(parent: &W, options: RunOptions) -> Result<
     // The fixture is on this PC; it stays reachable while the network switch is off
     // (the same rule `strata-ngii-run` uses).
     let local = options.config.fixture_base.clone();
-    let browser = HiddenBrowser::start(
+    let mut browser = HiddenBrowser::start(
         parent,
         BrowserOptions {
-            data_parent: options.data_parent,
+            data_parent: options.data_parent.clone(),
             navigation: NavigationPolicy::new(options.network_allowed, local.as_deref()),
             document_ready_script: None,
         },
     )?;
     let core = Rc::new(RefCell::new(Core {
-        machine: HeritageAutomation::new(options.config),
+        machine: HeritageAutomation::new(options.config.clone()),
         host: QueuedHost::default(),
         began: Instant::now(),
+    }));
+    // A file the site offers is accepted only while the run is fetching a kind, and it goes
+    // under 주변유적 (never the survey folder). The C++ refuses one at any other stage
+    // (`KaHeritageBrowser.cpp:1295-1302`).
+    let decide = Rc::clone(&core);
+    let root = options.download_root.clone();
+    let (sido, city) = (
+        options.config.sido.clone(),
+        options.config.city.clone(),
+    );
+    browser.set_download_decider(Box::new(move |offer| {
+        let mut core = decide.try_borrow_mut().ok()?;
+        if !core.machine.accepts_files() {
+            return None;
+        }
+        let serial = core.now();
+        let directory = crate::finish::received_folder(&root, &sido, &city, serial);
+        std::fs::create_dir_all(&directory).ok()?;
+        let file_name = crate::finish::safe_name(&offer.suggested_name);
+        core.machine.file_offered(directory.join(&file_name));
+        Some(DownloadPlace {
+            directory,
+            file_name,
+        })
     }));
     Ok(HeritageRunHandle {
         browser: Some(browser),
@@ -129,6 +156,7 @@ impl HeritageRunHandle {
             return Vec::new();
         };
         let reported = browser.pump(parent);
+        let mut events_extra: Vec<HeritageEvent> = Vec::new();
         let mut core = self.core.borrow_mut();
         let now = core.now();
         let Core { machine, host, .. } = &mut *core;
@@ -137,16 +165,35 @@ impl HeritageRunHandle {
             match event {
                 BrowserEvent::Script { call, json, .. } => {
                     if let Some(token) = self.answers.remove(&call) {
-                        let _ = machine.script_answered(token, &json);
+                        events_extra.extend(machine.script_answered(token, &json));
                     }
                 }
-                // The stage machine reads the page through scripts, not through load events;
-                // a load only tells the log that something moved.
-                BrowserEvent::PageLoaded { .. } | BrowserEvent::PageLoadStarted { .. } => {}
+                // The C++ reads the finished file's size against what the browser reported
+                // and asks again when they differ (`:1370-1382`).
+                BrowserEvent::DownloadFinished { path, .. } => {
+                    if !crate::finish::looks_like_zip(&path) {
+                        let reason = "받은 파일이 압축 파일이 아닙니다";
+                        events_extra.extend(machine.transfer_failed(reason, now));
+                    } else {
+                        events_extra.extend(machine.zip_arrived(path));
+                        // One file finishes a kind (the C++ moves on as soon as the file is
+                        // complete, `KaHeritageBrowser.cpp:1396-1400`).
+                        events_extra.extend(machine.kind_done());
+                    }
+                }
+                BrowserEvent::DownloadFailed { .. } => {
+                    events_extra.extend(machine.transfer_failed("파일을 끝까지 받지 못했습니다", now));
+                }
+                BrowserEvent::DownloadRefused { .. } => {
+                    events_extra.extend(machine.transfer_failed("파일을 저장하지 못했습니다", now));
+                }
+                // The stage machine reads the page through scripts, not through load events.
                 _ => {}
             }
         }
         let wanted = std::mem::take(&mut host.wanted);
+        // The run's own timers: a retry that has come due, and the wait for the panel.
+        events_extra.extend(machine.timers(now));
         let over = machine.is_over();
         drop(core);
         if over {
@@ -154,7 +201,7 @@ impl HeritageRunHandle {
             if let Some(browser) = self.browser.take() {
                 self.leftover = Some(browser.shut_down());
             }
-            return Vec::new();
+            return events_extra;
         }
         // Opening the portal is a navigation, not a script; ask the machine for the next step.
         {
@@ -184,7 +231,7 @@ impl HeritageRunHandle {
                 }
             }
         }
-        Vec::new()
+        events_extra
     }
 }
 

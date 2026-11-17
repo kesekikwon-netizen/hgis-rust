@@ -13,6 +13,8 @@ pub mod scripts;
 mod machine;
 #[path = "machine_login.rs"]
 mod machine_login;
+#[path = "machine_kinds.rs"]
+mod machine_kinds;
 #[path = "machine_pages.rs"]
 mod machine_pages;
 #[path = "login_answers.rs"]
@@ -22,10 +24,14 @@ mod login_answers;
 #[path = "tests_login.rs"]
 mod tests_login;
 #[cfg(test)]
+#[path = "tests_kinds.rs"]
+mod tests_kinds;
+#[cfg(test)]
 #[path = "tests_pages.rs"]
 mod tests_pages;
 
 pub use machine::{HeritageAutomation, HeritageConfig, HeritageEvent, HeritageStage};
+pub use machine_kinds::MAX_ATTEMPTS;
 pub use machine_login::NO_ACCOUNT;
 
 /// A page of the hidden browser, as the stage logic sees it.

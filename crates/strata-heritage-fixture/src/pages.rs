@@ -3,6 +3,9 @@
 //! Each page carries the element ids the ported scripts read, so a run against this fixture
 //! exercises the same selectors as a run against the site.
 
+/// The page paths the fixture serves, so a page's own script can point at them.
+pub const DOWNLOAD_FILES_ALL: &str = "/user/data/heritageDownload/downloadFilesAll.do";
+
 /// The six kinds and their tab letters, the C++ table (`HeritageStyle.cpp`).
 pub const KIND_TABS: [(&str, &str); 6] = [
     ("S", "지정유산"),
@@ -114,6 +117,17 @@ pub fn download_page(city: &(String, String)) -> String {
 function changeTab(code){{
   document.getElementById('mode').value=code;
 }}
+// The real page's button builds a request and the browser receives a file
+// (KaHeritageBrowser.cpp:1450-1524). The fixture sends the browser to the ZIP route, which
+// answers with Content-Type: application/zip so WebView2 treats it as a download.
+function downloadAll(){{
+  var a=document.createElement('a');
+  a.href='{files_all}';
+  a.download='';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}}
 </script></head><body>
 <div id="leftPanel">
   <select id="bjdcd1_newJbn" name="bjdCdNewAddr"><option>시도선택</option></select>
@@ -133,11 +147,12 @@ function changeTab(code){{
   </select>
   <select id="pageSize" name="pageSize"><option>10개씩 보기</option><option>100개씩 보기</option></select>
   <button type="button" id="searchGisChaRirList">검색</button>
-  <button type="button" id="downloadFilesAll">전체다운로드</button>
+  <button type="button" id="downloadFilesAll" onclick="downloadAll();">전체다운로드</button>
 </form>
 <table><tbody></tbody></table>
 </div>
-</body></html>"#
+</body></html>"#,
+        files_all = DOWNLOAD_FILES_ALL
     )
 }
 

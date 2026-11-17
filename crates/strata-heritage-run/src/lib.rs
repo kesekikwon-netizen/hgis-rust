@@ -11,6 +11,8 @@
 //! `examples/heritage_run`, the shape of `strata-ngii-run/examples/portal_run`.
 
 #[cfg(windows)]
+pub mod finish;
+#[cfg(windows)]
 mod host;
 #[cfg(windows)]
 mod run;

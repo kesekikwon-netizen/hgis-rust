@@ -45,6 +45,9 @@ impl Runner {
     fn begin(&mut self, frame: &eframe::Frame) -> Result<Live, String> {
         let case = &self.cases[self.at];
         let fixture = Fixture::start(crate::case::FIXTURE_ACCOUNT, case.city);
+        if crate::case::wants_zip(case) {
+            fixture.give_zip("지정유산", crate::case::sample_zip()?);
+        }
         let options = RunOptions {
             data_parent: self.work.join(format!("case-{}", self.at + 1)).join("profile"),
             config: HeritageConfig {
@@ -56,6 +59,7 @@ impl Runner {
             },
             // The fixture is on this PC, so the switch stays off as in `strata-ngii-run`.
             network_allowed: Arc::new(|| false),
+            download_root: self.work.join(format!("case-{}", self.at + 1)).join("받은자료"),
         };
         let run = start_run(frame, options).map_err(|e| e.to_string())?;
         Ok(Live {
@@ -95,10 +99,10 @@ impl eframe::App for Runner {
             println!("  event: {event:?}");
         }
         let stage = live.run.stage();
-        let over = matches!(
-            &stage,
-            HeritageStage::Stopped(_) | HeritageStage::Done | HeritageStage::DownloadAll
-        );
+        // The case is over when the run ends, or when it has reached the stage the case is
+        // about. A case that expects `Done` must not stop at `DownloadAll` on the way there.
+        let over = matches!(stage, HeritageStage::Stopped(_) | HeritageStage::Done)
+            || matches(&stage, &self.cases[self.at].expect);
         let timed_out = live.began.elapsed() > CASE_LIMIT;
         if over || timed_out || live.run.finished() {
             let _ = &live.fixture;

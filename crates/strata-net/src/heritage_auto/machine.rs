@@ -121,6 +121,21 @@ pub struct HeritageAutomation {
     /// The pledge the page showed when the box was ticked (`HeritageIntranetFlow.cpp:230-243`),
     /// so a receipt can hold it.
     pub(super) pledge: Option<String>,
+    /// How many transfers of the current kind have failed since it started.
+    pub(super) retry_count: u8,
+    /// When the next retry may happen (ms since the run began).
+    pub(super) retry_at_ms: u64,
+    /// When the current kind asked the server for its ZIP.
+    pub(super) wait_since_ms: u64,
+    /// What came back was a page, not a file, so the same request is worth repeating.
+    pub(super) response_only_retry: bool,
+    /// Files received for the kind being fetched.
+    pub(super) files_this_kind: usize,
+    /// Whether a pledge was agreed at any point in this run.
+    pub(super) pledge_kept: bool,
+    /// Paths the site offered and the run accepted, in order, waiting for their transfer to
+    /// finish.
+    pub(super) offered: Vec<std::path::PathBuf>,
 }
 
 impl HeritageAutomation {
@@ -138,6 +153,13 @@ impl HeritageAutomation {
             pending: None,
             asked_at_ms: 0,
             pledge: None,
+            retry_count: 0,
+            retry_at_ms: 0,
+            wait_since_ms: 0,
+            response_only_retry: false,
+            files_this_kind: 0,
+            pledge_kept: false,
+            offered: Vec::new(),
         }
     }
 
@@ -205,6 +227,7 @@ impl HeritageAutomation {
                 &self.config.account_password.clone(),
             ),
             _ if self.page_script().is_some() => self.page_script()?,
+            HeritageStage::DownloadAll => super::scripts::download_all_script(),
             HeritageStage::Done | HeritageStage::Stopped(_) | HeritageStage::Idle => return None,
             _ => return None,
         };
@@ -234,6 +257,7 @@ impl HeritageAutomation {
         match self.stage.clone() {
             HeritageStage::LoginProbe => self.on_login_probe(value),
             HeritageStage::LoggingIn => self.on_login_submitted(value),
+            HeritageStage::DownloadAll => self.on_download_all(value),
             _ => self.on_page_answer(value),
         }
     }
