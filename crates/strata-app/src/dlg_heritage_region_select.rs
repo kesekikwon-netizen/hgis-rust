@@ -102,9 +102,17 @@ pub(crate) fn render_heritage_region_select(app: &mut StrataAppState, ctx: &egui
                     && !app.modals.heritage_city.is_empty();
                 let ok_b = egui::Button::new(egui::RichText::new("이 지역 받기").color(Color32::WHITE).strong().size(14.0)).fill(Color32::from_rgb(181, 87, 58)).corner_radius(6.0).min_size(Vec2::new(116.0, 36.0));
                 if ui.add_enabled(ready, ok_b).clicked() {
-                    // The run goes on in the background; the bottom gauge shows it (heritage_run.rs).
-                    app.heritage.wanted = Some(crate::heritage_run::reuse::Wanted { sido, city, reuse: app.modals.heritage_reuse_recent });
                     app.modals.active = None;
+                    if app.modals.heritage_reuse_recent {
+                        // 「최근 받은 자료 다시 쓰기」: the archives already on disk go back on the
+                        // map through the same loader, in a thread (`heritage_run.rs`).
+                        app.heritage.wanted = Some(crate::heritage_run::reuse::Wanted { sido, city, reuse: true });
+                    } else {
+                        // The C++ goes to the intranet here (`MainWindow.cpp:3071-3225`); the run
+                        // is `strata-heritage-run`, started from the frame loop where the window
+                        // handle exists (`heritage_run_start.rs`).
+                        crate::heritage_run_start::start_heritage_fetch(app);
+                    }
                 }
             });
         });

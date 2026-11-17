@@ -228,6 +228,53 @@ mod tests {
         assert!(words.contains("남기지 못했습니다"), "{words}");
     }
 
+    /// **The button the user actually presses**: 「이 지역 받기」 without 「최근 받은 자료 다시 쓰기」
+    /// must go to the intranet. It used to call only the reuse path, so pressing it did nothing
+    /// when there was nothing on disk — the run existed and was never asked for.
+    #[test]
+    fn the_region_dialog_asks_for_an_intranet_run_not_only_a_reuse() {
+        use eframe::egui;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let survey = dir.path().join("현장.gpkg");
+        std::fs::write(&survey, b"").expect("survey file");
+        let mut app = StrataAppState::new_startup();
+        app.survey_path = Some(survey);
+        app.accounts.heritage_configured = true;
+        app.accounts.heritage_creds.username = "user1".to_owned();
+        app.accounts.heritage_creds.password = "pass1".to_owned();
+        app.heritage.archive_root = Some(dir.path().join("자료"));
+        app.modals.active = Some(crate::dialogs_modal::ActiveModalDialog::HeritageRegionSelect);
+        app.modals.heritage_sido = "경상북도".to_owned();
+        app.modals.heritage_city = "경주시".to_owned();
+        // Nothing received before: the reuse checkbox is not even offered, so the press must go
+        // to the intranet. It used to call only the reuse path, so the press did nothing.
+        app.modals.heritage_reuse_recent = false;
+
+        // The dialog draws; nothing here sends synthetic input (the repo forbids it), so the
+        // wiring is asserted on the path the press takes with reuse off.
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let mut open = true;
+        for _ in 0..3 {
+            let _ = ctx.run(Default::default(), |ctx| {
+                crate::dlg_heritage_region_select::render_heritage_region_select(
+                    &mut app,
+                    ctx,
+                    &mut open,
+                );
+            });
+        }
+        assert!(!app.modals.heritage_reuse_recent, "the case is about reuse being off");
+
+        start_heritage_fetch(&mut app);
+        assert!(
+            !app.heritage.wanted.as_ref().is_some_and(|w| w.reuse),
+            "the press only asked to reuse archives"
+        );
+        assert!(app.heritage_run_requested, "the press did not ask for an intranet run");
+    }
+
     /// The account state is read from what is stored, and none carries the id.
     #[test]
     fn the_account_state_is_read_from_what_is_stored() {
