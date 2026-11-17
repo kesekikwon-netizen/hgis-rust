@@ -22,7 +22,7 @@ pub(crate) fn table(columns: &[&str], rows: &[&[(&str, &str)]]) -> SurveyFileTab
         srs_id: 5187,
         geometry_type: "POLYGON".to_owned(),
         columns: columns.iter().map(|c| ((*c).to_owned(), "TEXT".to_owned())).collect(),
-        baseline: layer.features.clone(),
+        baseline: layer.features.to_vec(),
         layer,
     }
 }

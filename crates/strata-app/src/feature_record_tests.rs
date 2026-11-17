@@ -54,7 +54,7 @@ pub(crate) fn record_table() -> SurveyFileTable {
         srs_id: 5187,
         geometry_type: "POLYGON".to_owned(),
         columns: cols.iter().map(|(c, t)| ((*c).to_owned(), (*t).to_owned())).collect(),
-        baseline: layer.features.clone(),
+        baseline: layer.features.to_vec(),
         layer,
     }
 }

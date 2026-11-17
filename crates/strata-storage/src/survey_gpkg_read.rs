@@ -111,7 +111,7 @@ pub fn read_survey_tables(path: &Path) -> StrataResult<Vec<SurveyFileTable>> {
             continue;
         }
         let layer = read_table(&conn, &table, geom_col.as_deref())?;
-        let baseline = layer.features.clone();
+        let baseline = layer.features.to_vec();
         let columns = read_columns(&conn, &table, geom_col.as_deref())?;
         out.push(SurveyFileTable {
             table,

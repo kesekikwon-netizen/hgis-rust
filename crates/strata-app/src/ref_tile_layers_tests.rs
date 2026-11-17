@@ -54,7 +54,7 @@ pub(super) fn draw_survey_area(app: &mut StrataAppState, centre: [f64; 2]) {
         srs_id: 5187,
         geometry_type: "POLYGON".to_owned(),
         columns: Vec::new(),
-        baseline: layer.features.clone(),
+        baseline: layer.features.to_vec(),
         layer,
     });
     // A drawn layer goes to the top of the legend (app_state_draw_entry.rs begin_edit_layer).

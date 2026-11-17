@@ -99,7 +99,7 @@ fn insert(conn: &Connection, t: &str, info: &TableInfo, fid: Option<i64>, geom: 
 
 /// 표 하나의 편집을 쓴다. 쓴 뒤 그 표에 있어야 할 도형 수를 돌려준다(확인용).
 pub(crate) fn apply_table_edits(conn: &Connection, t: &SurveyFileTable) -> Result<usize, String> {
-    if t.layer.features == t.baseline {
+    if t.layer.features.as_slice() == t.baseline.as_slice() {
         return Ok(t.baseline.len());
     }
     let info = table_info(conn, &t.table)?;

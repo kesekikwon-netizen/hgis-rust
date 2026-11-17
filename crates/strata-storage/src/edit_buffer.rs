@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use strata_types::schema::DomainLayerKey;
 
+#[path = "feature_snapshot.rs"]
+mod feature_snapshot;
+pub use feature_snapshot::{FeatureSnapshot, SharedFeatureRows};
+
 /// C++ `HGIS_FIRST_TEMP_FID` (-1) — 미저장 신규 피처 최초 음수 임시 FID 상수
 pub const HGIS_FIRST_TEMP_FID: i64 = -1;
 
@@ -16,18 +20,22 @@ pub struct FeatureRecord {
 pub struct LayerEditBuffer {
     pub key: Option<DomainLayerKey>,
     pub visible: bool,
-    pub features: Vec<FeatureRecord>,
+    pub features: SharedFeatureRows,
     next_temp_id: i64,
-    undo_stack: Vec<Vec<FeatureRecord>>,
-    redo_stack: Vec<Vec<FeatureRecord>>,
+    undo_stack: Vec<SharedFeatureRows>,
+    redo_stack: Vec<SharedFeatureRows>,
 }
 
 impl LayerEditBuffer {
+    pub fn snapshot(&self) -> FeatureSnapshot {
+        FeatureSnapshot::new(self.features.clone())
+    }
+
     pub fn new(key: DomainLayerKey) -> Self {
         Self {
             key: Some(key),
             visible: true,
-            features: Vec::new(),
+            features: SharedFeatureRows::default(),
             next_temp_id: -1,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -153,6 +161,10 @@ impl LayerEditBuffer {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "feature_snapshot_tests.rs"]
+mod feature_snapshot_tests;
 
 #[cfg(test)]
 mod tests {

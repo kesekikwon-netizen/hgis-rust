@@ -261,7 +261,7 @@ fn clicking_saved_line_vertex_starts_new_sketch_without_touching_existing_line()
         assert_eq!(stored.wkt_geom, orig_wkt, "{row_name}");
         assert_eq!(stored.attributes.get("note").map(String::as_str), Some("saved"), "{row_name}");
         assert!(
-            table.baseline != table.layer.features
+            table.baseline.as_slice() != table.layer.features.as_slice()
                 && app.is_dirty
                 && app.unsaved_chip_text().as_deref() == Some("저장 안 됨 1건"),
             "{row_name}: modified flag must stay set"

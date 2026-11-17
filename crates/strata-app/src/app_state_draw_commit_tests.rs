@@ -205,9 +205,9 @@ fn unsaved_chip_counts_edited_features() {
     trench.layer.features.clear();
     assert_eq!(app.unsaved_chip_text().as_deref(), Some("저장 안 됨 3건"));
     let area = app.survey_tables.iter_mut().find(|t| t.table == "survey_area").unwrap();
-    area.layer.features = area.baseline.clone();
+    area.layer.features = area.baseline.clone().into();
     let trench = app.survey_tables.iter_mut().find(|t| t.table == "trial_trench").unwrap();
-    trench.layer.features = trench.baseline.clone();
+    trench.layer.features = trench.baseline.clone().into();
     app.undo_map_action();
     assert_eq!(app.unsaved_chip_text().as_deref(), Some("저장 안 됨"), "'*' stays after undo");
 }

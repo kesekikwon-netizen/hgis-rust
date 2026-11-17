@@ -29,7 +29,7 @@ pub(crate) fn draw_survey_area(app: &mut StrataAppState, centre: [f64; 2], srs_i
     let mut layer = LayerEditBuffer::new(DomainLayerKey::SurveyArea);
     layer.features.push(FeatureRecord { fid: 1, wkt_geom: wkt, attributes: Default::default() });
     app.survey_tables.retain(|t| t.table != "survey_area");
-    app.survey_tables.push(SurveyFileTable { table: "survey_area".to_owned(), srs_id, geometry_type: "POLYGON".to_owned(), columns: Vec::new(), baseline: layer.features.clone(), layer });
+    app.survey_tables.push(SurveyFileTable { table: "survey_area".to_owned(), srs_id, geometry_type: "POLYGON".to_owned(), columns: Vec::new(), baseline: layer.features.to_vec(), layer });
     // As in the app: a drawn survey area has its row in the legend, above everything else.
     app.left_layers.ensure_domain_layer(DomainLayerKey::SurveyArea);
 }

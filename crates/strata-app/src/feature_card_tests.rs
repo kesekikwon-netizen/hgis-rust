@@ -25,7 +25,7 @@ pub(crate) fn survey_features() -> SurveyFileTable {
         srs_id: 5187,
         geometry_type: "POLYGON".to_owned(),
         columns: ["kind", "period", "feature_no", "note", "updated_at"].iter().map(|c| ((*c).to_owned(), "TEXT".to_owned())).collect(),
-        baseline: layer.features.clone(),
+        baseline: layer.features.to_vec(),
         layer,
     }
 }
@@ -139,7 +139,7 @@ fn control_point_rows() {
         srs_id: 5187,
         geometry_type: "POINT".to_owned(),
         columns: ["point_id", "x", "y", "z", "datum", "origin"].iter().map(|c| ((*c).to_owned(), "TEXT".to_owned())).collect(),
-        baseline: layer.features.clone(),
+        baseline: layer.features.to_vec(),
         layer,
     };
     let v = card_view(&t, 1, "기준점", None).expect("card");
