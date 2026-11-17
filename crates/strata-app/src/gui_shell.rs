@@ -26,15 +26,18 @@ impl StrataAppState {
         // KaCaptureMapTool::keyPressEvent (target/cpp-ref/src/app/KaCaptureMapTool.cpp:379-391) and
         // target/cpp-ref/src/app/MainWindowUndo.cpp:486-495 apply Esc, Enter, Backspace and Delete to capture.
         let capture = !wants_kb && self.modals.active.is_none() && self.capture_active();
+        // target/cpp-ref/src/app/KaRegionLocator.cpp:106-120 and MainWindowContextMenus.cpp:192: popup Escape stays out of the canvas.
+        let popup_owns_escape = self.app_popup_menu_open() || self.ribbon.app_bar.address_popup_open;
         ctx.input(|i| {
-            if !wants_kb && self.active_tool == MapToolKind::GeorefAlign && i.key_pressed(egui::Key::Escape) {
+            let escape = i.key_pressed(egui::Key::Escape) && !popup_owns_escape;
+            if !wants_kb && self.active_tool == MapToolKind::GeorefAlign && escape {
                 self.align.pending_source = None;
                 self.status_bar_hint = self.align.status_text();
-            } else if capture && i.key_pressed(egui::Key::Escape) {
+            } else if capture && escape {
                 self.sketch_cancel();
-            } else if i.key_pressed(egui::Key::Escape) && self.home_map.active_vertex.take().is_some() {
+            } else if escape && self.home_map.active_vertex.take().is_some() {
                 // KaFeatureSelectTool.cpp:164-170: Esc lets go of the picked vertex and keeps the tool.
-            } else if i.key_pressed(egui::Key::Escape) && self.home_map.inline_rename.is_none() {
+            } else if escape && self.home_map.inline_rename.is_none() {
                 self.home_map.cad.on_escape(&mut self.home_map.scene);
                 self.modals.active = None;
                 self.ribbon.sub_toolbar_visible = false;
@@ -224,3 +227,7 @@ impl eframe::App for StrataAppState {
 #[cfg(test)]
 #[path = "gui_shell_keys_tests.rs"]
 mod keys_tests;
+
+#[cfg(test)]
+#[path = "popup_escape_tests.rs"]
+mod popup_escape_tests;

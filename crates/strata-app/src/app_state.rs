@@ -30,6 +30,8 @@ mod app_state_draw_entry;
 mod app_state_draw_commit;
 #[path = "app_state_draw_row.rs"]
 mod app_state_draw_row;
+#[path = "app_state_popup_input.rs"]
+mod app_state_popup_input;
 #[path = "app_state_buffer.rs"]
 mod app_state_buffer;
 #[path = "app_state_erase.rs"]

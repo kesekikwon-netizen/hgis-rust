@@ -82,21 +82,7 @@ impl StrataAppState {
         {
             return Some(WheelBlockReason::ModalDialog);
         }
-        let menu_open = self.ribbon.paleo_menu_open
-            || self.ribbon.geology_menu_open
-            || self.ribbon.dem_menu_open
-            || self.ribbon.soil_menu_open
-            || self.ribbon.cadastral_menu_open
-            || self.ribbon.topo_menu_open
-            || self.ribbon.old_map_menu_open
-            || self.ribbon.more_menu_open
-            || self.map_context_menu_open
-            || self.layer_context_menu_open
-            || self.ribbon.app_bar.region_popup_open
-            || (self.ribbon.snap_assist_menu_open && self.draw_row_open())
-            || self.theme_menu_open
-            || self.scale_menu_open;
-        if menu_open {
+        if self.app_popup_menu_open() {
             return Some(WheelBlockReason::PopupMenu);
         }
         self.ribbon.app_bar.address_popup_open.then_some(WheelBlockReason::RegionAddressPopup)

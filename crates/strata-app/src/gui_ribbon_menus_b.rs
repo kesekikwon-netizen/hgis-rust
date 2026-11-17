@@ -115,35 +115,21 @@ impl StrataAppState {
                 }
             }
         }
-        // 바깥을 누르면 닫는다
-        if ctx.input(|i| i.pointer.any_click()) {
-            let any_open = self.ribbon.paleo_menu_open
-                || self.ribbon.geology_menu_open
-                || self.ribbon.dem_menu_open
-                || self.ribbon.soil_menu_open
-                || self.ribbon.cadastral_menu_open
-                || self.ribbon.topo_menu_open
-                || self.ribbon.old_map_menu_open
-                || self.ribbon.more_menu_open;
-            if any_open {
-                let pos = ctx.input(|i| i.pointer.interact_pos());
-                if let Some(p) = pos {
-                    let near = anchor.x - 16.0 <= p.x
-                        && p.x <= anchor.x + 450.0
-                        && anchor.y - 36.0 <= p.y
-                        && p.y <= anchor.y + 420.0;
-                    if !near {
-                        self.ribbon.paleo_menu_open = false;
-                        self.ribbon.geology_menu_open = false;
-                        self.ribbon.dem_menu_open = false;
-                        self.ribbon.soil_menu_open = false;
-                        self.ribbon.cadastral_menu_open = false;
-                        self.ribbon.topo_menu_open = false;
-                        self.ribbon.old_map_menu_open = false;
-                        self.ribbon.more_menu_open = false;
-                    }
-                }
-            }
+        // target/cpp-ref/src/app/MainWindowContextMenus.cpp:192: QMenu closes on Escape as well as an outside click.
+        let outside = ctx.input(|i| {
+            i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|p| {
+                !(anchor.x - 16.0 <= p.x && p.x <= anchor.x + 450.0 && anchor.y - 36.0 <= p.y && p.y <= anchor.y + 420.0)
+            })
+        });
+        if outside || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.ribbon.paleo_menu_open = false;
+            self.ribbon.geology_menu_open = false;
+            self.ribbon.dem_menu_open = false;
+            self.ribbon.soil_menu_open = false;
+            self.ribbon.cadastral_menu_open = false;
+            self.ribbon.topo_menu_open = false;
+            self.ribbon.old_map_menu_open = false;
+            self.ribbon.more_menu_open = false;
         }
     }
 }
