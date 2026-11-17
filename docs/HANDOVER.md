@@ -1,4 +1,4 @@
-# Strata Rust 판 인수인계 (2026-11-16 기준)
+# Strata Rust 판 인수인계 (2026-11-17 유산 흐름 갱신)
 
 이 문서 하나로, 다른 컴퓨터에서 어떤 AI(Claude, Codex, Gemini 등)가 와도 이어서 개발할 수 있게 정리했다.
 처음 오는 에이전트는 이 문서 → `AGENTS.md` → `docs/RUST_PLAN.md` → `docs/RESULTS.md` 의 마지막 절 순서로 읽는다.
@@ -26,7 +26,7 @@
 ```bash
 cargo build -j 3 -p strata-app                    # 디버그: target/debug/ka-hgis.exe
 cargo build --release -j 3 -p strata-app          # 배포용: target/release/ka-hgis.exe
-cargo test -j 3 -p strata-app                     # 앱 시험 (2026-11-16: 794개)
+cargo test -j 3 -p strata-app                     # 앱 시험 (2026-11-17: 837개)
 cargo test -j 3 -p strata-engine --features gdal  # GDAL 이 필요한 엔진 시험
 cargo test -j 3 -p strata-geo                     # 기하 계산 시험
 cargo clippy -j 3 -p strata-app -p strata-engine -p strata-geo --all-targets -- -D warnings
@@ -70,7 +70,7 @@ target/release/ka-hgis.exe --smoke-quit           # 켜졌다 바로 꺼짐, 종
 - 저장소는 **공개**다. 올리기 전에 커밋 전체에서 키·계정·개인정보·조사 좌표를 훑는다.
 - 사용자 원본 조사 자료(조사 GPKG, 받은 자료)를 고치지 않는다. 시험·사진은 임시 사본으로만 한다.
 - 실제 사이트에 주문·로그인하는 실행은 사용자 허락 뒤에만 한다. 거절된 로그인은 다시 시도하지 않는다. 「수치지형」 주문 단추를 사진 실행 단계에 넣지 않는다(실제 신청이 들어간다).
-- **국가유산 인트라넷(「유산」) 실제 실행은 허락 대기 중**이다(2026-11-16 사용자에게 「경주시 한 곳 시험 실행」을 물었고 답이 아직 없다). 허락 전에는 코드를 만들되 실제 접속하지 않고, 그 기능을 바로가기 앱에 넣지 않는다.
+- **국가유산 인트라넷 실제 접속·로그인은 아직 실행하지 않았다.** 2026-11-17 사용자는 바탕화면 앱 교체, Git 커밋·푸시와 GitHub Actions 확인을 명시적으로 지시했다. 검증한 빌드를 백업 후 교체한다. 이 배포 지시는 실제 사이트 시험 로그인 허락과 구분한다.
 
 ## 7. 지금까지 된 것
 
@@ -80,12 +80,12 @@ target/release/ka-hgis.exe --smoke-quit           # 켜졌다 바로 꺼짐, 종
 ## 8. 다음 할 일 (우선순위 순)
 
 1. **정합(맞추기) 나머지** — 사용자가 직접 「안 된다」고 한 기능. 설계와 C++ 근거는 `docs/research/align/ALIGN0.md`(끝의 「Port order」 18단계). 된 것: 그림 레이어(Port order 4·8), 변환 계산·품질 문구(1·2, `strata-geo/src/align_fit.rs`). 남은 순서: 월드 파일·`.prj` 쓰기(3) → 정합백업·되돌리기(5) → 그림에 좌표 붙이기(6) → 붙인 그림 표시 방식(7) → 진입과 「맞출 도면」 파일 창(9) → 왼쪽 그림 창과 점 짝 찍기(10) → 표시(번호·화살표·목록, 11) → 끌어 고치기(12) → 이동(13) → 되돌리기·맞추기 저장(14) → 벡터·CAD 정합(15·16, DXF 불러오기 뒤) → 큰 그림 미리보기(17) → 가짜 코드 정리(18: `strata-geo` 의 `helmert_solve.rs`·`georef_quality.rs`·`gcp_solve.rs` 는 C++ 에 없는 이름을 인용한 가짜 이식이고, `gui_ribbon_align*.rs` 의 상태 문구 일부도 가짜다).
-2. **유산 인트라넷 받기** — `docs/research/heritage/HER-NET0.md` §3.4 의 단계(가짜 사이트 고정물 → 실행 틀 → 시·군 조건이 안 걸리면 멈추기, 종류마다 전체다운로드 1회 → `recent.json` 쓰기·서약서 영수증 → 허락받은 뒤 한 번 실제 실행). C++ 흐름 요약은 `docs/research/post/heritage-plate.md`. 지금 Rust 는 C++ 앱이 30일 안에 받아 둔 압축 파일 다시 쓰기만 된다.
-   주의(HER-NET0):
-   - `strata-net` 의 `heritage_http.rs`·`heritage_pipeline_http.rs`·`heritage_flow_body.rs` 는 C++ 이 쓰지 않는 직접 HTTP 길을 옮긴 것이다. 시험만 이 코드를 부르고, 시간 제한 30초도 서버가 ZIP 을 만드는 42~115초보다 짧다. 쓰지 말고 걷어 낸다. 실제 길은 숨긴 브라우저에서 사이트 자신의 `goLogin()` 을 부르는 것이다(비밀번호를 직접 POST 하지 않는다).
-   - 숨긴 브라우저(`strata-webview`)는 지금 `confirm` 에 「아니오」로 답하지만, 유산 사이트는 「예」가 있어야 받기가 이어진다(C++ `KaHeritageBrowser.cpp:124-127`). 또 스크립트가 메인 프레임에서만 돌므로, C++ 의 프레임 순회(`wrap()`)를 스크립트마다 넣어야 한다.
-   - 받은 ZIP 은 조사 폴더가 아니라 `%LOCALAPPDATA%\ka-hgis\ka-hgis\주변유적\<시도> <시군>\원본\<UUID>\` 에 둔다(`heritage_pipeline.rs:103-108` 의 `heritage_download_root` 는 틀렸다). 조사 폴더에는 서약서 영수증 하나만 남는다. 「영수증을 남겼다」고 말하는 화면 두 곳(`dlg_heritage_region_select.rs:91`, `dlg_heritage_browser_progress.rs:89`)은 아직 사실이 아니다.
-   - C++ 은 받기가 깨지면 세션을 새로 열어 다시 로그인하고, 횟수 제한 없이 재시도한다(C++ 주석: 사용자 결정). 이 규칙을 그대로 옮길지는 사용자에게 확인할 일이다. 거절된 로그인은 C++ 도 다시 시도하지 않는다.
+2. **유산 인트라넷 받기 후속** — 숨긴 WebView에서 사이트 자신의 `goLogin()`과 다운로드 동작을 호출하는 흐름을 연결했다. 설정 창은 받기 시작 때 닫고, 수치지형·지적도와 같은 아래 게이지와 상태줄에 진행·오류를 표시한다. 실제 사이트 시험은 남았다. C++ 근거는 `docs/research/heritage/HER-NET0.md`와 `docs/research/post/heritage-plate.md`다.
+   - 종류별 모든 파일의 완료와 700 ms 간격 여섯 번의 안정 확인 후, 한 `DatasetReady` 묶음을 보낸다. 실제 GIS 적재가 그 정확한 묶음을 승인해야 다음 종류로 간다. `recent.json`과 지도 줄은 승인된 현재 작업에만 반영한다.
+   - 망가진 전송·압축 파일은 현재 종류를 유지하고, 숨김 세션을 닫고 프로필을 정리한 뒤 새 세션으로 재로그인한다. 대기는 5·10·20·30초로 늘고 횟수 제한은 없다. 거절된 로그인은 반복하지 않는다. 취소·조사 변경 뒤의 결과는 버린다.
+   - 파일은 앱 보관 폴더의 `주변유적/<시도> <시군>/원본/offer-...`에 각각 배정한다. 서약서 원문과 동의 시각은 조사 폴더의 영수증에 기록한다. 유산 세션만 사이트 `confirm`에 동의하며, 다른 브라우저의 기본 정책은 유지한다.
+   - 로컬 확인: `cargo test --workspace --quiet` 통과, 앱 837개·net 241개·독립 계약 22개 포함. `cargo run --offline -p strata-heritage-run --example heritage_run`의 실제 WebView 시나리오 11개가 통과했고, 부모 창 표시 상태 97,841회가 모두 숨김이었다. 묶음 GIS 적재는 임시 SHP 시험으로 별도 확인했다. 네이티브 시나리오의 ZIP은 `a.txt` 전송 고정물이므로 GIS 적재 통합 확인으로 세지 않는다.
+   - 추가 창 금지 지시 때문에 앱 `--snap`은 실행하지 않았다. 네이티브 시험은 렌더링하지 않는 숨김 winit 부모만 사용한다. 실패했던 팝업 소유 문서와 중첩 로그인도 위 11개에 포함한다.
 3. **받은 지도 목록 후속**(검수 지적): 범례 체크 끄기와 투명도 막대가 「저장 안 됨」을 켜지 않음, 이름 바꾸기도 그렇다, 1919 키가 없는 PC 에서 열고 저장하면 그 줄이 목록에서 사라짐, 유산 줄은 아직 목록에 안 남음.
 4. **메뉴 감사표의 남은 것** — `docs/research/more/MORE0.md` 끝의 「To build」 목록: 제출 꾸러미·5179 변환(#5), 시굴격자 배치(#6), 등고선(#7), 인쇄 창(#9), CSV 기준점(#10), OSM·Google 배경(#14), 주소 검색이 화면을 멈춤(#18), F9/F11(#19), 표시 설정(#21), 스타일 색 저장(#22).
 5. **파일 불러오기 나머지**: 점 SHP(엔진 `ShapeKind` 와 그리기에 점이 없다), GPKG 표, GeoJSON(GDAL `driver_geojson` 을 켜야 함), DXF(CAD 공지 창 → 좌표계 확인; GDAL DXF 드라이버는 이미 있음), DWG(C++ 은 GPL 인 LibreDWG 를 따로 부른다: 쓰지 않는다. GDAL CAD 드라이버는 DWG R2000 만), 이름 글자, 범례의 「레이어 불러오기」 줄(C++ 은 새 빈 레이어 만들기 창).
@@ -117,3 +117,8 @@ target/release/ka-hgis.exe --smoke-quit           # 켜졌다 바로 꺼짐, 종
 3. C++ 근거를 열 수 있게 `target/cpp-ref` 에 gogohak1 을 clone 하고 `b036c09` 로 맞춘다.
 4. 사용자에게 키·계정은 앱 화면에서 직접 넣어 달라고 한다(값을 받아 파일에 쓰지 않는다).
 5. 이 문서의 8절 1번(정합)부터 이어서 한다. 한 기능이 끝날 때마다 `docs/RESULTS.md` 에 행을 쓰고, 이 문서의 7·8절을 고친다.
+
+### 2026-11-17 작업 지시 변경
+
+- 사용자가 모든 보조 에이전트를 종료하고 한 세션에서 개발하도록 지시했다. 기존 작업은 보존하고 추가 에이전트는 만들지 않는다.
+- 개발·검증·문서와 커밋에 관련 pstack 플러그인 스킬을 적용한다. 에이전트 간 기록이 필요하면 영어 YAML을 쓴다.

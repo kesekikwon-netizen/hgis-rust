@@ -116,6 +116,14 @@ impl Fixture {
         }
     }
 
+    /// Expires only the fixture's fake login for a fresh-session retry test
+    /// (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:533-562`).
+    pub fn expire_login(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.logged_in = false;
+        }
+    }
+
     /// Shows a real checkbox and confirmation before the download form (`KaHeritageBrowser.cpp:985-1001`).
     pub fn require_pledge(&self) {
         if let Ok(mut state) = self.state.lock() {

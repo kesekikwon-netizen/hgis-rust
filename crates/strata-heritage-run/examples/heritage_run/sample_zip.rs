@@ -3,8 +3,8 @@
 /// A minimal but real ZIP: one entry, stored (not deflated), so `looks_like_zip` accepts it and
 /// nothing has to be compressed for the test.
 ///
-/// The site answers with a ZIP of shapefiles; the run only needs the file to be a ZIP here,
-/// because what the app does with the contents is `heritage_reuse`'s job (HER9).
+/// The site answers with shapefiles. This example proves stored bytes and an explicit
+/// transport acknowledgment only; it never imports GIS data (HER-API2).
 pub fn sample_zip() -> Result<Vec<u8>, String> {
     // One stored entry named `a.txt` holding `hi`. Every field is hand-written so the bytes are
     // a ZIP a reader accepts, without pulling a compression crate in for the example.

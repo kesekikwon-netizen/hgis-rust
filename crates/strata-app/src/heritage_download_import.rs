@@ -9,18 +9,30 @@ use strata_refmap::heritage_load::{load_dataset, DatasetLoad, LoadFailure};
 use strata_topo::archive::{prepare, Limits};
 
 use super::Context;
-use crate::download_jobs::{DownloadJobHandle, StopCode};
+use crate::download_jobs::{DownloadJobHandle, DownloadJobId, StopCode};
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct Group {
+    pub(super) job: DownloadJobId,
+    pub(super) dataset: &'static HeritageDataset,
+    pub(super) files: Vec<PathBuf>,
+}
+
+pub(crate) struct ImportFailure {
+    pub(super) code: StopCode,
+    pub(super) reason: String,
+    pub(super) download_again: bool,
+}
 
 pub(super) enum Task {
-    Zip(&'static HeritageDataset, PathBuf),
+    Group(Group),
+    Publish(Group, DatasetLoad),
     Pledge(String),
 }
 
 pub(crate) enum Reply {
-    Kind(
-        &'static HeritageDataset,
-        Result<DatasetLoad, (StopCode, String)>,
-    ),
+    Kind(Group, Result<DatasetLoad, ImportFailure>),
+    Published(Group, Result<DatasetLoad, ImportFailure>),
     Receipt(Result<PathBuf, String>),
 }
 
@@ -54,7 +66,9 @@ impl Worker {
                         )
                         .map_err(|error| error.to_string()),
                     ),
-                    Task::Zip(dataset, path) => {
+                    Task::Group(group) => {
+                        let dataset = group.dataset;
+                        let received = &group.files;
                         let cancelled = || job.is_cancelled();
                         let unpack = |archive: &std::path::Path| {
                             let prepared = prepare(
@@ -77,41 +91,52 @@ impl Worker {
                         };
                         let loaded = load_dataset(
                             dataset,
-                            std::slice::from_ref(&path),
+                            received,
                             &unpack,
                             Some((&scope, context.work_epsg)),
                             "",
-                            &work.join(dataset.key),
+                            &work
+                                .join(dataset.key)
+                                .join(uuid::Uuid::new_v4().to_string()),
                         );
-                        // Import acceptance precedes recent.json, as in C++
-                        // (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:1206-1214`).
                         if job.is_cancelled() {
                             break;
                         }
-                        let result = loaded
-                            .map_err(|failure| (StopCode::Data1, failure.reason))
-                            .and_then(|load| {
-                                let region = strata_refmap::heritage_recent::region_folder(
-                                    &context.root,
-                                    &context.sido,
-                                    &context.city,
-                                )
-                                .ok_or_else(|| {
-                                    (
-                                        StopCode::Dir1,
-                                        "받은 파일을 둘 곳을 찾지 못했습니다.".to_owned(),
-                                    )
-                                })?;
-                                crate::heritage_receipt::record_recent(
-                                    &region,
-                                    dataset.name,
-                                    &[path],
-                                    chrono::Local::now().naive_local(),
-                                )
-                                .map_err(|error| (StopCode::Dir2, error.to_string()))?;
-                                Ok(load)
-                            });
-                        Reply::Kind(dataset, result)
+                        let result = loaded.map_err(|failure| ImportFailure {
+                            code: StopCode::Data1,
+                            reason: failure.reason,
+                            download_again: failure.download_again,
+                        });
+                        Reply::Kind(group, result)
+                    }
+                    Task::Publish(group, load) => {
+                        // UI acceptance precedes cache publication; the next browser action waits
+                        // for this reply (target/cpp-ref/src/app/KaHeritageBrowser.cpp:1206-1217).
+                        let result = (|| {
+                            let region = strata_refmap::heritage_recent::region_folder(
+                                &context.root,
+                                &context.sido,
+                                &context.city,
+                            )
+                            .ok_or_else(|| ImportFailure {
+                                code: StopCode::Dir1,
+                                reason: "받은 파일을 둘 곳을 찾지 못했습니다.".to_owned(),
+                                download_again: false,
+                            })?;
+                            crate::heritage_receipt::record_recent(
+                                &region,
+                                group.dataset.name,
+                                &group.files,
+                                chrono::Local::now().naive_local(),
+                            )
+                            .map_err(|error| ImportFailure {
+                                code: StopCode::Dir2,
+                                reason: error.to_string(),
+                                download_again: false,
+                            })?;
+                            Ok(load)
+                        })();
+                        Reply::Published(group, result)
                     }
                 };
                 if job.is_cancelled() || answers.send(reply).is_err() {

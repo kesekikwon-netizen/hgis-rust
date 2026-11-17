@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use strata_heritage_fixture::{Fixture, Presentation};
-use strata_heritage_run::{start_run, HeritageRunHandle, RunOptions};
+use strata_heritage_run::{start_run, DatasetOutcome, HeritageRunHandle, RunOptions};
 use strata_net::heritage_auto::{HeritageConfig, HeritageEvent, HeritageStage};
 
 use crate::case::{cases, matches, Case, Scenario};
@@ -22,8 +22,10 @@ struct Live {
     run: HeritageRunHandle,
     began: Instant,
     download_root: PathBuf,
-    accepted_transfer: bool,
+    proof: crate::assertions::TransportProof,
     events: Vec<HeritageEvent>,
+    initial_profile: Option<PathBuf>,
+    retry_prepared: bool,
 }
 
 pub struct Runner {
@@ -63,6 +65,9 @@ impl Runner {
         if crate::case::wants_zip(case) {
             fixture.give_zip("지정유산", crate::case::sample_zip()?);
         }
+        if case.scenario == Scenario::RetryOnce {
+            fixture.give_zip("지정유산", b"not a zip".to_vec());
+        }
         if case.expect == HeritageStage::Cancelled {
             fixture.set_download_delay(1500);
         }
@@ -95,14 +100,33 @@ impl Runner {
             network_allowed: Arc::new(|| false),
             download_root: download_root.clone(),
         };
+        let profile_parent = options.data_parent.clone();
         let run = start_run(frame, options).map_err(|e| e.to_string())?;
+        let initial_profile = if case.scenario == Scenario::RetryOnce {
+            Some(
+                std::fs::read_dir(profile_parent)
+                    .map_err(|error| error.to_string())?
+                    .flatten()
+                    .map(|entry| entry.path())
+                    .find(|path| path.is_dir())
+                    .ok_or("initial fixture browser profile missing")?,
+            )
+        } else {
+            None
+        };
         Ok(Live {
             fixture,
             run,
             began: Instant::now(),
             download_root,
-            accepted_transfer: false,
+            proof: crate::assertions::TransportProof {
+                accepted_transfer: false,
+                acknowledged: Some(0),
+                recreated_session: false,
+            },
             events: Vec::new(),
+            initial_profile,
+            retry_prepared: false,
         })
     }
 }
@@ -129,16 +153,67 @@ impl Runner {
             return false;
         };
         let events = live.run.frame(frame);
+        if self.cases[self.at].scenario == Scenario::RetryOnce {
+            if live.run.stage() == HeritageStage::RetryWait && !live.retry_prepared {
+                live.fixture.give_zip(
+                    "지정유산",
+                    crate::case::sample_zip().expect("stored fixture ZIP"),
+                );
+                live.fixture.expire_login();
+                live.retry_prepared = true;
+            }
+            if live.retry_prepared && live.fixture.hits("/j_spring_security_check") == 2 {
+                live.proof.recreated_session = live
+                    .initial_profile
+                    .as_ref()
+                    .is_some_and(|old| !old.exists());
+            }
+        }
+        if events
+            .iter()
+            .any(|event| matches!(event, HeritageEvent::Done))
+            && events
+                .iter()
+                .any(|event| matches!(event, HeritageEvent::DatasetReady { .. }))
+        {
+            live.proof.acknowledged = None;
+        }
         for event in &events {
             println!("  event: {event:?}");
+            if let HeritageEvent::DatasetReady { files, .. } = event {
+                let stored = crate::case::sample_zip();
+                let intact = !files.is_empty()
+                    && stored.as_ref().is_ok_and(|expected| {
+                        files
+                            .iter()
+                            .all(|file| std::fs::read(file).is_ok_and(|bytes| bytes == *expected))
+                    });
+                let waiting = live.run.stage() == HeritageStage::AwaitingImport;
+                let outcome = if intact {
+                    DatasetOutcome::Accepted
+                } else {
+                    DatasetOutcome::FatalFailure {
+                        reason: "fixture transport bytes differ".into(),
+                    }
+                };
+                let accepted = live.run.dataset_loaded(files, outcome);
+                live.proof.acknowledged = if intact && waiting && accepted {
+                    live.proof.acknowledged.map(|count| count + 1)
+                } else {
+                    None
+                };
+                println!(
+                    "  transport ACK accepted={accepted}; stored a.txt fixture, no GIS import"
+                );
+            }
         }
         live.events.extend(events);
         let stage = live.run.stage();
         if self.cases[self.at].expect == HeritageStage::Cancelled
-            && !live.accepted_transfer
+            && !live.proof.accepted_transfer
             && crate::assertions::offer_was_accepted(&live.download_root, self.cases[self.at].city)
         {
-            live.accepted_transfer = true;
+            live.proof.accepted_transfer = true;
             live.run.cancel();
             live.run.cancel();
         }
@@ -163,7 +238,7 @@ impl Runner {
                     &live.events,
                     &live.fixture,
                     &live.download_root,
-                    live.accepted_transfer,
+                    &live.proof,
                 );
             let (passed, failed) = *self.outcome.borrow();
             if held {

@@ -118,12 +118,15 @@ pub const KINDS: [(&str, &str); 6] = [
 #[must_use]
 pub fn login_script(user_id: &str, password: &str) -> String {
     wrap(&format!(
-        "var id=document.getElementById('userId');\
-         var pw=document.getElementById('pwd');\
-         if(!id||!pw){{return 'no-form';}}\
+        "var frames=cands(),owner=null,id=null,pw=null;\
+         for(var i=0;i<frames.length;i++){{try{{var d=frames[i].document;\
+         var u=d.getElementById('userId'),p=d.getElementById('pwd');\
+         if(visibleElement(u)&&visibleElement(p)){{owner=frames[i];id=u;pw=p;break;}}\
+         }}catch(e){{}}}}\
+         if(!owner){{return 'no-form';}}\
          id.value={}; pw.value={};\
-         if(typeof goLogin!=='function'){{return 'no-goLogin';}}\
-         goLogin(); return 'submitted';",
+         if(typeof owner.goLogin!=='function'){{return 'no-goLogin';}}\
+         owner.goLogin(); return 'submitted';",
         js_string(user_id),
         js_string(password)
     ))
@@ -212,3 +215,7 @@ pub fn agree_terms_script() -> String {
 #[path = "scripts_pages.rs"]
 mod pages;
 pub use pages::*;
+
+#[path = "scripts_ownership.rs"]
+mod ownership;
+pub use ownership::*;

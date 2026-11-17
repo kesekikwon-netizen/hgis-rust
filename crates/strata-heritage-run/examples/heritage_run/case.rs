@@ -14,6 +14,7 @@ pub enum Scenario {
     Popup,
     NestedLogin,
     StorageFailure,
+    RetryOnce,
 }
 
 pub struct Case {
@@ -89,6 +90,11 @@ pub fn cases() -> Vec<Case> {
             "allocation refusal preserves its I/O cause and original file",
             HeritageStage::Stopped(String::new()),
             Scenario::StorageFailure,
+        ),
+        case(
+            "retry reopens a fresh hidden session and keeps current kind",
+            HeritageStage::Done,
+            Scenario::RetryOnce,
         ),
     ];
     // Optional substring selects one actual browser case for a reproducible red/green run.

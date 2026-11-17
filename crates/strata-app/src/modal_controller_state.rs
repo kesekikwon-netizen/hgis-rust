@@ -89,11 +89,7 @@ pub struct ModalDialogController {
     // T8 KaHeritageBrowser ("주변유적 받기") 상태
     pub heritage_sido: String,
     pub heritage_city: String,
-    pub heritage_dataset_checks: [bool; 7],
     pub heritage_reuse_recent: bool,
-    pub heritage_stage_idx: usize,
-    pub heritage_progress_pct: f32,
-    pub heritage_status_detail: String,
     pub heritage_show_details: bool,
     pub heritage_request_log: Vec<String>,
     // T9 KaTopographicImportDialog ("수치지형도 — 좌표계 확인과 지도 추가") 상태
@@ -206,11 +202,7 @@ impl Default for ModalDialogController {
             // KaHeritageBrowser 처음 모습(KaHeritageBrowser.cpp:214-229): 단계 「대기」, 설명·진행 없음, 시·군은 고른 뒤에.
             heritage_sido: String::new(),
             heritage_city: String::new(),
-            heritage_dataset_checks: [true; 7],
             heritage_reuse_recent: false,
-            heritage_stage_idx: 0,
-            heritage_progress_pct: 0.0,
-            heritage_status_detail: String::new(),
             heritage_show_details: false,
             heritage_request_log: Vec::new(),
             topo_folder: String::new(),

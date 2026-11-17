@@ -61,6 +61,14 @@ fn wheel_notch_over_floating_non_modal_window_never_zooms_map_behind_it() {
         let center0 = app.home_map.viewport.center_xy;
 
         let _ = run_frame(&mut app, &ctx, vec![Event::PointerMoved(over_window)]);
+        let shapes = run_frame(&mut app, &ctx, vec![Event::PointerMoved(over_window)]);
+        // The setup has no progress card after HER-API1 (MainWindow.cpp:3135-3148).
+        let over_window = if dialog == ActiveModalDialog::HeritageBrowser {
+            find_text_center(&shapes, "주변유적 받기")
+                .unwrap_or_else(|| panic!("heritage setup header missing: {:?}", collect_texts(&shapes)))
+        } else {
+            over_window
+        };
         assert_eq!(
             ctx.layer_id_at(over_window).map(|l| l.order),
             Some(Order::Middle),

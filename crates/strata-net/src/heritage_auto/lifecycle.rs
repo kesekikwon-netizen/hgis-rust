@@ -3,8 +3,8 @@
 use super::{HeritageAutomation, HeritageEvent, HeritageStage};
 
 impl HeritageAutomation {
-    /// Records an allocation refusal (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:1303-1306`).
-    pub fn storage_failed(&mut self, reason: String) {
+    /// Records an unrecoverable boundary failure (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:445-477,1303-1306`).
+    pub fn fail(&mut self, reason: String) {
         if self.is_over() {
             return;
         }

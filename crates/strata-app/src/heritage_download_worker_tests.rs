@@ -19,20 +19,38 @@ use strata_refmap::heritage::DATASETS;
 fn drain(app: &mut StrataAppState) -> DownloadJobState {
     let limit = Instant::now() + Duration::from_secs(15);
     loop {
-        app.drive_heritage_download(&eframe::egui::Context::default());
-        app.download_jobs.tick(1.0);
-        let state = app.download_jobs.jobs()[0].state.clone();
-        if !matches!(state, DownloadJobState::Running { .. }) {
-            return state;
+        let settled = app
+            .heritage
+            .download
+            .as_ref()
+            .is_none_or(|download| download.phase == Phase::Settled || download.complete());
+        if settled {
+            app.drive_heritage_download(&eframe::egui::Context::default());
+            app.download_jobs.tick(1.0);
+            return app.download_jobs.jobs()[0].state.clone();
         }
-        assert!(Instant::now() < limit, "worker did not settle");
-        std::thread::sleep(Duration::from_millis(10));
+        let reply = app
+            .heritage
+            .download
+            .as_ref()
+            .unwrap()
+            .worker
+            .replies
+            .recv_timeout(limit.saturating_duration_since(Instant::now()))
+            .expect("real disk worker did not settle");
+        // Component-only engine acceptance; actual handle ACK is checked by the native example
+        // (target/cpp-ref/src/app/KaHeritageBrowser.cpp:1206-1217).
+        app.take_heritage_import_with(reply, |_, _| true);
     }
 }
 
 fn archive(dir: &Path) -> PathBuf {
+    archive_named(dir, "fixture")
+}
+
+pub(super) fn archive_named(dir: &Path, name: &str) -> PathBuf {
     // One synthetic 10 m square, work CRS EPSG:5187, wholly inside the synthetic survey.
-    let shp = dir.join("fixture.shp");
+    let shp = dir.join(format!("{name}.shp"));
     let mut file = DriverManager::get_driver_by_name("ESRI Shapefile")
         .unwrap()
         .create_vector_only(&shp)
@@ -40,7 +58,7 @@ fn archive(dir: &Path) -> PathBuf {
     let crs = SpatialRef::from_epsg(5187).unwrap();
     let layer = file
         .create_layer(LayerOptions {
-            name: "fixture",
+            name,
             srs: Some(&crs),
             ty: OGRwkbGeometryType::wkbPolygon,
             options: None,
@@ -58,11 +76,11 @@ fn archive(dir: &Path) -> PathBuf {
     feature.create(&layer).unwrap();
     drop(feature);
     drop(file);
-    let path = dir.join("fixture.zip");
+    let path = dir.join(format!("{name}.zip"));
     let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
     for suffix in ["shp", "shx", "dbf", "prj"] {
         zip.start_file(
-            format!("fixture.{suffix}"),
+            format!("{name}.{suffix}"),
             zip::write::SimpleFileOptions::default(),
         )
         .unwrap();
@@ -79,9 +97,9 @@ fn six_actual_imports_keep_every_layer_and_one_gauge() {
     let zip = archive(dir.path());
     crate::heritage_run_start::start_heritage_fetch(&mut app);
     for dataset in &DATASETS {
-        app.take_heritage_event(HeritageEvent::ZipReady {
+        app.take_heritage_event(HeritageEvent::DatasetReady {
             kind: dataset.name,
-            path: zip.clone(),
+            files: vec![zip.clone()],
         });
     }
     app.take_heritage_event(HeritageEvent::Done);
@@ -112,22 +130,39 @@ fn six_actual_imports_keep_every_layer_and_one_gauge() {
 }
 
 #[test]
-fn invalid_zip_stops_without_publishing_recent_record() {
+fn invalid_zip_retries_without_publishing_recent_record() {
     let (mut app, dir) = ready();
     let path = dir.path().join("broken.zip");
     std::fs::write(&path, b"PK\x03\x04truncated").unwrap();
     crate::heritage_run_start::start_heritage_fetch(&mut app);
-    app.take_heritage_event(HeritageEvent::ZipReady {
+    app.take_heritage_event(HeritageEvent::DatasetReady {
         kind: DATASETS[0].name,
-        path,
+        files: vec![path],
     });
+    let reply = app
+        .heritage
+        .download
+        .as_ref()
+        .unwrap()
+        .worker
+        .replies
+        .recv_timeout(Duration::from_secs(15))
+        .unwrap();
+    let mut outcomes = Vec::new();
+    app.take_heritage_import_with(reply, |_, outcome| {
+        outcomes.push(outcome);
+        true
+    });
+    assert!(
+        matches!(&outcomes[..], [strata_net::heritage_auto::DatasetOutcome::RetryableFailure { reason }]
+        if reason.contains("broken.zip"))
+    );
+    app.download_jobs.tick(1.0);
     assert!(matches!(
-        drain(&mut app),
-        DownloadJobState::Stopped {
-            code: StopCode::Data1,
-            ..
-        }
+        app.download_jobs.jobs()[0].state,
+        DownloadJobState::Running { .. }
     ));
+    assert!(app.heritage.download.as_ref().unwrap().kinds[0] == Kind::Pending);
     let region =
         strata_refmap::heritage_recent::region_folder(dir.path(), "경상북도", "경주시").unwrap();
     assert!(!region.join("recent.json").exists());
@@ -183,9 +218,9 @@ fn a_received_kind_refreshes_the_reuse_choice_when_setup_reopens() {
     let zip = archive(dir.path());
     assert_eq!(app.heritage_reuse_when("경상북도", "경주시"), None);
     crate::heritage_run_start::start_heritage_fetch(&mut app);
-    app.take_heritage_event(HeritageEvent::ZipReady {
+    app.take_heritage_event(HeritageEvent::DatasetReady {
         kind: DATASETS[0].name,
-        path: zip,
+        files: vec![zip],
     });
     for dataset in &DATASETS[1..] {
         app.take_heritage_event(HeritageEvent::KindAbsent { kind: dataset.name });

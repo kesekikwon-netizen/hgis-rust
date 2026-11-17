@@ -57,8 +57,14 @@ fn engine_done_waits_for_import_and_retains_earlier_kind_rows() {
     use strata_engine::ShapeKind;
     use strata_refmap::heritage_load::{DatasetLoad, Loaded};
     let (mut app, _dir) = start();
-    app.heritage.download.as_mut().unwrap().kinds[0] = Kind::Importing;
-    app.heritage.download.as_mut().unwrap().kinds[1] = Kind::Importing;
+    let groups: [Group; 2] = std::array::from_fn(|index| Group {
+        job: app.heritage.download.as_ref().unwrap().job.id(),
+        dataset: &DATASETS[index],
+        files: vec!["fixture.zip".into()],
+    });
+    for (index, group) in groups.iter().enumerate() {
+        app.heritage.download.as_mut().unwrap().kinds[index] = Kind::Publishing(group.clone());
+    }
     absent(&mut app, 2);
     app.take_heritage_event(HeritageEvent::Done);
     assert!(matches!(tick(&mut app), DownloadJobState::Running { .. }));
@@ -74,7 +80,7 @@ fn engine_done_waits_for_import_and_retains_earlier_kind_rows() {
             messages: vec![],
             empty_in_scope: false,
         };
-        app.take_heritage_import(Reply::Kind(&DATASETS[index], Ok(load)));
+        app.take_heritage_import(Reply::Published(groups[index].clone(), Ok(load)));
         assert_eq!(
             app.left_layers
                 .entries
@@ -94,13 +100,25 @@ fn engine_done_waits_for_import_and_retains_earlier_kind_rows() {
 #[test]
 fn rejected_import_cannot_finish_download() {
     let (mut app, _dir) = start();
-    app.heritage.download.as_mut().unwrap().kinds[0] = Kind::Importing;
+    let group = Group {
+        job: app.heritage.download.as_ref().unwrap().job.id(),
+        dataset: &DATASETS[0],
+        files: vec!["fixture.zip".into()],
+    };
+    app.heritage.download.as_mut().unwrap().kinds[0] = Kind::Importing(group.clone());
     absent(&mut app, 1);
     app.take_heritage_event(HeritageEvent::Done);
-    app.take_heritage_import(Reply::Kind(
-        &DATASETS[0],
-        Err((StopCode::Data1, "fixture import failed".into())),
-    ));
+    app.take_heritage_import_with(
+        Reply::Kind(
+            group,
+            Err(ImportFailure {
+                code: StopCode::Data1,
+                reason: "fixture import failed".into(),
+                download_again: false,
+            }),
+        ),
+        |_, _| true,
+    );
     assert!(matches!(
         tick(&mut app),
         DownloadJobState::Stopped {

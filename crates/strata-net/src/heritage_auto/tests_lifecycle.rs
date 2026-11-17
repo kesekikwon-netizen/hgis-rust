@@ -67,14 +67,14 @@ fn an_already_open_panel_does_not_invent_an_agreement() {
 fn a_stopped_run_cannot_finish_or_report_a_late_zip() {
     let mut machine = machine(HeritageStage::Stopped("fixture stop".to_owned()));
     assert!(machine.zip_arrived("late.zip".into()).is_none());
-    assert!(machine.kind_done().is_none());
+    assert!(!machine.dataset_loaded(&["fixture.zip".into()], super::DatasetOutcome::Accepted));
     assert!(matches!(machine.stage(), HeritageStage::Stopped(_)));
 }
 
 #[test]
 fn a_kind_without_a_received_file_cannot_be_completed() {
     let mut machine = machine(HeritageStage::Waiting);
-    assert!(machine.kind_done().is_none());
+    assert!(!machine.dataset_loaded(&["fixture.zip".into()], super::DatasetOutcome::Accepted));
     assert_eq!(machine.current_kind(), "지정유산");
     assert_eq!(machine.stage(), &HeritageStage::Waiting);
 }
@@ -92,7 +92,7 @@ fn cancellation_happens_once_and_discards_late_answers_and_files() {
         .script_answered(token, r#"{"status":"agreed","text":"late"}"#)
         .is_none());
     assert!(machine.zip_arrived("late.zip".into()).is_none());
-    assert!(machine.kind_done().is_none());
+    assert!(!machine.dataset_loaded(&["fixture.zip".into()], super::DatasetOutcome::Accepted));
     assert!(machine.transfer_failed("late failure", 0).is_none());
     assert!(machine.timers(u64::MAX).is_empty());
 }
@@ -100,7 +100,7 @@ fn cancellation_happens_once_and_discards_late_answers_and_files() {
 #[test]
 fn storage_failure_keeps_the_io_reason_and_stops_once_without_retry() {
     let mut machine = machine(HeritageStage::Waiting);
-    machine.storage_failed("fixture allocation I/O error".into());
+    machine.fail("fixture allocation I/O error".into());
     assert_eq!(
         machine.stage(),
         &HeritageStage::Stopped("fixture allocation I/O error".into())
@@ -113,14 +113,14 @@ fn storage_failure_keeps_the_io_reason_and_stops_once_without_retry() {
     );
     assert!(machine.timers(u64::MAX).is_empty());
     assert!(machine.transfer_failed("late refusal", 1).is_none());
-    assert!(machine.kind_done().is_none());
+    assert!(!machine.dataset_loaded(&["fixture.zip".into()], super::DatasetOutcome::Accepted));
 }
 
 #[test]
 fn a_storage_failure_after_cancel_cannot_replace_the_outcome() {
     let mut machine = machine(HeritageStage::Waiting);
     assert_eq!(machine.cancel(), Some(HeritageEvent::Cancelled));
-    machine.storage_failed("late allocation error".into());
+    machine.fail("late allocation error".into());
     assert_eq!(machine.stage(), &HeritageStage::Cancelled);
     assert!(machine.timers(u64::MAX).is_empty());
 }

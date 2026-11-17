@@ -73,12 +73,6 @@ impl HeritageAutomation {
         None
     }
 
-    /// A transfer alone cannot advance the kind (`KaHeritageBrowser.cpp:1206-1217`).
-    /// Removed with the native runner caller once its separate bridge dependency is consumed.
-    pub fn kind_done(&mut self) -> Option<HeritageEvent> {
-        None
-    }
-
     /// Both received files and proven absence end a kind (`KaHeritageBrowser.cpp:1108-1112,1271-1289`).
     pub(super) fn advance_kind(&mut self) -> Option<HeritageEvent> {
         self.kind_index += 1;

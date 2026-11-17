@@ -15,27 +15,28 @@ use crate::app_state::StrataAppState;
 use crate::download_jobs::{DownloadJobHandle, DownloadJobState, StopCode};
 use crate::survey_area_setup::is_survey_area_key;
 
+#[path = "heritage_download.rs"]
+pub(crate) mod download;
+#[path = "heritage_run_layers.rs"]
+mod layers;
+#[cfg(test)]
+#[path = "heritage_lifecycle_tests.rs"]
+pub(crate) mod lifecycle_tests;
 #[path = "heritage_resolve.rs"]
 pub(crate) mod resolve;
 #[path = "heritage_reuse.rs"]
 pub(crate) mod reuse;
-#[path = "heritage_run_layers.rs"]
-mod layers;
-#[path = "heritage_download.rs"]
-pub(crate) mod download;
 #[cfg(test)]
 #[path = "heritage_run_tests.rs"]
 mod tests;
-#[cfg(test)]
-#[path = "heritage_lifecycle_tests.rs"]
-pub(crate) mod lifecycle_tests;
 
 /// The rows of the button: `ref_heritage:<key of the kind>:<title>`.
 pub(crate) const KEY_PREFIX: &str = "ref_heritage:";
 pub(crate) const HERITAGE_JOB_TITLE: &str = "주변유적";
 /// Why a press is stopped (`MainWindow.cpp:3082-3099`).
 const NO_AREA_LAYER: &str = "조사구역 레이어가 없습니다. 조사구역을 먼저 그리세요.";
-const EMPTY_AREA: &str = "조사구역이 비어 있습니다. 조사구역을 먼저 그리세요. 그린 구역으로 어느 시·군인지 판정합니다.";
+const EMPTY_AREA: &str =
+    "조사구역이 비어 있습니다. 조사구역을 먼저 그리세요. 그린 구역으로 어느 시·군인지 판정합니다.";
 const NO_SURVEY: &str = "조사를 먼저 열거나 저장하세요. 받은 자료는 그 조사폴더 안에만 둡니다.";
 /// The end of a run (`:3143`).
 const DONE: &str = "주변유적 자료 처리를 마쳤습니다. 받은 자료는 「참조 지도」에 있습니다.";
@@ -46,7 +47,9 @@ const NOT_RECEIVED: &str = "받아 둔 자료가 없는 종류";
 pub(crate) enum Step {
     Kind(&'static HeritageDataset, Result<DatasetLoad, LoadFailure>),
     /// Every kind is through; `missing` names the kinds that were not there to use again.
-    End { missing: Vec<&'static str> },
+    End {
+        missing: Vec<&'static str>,
+    },
 }
 
 /// A run of the button and what it waits for.
@@ -58,7 +61,8 @@ pub(crate) struct HeritageRun {
     pub(crate) wanted: Option<reuse::Wanted>,
     pub(crate) running: Option<(Receiver<Step>, DownloadJobHandle)>,
     /// The question about the city of the survey area, while it is open.
-    pub(crate) resolving: Option<Receiver<Result<Vec<u8>, strata_refmap::transfer::TransferFailure>>>,
+    pub(crate) resolving:
+        Option<Receiver<Result<Vec<u8>, strata_refmap::transfer::TransferFailure>>>,
     /// Why no city could be given, for the dialog.
     pub(crate) region_note: Option<String>,
     /// The city the dialog last asked about, and when its newest usable data was received.
@@ -81,21 +85,33 @@ impl std::fmt::Debug for HeritageRun {
 /// A copy of the app state does not take the run with it.
 impl Clone for HeritageRun {
     fn clone(&self) -> Self {
-        Self { archive_root: self.archive_root.clone(), ..Self::default() }
+        Self {
+            archive_root: self.archive_root.clone(),
+            ..Self::default()
+        }
     }
 }
 
 impl HeritageRun {
     /// Whether a press is still being worked on (the scripted screenshots wait for its end).
     pub(crate) fn is_busy(&self) -> bool {
-        self.refused.is_some() || self.wanted.is_some() || self.running.is_some() || self.resolving.is_some() || self.download.is_some() || self.browser_busy()
+        self.refused.is_some()
+            || self.wanted.is_some()
+            || self.running.is_some()
+            || self.resolving.is_some()
+            || self.download.is_some()
+            || self.browser_busy()
     }
 
     pub(crate) fn browser_busy(&self) -> bool {
         #[cfg(windows)]
-        { self.browser_run.is_some() }
+        {
+            self.browser_run.is_some()
+        }
         #[cfg(not(windows))]
-        { false }
+        {
+            false
+        }
     }
 }
 
@@ -113,7 +129,11 @@ pub(crate) fn colour_of_key(key: &str) -> Option<[u8; 3]> {
 impl StrataAppState {
     /// What a run needs before anything else: the survey area grown by 5 km (`:3082-3099`).
     pub(crate) fn heritage_scope(&self) -> Result<Scope, (StopCode, String)> {
-        if !self.survey_tables.iter().any(|table| is_survey_area_key(&table.table)) {
+        if !self
+            .survey_tables
+            .iter()
+            .any(|table| is_survey_area_key(&table.table))
+        {
             return Err((StopCode::Area1, NO_AREA_LAYER.to_owned()));
         }
         let scope = match crate::ref_vector::map::survey_scope(self, NEAR_M) {
@@ -129,7 +149,11 @@ impl StrataAppState {
 
     /// The press: with a survey area in an open survey, the dialog asks for the city.
     pub(crate) fn press_heritage(&mut self) {
-        if self.heritage.download.is_some() || self.heritage.browser_busy() || self.heritage.running.is_some() || self.heritage.wanted.is_some() {
+        if self.heritage.download.is_some()
+            || self.heritage.browser_busy()
+            || self.heritage.running.is_some()
+            || self.heritage.wanted.is_some()
+        {
             return;
         }
         match self.heritage_scope() {
@@ -145,7 +169,11 @@ impl StrataAppState {
     /// Every frame: what a press or the dialog wished for becomes a line of the gauge.
     pub(crate) fn drive_heritage_wishes(&mut self, now: f64) {
         if let Some((code, reason)) = self.heritage.refused.take() {
-            drop(self.download_jobs.add_job(HERITAGE_JOB_TITLE, DownloadJobState::Stopped { code, reason }, now));
+            drop(self.download_jobs.add_job(
+                HERITAGE_JOB_TITLE,
+                DownloadJobState::Stopped { code, reason },
+                now,
+            ));
         }
         if let Some(wanted) = self.heritage.wanted.take() {
             self.begin_heritage_run(&wanted, now);
@@ -156,7 +184,12 @@ impl StrataAppState {
     ///
     /// `frame` is needed only when a 「받기」 press has to open the browser session, which a test
     /// cannot do; [`Self::drive_heritage_no_window`] drives the testable app state.
-    pub(crate) fn drive_heritage(&mut self, ctx: &eframe::egui::Context, frame: &eframe::Frame, now: f64) {
+    pub(crate) fn drive_heritage(
+        &mut self,
+        ctx: &eframe::egui::Context,
+        frame: &eframe::Frame,
+        now: f64,
+    ) {
         self.drive_heritage_region(ctx);
         self.drive_heritage_wishes(now);
         self.drive_heritage_download(ctx);
@@ -185,10 +218,24 @@ impl StrataAppState {
     /// Feed the hidden session and consume only explicit engine facts (HER-API1).
     #[cfg(windows)]
     pub(crate) fn drive_heritage_browser(&mut self, frame: &eframe::Frame) {
-        let Some(run) = self.heritage.browser_run.as_mut() else { return; };
+        // Record accepted files before any next-kind site action, without UI-thread disk I/O
+        // (target/cpp-ref/src/app/KaHeritageBrowser.cpp:1206-1217).
+        if self
+            .heritage
+            .download
+            .as_ref()
+            .is_some_and(download::Download::publication_pending)
+        {
+            return;
+        }
+        let Some(run) = self.heritage.browser_run.as_mut() else {
+            return;
+        };
         let events = run.frame(frame);
         let finished = run.finished();
-        for event in events { self.take_heritage_event(event); }
+        for event in events {
+            self.take_heritage_event(event);
+        }
         if finished {
             self.heritage.browser_run = None;
             self.heritage_browser_ended();
@@ -229,7 +276,11 @@ impl StrataAppState {
     pub(crate) fn drop_heritage_run(&mut self) {
         self.heritage_run_requested = false;
         self.cancel_heritage_download();
-        (self.heritage.wanted, self.heritage.refused, self.heritage.resolving) = (None, None, None);
+        (
+            self.heritage.wanted,
+            self.heritage.refused,
+            self.heritage.resolving,
+        ) = (None, None, None);
         if let Some((_, job)) = self.heritage.running.take() {
             self.download_jobs.request_cancel(job.id());
             job.report_cancelled();

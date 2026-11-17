@@ -10,7 +10,12 @@ use crate::download_jobs::DownloadJobHandle;
 
 #[path = "heritage_download_import.rs"]
 mod import;
-use import::{Reply, Task, Worker};
+#[cfg(test)]
+use import::ImportFailure;
+use import::{Group, Reply, Task, Worker};
+#[cfg(test)]
+#[path = "heritage_download_group_tests.rs"]
+mod group_tests;
 #[cfg(test)]
 #[path = "heritage_download_tests.rs"]
 mod tests;
@@ -29,10 +34,11 @@ pub(super) struct Context {
     pub(super) account: crate::heritage_receipt::AccountState,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum Kind {
     Pending,
-    Importing,
+    Importing(Group),
+    Publishing(Group),
     Imported,
     Absent,
 }
@@ -101,7 +107,7 @@ impl Download {
             config: Some(config),
             job,
             worker,
-            kinds: [Kind::Pending; DATASETS.len()],
+            kinds: std::array::from_fn(|_| Kind::Pending),
             phase: Phase::Receiving,
             receipts: 0,
             last_receiving_note: stage,
@@ -116,9 +122,19 @@ impl Download {
                 .iter()
                 .all(|kind| matches!(kind, Kind::Imported | Kind::Absent))
     }
+
+    pub(crate) fn publication_pending(&self) -> bool {
+        self.phase != Phase::Settled
+            && self
+                .kinds
+                .iter()
+                .any(|kind| matches!(kind, Kind::Publishing(_)))
+    }
 }
 
 #[path = "heritage_download_drive.rs"]
 mod drive;
 #[path = "heritage_download_events.rs"]
 mod events;
+#[path = "heritage_download_results.rs"]
+mod results;

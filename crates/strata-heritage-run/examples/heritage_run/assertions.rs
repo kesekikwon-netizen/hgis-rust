@@ -14,13 +14,19 @@ const KINDS: [&str; 6] = [
     "발굴조사구역",
 ];
 
+pub struct TransportProof {
+    pub accepted_transfer: bool,
+    pub acknowledged: Option<usize>,
+    pub recreated_session: bool,
+}
+
 pub fn held(
     case: &Case,
     stage: &HeritageStage,
     events: &[HeritageEvent],
     fixture: &Fixture,
     root: &Path,
-    accepted_transfer: bool,
+    proof: &TransportProof,
 ) -> bool {
     let agreements: Vec<_> = events
         .iter()
@@ -37,7 +43,12 @@ pub fn held(
     };
     if !pledge
         || !crate::case::matches(stage, &case.expect)
-        || fixture.hits("/j_spring_security_check") != 1
+        || fixture.hits("/j_spring_security_check")
+            != if case.scenario == Scenario::RetryOnce {
+                2
+            } else {
+                1
+            }
         || fixture.hits("/fixture/unfiltered-download") != 0
     {
         return false;
@@ -45,7 +56,7 @@ pub fn held(
     let zips: Vec<_> = events
         .iter()
         .filter_map(|event| match event {
-            HeritageEvent::ZipReady { kind, path } => Some((*kind, path)),
+            HeritageEvent::DatasetReady { kind, files } => Some((*kind, files)),
             _ => None,
         })
         .collect();
@@ -75,24 +86,31 @@ pub fn held(
         HeritageStage::Done => {
             let names: Vec<_> = zips.iter().map(|(kind, _)| *kind).collect();
             let empty = case.scenario == Scenario::Absent;
+            let retried = usize::from(case.scenario == Scenario::RetryOnce);
             done == 1
+                && (retried == 0 || proof.recreated_session)
+                && proof.acknowledged == Some(if empty { 0 } else { 6 })
                 && cancelled == 0
                 && stopped.is_empty()
                 && matches!(events.last(), Some(HeritageEvent::Done))
                 && if empty {
                     absent == KINDS && zips.is_empty()
                 } else {
-                    names == KINDS && absent.is_empty() && zips.iter().all(|(_, p)| p.is_file())
+                    names == KINDS
+                        && absent.is_empty()
+                        && zips.iter().all(|(_, files)| {
+                            !files.is_empty() && files.iter().all(|p| p.is_file())
+                        })
                 }
-                && fixture.hits("/fixture/panel-open") == 1
-                && fixture.hits("/fixture/kind-request") == 6
-                && fixture.hits("/fixture/search-request") == 6
-                && fixture.hits("/fixture/confirm-accepted") == if empty { 0 } else { 6 }
+                && fixture.hits("/fixture/panel-open") == 1 + retried
+                && fixture.hits("/fixture/kind-request") == 6 + retried
+                && fixture.hits("/fixture/search-request") == 6 + retried
+                && fixture.hits("/fixture/confirm-accepted") == if empty { 0 } else { 6 + retried }
                 && fixture.hits("/user/data/heritageDownload/downloadFilesAll.do")
-                    == if empty { 0 } else { 6 }
+                    == if empty { 0 } else { 6 + retried }
         }
         HeritageStage::Cancelled => {
-            accepted_transfer
+            proof.accepted_transfer
                 && cancelled == 1
                 && done == 0
                 && stopped.is_empty()
