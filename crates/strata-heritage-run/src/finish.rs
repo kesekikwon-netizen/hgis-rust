@@ -6,11 +6,42 @@
 //! (`MainWindow.cpp:3168-3170`).
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
-/// The folder a received file goes in: `<root>/주변유적/<시도> <시군>/원본/<uuid>`.
+static NEXT_OFFER: AtomicU64 = AtomicU64::new(0);
+
+/// Allocates an offer's directory (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:1308-1315`).
 ///
-/// The uuid folder is the C++ one (`:1308-1315`, `QUuid::WithoutBraces`): two runs of the same
-/// city do not overwrite each other's files.
+/// Only an exclusively created directory is returned. Process/serial candidate names are not UUIDs;
+/// occupied names are skipped without touching their contents. O(d + k) directory operations for
+/// parent depth d and k occupied candidates; no directory scans or archive reads.
+///
+/// # Errors
+/// Returns the filesystem error if the directory cannot be created.
+pub fn allocate_received_folder(root: &Path, sido: &str, city: &str) -> std::io::Result<PathBuf> {
+    let parent = root
+        .join("주변유적")
+        .join(format!("{sido} {city}"))
+        .join("원본");
+    allocate_in(&parent, &NEXT_OFFER)
+}
+
+fn allocate_in(parent: &Path, next: &AtomicU64) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(parent)?;
+    loop {
+        let serial = next.fetch_add(1, Ordering::Relaxed);
+        let path = parent.join(format!("offer-{}-{serial}", std::process::id()));
+        match std::fs::create_dir(&path) {
+            Ok(()) => return Ok(path),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// Legacy path formula retained for the runner until its caller migration.
+/// This serial is not the UUID used by `target/cpp-ref/src/app/KaHeritageBrowser.cpp:1308-1315`;
+/// this function only names a path and does not allocate a directory.
 #[must_use]
 pub fn received_folder(root: &Path, sido: &str, city: &str, serial: u64) -> PathBuf {
     root.join("주변유적")
@@ -19,6 +50,10 @@ pub fn received_folder(root: &Path, sido: &str, city: &str, serial: u64) -> Path
         .join(format!("{serial:032x}"))
 }
 
+#[cfg(test)]
+#[path = "finish_allocation_tests.rs"]
+mod allocation_tests;
+
 /// A name the site suggested, made safe to write (`KaHeritageBrowser.cpp:196-200 safeName`).
 ///
 /// Windows forbids `\ / : * ? " < > |` and the reserved device names; the C++ replaces the
@@ -26,8 +61,8 @@ pub fn received_folder(root: &Path, sido: &str, city: &str, serial: u64) -> Path
 #[must_use]
 pub fn safe_name(suggested: &str) -> String {
     const RESERVED: [&str; 22] = [
-        "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7",
-        "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+        "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8",
+        "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
     ];
     let cleaned: String = suggested
         .chars()
@@ -74,7 +109,10 @@ mod tests {
 
     #[test]
     fn forbidden_characters_become_underscores() {
-        assert_eq!(safe_name("a/b\\c:d*e?f\"g<h>i|j.zip"), "a_b_c_d_e_f_g_h_i_j.zip");
+        assert_eq!(
+            safe_name("a/b\\c:d*e?f\"g<h>i|j.zip"),
+            "a_b_c_d_e_f_g_h_i_j.zip"
+        );
     }
 
     #[test]
