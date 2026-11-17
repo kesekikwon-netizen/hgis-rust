@@ -89,7 +89,7 @@ impl StrataAppState {
                 }
                 "modal:drawing_print" => {
                     self.active_tab = MainTab::Drawing;
-                    self.modals.active = Some(ActiveModalDialog::DrawingPrint);
+                    self.open_studio_tab(MainTab::Print);
                 }
                 "modal:account" => {
                     self.accounts.show_passwords = false;

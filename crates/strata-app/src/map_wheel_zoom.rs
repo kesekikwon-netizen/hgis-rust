@@ -60,7 +60,6 @@ impl StrataAppState {
             | ActiveModalDialog::HeritageRegionSelect
             | ActiveModalDialog::PaleoSourceDownload
             | ActiveModalDialog::PdfPreparing
-            | ActiveModalDialog::DrawingPrint
             | ActiveModalDialog::ControlPoint
             | ActiveModalDialog::SurveyArea
             | ActiveModalDialog::LineColor
@@ -100,10 +99,7 @@ impl StrataAppState {
         if menu_open {
             return Some(WheelBlockReason::PopupMenu);
         }
-        self.ribbon
-            .app_bar
-            .address_popup_open
-            .then_some(WheelBlockReason::RegionAddressPopup)
+        self.ribbon.app_bar.address_popup_open.then_some(WheelBlockReason::RegionAddressPopup)
     }
 }
 
@@ -126,11 +122,7 @@ pub(crate) fn wheel_zoom_mpp_factor(notches: f64, ctrl: bool) -> f64 {
     if !notches.is_finite() || notches == 0.0 {
         return 1.0;
     }
-    let base = if ctrl {
-        1.0 + (WHEEL_ZOOM_FACTOR - 1.0) * CTRL_WHEEL_FINE_RATIO
-    } else {
-        WHEEL_ZOOM_FACTOR
-    };
+    let base = if ctrl { 1.0 + (WHEEL_ZOOM_FACTOR - 1.0) * CTRL_WHEEL_FINE_RATIO } else { WHEEL_ZOOM_FACTOR };
     base.powf(-notches)
 }
 
@@ -138,13 +130,7 @@ pub(crate) fn wheel_zoom_mpp_factor(notches: f64, ctrl: bool) -> f64 {
 ///
 /// Wheel input is ignored only when `blocked` identifies an open C++ modal dialog, popup menu, or
 /// region address popup (never using `egui::Memory::any_popup_open()` or overlay layer checks).
-pub(crate) fn apply_map_wheel_zoom(
-    ui: &egui::Ui,
-    rect: Rect,
-    hover_pos: Option<Pos2>,
-    blocked: Option<WheelBlockReason>,
-    vp: &mut ViewportTransform,
-) {
+pub(crate) fn apply_map_wheel_zoom(ui: &egui::Ui, rect: Rect, hover_pos: Option<Pos2>, blocked: Option<WheelBlockReason>, vp: &mut ViewportTransform) {
     if blocked.is_some() {
         return;
     }

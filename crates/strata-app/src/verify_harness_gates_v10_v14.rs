@@ -14,10 +14,10 @@ use strata_storage::project_actions::WorkspaceFileActions;
 use strata_types::crs::WorkCrs;
 use strata_types::schema::DomainLayerKey;
 
+use super::verify_harness_types::GateResult;
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::ActiveModalDialog;
 use crate::ribbon::{KaBeginnerRibbon, SubToolsMode, PENINSULA_REGION_TILES};
-use super::verify_harness_types::GateResult;
 
 /// V10~V14 게이트를 원래 순서대로 gates 에 넣는다.
 pub(crate) fn push_v10_to_v14_gates(gates: &mut Vec<GateResult>) {
@@ -26,17 +26,10 @@ pub(crate) fn push_v10_to_v14_gates(gates: &mut Vec<GateResult>) {
     let mut gui_state = StrataAppState::new_startup();
     gui_state.ribbon.sub_mode = SubToolsMode::Draw;
     gui_state.ribbon.app_bar.region_popup_open = true;
-    let mut all_tabs_rendered =
-        KaBeginnerRibbon::categories().len() == 7 && PENINSULA_REGION_TILES.len() == 17;
+    let mut all_tabs_rendered = KaBeginnerRibbon::categories().len() == 7 && PENINSULA_REGION_TILES.len() == 17;
     for &tab in MainTab::all() {
         gui_state.active_tab = tab;
-        let raw_input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                egui::vec2(1440.0, 900.0),
-            )),
-            ..Default::default()
-        };
+        let raw_input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1440.0, 900.0))), ..Default::default() };
         let mut rect_out = egui::Rect::NOTHING;
         let _ = ctx.run(raw_input, |ctx| {
             rect_out = gui_state.render_workspace_egui(ctx);
@@ -66,33 +59,18 @@ pub(crate) fn push_v10_to_v14_gates(gates: &mut Vec<GateResult>) {
         gate_id: "V11",
         title_ko: "2D 마우스 CAD 드로잉·스냅·우클릭 폴리곤 확정 및 거리·면적 측정",
         passed: committed && cad_scene.buffer_500m_ring.len() == 37 && cad.last_measure.is_some(),
-        detail: format!(
-            "polygons={} ring={}",
-            cad_scene.polygons.len(),
-            cad_scene.buffer_500m_ring.len()
-        ),
+        detail: format!("polygons={} ring={}", cad_scene.polygons.len(), cad_scene.buffer_500m_ring.len()),
     });
 
     // V12: 비동기 배경지도(Basemap RGBA) 합성 및 인트라넷/NGII WebView 자동화 계획
-    let tile_rgba = AsyncTileDispatcher::synthesize_basemap_backdrop_rgba(
-        BasemapSource::Daedongyeojido,
-        64,
-        64,
-    );
-    let h_plan =
-        AsyncTileDispatcher::build_heritage_webview_plan("arch_user", "pw", "경상북도", "경주시");
+    let tile_rgba = AsyncTileDispatcher::synthesize_basemap_backdrop_rgba(BasemapSource::Daedongyeojido, 64, 64);
+    let h_plan = AsyncTileDispatcher::build_heritage_webview_plan("arch_user", "pw", "경상북도", "경주시");
     let n_plan = AsyncTileDispatcher::build_ngii_webview_plan("35701");
     gates.push(GateResult {
         gate_id: "V12",
         title_ko: "비동기 배경지도 타일 합성 및 국가유산청·국토정보플랫폼 WebView 계획",
-        passed: tile_rgba.len() == 64 * 64 * 4
-            && !h_plan.injected_scripts.is_empty()
-            && n_plan.portal_url.contains("ngii.go.kr"),
-        detail: format!(
-            "basemaps={} scripts={}",
-            BasemapSource::all().len(),
-            h_plan.injected_scripts.len()
-        ),
+        passed: tile_rgba.len() == 64 * 64 * 4 && !h_plan.injected_scripts.is_empty() && n_plan.portal_url.contains("ngii.go.kr"),
+        detail: format!("basemaps={} scripts={}", BasemapSource::all().len(), h_plan.injected_scripts.len()),
     });
 
     // V13: 실제 파일 액션(.gpkg 저장·재열기 + .dxf 표고점 추출 + .csv 기준점 임포트)
@@ -111,9 +89,8 @@ pub(crate) fn push_v10_to_v14_gates(gates: &mut Vec<GateResult>) {
             }
             strata_storage::survey_gpkg_save::save_survey(&gpkg_p, &tables).is_ok()
         })
-        && strata_storage::survey_gpkg_read::read_survey_tables(&gpkg_p).is_ok_and(|t| {
-            t.iter().any(|t| t.layer.key == Some(DomainLayerKey::SurveyArea) && t.layer.features.len() == 1)
-        })
+        && strata_storage::survey_gpkg_read::read_survey_tables(&gpkg_p)
+            .is_ok_and(|t| t.iter().any(|t| t.layer.key == Some(DomainLayerKey::SurveyArea) && t.layer.features.len() == 1))
         && WorkspaceFileActions::import_dxf_contour_points(&dxf_p).is_ok_and(|v| v.len() == 1)
         && WorkspaceFileActions::import_control_points_csv(&csv_p).is_ok_and(|v| v.len() == 1);
     let _ = std::fs::remove_dir_all(&f_dir);
@@ -137,16 +114,9 @@ pub(crate) fn push_v10_to_v14_gates(gates: &mut Vec<GateResult>) {
         ActiveModalDialog::CadastralDownload,
         ActiveModalDialog::PaleoSourceDownload,
         ActiveModalDialog::PdfPreparing,
-        ActiveModalDialog::DrawingPrint,
     ] {
         gui_state.modals.active = Some(modal);
-        let raw_input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                egui::vec2(1680.0, 960.0),
-            )),
-            ..Default::default()
-        };
+        let raw_input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1680.0, 960.0))), ..Default::default() };
         let _ = ctx.run(raw_input, |ctx| {
             let _ = gui_state.render_workspace_egui(ctx);
         });

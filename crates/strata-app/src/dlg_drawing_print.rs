@@ -1,15 +1,6 @@
-//! `dialogs_download_print` 에서 옮긴 「DrawingPrint」 대화상자.
-//!
-//! 분할 전에는 `render_download_and_print_dialogs` 의 match arm 이었다.
-//! 300줄 규칙에 맞춰 왼쪽 칸(`dlg_drawing_print_options`), 오른쪽 미리보기
-//! (`dlg_drawing_print_preview`), 아래 단추(`dlg_drawing_print_actions`)로 나눴다.
-//! `crate::dlg_drawing_print::render_drawing_print` 경로와 위젯 순서는 그대로다.
-
-use eframe::egui;
-
+//! App print tab. Owner 2026-11-17; target/cpp-ref/src/app/KaPrintDialogPlate.cpp:77-125.
 use crate::app_state::StrataAppState;
-use crate::dialogs_modal::render_strata_modal_header;
-
+use eframe::egui::{self, Vec2};
 #[path = "dlg_drawing_print_actions.rs"]
 mod dlg_drawing_print_actions;
 #[path = "dlg_drawing_print_options.rs"]
@@ -17,27 +8,38 @@ mod dlg_drawing_print_options;
 #[path = "dlg_drawing_print_preview.rs"]
 mod dlg_drawing_print_preview;
 
-use dlg_drawing_print_actions::render_print_actions;
-use dlg_drawing_print_options::render_print_options;
-use dlg_drawing_print_preview::render_print_preview;
-
-pub(crate) fn render_drawing_print(
-    app: &mut StrataAppState,
-    ctx: &egui::Context,
-    open: &mut bool,
-) {
-    egui::Window::new("ka_modal_drawing_print")
-        .title_bar(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .default_width(760.0)
-        .show(ctx, |ui| {
-            render_strata_modal_header(ui, "도면 인쇄 - Strata", open);
-            ui.columns(2, |cols| {
-                let (paper_summary, scale_summary) =
-                    render_print_options(app, &mut cols[0]);
-                render_print_preview(&mut cols[1], &paper_summary, &scale_summary);
+pub(crate) fn render_drawing_print(app: &mut StrataAppState, ui: &mut egui::Ui) {
+    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+    ui.spacing_mut().interact_size.y = 30.0;
+    egui::TopBottomPanel::top("print_tab_heading").show_inside(ui, |ui| {
+        ui.add_space(8.0);
+        ui.heading("도면 인쇄");
+        ui.label(&app.drawing.title_ko);
+        ui.add_space(8.0);
+    });
+    egui::TopBottomPanel::bottom("print_tab_actions").show_inside(ui, |ui| {
+        ui.add_space(8.0);
+        dlg_drawing_print_actions::render_print_actions(app, ui);
+        ui.add_space(8.0);
+    });
+    egui::CentralPanel::default().show_inside(ui, |ui| {
+        if ui.available_width() >= 850.0 {
+            let height = ui.available_height();
+            ui.horizontal_top(|ui| {
+                ui.allocate_ui_with_layout(Vec2::new(330.0, height), egui::Layout::top_down(egui::Align::Min), |ui| {
+                    egui::ScrollArea::vertical().id_salt("print_options").auto_shrink([false, false]).show(ui, |ui| {
+                        dlg_drawing_print_options::render_print_options(app, ui);
+                    });
+                });
+                ui.separator();
+                dlg_drawing_print_preview::render_print_preview(app, ui, height);
             });
-            render_print_actions(app, ui);
-        });
+        } else {
+            egui::ScrollArea::vertical().id_salt("print_compact").auto_shrink([false, false]).show(ui, |ui| {
+                dlg_drawing_print_options::render_print_options(app, ui);
+                ui.add_space(16.0);
+                dlg_drawing_print_preview::render_print_preview(app, ui, 420.0);
+            });
+        }
+    });
 }

@@ -2,8 +2,8 @@
 
 use eframe::egui::{self, Color32, Stroke, Vec2};
 
+use crate::app_state::MainTab;
 use crate::app_state::StrataAppState;
-use crate::dialogs_modal::ActiveModalDialog;
 
 impl StrataAppState {
     /// 축척 프리셋·용지 크기·도면 정보 칸.
@@ -92,9 +92,7 @@ impl StrataAppState {
                 .corner_radius(6.0)
                 .min_size(Vec2::new(room * 0.36, 36.0));
             if ui.add_sized([room * 0.36, 36.0], prt_btn).clicked() {
-                // KaPrintDialog.cpp:124 — 용지 기본값은 프린터가 A3 를 지원할 때만 A3.
-                self.modals.print_paper = crate::dialogs_modal::default_print_paper_for_printer();
-                self.modals.active = Some(ActiveModalDialog::DrawingPrint);
+                self.open_studio_tab(MainTab::Print);
             }
         });
     }

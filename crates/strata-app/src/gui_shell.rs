@@ -2,7 +2,7 @@ use eframe::egui::{self};
 use strata_canvas2d::map_tools::MapToolKind;
 
 use crate::app_state::{MainTab, StrataAppState};
-use crate::dialogs_modal::{ActiveModalDialog};
+use crate::dialogs_modal::ActiveModalDialog;
 
 /// UX_LAYOUT_SPEC.md 1절: 세로 5단 골격 (창 1600×900 기준, 상태줄 y=839, h=32)
 pub const UX_STATUS_BAR_Y: f32 = 839.0;
@@ -11,9 +11,7 @@ pub const UX_TAB_BODY_Y: f32 = 158.0;
 pub const UX_TAB_BODY_HEIGHT: f32 = 681.0;
 
 /// KaStatusBar.cpp:86-87 — 13개 기본 축척 프리셋
-pub const KA_STATUS_SCALE_PRESETS: [u32; 13] = [
-    100, 200, 250, 500, 1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000,
-];
+pub const KA_STATUS_SCALE_PRESETS: [u32; 13] = [100, 200, 250, 500, 1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000];
 
 impl StrataAppState {
     /// C++ `MainWindow.cpp` + `MainWindowRibbon.cpp` + `KaShellFocus.h` 단축키 1:1 처리
@@ -43,8 +41,7 @@ impl StrataAppState {
                 self.sketch_finish();
             }
             if i.key_pressed(egui::Key::F9) {
-                self.right_inspector.left_panel_collapsed =
-                    !self.right_inspector.left_panel_collapsed;
+                self.right_inspector.left_panel_collapsed = !self.right_inspector.left_panel_collapsed;
                 self.home_map.draw_guide_message = Some(
                     if self.right_inspector.left_panel_collapsed {
                         "왼쪽 패널을 접었습니다. F9 키를 누르면 다시 펼칩니다."
@@ -55,8 +52,7 @@ impl StrataAppState {
                 );
             }
             if i.key_pressed(egui::Key::F10) {
-                self.right_inspector.right_panel_collapsed =
-                    !self.right_inspector.right_panel_collapsed;
+                self.right_inspector.right_panel_collapsed = !self.right_inspector.right_panel_collapsed;
                 self.home_map.draw_guide_message = Some(
                     if self.right_inspector.right_panel_collapsed {
                         "오른쪽 패널을 접었습니다. F10 키를 누르면 다시 펼칩니다."
@@ -117,10 +113,7 @@ impl StrataAppState {
                     self.modals.active = Some(ActiveModalDialog::PaperSetup);
                 } else if i.key_pressed(egui::Key::P) {
                     // MainWindowExport.cpp:186-194 + KaPrintDialog.cpp:124 — Ctrl+P 도 같은 인쇄 창.
-                    self.open_studio_tab(MainTab::Drawing);
-                    self.modals.print_paper =
-                        crate::dialogs_modal::default_print_paper_for_printer();
-                    self.modals.active = Some(ActiveModalDialog::DrawingPrint);
+                    self.open_studio_tab(MainTab::Print);
                 } else if i.key_pressed(egui::Key::E) {
                     self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
                 } else if !wants_kb && i.key_pressed(egui::Key::Z) && self.active_tab == MainTab::Drawing && self.drawing.coord_callout_mode {
@@ -160,7 +153,11 @@ impl eframe::App for StrataAppState {
 
     /// See-through around the card of the startup notice.
     fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
-        if self.startup_notice.is_some() { [0.0; 4] } else { visuals.panel_fill.to_normalized_gamma_f32() }
+        if self.startup_notice.is_some() {
+            [0.0; 4]
+        } else {
+            visuals.panel_fill.to_normalized_gamma_f32()
+        }
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
@@ -185,8 +182,7 @@ impl eframe::App for StrataAppState {
             let full = ctx.screen_rect();
             let dbg_mon = ctx.input(|i| i.viewport().monitor_size);
             if std::env::var("KA_HGIS_DEBUG_WIN").is_ok() {
-                eprintln!("[WIN] screen_rect={:.1}x{:.1} monitor={:?} ppp={:.3}",
-                    full.width(), full.height(), dbg_mon, ctx.pixels_per_point());
+                eprintln!("[WIN] screen_rect={:.1}x{:.1} monitor={:?} ppp={:.3}", full.width(), full.height(), dbg_mon, ctx.pixels_per_point());
             }
             if let Some(mon) = dbg_mon {
                 // 창이 모니터보다 크면 작업영역(대략 모니터 - 작업표시줄 48px)에 맞춘다.
@@ -195,9 +191,7 @@ impl eframe::App for StrataAppState {
                 if full.width() > max_w + 1.0 || full.height() > max_h + 1.0 {
                     let new_w = full.width().min(max_w);
                     let new_h = full.height().min(max_h);
-                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
-                        new_w, new_h,
-                    )));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(new_w, new_h)));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
                 }
             }

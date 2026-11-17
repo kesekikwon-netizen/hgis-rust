@@ -8,10 +8,10 @@ use strata_types::crs::WorkCrs;
 use strata_types::schema::DomainLayerKey;
 use strata_types::theme_tokens::{DisplayOptions, ThemeTokens};
 
-use crate::app_state::StrataAppState;
-use crate::dialogs_modal::ModalDialogController;
 use super::app_state_types::MainTab;
+use crate::app_state::StrataAppState;
 use crate::dialogs_account::AccountDialogState;
+use crate::dialogs_modal::ModalDialogController;
 use crate::left_layer_panel::LeftLayerPanel;
 use crate::ribbon::{KaBeginnerRibbon, RibbonCategory};
 use crate::right_inspector::RightInspectorState;
@@ -23,12 +23,8 @@ impl StrataAppState {
     #[must_use]
     pub fn new_startup() -> Self {
         let accounts = AccountDialogState::probe_user_accounts();
-        let (basemap_fetch, cadastral_fetch) =
-            crate::basemap_cadastral_jobs::shared_tile_fetchers();
-        let default_opts = DisplayOptions {
-            paper_look: true,
-            ..DisplayOptions::default()
-        };
+        let (basemap_fetch, cadastral_fetch) = crate::basemap_cadastral_jobs::shared_tile_fetchers();
+        let default_opts = DisplayOptions { paper_look: true, ..DisplayOptions::default() };
         let mut app = Self {
             active_tab: MainTab::Home,
             open_studio_tabs: Vec::new(),
@@ -110,24 +106,17 @@ impl StrataAppState {
         if self.snap.is_some() {
             return;
         }
-        if let Some(rust_ini) = self
-            .settings_ini
-            .as_deref()
-            .and_then(crate::user_settings::rust_settings_ini_from_shared)
-        {
+        if let Some(rust_ini) = self.settings_ini.as_deref().and_then(crate::user_settings::rust_settings_ini_from_shared) {
             self.display_options.sound_level = crate::rust_settings::load_sound_level(&rust_ini);
         }
     }
 
     /// `MainWindowExport.cpp:252` — 도면 화면을 처음 열 때 상태줄에 남기는 C++ 원문.
-    pub const DRAWING_STUDIO_WELCOME: &'static str =
-        "도면 화면입니다. 좌표점은 용지 아래 아이콘으로 찍습니다.";
+    pub const DRAWING_STUDIO_WELCOME: &'static str = "도면 화면입니다. 좌표점은 용지 아래 아이콘으로 찍습니다.";
 
     /// C++ `MainWindowChrome::openDrawingStudio` 등 스튜디오 탭 열기 생명주기 1:1
     pub fn open_studio_tab(&mut self, tab: MainTab) {
-        if matches!(tab, MainTab::Drawing | MainTab::Paleo | MainTab::Terrain3d)
-            && !self.open_studio_tabs.contains(&tab)
-        {
+        if matches!(tab, MainTab::Drawing | MainTab::Print | MainTab::Paleo | MainTab::Terrain3d) && !self.open_studio_tabs.contains(&tab) {
             self.open_studio_tabs.push(tab);
         }
         self.active_tab = tab;
@@ -146,12 +135,7 @@ impl StrataAppState {
     #[must_use]
     pub fn window_title(&self) -> String {
         let star = if self.is_dirty { " *" } else { "" };
-        let name = self
-            .survey_path
-            .as_ref()
-            .and_then(|p| p.file_stem())
-            .map(|s| s.to_string_lossy().trim().to_owned())
-            .unwrap_or_default();
+        let name = self.survey_path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().trim().to_owned()).unwrap_or_default();
         if name.is_empty() {
             format!("Strata{star}")
         } else {
@@ -170,12 +154,8 @@ impl StrataAppState {
             self.edit_layer_key = None;
             self.draw_sketch = crate::draw_sketch::DrawSketch::default();
         }
-        if matches!(
-            tool,
-            MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint
-        ) {
-            self.left_layers
-                .ensure_domain_layer(DomainLayerKey::SurveyArea);
+        if matches!(tool, MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint) {
+            self.left_layers.ensure_domain_layer(DomainLayerKey::SurveyArea);
             self.ribbon.active_category = RibbonCategory::Survey;
         }
     }

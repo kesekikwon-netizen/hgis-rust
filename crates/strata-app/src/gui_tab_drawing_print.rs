@@ -11,16 +11,16 @@ use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::sync::Arc;
 use std::time::Instant;
 
-use eframe::egui::{self, epaint::ClippedShape, Color32, Pos2, RawInput, Rect, Vec2, ViewportId};
+use eframe::egui::{self, epaint::ClippedShape, Pos2, RawInput, Rect, Vec2, ViewportId};
 
+pub(crate) use super::sheet_pdf_file::CANCELLED;
+use super::sheet_pdf_file::{pack_pdf, picture_size, print_dpi, put_pdf, render_note, DESIGN_PX_PER_MM, TILE_WAIT_SECONDS};
+use super::sheet_raster::{paint, Textures};
 use crate::app_state::StrataAppState;
 use crate::basemap_cadastral_jobs::{shared_tile_fetchers, BasemapFetcher, CadastralFetcher};
 use crate::basemap_paint::{CadastralCellCache, TileTextureCache};
 use crate::dialogs_modal::ActiveModalDialog;
 use crate::ref_vector::print::PictureSet;
-use super::sheet_raster::{paint, Textures};
-pub(crate) use super::sheet_pdf_file::CANCELLED;
-use super::sheet_pdf_file::{pack_pdf, picture_size, print_dpi, put_pdf, render_note, DESIGN_PX_PER_MM, TILE_WAIT_SECONDS};
 
 /// Whether the PDF can be made after `passes` passes, the last `quiet` of which asked for nothing new and had
 /// nothing on the way, `waited` after it began: the tiles had time to be asked for (a tile is asked for once
@@ -271,21 +271,6 @@ impl StrataAppState {
         std::mem::swap(&mut self.basemap_fetch, &mut side.basemap_fetch);
         std::mem::swap(&mut self.cadastral_fetch, &mut side.cadastral_fetch);
         std::mem::swap(&mut self.basemap_tiles_painted, &mut side.painted);
-    }
-
-    /// The sheet on white paper, as the screen paints it, without the tools of the screen (toolbar, popups,
-    /// handles).
-    pub(crate) fn paint_sheet_for_print(&mut self, ctx: &egui::Context, paper: Rect, px_per_mm: f32) {
-        let painter = ctx.layer_painter(egui::LayerId::background());
-        painter.rect_filled(paper, 0.0, Color32::WHITE);
-        let screen_items = std::mem::take(&mut self.drawing.item_rects);
-        let f = self.sheet_frame_for(paper, paper, px_per_mm, painter, false);
-        self.paint_sheet_map_layers(&f);
-        self.paint_sheet_grid(&f);
-        self.paint_sheet_legend(&f);
-        self.paint_sheet_chrome(&f);
-        self.paint_sheet_coord_points(&f);
-        self.drawing.item_rects = screen_items;
     }
 }
 

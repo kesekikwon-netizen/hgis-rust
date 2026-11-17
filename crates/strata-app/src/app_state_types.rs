@@ -24,15 +24,10 @@ impl ShortcutManager {
         if normalized_seq.is_empty() || action_id.trim().is_empty() {
             return false;
         }
-        if self
-            .bindings
-            .values()
-            .any(|existing| existing == &normalized_seq)
-        {
+        if self.bindings.values().any(|existing| existing == &normalized_seq) {
             return false;
         }
-        self.bindings
-            .insert(action_id.trim().to_owned(), normalized_seq);
+        self.bindings.insert(action_id.trim().to_owned(), normalized_seq);
         true
     }
 }
@@ -52,12 +47,7 @@ impl Default for ProjectTemplateConfig {
             survey_title: "새 고고학 지표·시굴조사".to_owned(),
             work_crs: WorkCrs::Epsg5186,
             investigator: "국가유산청 지표·시굴조사단".to_owned(),
-            default_layers: vec![
-                DomainLayerKey::SurveyArea,
-                DomainLayerKey::FeaturePoly,
-                DomainLayerKey::FeatureLine,
-                DomainLayerKey::TrialTrench,
-            ],
+            default_layers: vec![DomainLayerKey::SurveyArea, DomainLayerKey::FeaturePoly, DomainLayerKey::FeatureLine, DomainLayerKey::TrialTrench],
         }
     }
 }
@@ -68,19 +58,14 @@ pub enum MainTab {
     Map,
     Paleo,
     Drawing,
+    Print,
     Terrain3d,
 }
 
 impl MainTab {
     #[must_use]
     pub const fn all() -> &'static [Self] {
-        &[
-            Self::Home,
-            Self::Map,
-            Self::Paleo,
-            Self::Drawing,
-            Self::Terrain3d,
-        ]
+        &[Self::Home, Self::Map, Self::Paleo, Self::Drawing, Self::Print, Self::Terrain3d]
     }
 
     #[must_use]
@@ -90,6 +75,7 @@ impl MainTab {
             Self::Map => "지도",
             Self::Paleo => "고지형분석",
             Self::Drawing => "도면",
+            Self::Print => "인쇄",
             Self::Terrain3d => "입체지형",
         }
     }

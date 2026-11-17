@@ -32,14 +32,10 @@ mod gui_tab_drawing_legend_flow;
 mod gui_tab_drawing_map_layers;
 #[path = "gui_tab_drawing_popups.rs"]
 mod gui_tab_drawing_popups;
+#[path = "gui_tab_drawing_preview.rs"]
+mod gui_tab_drawing_preview;
 #[path = "gui_tab_drawing_print.rs"]
 pub(crate) mod gui_tab_drawing_print;
-#[path = "sheet_coord_points.rs"]
-pub(crate) mod sheet_coord_points;
-#[path = "sheet_pdf_file.rs"]
-mod sheet_pdf_file;
-#[path = "sheet_raster.rs"]
-pub(crate) mod sheet_raster;
 #[path = "gui_tab_drawing_put.rs"]
 mod gui_tab_drawing_put;
 #[path = "gui_tab_drawing_refs.rs"]
@@ -50,12 +46,18 @@ mod gui_tab_drawing_right;
 mod gui_tab_drawing_right_b;
 #[path = "gui_tab_drawing_scale.rs"]
 mod gui_tab_drawing_scale;
-#[path = "gui_tab_drawing_sheets.rs"]
-pub(crate) mod gui_tab_drawing_sheets;
 #[path = "gui_tab_drawing_sheet.rs"]
 mod gui_tab_drawing_sheet;
+#[path = "gui_tab_drawing_sheets.rs"]
+pub(crate) mod gui_tab_drawing_sheets;
 #[path = "gui_tab_drawing_toolbar.rs"]
 mod gui_tab_drawing_toolbar;
+#[path = "sheet_coord_points.rs"]
+pub(crate) mod sheet_coord_points;
+#[path = "sheet_pdf_file.rs"]
+mod sheet_pdf_file;
+#[path = "sheet_raster.rs"]
+pub(crate) mod sheet_raster;
 
 impl StrataAppState {
     /// C++ `KaDrawingStudio.cpp` 도면 스튜디오 (좌측 레이어/파일함 + 중앙 도면 용지 & 하단 7버튼 툴바 + 우측 도면 항목/방위/도면 정보) 1:1 재현

@@ -34,10 +34,7 @@ impl StrataAppState {
             "수계" => self.press_reference_map(&crate::ref_vector::map::RIVER),
             // InstantPopup chooses a map before changing layers (target/cpp-ref/src/app/MainWindowRibbon.cpp:486-500).
             "옛 지도" => {
-                let anchor = eframe::egui::Rect::from_min_size(
-                    self.ribbon.context_menu_anchor,
-                    eframe::egui::Vec2::ZERO,
-                );
+                let anchor = eframe::egui::Rect::from_min_size(self.ribbon.context_menu_anchor, eframe::egui::Vec2::ZERO);
                 self.open_ribbon_context_menu(label, anchor);
             }
             "고지형" => self.open_studio_tab(MainTab::Paleo),
@@ -53,10 +50,7 @@ impl StrataAppState {
                     self.start_align_session(&target);
                 } else {
                     // :871-874 QMessageBox::information 원문
-                    self.home_map.draw_guide_message = Some(
-                        "맞추기 — JPG·PNG·DXF 도면을 고르거나, 목록에서 도면을 선택한 뒤 다시 누르세요."
-                            .to_owned(),
-                    );
+                    self.home_map.draw_guide_message = Some("맞추기 — JPG·PNG·DXF 도면을 고르거나, 목록에서 도면을 선택한 뒤 다시 누르세요.".to_owned());
                 }
             }
             // MainWindowRibbon.cpp:552-557 「도면」 → MainWindow::openLayoutDesigner (Ctrl+L).
@@ -68,20 +62,13 @@ impl StrataAppState {
                     self.open_studio_tab(MainTab::Drawing);
                     // MainWindowExport.cpp:206 `hideSubTools()` — 도면 탭으로 가면 도구 줄을 닫는다.
                     self.hide_sub_tools();
-                    self.home_map.draw_guide_message =
-                        Some(StrataAppState::DRAWING_STUDIO_WELCOME.to_owned());
+                    self.home_map.draw_guide_message = Some(StrataAppState::DRAWING_STUDIO_WELCOME.to_owned());
                 } else {
                     self.modals.active = Some(ActiveModalDialog::PaperSetup);
                 }
             }
-            "인쇄" => {
-                // MainWindowExport.cpp:186-194 — 도면 화면이 앞에 없으면 도면 탭을 열고
-                // 인쇄 창을 띄운다. 용지 기본값은 KaPrintDialog.cpp:124 대로 프린터가
-                // A3 를 지원할 때만 A3 다.
-                self.open_studio_tab(MainTab::Drawing);
-                self.modals.print_paper = crate::dialogs_modal::default_print_paper_for_printer();
-                self.modals.active = Some(ActiveModalDialog::DrawingPrint);
-            }
+            // Separate app tab, requested by owner (target/cpp-ref/src/app/MainWindowExport.cpp:186-194).
+            "인쇄" => self.open_studio_tab(MainTab::Print),
             // Deferred until R7 (gui_ribbon_draw::deferred_ribbon_tooltip): cpp writes a real map
             // GeoTIFF (MainWindowExport.cpp:58-96 + MapGeoTiffExport.cpp); the Rust writer made a
             // header-only TIFF, so the click opens no dialog, writes nothing and says nothing.

@@ -3,9 +3,9 @@
 //! 원래 3,431줄 한 파일이던 것을 300줄 규칙(마스터플랜 Chapter 07)에 맞춰 나눴다.
 //! 기존 경로 `crate::dialogs_modal::<이름>` 은 그대로 동작한다.
 
+use crate::app_state::StrataAppState;
 use crate::dialogs_download_print::render_download_and_print_dialogs;
 use crate::ribbon_icons::paint_strata_logo;
-use crate::app_state::StrataAppState;
 use eframe::egui::{self, Color32, Stroke, Vec2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,7 +23,6 @@ pub enum ActiveModalDialog {
     CadastralStyle,
     PaleoSourceDownload,
     PdfPreparing,
-    DrawingPrint,
     ControlPoint,
     SurveyArea,
     LineColor,
@@ -34,29 +33,17 @@ pub enum ActiveModalDialog {
     CadImportNotice,
 }
 
+pub use crate::modal_types::{default_print_paper_for_printer, topo_crs_label_ko, topo_default_crs_idx, topo_record_key, TOPO_CRS_CANDIDATES, TOPO_CRS_UNKNOWN};
 pub use crate::modal_types::{ModalDialogController, TopoTableRow};
-pub use crate::modal_types::{topo_record_key, topo_default_crs_idx,
-                            TOPO_CRS_UNKNOWN, TOPO_CRS_CANDIDATES, topo_crs_label_ko,
-                            default_print_paper_for_printer};
 
 pub fn render_strata_modal_header(ui: &mut egui::Ui, title: &str, open: &mut bool) {
     ui.horizontal(|ui| {
         let (logo_r, _) = ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::hover());
         paint_strata_logo(&ui.painter_at(logo_r), logo_r);
         ui.add_space(4.0);
-        ui.label(
-            egui::RichText::new(title)
-                .size(13.5)
-                .color(Color32::from_rgb(30, 30, 28)),
-        );
+        ui.label(egui::RichText::new(title).size(13.5).color(Color32::from_rgb(30, 30, 28)));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let close_btn = egui::Button::new(
-                egui::RichText::new("×")
-                    .size(18.0)
-                    .color(Color32::from_rgb(55, 54, 50)),
-            )
-            .fill(Color32::TRANSPARENT)
-            .stroke(Stroke::NONE);
+            let close_btn = egui::Button::new(egui::RichText::new("×").size(18.0).color(Color32::from_rgb(55, 54, 50))).fill(Color32::TRANSPARENT).stroke(Stroke::NONE);
             if ui.add(close_btn).clicked() {
                 *open = false;
             }
@@ -65,17 +52,16 @@ pub fn render_strata_modal_header(ui: &mut egui::Ui, title: &str, open: &mut boo
     ui.add_space(8.0);
 }
 
-
-pub(crate) use crate::modal_paper_account::render_paper_setup;
-pub(crate) use crate::modal_paper_account::render_account_settings;
+pub(crate) use crate::modal_control::render_control_point;
 pub(crate) use crate::modal_downloads::render_dem_download;
 pub(crate) use crate::modal_downloads::render_paleo_source_download;
 pub(crate) use crate::modal_export::render_export_submit_package;
-pub(crate) use crate::modal_control::render_control_point;
-pub(crate) use crate::modal_survey::render_survey_area;
+pub(crate) use crate::modal_paper_account::render_account_settings;
+pub(crate) use crate::modal_paper_account::render_paper_setup;
+pub(crate) use crate::modal_reference::render_reference_status;
 pub(crate) use crate::modal_style::render_line_color;
 pub(crate) use crate::modal_style_demclass::render_dem_class;
-pub(crate) use crate::modal_reference::render_reference_status;
+pub(crate) use crate::modal_survey::render_survey_area;
 
 pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context) {
     let Some(kind) = app.modals.active else {

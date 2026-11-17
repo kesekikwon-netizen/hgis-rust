@@ -14,11 +14,7 @@ use crate::app_state::StrataAppState;
 type Paint = fn(&mut StrataAppState, &mut egui::Ui);
 
 fn frame(app: &mut StrataAppState, ctx: &egui::Context, paint: Paint, events: Vec<Event>) -> Vec<(String, bool, Option<Rect>)> {
-    let raw = RawInput {
-        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(900.0, 1400.0))),
-        events,
-        ..RawInput::default()
-    };
+    let raw = RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(900.0, 1400.0))), events, ..RawInput::default() };
     let out = ctx.run(raw, |ctx| {
         egui::CentralPanel::default().show(ctx, |ui| paint(app, ui));
     });
@@ -27,9 +23,7 @@ fn frame(app: &mut StrataAppState, ctx: &egui::Context, paint: Paint, events: Ve
             .nodes
             .iter()
             .filter_map(|(_, n)| {
-                let bounds = n.bounds().map(|b| {
-                    Rect::from_min_max(Pos2::new(b.x0 as f32, b.y0 as f32), Pos2::new(b.x1 as f32, b.y1 as f32))
-                });
+                let bounds = n.bounds().map(|b| Rect::from_min_max(Pos2::new(b.x0 as f32, b.y0 as f32), Pos2::new(b.x1 as f32, b.y1 as f32)));
                 n.label().map(|l| (l.to_owned(), n.is_disabled(), bounds))
             })
             .collect()
@@ -43,6 +37,7 @@ fn modified(p: &Path) -> Option<SystemTime> {
 /// Renders `paint`, checks `label` is disabled, clicks it, and checks nothing was written or said.
 fn assert_deferred(paint: Paint, label: &str) {
     let mut app = StrataAppState::new_startup();
+    app.modals.print_single_sheet = false;
     let temp_pdf = std::env::temp_dir().join("조사도면.pdf");
     let before = modified(&temp_pdf);
     let ctx = egui::Context::default();
@@ -51,11 +46,7 @@ fn assert_deferred(paint: Paint, label: &str) {
     for _ in 0..3 {
         nodes = frame(&mut app, &ctx, paint, vec![]);
     }
-    let (_, disabled, bounds) = nodes
-        .iter()
-        .find(|(l, _, _)| l == label)
-        .cloned()
-        .unwrap_or_else(|| panic!("{label} missing: {nodes:?}"));
+    let (_, disabled, bounds) = nodes.iter().find(|(l, _, _)| l == label).cloned().unwrap_or_else(|| panic!("{label} missing: {nodes:?}"));
     assert!(disabled, "{label} must be disabled until its order lands");
     let at = bounds.expect("bounds").center();
     let press = |pressed| Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Modifiers::default() };

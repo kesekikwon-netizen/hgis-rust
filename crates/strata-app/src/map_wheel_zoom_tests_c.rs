@@ -26,29 +26,13 @@ enum Want {
 }
 
 fn survey_table_with_row() -> SurveyFileTable {
-    mock_table(
-        &["kind", "period", "feature_no"],
-        &[&[("kind", "주거지"), ("period", "청동기"), ("feature_no", "1호")]],
-    )
+    mock_table(&["kind", "period", "feature_no"], &[&[("kind", "주거지"), ("period", "청동기"), ("feature_no", "1호")]])
 }
 
-pub(super) fn click_at(
-    app: &mut crate::app_state::StrataAppState,
-    ctx: &egui::Context,
-    pos: Pos2,
-    button: PointerButton,
-) -> Vec<egui::epaint::ClippedShape> {
+pub(super) fn click_at(app: &mut crate::app_state::StrataAppState, ctx: &egui::Context, pos: Pos2, button: PointerButton) -> Vec<egui::epaint::ClippedShape> {
     let _ = run_frame(app, ctx, vec![Event::PointerMoved(pos)]);
-    let _ = run_frame(
-        app,
-        ctx,
-        vec![Event::PointerButton { pos, button, pressed: true, modifiers: Modifiers::NONE }],
-    );
-    run_frame(
-        app,
-        ctx,
-        vec![Event::PointerButton { pos, button, pressed: false, modifiers: Modifiers::NONE }],
-    )
+    let _ = run_frame(app, ctx, vec![Event::PointerButton { pos, button, pressed: true, modifiers: Modifiers::NONE }]);
+    run_frame(app, ctx, vec![Event::PointerButton { pos, button, pressed: false, modifiers: Modifiers::NONE }])
 }
 
 fn walk_shapes(shape: &Shape, f: &mut impl FnMut(&Shape)) {
@@ -94,12 +78,7 @@ fn find_chevron_near(shapes: &[egui::epaint::ClippedShape], x_min: f32, y_min: f
 }
 
 fn assert_overlay_visible(ctx: &egui::Context, label: &str) {
-    let any_overlay = ctx.memory(|m| {
-        m.areas()
-            .visible_layer_ids()
-            .iter()
-            .any(|l| matches!(l.order, Order::Middle | Order::Foreground))
-    });
+    let any_overlay = ctx.memory(|m| m.areas().visible_layer_ids().iter().any(|l| matches!(l.order, Order::Middle | Order::Foreground)));
     assert!(any_overlay, "{label}: expected floating window or popup layer to be visible");
 }
 
@@ -116,11 +95,7 @@ fn assert_wheel_outcome(app: &mut crate::app_state::StrataAppState, ctx: &egui::
     );
     app.home_map.viewport.meters_per_pixel = 12.0;
     let center0 = app.home_map.viewport.center_xy;
-    let _ = run_frame(
-        app,
-        ctx,
-        vec![Event::PointerMoved(OVER_UNCOVERED_MAP), windows_wheel_notch(1.0, Modifiers::NONE)],
-    );
+    let _ = run_frame(app, ctx, vec![Event::PointerMoved(OVER_UNCOVERED_MAP), windows_wheel_notch(1.0, Modifiers::NONE)]);
     match want {
         Want::Zoom => assert!(
             (12.0 / app.home_map.viewport.meters_per_pixel - 1.2).abs() < 1e-9,
@@ -147,7 +122,6 @@ fn table_driven_wheel_zoom_only_ignores_cpp_modals_menus_and_address_popup() {
         ("HeritageRegionSelect", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::HeritageRegionSelect)),
         ("PaleoSourceDownload", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::PaleoSourceDownload)),
         ("PdfPreparing", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::PdfPreparing)),
-        ("DrawingPrint", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::DrawingPrint)),
         ("ControlPoint", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::ControlPoint)),
         ("SurveyArea", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::SurveyArea)),
         ("LineColor", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::LineColor)),
@@ -158,23 +132,12 @@ fn table_driven_wheel_zoom_only_ignores_cpp_modals_menus_and_address_popup() {
             a.home_map.feature_record = FeatureRecordForm::new(&survey_table_with_row(), 1, "유구 (Polygon)").ok();
         }),
         ("rename_layer", Want::Ignore, |a| {
-            a.home_map.rename_layer = Some(RenameLayer {
-                key: "feature_poly".to_owned(),
-                text: "유구".to_owned(),
-                keys_armed: false,
-            });
+            a.home_map.rename_layer = Some(RenameLayer { key: "feature_poly".to_owned(), text: "유구".to_owned(), keys_armed: false });
         }),
         // 3 additional modal prompts
         ("ka_close_prompt", Want::Ignore, |a| a.close_prompt_open = true),
         ("위치 선택 (search_results_modal)", Want::Ignore, |a| {
-            a.ribbon.app_bar.search_results_modal = vec![LocationHit {
-                title: "경주".to_owned(),
-                detail: String::new(),
-                lon: 129.2,
-                lat: 35.8,
-                bbox: None,
-                pnu: String::new(),
-            }];
+            a.ribbon.app_bar.search_results_modal = vec![LocationHit { title: "경주".to_owned(), detail: String::new(), lon: 129.2, lat: 35.8, bbox: None, pnu: String::new() }];
         }),
         ("위치 검색 (search_error_modal)", Want::Ignore, |a| {
             a.ribbon.app_bar.search_error_modal = Some("결과 없음".to_owned());
@@ -229,11 +192,7 @@ fn table_driven_wheel_zoom_only_ignores_cpp_modals_menus_and_address_popup() {
 
     // ka_download_gauge_popup keeps DownloadGuard alive in this scope.
     let (mut app, ctx) = new_map_app();
-    let (_id, _guard) = app.download_jobs.add_job(
-        "DEM",
-        DownloadJobState::Stopped { code: StopCode::None1, reason: "자료 없음".to_owned() },
-        1.0,
-    );
+    let (_id, _guard) = app.download_jobs.add_job("DEM", DownloadJobState::Stopped { code: StopCode::None1, reason: "자료 없음".to_owned() }, 1.0);
     app.download_jobs.popup_open = true;
     assert_wheel_outcome(&mut app, &ctx, "ka_download_gauge_popup", Want::Zoom);
 
