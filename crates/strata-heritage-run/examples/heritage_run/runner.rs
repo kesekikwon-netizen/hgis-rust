@@ -43,6 +43,11 @@ impl Runner {
         }
     }
 
+    fn record_start_failure(&mut self) {
+        let (passed, failed) = *self.outcome.borrow();
+        *self.outcome.borrow_mut() = (passed, failed + 1);
+    }
+
     fn begin(&mut self, frame: &eframe::Frame) -> Result<Live, String> {
         let case = &self.cases[self.at];
         let fixture = Fixture::start(crate::case::FIXTURE_ACCOUNT, case.city);
@@ -97,8 +102,7 @@ impl eframe::App for Runner {
                 Ok(live) => self.live = Some(live),
                 Err(why) => {
                     println!("case {} FAILED: {why}", self.cases[self.at].name);
-                    *self.outcome.borrow_mut() =
-                        (self.outcome.borrow().0, self.outcome.borrow().1 + 1);
+                    self.record_start_failure();
                     self.at += 1;
                 }
             }
@@ -212,5 +216,17 @@ impl eframe::App for Runner {
         }
         live.stage_when_done = Some(stage);
         ctx.request_repaint();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Runner;
+
+    #[test]
+    fn start_error_is_counted_without_a_refcell_panic() {
+        let mut runner = Runner::new(std::path::PathBuf::new());
+        runner.record_start_failure();
+        assert_eq!(*runner.outcome.borrow(), (0, 1));
     }
 }
