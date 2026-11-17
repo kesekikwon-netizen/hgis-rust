@@ -11,3 +11,11 @@ mod filtered_results;
 mod retry;
 #[path = "heritage_cpp_contract/stage_ack.rs"]
 mod stage_ack;
+#[path = "heritage_cpp_contract/transfer_driver.rs"]
+mod transfer_driver;
+#[path = "heritage_cpp_contract/transfer_group.rs"]
+mod transfer_group;
+#[path = "heritage_cpp_contract/transfer_outcome.rs"]
+mod transfer_outcome;
+#[path = "heritage_cpp_contract/transfer_retry.rs"]
+mod transfer_retry;

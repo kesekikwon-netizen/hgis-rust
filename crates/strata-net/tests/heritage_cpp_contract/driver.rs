@@ -97,6 +97,33 @@ impl Session {
     }
 
     pub fn reach(&mut self, wanted: HeritageStage) {
+        // Model the explicit fresh-browser boundary, not a hidden script answer.
+        // C++ retry recovery: target/cpp-ref/src/app/KaHeritageBrowser.cpp:523-560,832-856.
+        if *self.machine.stage() == HeritageStage::RetryWait {
+            assert!(
+                self.machine.session_restart_required(),
+                "retry must request a fresh session"
+            );
+            assert!(
+                self.machine.retry_due(self.now_ms),
+                "reopen cannot precede its backoff"
+            );
+            assert!(
+                self.machine.session_reopened(self.now_ms),
+                "fresh-session boundary must be accepted"
+            );
+            assert_eq!(*self.machine.stage(), HeritageStage::Idle);
+            self.page = Page {
+                url: "about:blank".to_owned(),
+            };
+            assert!(
+                self.machine
+                    .next_step(&mut self.page, self.now_ms)
+                    .is_none(),
+                "fresh login starts with navigation, not a script"
+            );
+            assert_eq!(*self.machine.stage(), HeritageStage::LoginProbe);
+        }
         // Check every setup action in order. Missing readiness observations cannot be hidden
         // by a later state's plausible reply: target/cpp-ref/src/app/KaHeritageBrowser.cpp:895-1147.
         let transcript = [
@@ -169,6 +196,16 @@ impl Session {
         // Identify returned boundary requests, not expected state transitions. The tests below
         // assert production state and events; these builders only decode the outbound protocol.
         // C++ source: target/cpp-ref/src/app/KaHeritageBrowser.cpp:895-1147.
+        // Literal C++ tab codes: HeritageStyle.cpp:27-32,90-92 and HeritageIntranetFlow.cpp:247-248.
+        let code = match self.machine.current_kind() {
+            "지정유산" => "S",
+            "현상변경허용기준" => "P",
+            "매장유산유존지역" => "B",
+            "문화유적분포지도" => "U",
+            "지표조사구역" => "R",
+            "발굴조사구역" => "E",
+            other => panic!("unrecognized kind {other}"),
+        };
         let known = [
             (Action::ProbeLogin, scripts::login_probe_script()),
             (
@@ -180,8 +217,8 @@ impl Session {
             (Action::OpenPanel, scripts::open_download_page_script()),
             (Action::AgreeTerms, scripts::agree_terms_script()),
             (Action::FormHint, scripts::form_hint_script()),
-            (Action::SelectKind, scripts::select_dataset_script("S")),
-            (Action::KindReady, scripts::dataset_ready_script("S")),
+            (Action::SelectKind, scripts::select_dataset_script(code)),
+            (Action::KindReady, scripts::dataset_ready_script(code)),
             (
                 Action::SelectRegion,
                 scripts::select_region_script("경상북도", "포항시"),
