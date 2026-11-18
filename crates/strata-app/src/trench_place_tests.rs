@@ -82,16 +82,11 @@ fn trench_count(app: &StrataAppState) -> usize {
 
 fn click_place(app: &mut StrataAppState) {
     let ctx = egui::Context::default();
-    let mut nodes = Vec::new();
+    let mut at = None;
     for step in 0..3 {
-        nodes = frame(&ctx, f64::from(step) * 0.1, vec![], app);
+        at = frame(&ctx, f64::from(step) * 0.1, vec![], app);
     }
-    let bounds = nodes
-        .iter()
-        .find(|(label, disabled, _)| label.contains("구역에 깔기") && !disabled)
-        .and_then(|(_, _, b)| *b)
-        .unwrap_or_else(|| panic!("enabled 구역에 깔기 not in {nodes:?}"));
-    let at = bounds.center();
+    let at = at.expect("painted 구역에 깔기");
     let press = |pressed| Event::PointerButton {
         pos: at,
         button: PointerButton::Primary,
@@ -127,7 +122,7 @@ fn frame(
     time: f64,
     events: Vec<Event>,
     app: &mut StrataAppState,
-) -> Vec<(String, bool, Option<Rect>)> {
+) -> Option<Pos2> {
     let raw = RawInput {
         screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 900.0))),
         time: Some(time),
@@ -135,22 +130,17 @@ fn frame(
         ..RawInput::default()
     };
     let out = ctx.run(raw, |ctx| render_active_modal_dialogs(app, ctx));
-    out.platform_output
-        .accesskit_update
-        .map_or_else(Vec::new, |u| {
-            u.nodes
-                .iter()
-                .filter_map(|(_, n)| {
-                    let bounds = n.bounds().map(|b| {
-                        Rect::from_min_max(
-                            Pos2::new(b.x0 as f32, b.y0 as f32),
-                            Pos2::new(b.x1 as f32, b.y1 as f32),
-                        )
-                    });
-                    n.label().map(|l| (l.to_owned(), n.is_disabled(), bounds))
-                })
-                .collect()
-        })
+    out.shapes
+        .iter()
+        .find_map(|cs| text_pos(&cs.shape, "구역에 깔기"))
+}
+
+fn text_pos(shape: &egui::Shape, label: &str) -> Option<Pos2> {
+    match shape {
+        egui::Shape::Text(t) if t.galley.job.text.contains(label) => Some(t.pos),
+        egui::Shape::Vec(v) => v.iter().find_map(|s| text_pos(s, label)),
+        _ => None,
+    }
 }
 
 fn sql_count(path: &Path) -> i64 {
