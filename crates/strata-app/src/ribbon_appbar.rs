@@ -18,6 +18,13 @@ pub struct KaAppBarSearch {
     pub search_results_modal: Vec<strata_net::address_search::LocationHit>,
     pub selected_hit_idx: usize,
     pub search_error_modal: Option<String>,
+    /// `KaAppBar::focusSearch` (`KaAppBar.cpp:84-87`), armed by Ctrl+F.
+    pub focus_search: bool,
+}
+
+/// Stable id of the address field so Ctrl+F can focus it (`MainWindowRibbon.cpp:240-244`).
+pub(crate) fn search_edit_id() -> eframe::egui::Id {
+    eframe::egui::Id::new("ka_app_bar_search")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

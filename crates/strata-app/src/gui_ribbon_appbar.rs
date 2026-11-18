@@ -29,14 +29,29 @@ impl StrataAppState {
             } else {
                 "도로명·지번 (예: 하회종가길 40)  Ctrl+F"
             };
+            let search_id = crate::ribbon_appbar::search_edit_id();
             let resp = ui
                 .add_sized(
                     [156.0, 32.0],
                     egui::TextEdit::singleline(&mut self.ribbon.app_bar.query)
+                        .id(search_id)
                         .hint_text(format!("     {search_placeholder}"))
                         .vertical_align(egui::Align::Center),
                 )
                 .on_hover_text("도로명·지번으로 찾습니다 (예: 하회종가길 40) · Ctrl+F");
+            // KaAppBar::focusSearch (KaAppBar.cpp:84-87): focus and selectAll.
+            if std::mem::take(&mut self.ribbon.app_bar.focus_search) {
+                resp.request_focus();
+                let chars = self.ribbon.app_bar.query.chars().count();
+                let mut state = egui::TextEdit::load_state(ui.ctx(), search_id).unwrap_or_default();
+                state
+                    .cursor
+                    .set_char_range(Some(egui::text::CCursorRange::two(
+                        egui::text::CCursor::new(0),
+                        egui::text::CCursor::new(chars),
+                    )));
+                state.store(ui.ctx(), search_id);
+            }
             // 검색칸 안쪽 왼쪽 돋보기 아이콘(16px, KaAppBar.cpp:41)
             {
                 let sp = ui.painter();

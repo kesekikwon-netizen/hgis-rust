@@ -10,6 +10,8 @@ mod opacity_placement_input_tests;
 
 #[path = "gui_shell_escape.rs"]
 mod escape;
+#[path = "gui_shell_chords.rs"]
+mod chords;
 #[path = "native_menu_input.rs"]
 mod native_menu_input;
 pub(crate) use native_menu_input::menu_button as native_menu_button;
@@ -39,6 +41,7 @@ impl StrataAppState {
         // KaCaptureMapTool::keyPressEvent (target/cpp-ref/src/app/KaCaptureMapTool.cpp:379-391) and
         // target/cpp-ref/src/app/MainWindowUndo.cpp:486-495 apply Esc, Enter, Backspace and Delete to capture.
         let capture = !wants_kb && self.modals.active.is_none() && self.capture_active();
+        let mut fullscreen: Option<bool> = None;
         let history = ctx.input(|i| {
             if i.key_pressed(egui::Key::F9) {
                 self.right_inspector.left_panel_collapsed = !self.right_inspector.left_panel_collapsed;
@@ -62,17 +65,8 @@ impl StrataAppState {
                     .to_owned(),
                 );
             }
-            if i.key_pressed(egui::Key::F11) {
-                self.right_inspector.map_focused = !self.right_inspector.map_focused;
-                self.home_map.draw_guide_message = Some(
-                    if self.right_inspector.map_focused {
-                        "지도 넓게 보기 — Ctrl+F11 키를 다시 누르면 리본과 왼쪽 패널이 돌아옵니다."
-                    } else {
-                        "지도 넓게 보기를 끝냈습니다."
-                    }
-                    .to_owned(),
-                );
-            }
+            // F11, Ctrl+F11, Ctrl+F and F2 live in gui_shell_chords.rs. F9 and F10 stay here.
+            fullscreen = self.window_chords(i, wants_kb);
             if !wants_kb && i.modifiers.is_none() && i.key_pressed(egui::Key::A) {
                 self.active_tab = MainTab::Map;
                 self.active_tool = MapToolKind::Select;
@@ -125,6 +119,13 @@ impl StrataAppState {
             }
             None
         });
+        // MainWindow.cpp:274-277 — F11 is showFullScreen, and leaving it is showMaximized.
+        if let Some(on) = fullscreen {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(on));
+            if !on {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
+            }
+        }
         if paper_requested { crate::modal_paper_account::paper_keyboard_entry(ctx); }
         let pending = pending.with_history(self, ctx, history);
         if open_requested {
