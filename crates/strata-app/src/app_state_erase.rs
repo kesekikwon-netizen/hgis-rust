@@ -70,7 +70,7 @@ impl StrataAppState {
     }
 
     /// `PolygonErase::plan` for one selected shape: the shapes to cut, or the words that say why not.
-    fn erase_plan(&self, picked: Option<&ShapeId>) -> Result<(ShapeId, Vec<ShapeId>), String> {
+    pub(crate) fn erase_plan(&self, picked: Option<&ShapeId>) -> Result<(ShapeId, Vec<ShapeId>), String> {
         let Some(cutter) = picked else { return Err("위에 그린 도형을 [도형선택]으로 고른 뒤 누르세요.".to_owned()) };
         let Some(shape) = self.shape_polygons(cutter).filter(|_| self.erasable(&cutter.0)) else {
             return Err("고른 도형으로는 지울 수 없습니다. 조사 데이터의 면 도형을 고르세요.".to_owned());

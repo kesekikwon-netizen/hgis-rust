@@ -62,6 +62,14 @@ mod app_state_recent;
 mod app_state_status_bar;
 #[path = "app_state_types.rs"]
 mod app_state_types;
+#[path = "user_error.rs"]
+pub(crate) mod user_error;
+#[path = "dlg_user_error.rs"]
+mod dlg_user_error;
+#[path = "drawn_erase.rs"]
+pub(crate) mod drawn_erase;
+#[path = "shapefile_encoding.rs"]
+mod shapefile_encoding;
 
 pub use app_state_types::*;
 
@@ -187,6 +195,14 @@ pub struct StrataAppState {
     pub drawing: DrawingTabState,
     pub accounts: AccountDialogState,
     pub modals: ModalDialogController,
+    /// The field error window (`KaUserError`). `None` when it is closed.
+    pub(crate) field_error: Option<user_error::FieldError>,
+    /// `KaUserError::logFolder` — empty hides 「로그 폴더 열기」.
+    pub(crate) log_folder: String,
+    /// `Some` records the folder instead of opening a window (`setFolderOpener`).
+    pub(crate) log_opener_records: Option<Vec<String>>,
+    /// The action button was the one that closed the window (`Result::ActionChosen`).
+    pub(crate) field_action_chosen: bool,
 }
 
 #[cfg(test)]

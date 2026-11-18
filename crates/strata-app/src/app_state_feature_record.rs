@@ -19,6 +19,8 @@ impl StrataAppState {
             || self.home_map.survey_area_setup.is_some()
             || self.home_map.feature_record.is_some()
             || self.home_map.rename_layer.is_some()
+            || self.field_error.is_some()
+            || self.home_map.drawn_erase.is_some()
     }
 
     /// 그 표의 도형 `fid` 로 창을 연다.
@@ -46,6 +48,8 @@ impl StrataAppState {
         let mut values = match form.values(t) {
             Ok(values) => values,
             Err(w) => {
+                // KaUserError::warn — the three-part window, and the same words on the status line.
+                self.warn_field(crate::app_state::user_error::FieldError::warn(&w.title, &w.text, &w.detail, &w.action));
                 self.show_status_message(format!("{} {} {}", w.text, w.detail, w.action));
                 return;
             }

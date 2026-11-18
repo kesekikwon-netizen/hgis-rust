@@ -8,7 +8,7 @@ use strata_types::schema::LegendGroup;
 
 use super::{Layer, OPEN_FAILED};
 use crate::app_state::StrataAppState;
-use crate::gui_tab_map::s2w;
+use crate::gui_tab_map::{s2w, w2s};
 use crate::left_layer_panel::LayerTreeEntry;
 use crate::ref_vector::data::LoadSpec;
 
@@ -108,6 +108,17 @@ impl StrataAppState {
             }
             if painted.failed_now {
                 self.show_status_message(OPEN_FAILED);
+            }
+            // Labels of a shapefile with no label rule of its own: the name column in the provider encoding
+            // (`setProviderEncoding` + `triggerRepaint`, LayerOps.cpp:480-483).
+            let names = self.ref_vectors.cached_shapefile_names(key);
+            let unlabeled = self.ref_vectors.spec_of(key).is_some_and(|spec| spec.label.is_none());
+            if let Some(extent) = unlabeled.then(|| self.ref_vectors.extent_of(key)).flatten() {
+                let at = w2s(rect, viewport, [(extent[0] + extent[2]) * 0.5, (extent[1] + extent[3]) * 0.5]);
+                for (i, name) in names.iter().filter(|name| !name.is_empty()).enumerate() {
+                    let down = f32::from(u16::try_from(i).unwrap_or(u16::MAX)) * 14.0;
+                    p.text(at + egui::vec2(0.0, down), egui::Align2::CENTER_CENTER, name, egui::FontId::proportional(12.0), egui::Color32::BLACK);
+                }
             }
             // A scripted run has nobody watching: how long the work took goes to its log.
             if self.snap.is_some() {

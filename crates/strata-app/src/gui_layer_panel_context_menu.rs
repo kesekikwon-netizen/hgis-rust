@@ -100,6 +100,10 @@ impl StrataAppState {
             "layer.bottom" => {
                 self.layer_to_group_bottom(key.unwrap_or_default());
             }
+            // setShapefileEncoding (MainWindowContextMenus.cpp:350-356).
+            "layer.encodingValue" => {
+                let _ = self.set_shapefile_encoding(key.unwrap_or_default(), &pick.value);
+            }
             // removeLayersFromTree — 그 줄(묶음 머리면 그 묶음의 레이어 모두). 깨진 한글 바로잡기는 .shp 레이어에만 보인다.
             "layer.remove" => match (key, self.home_map.layer_menu_group) {
                 (Some(k), _) => {

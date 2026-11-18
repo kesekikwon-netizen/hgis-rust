@@ -119,7 +119,9 @@ impl StrataAppState {
         self.render_save_before(ctx);
         render_active_modal_dialogs(self, ctx);
         self.render_survey_area_setup(ctx);
+        self.render_drawn_erase(ctx);
         self.render_feature_form(ctx);
+        self.render_field_error(ctx);
         self.render_feature_record(ctx);
         self.render_rename_layer(ctx);
         self.render_layer_set_question(ctx);

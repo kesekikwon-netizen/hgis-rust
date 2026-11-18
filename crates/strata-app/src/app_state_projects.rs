@@ -265,11 +265,9 @@ impl StrataAppState {
         true
     }
 
-    /// C++ `MainWindowSession.cpp:1006-1019` reportSaveFailure — 알림 창은 아직 없어 상태줄에 쓴다.
+    /// C++ `MainWindowSession.cpp:1006-1016` reportSaveFailure — the three-part window and the status sentence.
     fn report_save_failure(&mut self, reason: &str) {
-        self.home_map.draw_guide_message = Some(format!(
-            "저장 실패 — {reason} 미저장 편집은 그대로 있습니다. 다시 저장하세요."
-        ));
+        self.open_save_failure(reason);
     }
 
     /// C++ `CrashHandler::handleCrash` / `emergencyAutoSave` — 비정상 종료 시 현재 열려 있는 조사 버퍼를 `.crash_recovery.gpkg`로 즉시 직렬화 백업 1:1

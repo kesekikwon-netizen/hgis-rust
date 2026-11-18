@@ -41,6 +41,8 @@ pub(crate) mod raster;
 /// The app's side: legend rows, and the painting of every frame.
 #[path = "ref_vector_show.rs"]
 mod show;
+#[path = "ref_vector_text.rs"]
+pub(crate) mod text;
 #[path = "ref_vector_stroke.rs"]
 pub(crate) mod stroke;
 #[path = "ref_vector_view.rs"]
@@ -78,11 +80,13 @@ struct Layer {
     drawing: Option<Drawing>,
     /// A view no picture could be made for: it is not asked for again in every frame.
     failed: Option<RasterView>,
+    /// Name-column text and the provider encoding it was read with (`setProviderEncoding`, LayerOps.cpp:480).
+    label_names: Option<(String, Vec<String>)>,
 }
 
 impl Layer {
     fn new(key: String, spec: LoadSpec) -> Self {
-        Self { key, spec, shapes: Shapes::Wanted, picture: None, drawing: None, failed: None }
+        Self { key, spec, shapes: Shapes::Wanted, picture: None, drawing: None, failed: None, label_names: None }
     }
 }
 
