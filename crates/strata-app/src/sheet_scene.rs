@@ -129,6 +129,26 @@ impl SheetScene {
         self.requests = requests;
     }
 
+    /// The basemap (and any cadastral picture) that actually arrived, as a JPEG of the map
+    /// frame. C++ still paints that raster inside the map (`PdfExportSettings.cpp:13`
+    /// `rasterizeWholeImage = false`, `:25` only skips *tiled* raster draws). No picture
+    /// was drawn when the cache is empty, so the PDF does not invent one.
+    pub(crate) fn basemap_jpeg(&mut self, frame_mm: [f64; 4]) -> Option<(Vec<u8>, [u32; 2])> {
+        if self.tiles.basemap.len() == 0 && self.tiles.cadastral.len() == 0 {
+            return None;
+        }
+        let dpi = self.dpi;
+        let raster = self.raster();
+        let picture = raster.region_mm(frame_mm, dpi);
+        let width = u32::try_from(picture.size[0]).ok()?;
+        let height = u32::try_from(picture.size[1]).ok()?;
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 85)
+            .encode(&picture.rgb, width, height, image::ExtendedColorType::Rgb8)
+            .ok()?;
+        Some((jpeg, [width, height]))
+    }
+
     pub(crate) fn raster(&mut self) -> RasterInput {
         RasterInput {
             primitives: self.ctx.tessellate(std::mem::take(&mut self.shapes), self.pixels_per_point),

@@ -84,10 +84,10 @@ fn a_sheet_pdf_is_vector_text_and_paths() {
 fn the_pdf_page_box_follows_the_field_sheet_and_a3() {
     let mut app = StrataAppState::new_startup();
     app.drawing.sheet.change_paper(SheetPaperSize::A4, SheetOrientation::Landscape);
-    let field = app.vector_sheet_pdf().unwrap();
+    let field = app.vector_sheet_pdf(None, [0, 0]).unwrap();
     assert!(String::from_utf8_lossy(&field).contains("/MediaBox [0 0 898.58 623.62]"));
     app.drawing.sheet.change_paper(SheetPaperSize::A3, SheetOrientation::Portrait);
-    let a3 = app.vector_sheet_pdf().unwrap();
+    let a3 = app.vector_sheet_pdf(None, [0, 0]).unwrap();
     assert!(String::from_utf8_lossy(&a3).contains("/MediaBox [0 0 841.89 1190.55]"));
 }
 

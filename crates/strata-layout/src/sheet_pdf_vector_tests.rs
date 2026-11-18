@@ -10,7 +10,7 @@ use crate::picture_pdf::picture_page_pdf;
 use crate::sheet_composer::{DrawingSheet, SheetOrientation, SheetPaperSize};
 use crate::sheet_pdf_export::mm_to_pdf_points;
 use crate::sheet_pdf_vector::{
-    extracted_text, render_vector_sheet_pdf, SheetVectorRing, VectorSheetPdf,
+    extracted_text, render_vector_sheet_pdf, SheetPdfLabel, SheetVectorRing, VectorSheetPdf,
 };
 
 fn pt(mm: f64) -> String {
@@ -39,6 +39,9 @@ fn paint<'a>(
         north_label: "N",
         map_center_xy: center,
         rings,
+        labels: &[],
+        map_jpeg: None,
+        map_jpeg_px: [0, 0],
     })
     .unwrap()
 }
@@ -68,12 +71,16 @@ fn vector_pdf_has_extractable_text_paths_and_cpp_page_boxes() {
         "no text operators"
     );
     assert!(
-        raw.contains("Malgun Gothic"),
-        "layout face is not Malgun Gothic"
+        raw.contains("Malgun Gothic") || raw.contains("Noto Sans KR") || raw.contains("IBM Plex Sans KR"),
+        "layout face is not the embedded Hangul font"
     );
     assert!(
         raw.contains("15 Tf"),
         "title is not 15 pt (LayoutService.cpp:416)"
+    );
+    assert!(
+        raw.contains("/FontFile2") || raw.contains("/FontFile3"),
+        "the Hangul face is not embedded"
     );
     assert!(
         !raw.contains("/DCTDecode") && !raw.contains("/Subtype /Image"),
@@ -140,6 +147,33 @@ fn a_survey_ring_is_a_path_at_the_paper_scale() {
         raw.contains(&format!("{x_pt} {y_pt} l")),
         "100 m east is not 20 mm on the page"
     );
+}
+
+/// A feature name is text at its ground point (`LabelOps.cpp:67-130`, PreferText at
+/// `PdfExportSettings.cpp:17`).
+#[test]
+fn a_feature_label_is_extractable_text() {
+    let sheet = page(SheetPaperSize::A4, SheetOrientation::Portrait);
+    let center = [200_000.0, 400_000.0];
+    let label = SheetPdfLabel { text: "1호 주거지".to_owned(), xy: center, size_pt: 8.0 };
+    let pdf = render_vector_sheet_pdf(&VectorSheetPdf {
+        sheet: &sheet,
+        title: "유구",
+        lines: &[],
+        scale_label: "축척 1 : 5000",
+        crs_label: "",
+        legend_title: "",
+        legend_rows: &[],
+        north_label: "N",
+        map_center_xy: center,
+        rings: &[],
+        labels: &[label],
+        map_jpeg: None,
+        map_jpeg_px: [0, 0],
+    })
+    .unwrap();
+    let text = extracted_text(&pdf);
+    assert!(text.contains("1호 주거지"), "{text}");
 }
 
 #[test]

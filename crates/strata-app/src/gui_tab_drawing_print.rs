@@ -130,7 +130,9 @@ impl StrataAppState {
                 if !job.scene.ready() {
                     None
                 } else {
-                    match self.vector_sheet_pdf() {
+                    let frame = self.drawing.sheet.map_frame;
+                    let jpeg = job.scene.basemap_jpeg([frame.x_mm, frame.y_mm, frame.width_mm, frame.height_mm]);
+                    match self.vector_sheet_pdf(jpeg.as_ref().map(|image| image.0.as_slice()), jpeg.as_ref().map(|image| image.1).unwrap_or([0, 0])) {
                         Ok(pdf) => {
                             job.make(pdf);
                             None

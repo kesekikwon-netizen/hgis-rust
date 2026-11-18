@@ -4,7 +4,9 @@
 //! `KaDrawingStudio.cpp:3819-3855`), not a picture of that sheet. Rings are work-CRS
 //! metres (EPSG:5186 or EPSG:5187).
 
-use strata_layout::sheet_pdf_vector::{render_vector_sheet_pdf, SheetVectorRing, VectorSheetPdf};
+use strata_layout::sheet_pdf_vector::{
+    render_vector_sheet_pdf, SheetPdfLabel, SheetVectorRing, VectorSheetPdf,
+};
 use strata_types::crs::WorkCrs;
 
 use crate::app_state::StrataAppState;
@@ -12,7 +14,7 @@ use crate::survey_paint_layers::{build_paint_layers_with, PaintPart};
 
 impl StrataAppState {
     /// The PDF 「PDF 내보내기」 writes.
-    pub(crate) fn vector_sheet_pdf(&mut self) -> Result<Vec<u8>, String> {
+    pub(crate) fn vector_sheet_pdf(&mut self, map_jpeg: Option<&[u8]>, map_jpeg_px: [u32; 2]) -> Result<Vec<u8>, String> {
         let center = self.sheet_map_center();
         let lines = self.sheet_title_block_lines_on(chrono::Local::now().date_naive());
         let scale =
@@ -22,7 +24,7 @@ impl StrataAppState {
             WorkCrs::Epsg5187 => "동부원점(GRS80) · EPSG:5187",
         };
         let rows = self.sheet_legend_pdf_names();
-        let rings = self.sheet_pdf_rings();
+        let (rings, labels) = self.sheet_pdf_marks();
         let sheet = self.drawing.sheet.clone();
         let title = self.drawing.title_ko.clone();
         let legend = sheet.legend_title.clone();
@@ -37,12 +39,18 @@ impl StrataAppState {
             north_label: "N",
             map_center_xy: center,
             rings: &rings,
+            labels: &labels,
+            map_jpeg,
+            map_jpeg_px,
         })
         .map_err(|err| err.to_string())
     }
 
-    fn sheet_pdf_rings(&self) -> Vec<SheetVectorRing> {
+    /// Rings and the names C++ prints on them (`LabelOps.cpp:67-130`, area text `:217-245`,
+    /// cadastral `JIBUN` while the scale is closer than 1:10000, `CadastralImport.cpp:250-263`).
+    fn sheet_pdf_marks(&self) -> (Vec<SheetVectorRing>, Vec<SheetPdfLabel>) {
         let mut rings = Vec::new();
+        let mut labels = Vec::new();
         let rs = &self.home_map.real_survey;
         if rs.is_layer_visible("조사구역") {
             for ring in &rs.survey_rings {
@@ -55,8 +63,12 @@ impl StrataAppState {
             }
         }
         if rs.is_layer_visible("지적도 · 조사 주변 5km") {
+            let letters = self.drawing.sheet.scale_denominator <= 10_000 && rs.is_label_visible("지적도 · 조사 주변 5km");
             for parcel in &rs.cadastral_parcels {
                 push_ring(&mut rings, &parcel.ring, false);
+                if letters && !parcel.jibun.is_empty() {
+                    labels.push(SheetPdfLabel { text: parcel.jibun.clone(), xy: parcel.center, size_pt: 8.0 });
+                }
             }
         }
         if rs.is_layer_visible("참조 지도") && rs.is_layer_visible("지정유산") {
@@ -88,7 +100,15 @@ impl StrataAppState {
             if !rs.is_layer_visible(title) {
                 continue;
             }
+            let letters = rs.is_label_visible(title);
             for feature in &layer.features {
+                if letters {
+                    if let (Some(text), Some(anchor)) = (&feature.label, feature.anchor) {
+                        if !text.is_empty() {
+                            labels.push(SheetPdfLabel { text: text.clone(), xy: anchor.xy, size_pt: 8.0 });
+                        }
+                    }
+                }
                 for part in &feature.parts {
                     match part {
                         PaintPart::Point(xy) => {
@@ -113,7 +133,7 @@ impl StrataAppState {
                 }
             }
         }
-        rings
+        (rings, labels)
     }
 }
 

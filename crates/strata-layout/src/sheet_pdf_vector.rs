@@ -8,7 +8,7 @@
 
 use strata_types::error::StrataResult;
 
-use crate::sheet_composer::{nice_scale_bar_segment_meters, DrawingSheet, SheetRectMm};
+use crate::sheet_composer::DrawingSheet;
 use crate::sheet_pdf_export::mm_to_pdf_points;
 
 /// One ring in the work CRS (EPSG:5186 or EPSG:5187), metres. North is up.
@@ -18,7 +18,17 @@ pub struct SheetVectorRing {
     pub filled: bool,
 }
 
-/// What one sheet PDF draws. `map_center_xy` and `rings` are work-CRS metres.
+/// A feature label in the work CRS (EPSG:5186 or EPSG:5187), metres.
+/// C++ prints it as text (`PdfExportSettings.cpp:17` PreferText, `LabelOps.cpp:67-130`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SheetPdfLabel {
+    pub text: String,
+    pub xy: [f64; 2],
+    pub size_pt: f64,
+}
+
+/// What one sheet PDF draws. `map_center_xy`, `rings` and `labels` are work-CRS metres.
+/// `map_jpeg` is the basemap painted inside the map frame, when one was drawn.
 #[derive(Debug, Clone, Copy)]
 pub struct VectorSheetPdf<'a> {
     pub sheet: &'a DrawingSheet,
@@ -31,6 +41,9 @@ pub struct VectorSheetPdf<'a> {
     pub north_label: &'a str,
     pub map_center_xy: [f64; 2],
     pub rings: &'a [SheetVectorRing],
+    pub labels: &'a [SheetPdfLabel],
+    pub map_jpeg: Option<&'a [u8]>,
+    pub map_jpeg_px: [u32; 2],
 }
 
 #[derive(Debug)]
@@ -41,59 +54,78 @@ pub(crate) struct Run {
     text: String,
 }
 
-/// Bytes of the vector sheet. A picture of the page is not this file.
+/// Bytes of the vector sheet. A picture of the whole page is not this file.
 pub fn render_vector_sheet_pdf(doc: &VectorSheetPdf<'_>) -> StrataResult<Vec<u8>> {
-    let (runs, body) = page_body(doc);
-    let (cids, cmap) = encode::unicode_map(&runs);
-    let mut stream = body;
+    let (mut runs, mut body) = page_body(doc);
+    for label in doc.labels {
+        let at = doc.sheet.world_to_sheet_mm(doc.map_center_xy, label.xy);
+        text_at(&mut runs, doc.sheet.height_mm, at[0], at[1], label.size_pt, &label.text);
+    }
+    let face = font::embed_face(runs.iter().flat_map(|run| run.text.chars()));
+    let assigned = face.as_ref().map(|face| face.cid.clone()).unwrap_or_default();
+    let (cids, cmap) = encode::unicode_map(&runs, &assigned);
     for run in &runs {
-        let hex: String = run
-            .text
-            .chars()
-            .filter_map(|ch| cids.get(&ch))
-            .map(|id| format!("{id:04X}"))
-            .collect();
+        let hex: String = run.text.chars().filter_map(|ch| cids.get(&ch)).map(|id| format!("{id:04X}")).collect();
         if hex.is_empty() {
             continue;
         }
-        let size = format!("{:.2}", run.size)
-            .trim_end_matches('0')
-            .trim_end_matches('.')
-            .to_owned();
-        stream.push_str(&format!(
-            "BT /F1 {size} Tf {:.2} {:.2} Td <{hex}> Tj ET\n",
-            run.x, run.y
-        ));
+        let size = format!("{:.2}", run.size).trim_end_matches('0').trim_end_matches('.').to_owned();
+        body.push_str(&format!("BT /F1 {size} Tf {:.2} {:.2} Td <{hex}> Tj ET\n", run.x, run.y));
     }
-    Ok(encode::pdf_file(&[
+    let image = doc.map_jpeg.filter(|bytes| !bytes.is_empty());
+    let font_obj = 9;
+    let image_obj = 10;
+    let info = if image.is_some() { 11 } else { 10 };
+    if image.is_some() {
+        let frame = &doc.sheet.map_frame;
+        let (x, y, w, h) = (
+            mm_to_pdf_points(frame.x_mm),
+            mm_to_pdf_points(doc.sheet.height_mm - frame.y_mm - frame.height_mm),
+            mm_to_pdf_points(frame.width_mm),
+            mm_to_pdf_points(frame.height_mm),
+        );
+        // PdfExportSettings.cpp:25 disables tiled raster draws; the basemap is still
+        // painted in the map. It sits under the vectors, clipped to the frame.
+        body = format!("q {x:.2} {y:.2} {w:.2} {h:.2} re W n q {w:.2} 0 0 {h:.2} {x:.2} {y:.2} cm /Im0 Do Q Q\n{body}");
+    }
+    let (family, widths, file) = match &face {
+        Some(face) => (face.family.clone(), encode::width_array(&face.width), Some(face.ttf.clone())),
+        None => ("Malgun Gothic".to_owned(), String::new(), None),
+    };
+    let base = family.replace(' ', "");
+    let mut objects = vec![
         b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
-        format!(
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {:.2} {:.2}] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-            mm_to_pdf_points(doc.sheet.width_mm),
-            mm_to_pdf_points(doc.sheet.height_mm)
-        )
-        .into_bytes(),
-        encode::stream_obj(&stream),
-        b"<< /Type /Font /Subtype /Type0 /BaseFont /MalgunGothic /Encoding /Identity-H /DescendantFonts [6 0 R] /ToUnicode 8 0 R >>".to_vec(),
-        b"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /MalgunGothic /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 7 0 R /DW 1000 >>".to_vec(),
-        b"<< /Type /FontDescriptor /FontName /MalgunGothic /FontFamily (Malgun Gothic) /Flags 32 /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 >>".to_vec(),
+        encode::page_dict(doc, image.is_some(), image_obj),
+        encode::stream_obj(&body),
+        format!("<< /Type /Font /Subtype /Type0 /BaseFont /{base} /Encoding /Identity-H /DescendantFonts [6 0 R] /ToUnicode 8 0 R >>").into_bytes(),
+        format!("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /{base} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 7 0 R /CIDToGIDMap /Identity {widths} >>").into_bytes(),
+        format!("<< /Type /FontDescriptor /FontName /{base} /FontFamily ({family}) /Flags 32 /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 /FontFile2 {font_obj} 0 R >>").into_bytes(),
         encode::stream_obj(&cmap),
-        b"<< /Producer (Strata) >>".to_vec(),
-    ]))
+    ];
+    if let Some(bytes) = file {
+        objects.push(encode::stream_bytes(&bytes));
+    } else {
+        objects.push(encode::stream_bytes(b""));
+    }
+    if let Some(jpeg) = image {
+        objects.push(encode::image_obj_bytes(jpeg, doc.map_jpeg_px));
+    }
+    objects.push(b"<< /Producer (Strata) >>".to_vec());
+    Ok(encode::pdf_file(&objects, info))
 }
 
 fn page_body(doc: &VectorSheetPdf<'_>) -> (Vec<Run>, String) {
     let sheet = doc.sheet;
     let h = sheet.height_mm;
     let mut body = String::from("0.85 w 0.067 0.094 0.153 RG 0.067 0.094 0.153 rg\n");
-    body.push_str(&rect_op(h, &sheet.map_frame, "S"));
-    body.push_str(&rect_op(h, &sheet.scale_bar_rect, "S"));
-    body.push_str(&scale_boxes(h, sheet));
-    body.push_str(&rect_op(h, &sheet.legend_rect, "S"));
-    body.push_str(&rect_op(h, &sheet.title_block_rect, "S"));
-    body.push_str(&north_path(h, &sheet.north_arrow_rect));
-    body.push_str(&rings_path(sheet, doc.map_center_xy, doc.rings));
+    body.push_str(&paths::rect_op(h, &sheet.map_frame, "S"));
+    body.push_str(&paths::rect_op(h, &sheet.scale_bar_rect, "S"));
+    body.push_str(&paths::scale_boxes(h, sheet));
+    body.push_str(&paths::rect_op(h, &sheet.legend_rect, "S"));
+    body.push_str(&paths::rect_op(h, &sheet.title_block_rect, "S"));
+    body.push_str(&paths::north_path(h, &sheet.north_arrow_rect));
+    body.push_str(&paths::rings_path(sheet, doc.map_center_xy, doc.rings));
     let mut runs = Vec::new();
     // LayoutService.cpp:414 — title band, 15 pt, 10 mm from the left and 5 mm from the top.
     text_at(&mut runs, h, 10.0, 5.0, 15.0, doc.title);
@@ -167,106 +199,12 @@ fn text_at(runs: &mut Vec<Run>, page_h: f64, x_mm: f64, top_mm: f64, size: f64, 
     });
 }
 
-fn rect_op(page_h: f64, r: &SheetRectMm, op: &str) -> String {
-    format!(
-        "{:.2} {:.2} {:.2} {:.2} re {op}\n",
-        mm_to_pdf_points(r.x_mm),
-        mm_to_pdf_points(page_h - r.y_mm - r.height_mm),
-        mm_to_pdf_points(r.width_mm),
-        mm_to_pdf_points(r.height_mm)
-    )
-}
-
-/// Four double-box segments (`LayoutService.cpp:598-627`, style "Double Box").
-fn scale_boxes(page_h: f64, sheet: &DrawingSheet) -> String {
-    let denom = f64::from(sheet.scale_denominator.max(1));
-    let seg = nice_scale_bar_segment_meters(sheet.map_frame.width_mm, denom, 4);
-    let width = (seg * 4.0 * 1000.0 / denom)
-        .min(sheet.scale_bar_rect.width_mm)
-        .max(1.0);
-    let band = sheet.scale_bar_rect.height_mm / 2.0;
-    let mut out = String::new();
-    for row in 0..2 {
-        for col in 0..4 {
-            let cell = SheetRectMm {
-                x_mm: sheet.scale_bar_rect.x_mm + width / 4.0 * f64::from(col),
-                y_mm: sheet.scale_bar_rect.y_mm + band * f64::from(row),
-                width_mm: width / 4.0,
-                height_mm: band,
-            };
-            out.push_str(&rect_op(
-                page_h,
-                &cell,
-                if (col + row) % 2 == 0 { "f" } else { "S" },
-            ));
-        }
-    }
-    out
-}
-
-fn north_path(page_h: f64, r: &SheetRectMm) -> String {
-    let (cx, top, wing) = (r.x_mm + r.width_mm * 0.5, r.y_mm + 1.5, r.width_mm * 0.28);
-    let pts = [
-        [cx, top],
-        [cx - wing, r.bottom() - 1.5],
-        [cx + wing, r.bottom() - 1.5],
-    ];
-    path_mm(page_h, &pts, true, "f")
-}
-
-fn rings_path(sheet: &DrawingSheet, center: [f64; 2], rings: &[SheetVectorRing]) -> String {
-    let mut out = String::new();
-    let (x, y, w, h) = (
-        mm_to_pdf_points(sheet.map_frame.x_mm),
-        mm_to_pdf_points(sheet.height_mm - sheet.map_frame.y_mm - sheet.map_frame.height_mm),
-        mm_to_pdf_points(sheet.map_frame.width_mm),
-        mm_to_pdf_points(sheet.map_frame.height_mm),
-    );
-    if !rings.is_empty() {
-        out.push_str(&format!("q {x:.2} {y:.2} {w:.2} {h:.2} re W n\n"));
-    }
-    for ring in rings {
-        if ring.xy.len() < 2 {
-            continue;
-        }
-        let paper: Vec<[f64; 2]> = ring
-            .xy
-            .iter()
-            .map(|xy| sheet.world_to_sheet_mm(center, *xy))
-            .collect();
-        out.push_str(&path_mm(
-            sheet.height_mm,
-            &paper,
-            ring.filled,
-            if ring.filled { "f" } else { "S" },
-        ));
-    }
-    if !rings.is_empty() {
-        out.push_str("Q\n");
-    }
-    out
-}
-
-fn path_mm(page_h: f64, pts: &[[f64; 2]], close: bool, op: &str) -> String {
-    let mut out = String::new();
-    for (i, p) in pts.iter().enumerate() {
-        let cmd = if i == 0 { "m" } else { "l" };
-        out.push_str(&format!(
-            "{:.2} {:.2} {cmd}\n",
-            mm_to_pdf_points(p[0]),
-            mm_to_pdf_points(page_h - p[1])
-        ));
-    }
-    if close {
-        out.push_str("h\n");
-    }
-    out.push_str(op);
-    out.push('\n');
-    out
-}
-
+#[path = "sheet_pdf_paths.rs"]
+mod paths;
 #[path = "sheet_pdf_encode.rs"]
 mod encode;
+#[path = "sheet_pdf_font.rs"]
+mod font;
 
 pub use encode::extracted_text;
 

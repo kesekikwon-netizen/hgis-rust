@@ -5,14 +5,20 @@
 
 use std::collections::BTreeMap;
 
-use super::Run;
+use super::{Run, VectorSheetPdf};
+use crate::sheet_pdf_export::mm_to_pdf_points;
 
-pub(super) fn unicode_map(runs: &[Run]) -> (BTreeMap<char, u16>, String) {
+pub(super) fn unicode_map(runs: &[Run], assigned: &BTreeMap<char, u16>) -> (BTreeMap<char, u16>, String) {
     let mut cids = BTreeMap::new();
+    let mut spare = assigned.values().copied().max().unwrap_or(0);
     for run in runs {
         for ch in run.text.chars() {
-            let next = u16::try_from(cids.len() + 1).unwrap_or(u16::MAX);
-            cids.entry(ch).or_insert(next);
+            if let Some(id) = assigned.get(&ch) {
+                cids.insert(ch, *id);
+            } else {
+                spare = spare.saturating_add(1);
+                cids.entry(ch).or_insert(spare);
+            }
         }
     }
     let mut cmap = String::from(
@@ -120,7 +126,44 @@ pub(super) fn stream_obj(body: &str) -> Vec<u8> {
     format!("<< /Length {} >>\nstream\n{body}endstream", body.len()).into_bytes()
 }
 
-pub(super) fn pdf_file(objects: &[Vec<u8>]) -> Vec<u8> {
+pub(super) fn page_dict(doc: &VectorSheetPdf<'_>, image: bool, image_obj: usize) -> Vec<u8> {
+    let xobject = if image { format!(" /XObject << /Im0 {image_obj} 0 R >>") } else { String::new() };
+    format!(
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {:.2} {:.2}] /Resources << /Font << /F1 5 0 R >>{xobject} >> /Contents 4 0 R >>",
+        mm_to_pdf_points(doc.sheet.width_mm),
+        mm_to_pdf_points(doc.sheet.height_mm)
+    )
+    .into_bytes()
+}
+
+pub(super) fn image_obj_bytes(jpeg: &[u8], px: [u32; 2]) -> Vec<u8> {
+    let mut out = format!(
+        "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length {} >>\nstream\n",
+        px[0], px[1], jpeg.len()
+    )
+    .into_bytes();
+    out.extend_from_slice(jpeg);
+    out.extend_from_slice(b"\nendstream");
+    out
+}
+
+pub(super) fn width_array(widths: &BTreeMap<u16, u16>) -> String {
+    let mut out = String::from("/W [");
+    for (cid, width) in widths {
+        out.push_str(&format!("{cid} [{width}] "));
+    }
+    out.push(']');
+    out
+}
+
+pub(super) fn stream_bytes(body: &[u8]) -> Vec<u8> {
+    let mut out = format!("<< /Length {} >>\nstream\n", body.len()).into_bytes();
+    out.extend_from_slice(body);
+    out.extend_from_slice(b"\nendstream");
+    out
+}
+
+pub(super) fn pdf_file(objects: &[Vec<u8>], info: usize) -> Vec<u8> {
     let mut out = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
     let mut starts = Vec::with_capacity(objects.len());
     for (index, body) in objects.iter().enumerate() {
@@ -137,7 +180,7 @@ pub(super) fn pdf_file(objects: &[Vec<u8>]) -> Vec<u8> {
         out.extend_from_slice(format!("{start:010} 00000 n \n").as_bytes());
     }
     let trailer = format!(
-        "trailer\n<< /Size {} /Root 1 0 R /Info 9 0 R >>\nstartxref\n{table}\n%%EOF\n",
+        "trailer\n<< /Size {} /Root 1 0 R /Info {info} 0 R >>\nstartxref\n{table}\n%%EOF\n",
         objects.len() + 1
     );
     out.extend_from_slice(trailer.as_bytes());
