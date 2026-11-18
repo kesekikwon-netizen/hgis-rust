@@ -2,7 +2,7 @@
 use super::*;
 
 #[test]
-fn rail_keeps_actual_layer_search_keyboard_focus() {
+fn rail_blank_drag_keeps_search_focus_before_slider_takes_it() {
     let mut h = start();
     h.app.right_inspector.selected_layer_key = Some("위성".to_owned());
     let search = h.point_at("     레이어 찾기");
@@ -12,10 +12,12 @@ fn rail_keeps_actual_layer_search_keyboard_focus() {
     let (_, card) = rectangles(&mut h);
     drag(&mut h, card.min + Vec2::splat(5.0), Vec2::new(80.0, -40.0));
     assert_eq!(h.ctx.memory(|m| m.focused()), owner, "rail stole real text focus");
-    h.press(Pos2::new(card.left() + 80.0 + 80.0, card.top() - 40.0 + 40.0), PointerButton::Primary);
-    assert_eq!(h.ctx.memory(|m| m.focused()), owner, "slider stole real text focus");
     h.frame(vec![Event::Text("ab".to_owned())]);
-    assert_eq!(h.app.home_map.layer_filter, "ab", "search no longer receives typed text after rail use");
+    assert_eq!(h.app.home_map.layer_filter, "ab", "blank card stole subsequent search input");
+    h.press(Pos2::new(card.left() + 80.0 + 80.0, card.top() - 40.0 + 40.0), PointerButton::Primary);
+    assert!(h.ctx.memory(|m| m.focused()).is_some_and(|id| Some(id) != owner), "C++ ClickFocus slider did not take focus");
+    h.frame(vec![Event::Text("cd".to_owned())]);
+    assert_eq!(h.app.home_map.layer_filter, "ab", "slider click left search owning subsequent text");
 }
 
 #[test]

@@ -6,6 +6,16 @@ use crate::app_state::StrataAppState;
 
 #[path = "gui_tab_map_opacity_placement.rs"]
 mod placement;
+#[path = "gui_tab_map_opacity_keys.rs"]
+mod keys;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SliderControl { Opacity, Brightness }
+
+fn slider_rect(card: Rect, row: usize) -> Rect {
+    let y = card.top() + 40.0 + row as f32 * 24.0;
+    Rect::from_min_max(Pos2::new(card.left() + 52.0, y - 10.0), Pos2::new(card.right() - 42.0, y + 10.0))
+}
 
 use super::gui_tab_map_format::BrightRow;
 use super::gui_tab_map_geom::{brightness_row_text, is_raster_image_layer};
@@ -137,8 +147,12 @@ impl StrataAppState {
             Color32::from_rgb(45, 44, 40),
         );
 
-        let track_r =
-            Rect::from_min_max(Pos2::new(sx0 - 6.0, y - 10.0), Pos2::new(sx1 + 6.0, y + 10.0));
+        let track_r = slider_rect(card_r, row_i);
+        let control = match row_kind {
+            BrightRow::Opacity => Some(SliderControl::Opacity),
+            BrightRow::Raster => Some(SliderControl::Brightness),
+            BrightRow::Vector => None,
+        };
         let resp = if matches!(row_kind, BrightRow::Vector) {
             // 벡터 밝기는 끌 수 없다 (KaLayerOpacityRail.cpp:158-166). 안내말만 남긴다.
             ui.interact(
@@ -147,16 +161,18 @@ impl StrataAppState {
                 egui::Sense::hover(),
             )
         } else {
-            ui.interact(
-                track_r,
-                ui.id().with(("ka_opacity_slider", row_i)),
-                egui::Sense::CLICK | egui::Sense::DRAG,
-            )
+            keys::interact(ui, track_r, ui.id().with(("ka_opacity_slider", row_i)), if row_i == 0 { SliderControl::Opacity } else { SliderControl::Brightness })
         }
         .on_hover_text(tip);
-        if !matches!(row_kind, BrightRow::Vector) && (resp.clicked() || resp.dragged()) {
-            if let Some(pos) = resp.interact_pointer_pos() {
-                let t = ((pos.x - sx0) / (sx1 - sx0).max(1.0)).clamp(0.0, 1.0);
+        if resp.has_focus() {
+            p.rect_stroke(track_r.expand(2.0), 4.0, Stroke::new(1.0, Color32::from_rgb(181, 87, 58)), egui::StrokeKind::Inside);
+        }
+        let pointer_t = (control.is_some() && (resp.clicked_by(egui::PointerButton::Primary) || resp.dragged_by(egui::PointerButton::Primary)))
+            .then(|| resp.interact_pointer_pos()).flatten()
+            .map(|pos| ((pos.x - sx0) / (sx1 - sx0).max(1.0)).clamp(0.0, 1.0));
+        let keyboard_t = control.and_then(|control| keys::keyboard_value(ui, &resp, control, pointer_t.unwrap_or(knob_t)));
+        if let Some(t) = keyboard_t.or(pointer_t) {
+                ctx.request_repaint();
                 if row_i == 0 {
                     self.apply_rail_opacity(title, t);
                 } else {
@@ -172,7 +188,6 @@ impl StrataAppState {
                         ),
                     );
                 });
-            }
         }
     }
 }

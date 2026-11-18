@@ -6,6 +6,9 @@ use eframe::egui::{Color32, Event, PointerButton, Pos2, Rect, Shape, Vec2};
 #[path = "opacity_placement_input_tests_a.rs"]
 mod ownership;
 
+#[path = "opacity_control_input_tests.rs"]
+mod controls;
+
 fn start() -> Harness {
     let directory = tempfile::tempdir().expect("owned temporary survey");
     let file = directory.path().join("demo.gpkg");
