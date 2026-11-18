@@ -83,6 +83,9 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         other => render_download_and_print_dialogs(app, ctx, other, &mut open),
     }
     if !open {
+        if matches!(kind, ActiveModalDialog::ExportSubmitPackage) {
+            app.submit_phase = None;
+        }
         app.modals.active = None;
     }
 }
