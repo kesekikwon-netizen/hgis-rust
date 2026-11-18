@@ -114,7 +114,7 @@ fn ctrl_f_focuses_the_search_field_and_selects_its_text() {
         ..Modifiers::default()
     };
     press(&mut app, &ctx, Key::F, ctrl, None);
-    let id = crate::ribbon_appbar::search_edit_id();
+    let id = crate::ribbon::search_edit_id();
     assert!(
         ctx.memory(|memory| memory.has_focus(id)),
         "Ctrl+F focuses the search field"
@@ -152,7 +152,7 @@ fn text_fields_keep_copy_paste_and_shift_ctrl_f_is_not_find() {
         ..Modifiers::default()
     };
     press(&mut app, &ctx, Key::F, shift_ctrl, None);
-    assert!(!ctx.memory(|memory| memory.has_focus(crate::ribbon_appbar::search_edit_id())));
+    assert!(!ctx.memory(|memory| memory.has_focus(crate::ribbon::search_edit_id())));
 }
 
 /// F11 toggles full screen (`MainWindow.cpp:270-278`). Map focus is Ctrl+F11
@@ -247,7 +247,7 @@ fn f2_does_not_rename_while_a_text_field_has_focus() {
     let ctx = egui::Context::default();
     let ctrl = Modifiers { ctrl: true, command: true, ..Modifiers::default() };
     press(&mut app, &ctx, Key::F, ctrl, None);
-    assert!(ctx.memory(|memory| memory.has_focus(crate::ribbon_appbar::search_edit_id())));
+    assert!(ctx.memory(|memory| memory.has_focus(crate::ribbon::search_edit_id())));
     press(&mut app, &ctx, Key::F2, Modifiers::default(), None);
     assert!(app.home_map.rename_layer.is_none(), "the search field owns the key");
     assert_eq!(app.right_inspector.selected_layer_key.as_deref(), Some(label));

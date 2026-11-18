@@ -29,7 +29,7 @@ impl StrataAppState {
             } else {
                 "도로명·지번 (예: 하회종가길 40)  Ctrl+F"
             };
-            let search_id = crate::ribbon_appbar::search_edit_id();
+            let search_id = crate::ribbon::search_edit_id();
             let resp = ui
                 .add_sized(
                     [156.0, 32.0],

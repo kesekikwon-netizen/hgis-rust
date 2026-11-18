@@ -23,7 +23,7 @@ pub struct KaAppBarSearch {
 }
 
 /// Stable id of the address field so Ctrl+F can focus it (`MainWindowRibbon.cpp:240-244`).
-pub(crate) fn search_edit_id() -> eframe::egui::Id {
+pub fn search_edit_id() -> eframe::egui::Id {
     eframe::egui::Id::new("ka_app_bar_search")
 }
 
