@@ -8,6 +8,12 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "crates/strata-app/src/legend_frame_input_tests_a.rs": "5c542aed85081c5b08a019d491d682535bb137e80d8555a501dcf3d0e8a963cb",
+    "crates/strata-app/src/legend_frame_input_tests.rs": "b68acc66956b754edbee7feebbf9ef4b5508e8ff283a1e1d6fe3ad5a096b6e00",
+    "crates/strata-app/src/sheet_scene.rs": "89fb9cd317c04281e3af737b4f04fda7af3c4a525ff36de16a17e68aeddfd162",
+    "crates/strata-app/src/gui_tab_drawing_print.rs": "7d92f5dfd7e7dfc7299a066c0bb1e0fdeae8f966fae0a06c0a863ba77e22a419",
+    "crates/strata-app/src/gui_tab_drawing_items.rs": "46dbe63bc9d1cddd4a756ced82001cab646094fdb3c70785a28e37e227418b88",
+    "crates/strata-app/src/gui_tab_drawing_preview.rs": "e53ea4ceab7f95b0f8e7764e381fe78298c4f0ad097efcbebfec21de35793650",
     "target/cpp-ref/src/core/LayoutService.cpp": "dadcc7d77c05b408874704b41de7b9f1bf065c4d6bf7e3689036a29f88ef7835",
     "target/cpp-ref/src/app/MainWindowExport.cpp": "960aa5791afc27b35e981fb791f5a0c71088fd9436af3dd9e1e84d4c11dea73e",
     "target/cpp-ref/src/app/KaDrawingStudio.cpp": "c183d092e099e57650b351568a789e13baadc48de987398ea01394eeea09a98e",
@@ -18,7 +24,7 @@ REVIEWED_DIGESTS = {
     "crates/strata-app/src/paper_setup_input_tests_a.rs": "cf4741b86bf1314419e789232c19d6a969a55361290552595e1837bc5d49b094",
     "crates/strata-app/src/paper_setup_input_tests.rs": "9ebc5220b1d6b8c978e21d392279ff1ecf5ce4e6b2cfcc488d38825b94756d56",
     "crates/strata-app/src/gui_tab_drawing_decoration.rs": "f24eed9c171d57e773aa6718bd3b329f06bc97d2d8ada063734c909f395ef4df",
-    "crates/strata-app/src/gui_tab_drawing_legend.rs": "eee728e99c2d0d019a99b5ecd85ffb5dbc46218df7b562481e8b076910d77d17",
+    "crates/strata-app/src/gui_tab_drawing_legend.rs": "eacc41d54fa4498efb791b5afddb00db9c50e12c74df2f726a0e120c0a4a1284",
     "crates/strata-app/src/gui_tab_drawing_toolbar.rs": "bcd13c7088c7b825d9c7ab9d0a0a37b2b432a3148d1d7e336e7145597db5fca8",
     "crates/strata-app/src/modal_paper_layout.rs": "68f243dbb8ef7df8d472cdb2fb7b17a01f029727d5a1af6608a6ef48ec580827",
     "crates/strata-app/src/modal_paper_controls.rs": "1a657f7373d80bd1a8a1c688a7f06f1a6747c74968a6cce7399b1eac23299085",
@@ -124,7 +130,7 @@ REVIEWED_DIGESTS = {
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
     "crates/strata-app/src/popup_input_harness.rs": "12bc498a781ee060c639507ff22bd1ee5bf67603f2bbc96a5e103070f81a4371",
     "crates/strata-app/src/shell_workspace.rs": "b2d833287f100313db7a19a66ebb4cb78b283b1ed123afbd5017471edccc8142",
-    "crates/strata-app/src/gui_shell.rs": "23a6f42c53eda78c89cf470a8220fcb54ba0bdec78cf7637ff5809eab4f996ed",
+    "crates/strata-app/src/gui_shell.rs": "ffa14d3729ef151d9f198a10167114031b9c68a5f26392f06ae7d491c38196ab",
     "crates/strata-app/src/gui_shell_escape.rs": "e5c643ec9d7f7b4235e9a779c7119f9edc6935892d595afafe5f46ddb132cb23",
     "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
@@ -445,6 +451,17 @@ def build_cases(root):
          '직접 입력 생성 뒤 범례와 축척막대의 최소/가용 폭 충돌 종료를 실제 실패 뒤 수정'], [],
         '용지 창과 명시한 진입·복귀만의 완료다. 용지·축척 전체, 범례 전체 편집·둥근 모서리, PDF/프린터·실제 OS 입력과 모든 화면 크기의 완료 판정은 아니다. 계정 함수와 기존 용지 검사는 유지한다. 휠 검사의 전경 입력 배경 분류 한 항목만 갱신했고 확대/중심 보존 기대는 유지한다.',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 연결형 용지 설정과 입력 소유권')}])
+    add('sheet.legend-frame', '도면 > 범례 > 둥근 테두리와 기존 이동·크기 조절 유지', 1, '완료',
+        [('KaDrawingStudio.cpp', 'legend->setResizeToContents(false);'), ('LayoutService.cpp', 'void LayoutService::flowSheetLegend')],
+        ['gui_tab_drawing_legend.rs', 'gui_tab_drawing_preview.rs', 'gui_tab_drawing_items.rs', 'gui_tab_drawing_print.rs', 'sheet_scene.rs',
+         'legend_frame_input_tests.rs', 'legend_frame_input_tests_a.rs', 'gui_shell.rs', 'popup_input_harness.rs'],
+        ['사용자 UI10의 명시적 둥근 모서리 결정, 기존 앱 카드의6논리점 처리 재사용; C++의 반지름 값 이식이라는 뜻이 아님',
+         '실제 도면 진입·1680×960·800×600, 인쇄용 생산 함수의 네이티브200% DPI 그림',
+         '실제 범례 채움과 선 각각의 불투명 렌더링 윤곽·기존 클릭 범위 일치',
+         '실제 이동·늘이기·줄이기 뒤 같은 글·기록·이력·조사 바이트, 인쇄용 그림 뒤 화면 항목 범위 유지',
+         '최초3개 실제 실패 뒤3개 통과; 채움은 둥글고 선만 예전 모양인 변이도 실제 인쇄 경로에서 실패·정확 복구'], [],
+        '이 행은 테두리 표시와 명시한 기존 조작만의 완료다. 전체 범례 편집·모든 크기와 DPI·범례 전체 저장 왕복·실제 PDF 파일/프린터 검증으로 확대하지 않는다. 전체 sheet.legend는 부분 구현을 유지한다.',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 범례의 둥근 테두리와 공유 그림 경로')}])
     for key, title in [('F9', '왼쪽 패널'), ('F10', '오른쪽 패널'), ('F11', '전체 화면·지도 넓게 보기')]:
         add('key.' + key.lower(), title + ' / ' + key, 2, '검증 안 됨', ['MainWindowRibbon.cpp', 'MainWindowChrome.cpp'],
             ['gui_shell.rs'], ['메뉴·모달·텍스트 포커스', '축소·확대 후 복귀', 'Ctrl 등 수식키'], ['MORE0의 과거 판정을 갱신하고 현재 키 처리·복귀 UI 대조'])

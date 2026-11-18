@@ -288,3 +288,7 @@ mod align_snap_input_tests;
 #[cfg(test)]
 #[path = "paper_setup_input_tests.rs"]
 mod paper_setup_input_tests;
+
+#[cfg(test)]
+#[path = "legend_frame_input_tests.rs"]
+mod legend_frame_input_tests;

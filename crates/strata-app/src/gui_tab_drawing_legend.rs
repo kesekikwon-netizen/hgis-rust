@@ -149,8 +149,9 @@ impl StrataAppState {
         let s =
             s.min(leg_w / columns as f32 / row_width).min(leg_w / title_width).min(leg_r.height() / (heading + legend_column_rows(rows.len(), columns) as f32 * row_unit + 4.0));
         let row_h = row_unit * s;
-        sheet_p.rect_filled(leg_r, 1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 245));
-        sheet_p.rect_stroke(leg_r, 1.0, Stroke::new(0.9, ink), egui::StrokeKind::Middle);
+        // Owner UI10 rounded-frame decision; content follows target/cpp-ref/src/app/KaDrawingStudio.cpp:2364-2390.
+        sheet_p.rect_filled(leg_r, 6.0, Color32::from_rgba_unmultiplied(255, 255, 255, 245));
+        sheet_p.rect_stroke(leg_r, 6.0, Stroke::new(0.9, ink), egui::StrokeKind::Middle);
         let title_pt = font_pt * s;
         let title = self.legend_title_galley(&sheet_p, title_pt, ink);
         sheet_p.galley(Pos2::new(leg_r.left() + 5.0 * s, leg_r.top() + heading * s * 0.5 - title.size().y * 0.5), title, ink);
