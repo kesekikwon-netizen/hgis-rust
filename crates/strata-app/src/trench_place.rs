@@ -49,7 +49,7 @@ pub(crate) fn place_trenches_in_area(app: &mut StrataAppState) {
     }
 }
 
-pub(super) fn finish_plan(app: &mut StrataAppState, plan: job::Planned) {
+fn finish_plan(app: &mut StrataAppState, plan: job::Planned) {
     if plan.cells.is_empty() {
         let msg = if plan.error.is_empty() {
             "현재 규격과 방향으로 구역 안에 격자를 배치하지 못했습니다. 회전이나 규격을 바꿔 다시 적용하세요. 기존 격자는 유지됩니다.".to_owned()
