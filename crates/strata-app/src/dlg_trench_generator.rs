@@ -44,6 +44,9 @@ pub(crate) fn render_trench_generator(
             ui.add_space(8.0);
             ui.separator();
             ui.horizontal(|ui| {
+                // Straight grids are written by `trench_place`. ㄱ·ㄴ자 fill is not in
+                // `build_for_target_ratio` (no arm argument; C++ `TrenchGridGenerator.h:119-122`).
+                let l_shape = app.modals.trench_shape.arm_bend().is_some();
                 let place_btn = egui::Button::new(
                     egui::RichText::new("구역에 깔기")
                         .color(Color32::WHITE)
@@ -53,22 +56,18 @@ pub(crate) fn render_trench_generator(
                 .fill(Color32::from_rgb(181, 87, 58))
                 .corner_radius(6.0)
                 .min_size(Vec2::new(120.0, 30.0));
+                let tip = if l_shape {
+                    "아직 Rust 판에서 연결하지 않았습니다 (지시 WU-04)"
+                } else {
+                    "조사구역 위에 격자를 다시 깝니다. 깐 뒤 맵에서 끌어 옮기세요."
+                };
                 if ui
-                    .add(place_btn)
-                    .on_hover_text(
-                        "조사구역 위에 격자를 다시 깝니다. 깐 뒤 맵에서 끌어 옮기세요.",
-                    )
+                    .add_enabled(!l_shape, place_btn)
+                    .on_hover_text(tip)
+                    .on_disabled_hover_text(tip)
                     .clicked()
                 {
-                    app.home_map
-                        .real_survey
-                        .layer_visible
-                        .insert("시굴격자".to_owned(), true);
-                    app.home_map.draw_guide_message = Some(format!(
-                        "시굴격자 {}개를 조사구역 위에 배치했습니다 (방위 {:.0}°).",
-                        app.home_map.real_survey.trenches.len(),
-                        app.modals.trench_azimuth_deg
-                    ));
+                    crate::trench_place::place_trenches_in_area(app);
                 }
                 if ui
                     .button("맵에 찍기")
@@ -76,9 +75,8 @@ pub(crate) fn render_trench_generator(
                     .clicked()
                 {
                     app.modals.trench_auto_place = false;
-                    app.home_map.draw_guide_message = Some(
-                        "맵을 한 번 찍어 시굴격자 원점을 지정하세요.".to_owned(),
-                    );
+                    app.home_map.draw_guide_message =
+                        Some("맵을 한 번 찍어 시굴격자 원점을 지정하세요.".to_owned());
                     *open = false;
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
