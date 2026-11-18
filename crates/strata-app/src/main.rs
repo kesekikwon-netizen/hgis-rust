@@ -223,6 +223,7 @@ mod dlg_survey_contour;
 mod dlg_topographic_browser;
 mod dlg_topographic_import;
 mod dlg_trench_generator;
+mod trench_place;
 
 #[cfg(test)]
 #[path = "dialogs_download_print_tests.rs"]

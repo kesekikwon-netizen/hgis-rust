@@ -69,10 +69,7 @@ impl StrataAppState {
     /// 시굴격자가 덮을 조사구역의 넓이 — 첫 조사구역 표에서 pickAutoFillArea. 조사구역이 없으면 0.
     pub(crate) fn trench_survey_area_m2(&self) -> f64 {
         let Some(t) = self.survey_area_table() else { return 0.0 };
-        let selected: Vec<i64> = match &self.home_map.selected_shape {
-            Some((table, fid)) if *table == t.table => vec![*fid],
-            _ => Vec::new(),
-        };
+        let selected: Vec<i64> = self.all_selected().into_iter().filter(|(table, _)| table == &t.table).map(|(_, fid)| fid).collect();
         pick_auto_fill_area_m2(&t.layer.features, &selected)
     }
 }

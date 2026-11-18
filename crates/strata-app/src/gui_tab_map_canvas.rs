@@ -36,14 +36,7 @@ impl StrataAppState {
             is_style,
         } = input;
         if is_trench {
-            let trench_cnt = self.home_map.real_survey.trenches.len();
-            let trench_area: f64 = self
-                .home_map
-                .real_survey
-                .trenches
-                .iter()
-                .map(|t| t.area_m2)
-                .sum();
+            let (trench_cnt, trench_area) = crate::trench_place::placed_trench_totals(self);
             let survey_area: f64 = self.trench_survey_area_m2().max(1.0);
             let ratio_pct = (trench_area / survey_area * 100.0).clamp(0.0, 100.0);
             let shape_lbl = if self.modals.trench_shape.arm_bend().is_some() {
