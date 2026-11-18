@@ -7,8 +7,8 @@
 use std::collections::BTreeMap;
 
 use strata_geo::trench_plan::{
-    build, build_for_target_ratio, build_in_area, cells_valid, meets_target, pick_auto_fill_area,
-    total_area, Cell, PickedArea, Spec, SurveyPoly,
+    build, cells_valid, meets_target, pick_auto_fill_area, total_area, Cell, PickedArea, Spec,
+    SurveyPoly,
 };
 use strata_types::schema::DomainLayerKey;
 
@@ -17,7 +17,10 @@ use crate::app_state_layer_remove::UndoStep;
 
 #[path = "trench_place_geom.rs"]
 mod geom;
+#[path = "trench_place_job.rs"]
+mod job;
 use geom::{auth_of, cell_feature, cells_center, extent_center, geometry_from_wkt, same_layout};
+pub(crate) use job::{poll_trench_place, TrenchPlaceJob};
 
 const KEEP_EXISTING: &str = "기존 시굴격자를 그대로 두었습니다.";
 const NO_TARGET: &str = "목표 면적에 맞는 격자를 계산하지 못했습니다. 방향과 규격을 확인해 다시 적용하세요. 기존 격자는 유지됩니다.";
@@ -39,41 +42,30 @@ pub(crate) fn place_trenches_in_area(app: &mut StrataAppState) {
     }
     let picked = picked_area(app);
     if app.modals.trench_auto_place && picked.area.is_some() {
-        place_auto(app, &picked);
+        // `KaTrenchDialogPlan.cpp:121-129` runs the search off the UI thread.
+        job::start_auto_plan(app, &picked);
     } else {
         place_manual(app, picked.area_m2);
     }
 }
 
-fn place_auto(app: &mut StrataAppState, picked: &PickedArea) {
-    let kind = app.modals.trench_survey_kind_idx.min(2);
-    let azimuth = app.modals.trench_azimuth_deg;
-    if kind == 2 {
-        match build_in_area(&spec_from_dialog(app), picked.area.as_ref()) {
-            Ok(cells) if meets_target(&cells, picked.area_m2, 0.0) => {
-                commit_cells(app, &cells, picked.area_m2, 0.0)
-            }
-            Ok(_) => app.show_status_message(NO_TARGET),
-            Err(reason) => app.show_status_message(format!("{reason} 기존 격자는 유지됩니다.")),
-        }
-        return;
-    }
-    let target = if kind == 1 { 2.0 } else { 10.0 };
-    let plan = build_for_target_ratio(picked.area.as_ref(), target, 2.0, azimuth);
+pub(super) fn finish_plan(app: &mut StrataAppState, plan: job::Planned) {
     if plan.cells.is_empty() {
         let msg = if plan.error.is_empty() {
-            "현재 규격과 방향으로 구역 안에 격자를 배치하지 못했습니다. 회전이나 규격을 바꿔 다시 적용하세요. 기존 격자는 유지됩니다."
+            "현재 규격과 방향으로 구역 안에 격자를 배치하지 못했습니다. 회전이나 규격을 바꿔 다시 적용하세요. 기존 격자는 유지됩니다.".to_owned()
+        } else if plan.append_keep {
+            format!("{} 기존 격자는 유지됩니다.", plan.error)
         } else {
-            plan.error.as_str()
+            plan.error
         };
         app.show_status_message(msg);
         return;
     }
-    if !meets_target(&plan.cells, picked.area_m2, target) {
+    if !meets_target(&plan.cells, plan.area_m2, plan.target_pct) {
         app.show_status_message(NO_TARGET);
         return;
     }
-    commit_cells(app, &plan.cells, picked.area_m2, target);
+    commit_cells(app, &plan.cells, plan.area_m2, plan.target_pct);
 }
 
 /// No area, or the auto-fill box is off: rebuild around the current grid, or ask for an origin.
@@ -112,7 +104,12 @@ fn place_manual(app: &mut StrataAppState, area_m2: f64) {
     commit_cells(app, &cells, area_m2, 0.0);
 }
 
-fn commit_cells(app: &mut StrataAppState, cells: &[Cell], area_m2: f64, target_pct: f64) {
+pub(super) fn commit_cells(
+    app: &mut StrataAppState,
+    cells: &[Cell],
+    area_m2: f64,
+    target_pct: f64,
+) {
     if let Err(detail) = cells_valid(cells) {
         app.show_status_message(detail);
         return;
@@ -199,7 +196,7 @@ fn success_message(cells: &[Cell], area_m2: f64, target_pct: f64) -> String {
     msg
 }
 
-fn spec_from_dialog(app: &StrataAppState) -> Spec {
+pub(super) fn spec_from_dialog(app: &StrataAppState) -> Spec {
     let mut name_prefix = app.modals.trench_prefix.trim().to_owned();
     if name_prefix.is_empty() {
         name_prefix = "Tr-".to_owned();
@@ -230,11 +227,40 @@ fn picked_area(app: &StrataAppState) -> PickedArea {
             fid: f.fid,
         })
         .collect();
-    let selected = match &app.home_map.selected_shape {
-        Some((name, fid)) if name == "survey_area" => vec![*fid],
-        _ => Vec::new(),
-    };
+    // C++ `areaVl->selectedFeatureIds` (`MainWindow.cpp:1792-1797`): every selected survey polygon,
+    // including Shift and box hits kept in `also_selected`.
+    let selected = selected_survey_fids(app);
     pick_auto_fill_area(&features, &selected, false)
+}
+
+pub(super) fn selected_survey_fids(app: &StrataAppState) -> Vec<i64> {
+    app.all_selected()
+        .into_iter()
+        .filter(|(table, _)| table == "survey_area")
+        .map(|(_, fid)| fid)
+        .collect()
+}
+
+/// Written `trial_trench` rows. Width × length is the cell area (`TrenchGridGenerator.cpp:524-528`).
+pub(crate) fn placed_trench_totals(app: &StrataAppState) -> (usize, f64) {
+    let Some(table) = app.survey_tables.iter().find(|t| t.table == "trial_trench") else {
+        return (0, 0.0);
+    };
+    let area = table.layer.features.iter().map(cell_area).sum();
+    (table.layer.features.len(), area)
+}
+
+fn cell_area(feature: &strata_storage::edit_buffer::FeatureRecord) -> f64 {
+    let num = |key: &str| {
+        feature
+            .attributes
+            .get(key)
+            .and_then(|s| s.parse::<f64>().ok())
+    };
+    match (num("width"), num("length")) {
+        (Some(width), Some(length)) if width > 0.0 && length > 0.0 => width * length,
+        _ => 0.0,
+    }
 }
 
 fn trench_index(app: &StrataAppState) -> Option<usize> {

@@ -23,6 +23,7 @@ pub(crate) fn render_trench_generator(
     ctx: &egui::Context,
     open: &mut bool,
 ) {
+    crate::trench_place::poll_trench_place(app, ctx);
     egui::Window::new("ka_modal_trench")
         .title_bar(false)
         .resizable(false)
