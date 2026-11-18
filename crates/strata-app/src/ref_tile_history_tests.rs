@@ -167,3 +167,14 @@ fn a_press_on_the_old_map_button_preserves_the_selected_old_map() {
     app.handle_ribbon_click("옛 지도");
     assert!(!app.reference_tile_layer_shown(&DAEDONGYEOJIDO) && app.old_map_shown());
 }
+
+/// MainWindow.cpp:1425-1436.
+#[test]
+fn the_1919_menu_stays_disabled_without_the_history_key() {
+    let (tip, enabled) = super::history_1919_menu(false);
+    assert!(!enabled);
+    assert_eq!(tip, "더보기 → API 키 입력에 역사지리정보DB 키를 저장하면 켤 수 있습니다");
+    let (tip, enabled) = super::history_1919_menu(true);
+    assert!(enabled);
+    assert_eq!(tip, "1919년 조선지형도 1:5만 (국사편찬위원회 WMTS, EPSG:5179)");
+}
