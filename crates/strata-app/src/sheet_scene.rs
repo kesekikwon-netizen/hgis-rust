@@ -137,7 +137,7 @@ impl SheetScene {
     /// `rasterizeWholeImage = false`, `:25` only skips *tiled* raster draws). No picture
     /// was drawn when the cache is empty, so the PDF does not invent one.
     pub(crate) fn basemap_jpeg(&mut self, frame_mm: [f64; 4]) -> Option<(Vec<u8>, [u32; 2])> {
-        if self.tiles.basemap.len() == 0 && self.tiles.cadastral.len() == 0 {
+        if self.tiles.basemap.is_empty() && self.tiles.cadastral.is_empty() {
             return None;
         }
         let dpi = self.dpi;
