@@ -4,17 +4,20 @@
 //! there is none. The DEM run is this app's own (owner 2026-11-15: 「수치지형도와 같은 구역의 dem을 별도로
 //! 받아야한다」): the C++ fetches a Copernicus DEM and takes the NGII one only as a file the user picks.
 
-// The hidden-browser caller is Windows-only. Tests on every OS still construct these values.
-#![cfg_attr(not(windows), allow(dead_code))]
-
 use std::path::{Path, PathBuf};
 
-use strata_net::ngii_auto::{Account, Product, Scope, Stage, DEFAULT_PURPOSE, DEM_PAGE_SCRIPT, PAGE_SCRIPT};
+use strata_net::ngii_auto::{Account, Scope, DEFAULT_PURPOSE};
+#[cfg(windows)]
+use strata_net::ngii_auto::{Product, DEM_PAGE_SCRIPT, PAGE_SCRIPT};
+#[cfg(any(windows, test))]
+use strata_net::ngii_auto::Stage;
 use strata_net::ngii_topographic::NgiiTopographicClient;
 use strata_secrets::accounts::Credentials;
 use strata_types::crs::WorkCrs;
 
-use crate::download_jobs::{DownloadJobState, StopCode};
+#[cfg(any(windows, test))]
+use crate::download_jobs::DownloadJobState;
+use crate::download_jobs::StopCode;
 
 /// 5 km around the survey area (`MainWindowDownloads.cpp:187`; owner 2026-11-15).
 pub(crate) const TOPO_RADIUS_M: f64 = 5000.0;
@@ -56,6 +59,7 @@ impl OrderOf {
     }
 
     /// The name of the run in the log of a scripted run.
+    #[cfg(windows)]
     pub(crate) const fn log_name(self) -> &'static str {
         match self {
             Self::Sheets => "수치지형",
@@ -63,6 +67,7 @@ impl OrderOf {
         }
     }
 
+    #[cfg(windows)]
     pub(crate) const fn product(self) -> Product {
         match self {
             Self::Sheets => Product::Sheets,
@@ -71,6 +76,7 @@ impl OrderOf {
     }
 
     /// The page script that drives the portal for this order.
+    #[cfg(windows)]
     pub(crate) const fn script(self) -> &'static str {
         match self {
             Self::Sheets => PAGE_SCRIPT,
@@ -146,7 +152,8 @@ pub(crate) fn topo_request(of: OrderOf, facts: TopoFacts<'_>, stored_account: im
     })
 }
 
-/// A run as the gauge needs to see it.
+/// A run as the gauge needs to see it. The hidden session is Windows-only; the gauge tests construct it.
+#[cfg(any(windows, test))]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RunFacts<'a> {
     pub(crate) stage: Stage,
@@ -163,9 +170,11 @@ pub(crate) struct RunFacts<'a> {
 }
 
 /// The phases in the order of the C++ stage text `[n/6]` (`KaTopographicBrowser.cpp:411-414`).
+#[cfg(any(windows, test))]
 const PHASES: [&str; 6] = ["도엽 확인", "로그인", "신청", "파일 준비", "다운로드", "지도에 올리기"];
 
 /// The gauge line for a run.
+#[cfg(any(windows, test))]
 pub(crate) fn gauge_state(run: &RunFacts<'_>) -> DownloadJobState {
     match run.stage {
         Stage::Complete => {

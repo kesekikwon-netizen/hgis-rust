@@ -1,15 +1,17 @@
 //! Event facts and map acceptance (`target/cpp-ref/src/app/MainWindow.cpp:3135-3148`).
 
-// `take_heritage_event` is called from the Windows session. Tests call it on every OS.
-#![cfg_attr(not(windows), allow(dead_code))]
-
+#[cfg(any(windows, test))]
 use super::{Group, Kind, Phase, Task};
 use crate::app_state::StrataAppState;
+#[cfg(any(windows, test))]
 use crate::download_jobs::StopCode;
+#[cfg(any(windows, test))]
 use strata_net::heritage_auto::HeritageEvent;
+#[cfg(any(windows, test))]
 use strata_refmap::heritage::DATASETS;
 
 impl StrataAppState {
+    #[cfg(any(windows, test))]
     pub(crate) fn take_heritage_event(&mut self, event: HeritageEvent) {
         let Some(download) = self.heritage.download.as_mut() else {
             return;

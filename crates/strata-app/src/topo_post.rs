@@ -3,17 +3,21 @@
 //! `KaTopographicImportDialog.cpp` publishPrepared `:871-995`; the phase is the sixth of the run's gauge
 //! line, 「지도에 올리기」).
 
-// Started from the Windows session (`drive_ngii_order`). Tests call the same functions on every OS.
-#![cfg_attr(not(windows), allow(dead_code))]
+#[cfg(windows)]
+use std::sync::mpsc::channel;
+use std::sync::mpsc::{Receiver, TryRecvError};
 
-use std::sync::mpsc::{channel, Receiver, TryRecvError};
-
+#[cfg(windows)]
 use serde_json::{Map, Value};
 use strata_topo::merge::MergeStop;
-use strata_topo::post::{post_process, Posted, Received};
+#[cfg(windows)]
+use strata_topo::post::{post_process, Received};
+use strata_topo::post::Posted;
 use strata_types::crs::CrsCode;
 
-use super::{TOPO_JOB_TITLE, TOPO_RADIUS_M};
+use super::TOPO_JOB_TITLE;
+#[cfg(windows)]
+use super::TOPO_RADIUS_M;
 use crate::app_state::StrataAppState;
 use crate::download_jobs::{DownloadJobHandle, StopCode};
 use crate::ref_vector::data::{LoadSpec, Look};
@@ -93,6 +97,8 @@ impl StrataAppState {
 
     /// Starts the work on what a run left, in a thread: the sheets go into the survey's 지형도 folder list,
     /// every sheet of the folder is placed, and the lines within 5 km of the survey area are merged.
+    /// The hidden session that calls this is Windows-only.
+    #[cfg(windows)]
     pub(crate) fn begin_topographic_post(&mut self, received: Vec<(std::path::PathBuf, Map<String, Value>)>, portal: Vec<Map<String, Value>>, job: DownloadJobHandle) -> Option<TopoPost> {
         let Some(root) = crate::survey_folder::survey_folder(self.survey_path.as_deref()).map(|folder| folder.join("지형도")) else {
             job.report_stopped(StopCode::Dir1, "먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 지형도 폴더에 저장합니다.");

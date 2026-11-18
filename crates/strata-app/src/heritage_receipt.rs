@@ -6,10 +6,12 @@
 //! Two windows used to say a receipt was written while nothing wrote one. This module writes
 //! it, and the words in those windows now match what happens.
 
+#[cfg(any(windows, test))]
 use std::path::{Path, PathBuf};
 
 /// What the receipt says about the account, without the id or the password
 /// (`HeritageIntranetSettings.cpp:64-70`).
+#[cfg(any(windows, test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccountState {
     /// No account was ever set.
@@ -20,8 +22,10 @@ pub enum AccountState {
     Stored,
 }
 
+#[cfg(any(windows, test))]
 impl AccountState {
     /// The words the C++ writes (`describeForLog`).
+    #[cfg(any(windows, test))]
     #[must_use]
     pub fn words(self) -> &'static str {
         match self {
@@ -36,6 +40,7 @@ impl AccountState {
 ///
 /// `None` when there is no survey file, which is the C++ rule: no survey, no receipt
 /// (`MainWindow.cpp:3228-3244`).
+#[cfg(any(windows, test))]
 fn receipt_folder(survey_path: &Path) -> Option<PathBuf> {
     crate::survey_folder::survey_folder(Some(survey_path))
         .map(|folder| folder.join("주변유적").join("receipts"))
@@ -50,6 +55,7 @@ fn receipt_folder(survey_path: &Path) -> Option<PathBuf> {
 /// # Errors
 ///
 /// When there is no survey file, or the folder cannot be made, or the file cannot be written.
+#[cfg(any(windows, test))]
 pub fn write_pledge_receipt(
     survey_path: &Path,
     account: AccountState,
@@ -87,6 +93,7 @@ pub fn write_pledge_receipt(
 /// # Errors
 ///
 /// When the folder cannot be made or the file cannot be written.
+#[cfg(any(windows, test))]
 pub fn record_recent(
     region_folder: &Path,
     kind: &str,

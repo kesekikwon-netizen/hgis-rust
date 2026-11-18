@@ -1,9 +1,7 @@
 //! The running side of the 「수치지형」 and 「DEM」 buttons: a press is checked, the hidden run is started
 //! inside the app's window and fed every frame, and the gauge line follows it.
 
-// `run` and the gauge fields are driven by the Windows session. Linux still builds the tests.
-#![cfg_attr(not(windows), allow(dead_code))]
-
+#[cfg(windows)]
 use std::path::PathBuf;
 #[cfg(windows)]
 use std::sync::Arc;
@@ -21,7 +19,9 @@ use super::{topo_request, OrderOf, TopoFacts, TopoRequest};
 #[cfg(windows)]
 use super::{gauge_state, RunFacts};
 use crate::app_state::{MainTab, StrataAppState};
-use crate::download_jobs::{DownloadJobHandle, DownloadJobState, StopCode};
+#[cfg(windows)]
+use crate::download_jobs::DownloadJobHandle;
+use crate::download_jobs::{DownloadJobState, StopCode};
 
 /// The run of one of the two buttons, if there is one. A copy of the app state carries none.
 #[derive(Debug, Default)]
@@ -30,10 +30,15 @@ pub(crate) struct TopoDownload {
     pending: Option<Result<TopoRequest, (StopCode, String)>>,
     #[cfg(windows)]
     run: Option<NgiiRun>,
+    /// Set once the hidden session has a gauge line. That session is Windows-only.
+    #[cfg(windows)]
     job: Option<DownloadJobHandle>,
+    #[cfg(windows)]
     shown: Option<DownloadJobState>,
+    #[cfg(windows)]
     cancelled: bool,
     /// Data files of sheets the run has handed on, with the portal's record of each (for the map, F4-d).
+    #[cfg(windows)]
     pub(crate) received: Vec<(PathBuf, serde_json::Map<String, serde_json::Value>)>,
     /// The work on what the run left: listing, placing, merging (topo_post.rs).
     pub(crate) post: Option<TopoPost>,
@@ -78,6 +83,7 @@ fn browser_data_parent() -> PathBuf {
     std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("ka-hgis").join("webview")
 }
 
+#[cfg(windows)]
 fn report(job: &DownloadJobHandle, state: &DownloadJobState) {
     match state {
         DownloadJobState::Running { fraction, stage } => job.report_running(*fraction, stage.clone()),

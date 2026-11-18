@@ -1,11 +1,9 @@
 //! One whole-run gauge (`target/cpp-ref/src/app/MainWindow.cpp:3135-3148`, owner exception HER-API1).
 
-// The hidden-browser caller is Windows-only (`heritage_run.rs`). Tests on every OS still use this module.
-#![cfg_attr(not(windows), allow(dead_code))]
-
 use std::path::PathBuf;
 
 use strata_net::heritage_auto::HeritageConfig;
+#[cfg(any(windows, test))]
 use strata_refmap::heritage::DATASETS;
 
 use crate::app_state::StrataAppState;
@@ -15,7 +13,9 @@ use crate::download_jobs::DownloadJobHandle;
 mod import;
 #[cfg(test)]
 use import::ImportFailure;
-use import::{Group, Reply, Task, Worker};
+#[cfg(any(windows, test))]
+use import::{Group, Task};
+use import::{Reply, Worker};
 #[cfg(test)]
 #[path = "heritage_download_group_tests.rs"]
 mod group_tests;
@@ -31,24 +31,35 @@ pub(super) struct Context {
     pub(super) survey: PathBuf,
     pub(super) sido: String,
     pub(super) city: String,
+    /// The archive root. Read by the hidden-browser worker, which runs on Windows and in tests.
+    #[cfg(any(windows, test))]
     pub(super) root: PathBuf,
     /// Coordinates of the captured scope and output layers, EPSG:5187 or EPSG:5186.
     pub(super) work_epsg: u32,
+    /// Read when a pledge receipt is written. That write runs on Windows and in tests.
+    #[cfg(any(windows, test))]
     pub(super) account: crate::heritage_receipt::AccountState,
 }
 
+#[cfg(any(windows, test))]
 #[derive(Clone, PartialEq, Eq)]
 enum Kind {
     Pending,
+    /// Set when a hidden-browser kind starts importing. That session is Windows-only; tests set it too.
+    #[cfg(any(windows, test))]
     Importing(Group),
+    #[cfg(any(windows, test))]
     Publishing(Group),
+    #[cfg(any(windows, test))]
     Imported,
+    #[cfg(any(windows, test))]
     Absent,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Phase {
     Receiving,
+    #[cfg(any(windows, test))]
     Importing,
     Settled,
 }
@@ -58,8 +69,10 @@ pub(crate) struct Download {
     pub(super) config: Option<HeritageConfig>,
     pub(super) job: DownloadJobHandle,
     worker: Worker,
+    #[cfg(any(windows, test))]
     kinds: [Kind; DATASETS.len()],
     phase: Phase,
+    #[cfg(any(windows, test))]
     receipts: usize,
     last_receiving_note: String,
 }
@@ -93,8 +106,10 @@ impl Download {
             survey: app.survey_path.clone().unwrap_or_default(),
             sido: app.modals.heritage_sido.clone(),
             city: app.modals.heritage_city.clone(),
+            #[cfg(any(windows, test))]
             root: app.heritage_archive_root(),
             work_epsg: app.work_crs.epsg_code(),
+            #[cfg(any(windows, test))]
             account: crate::heritage_run_start::receipt_account_state(app),
         };
         let config = HeritageConfig {
@@ -110,22 +125,33 @@ impl Download {
             config: Some(config),
             job,
             worker,
+            #[cfg(any(windows, test))]
             kinds: std::array::from_fn(|_| Kind::Pending),
             phase: Phase::Receiving,
+            #[cfg(any(windows, test))]
             receipts: 0,
             last_receiving_note: stage,
         }
     }
 
     fn complete(&self) -> bool {
-        self.phase == Phase::Importing
-            && self.receipts == 0
-            && self
-                .kinds
-                .iter()
-                .all(|kind| matches!(kind, Kind::Imported | Kind::Absent))
+        // Kinds become Imported or Absent only after the hidden browser, which is Windows-only.
+        #[cfg(not(any(windows, test)))]
+        {
+            false
+        }
+        #[cfg(any(windows, test))]
+        {
+            self.phase == Phase::Importing
+                && self.receipts == 0
+                && self
+                    .kinds
+                    .iter()
+                    .all(|kind| matches!(kind, Kind::Imported | Kind::Absent))
+        }
     }
 
+    #[cfg(windows)]
     pub(crate) fn publication_pending(&self) -> bool {
         self.phase != Phase::Settled
             && self

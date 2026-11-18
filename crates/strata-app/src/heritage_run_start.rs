@@ -62,6 +62,7 @@ pub(crate) fn start_heritage_fetch(app: &mut StrataAppState) {
 /// The id and the password never reach the receipt; only which of the three states it is in
 /// (`HeritageIntranetSettings.cpp:64-70`).
 #[must_use]
+#[cfg(any(windows, test))]
 pub(crate) fn receipt_account_state(app: &StrataAppState) -> crate::heritage_receipt::AccountState {
     if app.accounts.heritage_creds.username.trim().is_empty() {
         crate::heritage_receipt::AccountState::None
