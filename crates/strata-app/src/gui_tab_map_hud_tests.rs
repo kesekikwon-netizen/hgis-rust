@@ -34,7 +34,8 @@ fn paint_hud(app: &mut StrataAppState, input: MapToolFlags) -> (Rect, Vec<Shape>
     let out = ctx.run(RawInput::default(), |ctx| {
         egui::CentralPanel::default().show(ctx, |ui| {
             let p = ui.painter_at(canvas);
-            app.paint_map_hud(ctx, ui, &p, canvas, input);
+            app.paint_map_hud(ui, &p, canvas, input);
+            app.paint_map_opacity_rail(ctx, ui, &p, canvas, app.map_guide_band_spec(input).is_some());
         });
     });
     (canvas, out.shapes.into_iter().map(|c| c.shape).collect())
@@ -200,7 +201,7 @@ fn guide_band_paints_em_dash_hint_label_at_12_12_height_36() {
     let undo_rect = find_rect_of_width(&shapes, 68.0).expect("undo/redo pair");
     assert!((undo_rect.left() - (pill.right() + 8.0)).abs() < 0.5);
     let rail_rect = find_rect_of_width(&shapes, 260.0).expect("opacity rail");
-    assert_eq!(rail_rect.min - canvas.min, Vec2::new(12.0, 56.0));
+    assert_eq!(rail_rect.min - canvas.min, Vec2::new(12.0, 510.0));
     assert!(!pill.intersects(rail_rect), "opacity rail sits below the band");
 
     // Empty hint keeps the pill and title visible while hiding the `— ` hint label (:237-238).
@@ -220,7 +221,7 @@ fn guide_band_paints_em_dash_hint_label_at_12_12_height_36() {
     let pan_flags = MapToolFlags { is_draw_tool: false, effective_tool: MapToolKind::Pan, ..draw_flags(MapToolKind::Pan, None) };
     let (canvas2, folded_shapes) = paint_hud(&mut app, pan_flags);
     assert!(find_pill_rect(&folded_shapes).is_none());
-    assert_eq!(find_rect_of_width(&folded_shapes, 260.0).unwrap().min - canvas2.min, Vec2::new(12.0, 12.0));
+    assert_eq!(find_rect_of_width(&folded_shapes, 260.0).unwrap().min - canvas2.min, Vec2::new(12.0, 510.0));
 }
 
 // Ported from target/cpp-ref/src/app/KaDrawSketchTools.cpp:178-199,216-236,

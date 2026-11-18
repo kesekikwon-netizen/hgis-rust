@@ -193,7 +193,6 @@ impl StrataAppState {
     /// 안내 띠·투명도 레일·측정 HUD (원문 캔버스 본문 뒤쪽).
     pub(crate) fn paint_map_hud(
         &mut self,
-        ctx: &egui::Context,
         ui: &mut egui::Ui,
         p: &egui::Painter,
         rect: Rect,
@@ -208,51 +207,9 @@ impl StrataAppState {
         let guide_spec = self.map_guide_band_spec(input);
         let opacity_top_y = self.paint_guide_band(ui, p, rect, guide_spec.as_ref());
 
-        // 2. KaLayerOpacityRail (KaLayerOpacityRail.cpp:18-177) — 좌상단 투명도(0~100) · 밝기(-255~255) 레일
-        let selected_layer = self.right_inspector.selected_layer_key.clone();
-        if let Some(layer_lbl) = selected_layer {
-            let card_r = Rect::from_min_size(
-                rect.min + Vec2::new(12.0, opacity_top_y),
-                Vec2::new(260.0, 86.0),
-            );
-            self.paint_opacity_card(ctx, ui, p, card_r, &layer_lbl);
-            if opacity_top_y <= 13.0 {
-                self.paint_undo_redo_pill(
-                    ui,
-                    p,
-                    Pos2::new(card_r.right() + 8.0, card_r.top()),
-                );
-            }
-        } else {
-            let idle_r = Rect::from_min_size(
-                rect.min + Vec2::new(12.0, opacity_top_y),
-                Vec2::new(260.0, 34.0),
-            );
-            p.rect_filled(
-                idle_r,
-                6.0,
-                Color32::from_rgba_unmultiplied(252, 251, 247, 248),
-            );
-            p.rect_stroke(
-                idle_r,
-                6.0,
-                Stroke::new(1.0, Color32::from_rgb(185, 182, 172)),
-                egui::StrokeKind::Middle,
-            );
-            p.text(
-                Pos2::new(idle_r.left() + 12.0, idle_r.center().y),
-                egui::Align2::LEFT_CENTER,
-                "투명도·밝기: 조절할 레이어를 고르세요",
-                FontId::proportional(11.5),
-                Color32::from_rgb(65, 64, 60),
-            );
-            if opacity_top_y <= 13.0 {
-                self.paint_undo_redo_pill(
-                    ui,
-                    p,
-                    Pos2::new(idle_r.right() + 8.0, idle_r.top()),
-                );
-            }
+        // Keep undo/redo beside the guide, independent of the movable rail (target/cpp-ref/src/app/MainWindowChrome.cpp:73-84).
+        if opacity_top_y <= 13.0 {
+            self.paint_undo_redo_pill(ui, p, rect.min + Vec2::new(12.0, 12.0));
         }
 
         if is_style && self.right_inspector.show_draw_tooltip {

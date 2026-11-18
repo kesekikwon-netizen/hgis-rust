@@ -4,6 +4,9 @@ use eframe::egui::{self, Color32, FontId, Pos2, Rect, Stroke};
 
 use crate::app_state::StrataAppState;
 
+#[path = "gui_tab_map_opacity_placement.rs"]
+mod placement;
+
 use super::gui_tab_map_format::BrightRow;
 use super::gui_tab_map_geom::{brightness_row_text, is_raster_image_layer};
 /// `KaLayerOpacityRail.cpp:18-177` — 좌상단 투명도(0~100) · 밝기(-255~255) 레일
@@ -147,7 +150,7 @@ impl StrataAppState {
             ui.interact(
                 track_r,
                 ui.id().with(("ka_opacity_slider", row_i)),
-                egui::Sense::click_and_drag(),
+                egui::Sense::CLICK | egui::Sense::DRAG,
             )
         }
         .on_hover_text(tip);

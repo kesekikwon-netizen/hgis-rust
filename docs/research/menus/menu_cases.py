@@ -8,6 +8,17 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "target/cpp-ref/tests/test_shell_focus.cpp": "b35b24f93adab30358b349d9e9b303b71b763be0c567ac4f49fd3163bdfbc98c",
+    "target/cpp-ref/src/core/LayerStyleOpacity.cpp": "f9ba30ed7a724891f3ec51611c1cac703cde6ede60cab35a1437f7ddac41ead8",
+    "target/cpp-ref/src/app/KaLayerOpacityRail.h": "bca898c8b8557a0fcb551c1d89fd75b06d547c3abd00fc1aa653e576788b4292",
+    "target/cpp-ref/src/app/KaLayerOpacityRail.cpp": "418bfffb7a98dec7886836e66df337b932ae3b688fed8fb548757bb746a962d9",
+    "crates/strata-app/src/opacity_placement_input_tests_a.rs": "f8315ab5a7c55ae0a77e2eb3b0d3080f738fd425b2dbad34b7c03148baa3a6d4",
+    "crates/strata-app/src/opacity_placement_input_tests.rs": "d63bb974dca851a723bac021db213d721df25062c00230ba00a1aa5ff0aa9e9d",
+    "crates/strata-app/src/gui_tab_map_hud_tests.rs": "30be3ec6268b533009c771e653f962cbf638b23ac6ef0dfccc63dfd586f7b587",
+    "crates/strata-app/src/gui_tab_map_hud.rs": "6f9470c4e9e2ca762a0c5db6a302058de35a16ea7978bed808edc513a69cc582",
+    "crates/strata-app/src/gui_tab_map_canvas.rs": "2421c3edd452fe2896152fcbfd337f7873e6721246ad0a3eac8251dbfd7e715a",
+    "crates/strata-app/src/gui_tab_map_opacity_placement.rs": "86a4ecfca64952e54257728ed34e7a383392d8b64c662db2d147b270b859e036",
+    "crates/strata-app/src/gui_tab_map_opacity.rs": "3b7bff4946e84b581ab726a84187313bc3d770d3be0eaf1d811646e7d1470d95",
     "crates/strata-app/src/legend_frame_input_tests_a.rs": "5c542aed85081c5b08a019d491d682535bb137e80d8555a501dcf3d0e8a963cb",
     "crates/strata-app/src/legend_frame_input_tests.rs": "b68acc66956b754edbee7feebbf9ef4b5508e8ff283a1e1d6fe3ad5a096b6e00",
     "crates/strata-app/src/sheet_scene.rs": "89fb9cd317c04281e3af737b4f04fda7af3c4a525ff36de16a17e68aeddfd162",
@@ -129,8 +140,8 @@ REVIEWED_DIGESTS = {
     "crates/strata-app/src/menu_selection_keys_tests.rs": "c54de8904932f32f702074cdeec77f8d4ae33e118386ce66d5b7aff8e5d09021",
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
     "crates/strata-app/src/popup_input_harness.rs": "12bc498a781ee060c639507ff22bd1ee5bf67603f2bbc96a5e103070f81a4371",
-    "crates/strata-app/src/shell_workspace.rs": "b2d833287f100313db7a19a66ebb4cb78b283b1ed123afbd5017471edccc8142",
-    "crates/strata-app/src/gui_shell.rs": "ffa14d3729ef151d9f198a10167114031b9c68a5f26392f06ae7d491c38196ab",
+    "crates/strata-app/src/shell_workspace.rs": "7cc825f8a3d15c4cbca67efe665f542dd96e5a621363237e1eb464a94a427d7d",
+    "crates/strata-app/src/gui_shell.rs": "c53b461e96b8e4cc29f5600be274126d434f72cda2e997a34d6e4a2df33d0568",
     "crates/strata-app/src/gui_shell_escape.rs": "e5c643ec9d7f7b4235e9a779c7119f9edc6935892d595afafe5f46ddb132cb23",
     "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
@@ -451,6 +462,19 @@ def build_cases(root):
          '직접 입력 생성 뒤 범례와 축척막대의 최소/가용 폭 충돌 종료를 실제 실패 뒤 수정'], [],
         '용지 창과 명시한 진입·복귀만의 완료다. 용지·축척 전체, 범례 전체 편집·둥근 모서리, PDF/프린터·실제 OS 입력과 모든 화면 크기의 완료 판정은 아니다. 계정 함수와 기존 용지 검사는 유지한다. 휠 검사의 전경 입력 배경 분류 한 항목만 갱신했고 확대/중심 보존 기대는 유지한다.',
         [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 연결형 용지 설정과 입력 소유권')}])
+    add('map.opacity-rail-placement', '지도 > 투명도·밝기 창 > 좌하단 배치·빈 바탕 이동', 0, '완료',
+        [('KaLayerOpacityRail.cpp', 'void KaLayerOpacityRail::mousePressEvent'), ('KaLayerOpacityRail.cpp', 'QPoint KaLayerOpacityRail::keptInside')],
+        ['gui_tab_map_opacity.rs', 'gui_tab_map_opacity_placement.rs', 'gui_tab_map_canvas.rs', 'gui_tab_map_hud.rs',
+         'opacity_placement_input_tests.rs', 'opacity_placement_input_tests_a.rs', 'gui_tab_map_hud_tests.rs', 'gui_shell.rs', 'shell_workspace.rs', 'popup_input_harness.rs'],
+        ['UI11의 좌하단 기본 위치, 고정 하단 제어와 안내 띠 회피', '실제 빈 곳 끌기·슬라이더 분리·포인터 첫 프레임·해제·창 크기 변경·탭 복귀',
+         '임시 조사 기록·이력·원본 바이트 보존, 카드 입력의 지도 캡처 누출 방지'], [],
+        '현재 지도 세션 안의 배치와 명시한 입력 범위만 완료. 도면 카드·디스크 위치 복원·모든 레이어 표시와 네이티브 OS 입력은 이 행의 완료 범위가 아니다.',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 지도 투명도 창의 배치와 포인터 소유권')}])
+    add('map.opacity-rail', '지도·도면 > 투명도·밝기 창 > 전체 표시·위치 복원', 1, '부분 구현',
+        ['KaLayerOpacityRail.cpp', 'LayerStyleOpacity.cpp'],
+        ['gui_tab_map_opacity.rs', 'gui_tab_map_opacity_placement.rs', 'gui_tab_drawing_sheet.rs'],
+        ['레이어 종류별 투명도와 그림 밝기', '지도·도면의 독립 위치 및 다음 실행 복원', '자료와 출력 표시의 일관성'],
+        ['MENU21은 지도 세션 배치와 입력만 완료. 도면 활성 카드, 별도 디스크 배치, 모든 실제 표시 소비자와 원본별 계약은 남음'])
     add('sheet.legend-frame', '도면 > 범례 > 둥근 테두리와 기존 이동·크기 조절 유지', 1, '완료',
         [('KaDrawingStudio.cpp', 'legend->setResizeToContents(false);'), ('LayoutService.cpp', 'void LayoutService::flowSheetLegend')],
         ['gui_tab_drawing_legend.rs', 'gui_tab_drawing_preview.rs', 'gui_tab_drawing_items.rs', 'gui_tab_drawing_print.rs', 'sheet_scene.rs',

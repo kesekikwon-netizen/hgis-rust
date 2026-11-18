@@ -14,6 +14,7 @@ impl StrataAppState {
         self.poll_debug_remote_commands(ctx);
         self.prepare_close_prompt(ctx);
         let pending_input = self.handle_cpp_keyboard_shortcuts(ctx);
+        self.remember_map_opacity_focus(ctx);
         self.advance_sheet_pdf(ctx);
         self.advance_device_print(ctx);
         self.poll_align_picker(ctx);

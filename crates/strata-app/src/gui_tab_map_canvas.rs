@@ -79,14 +79,17 @@ impl StrataAppState {
         self.home_map.viewport.screen_size_px =
             [f64::from(rect.width()), f64::from(rect.height())];
         self.apply_pending_align_view(ctx);
+        let flags = MapToolFlags { is_trench, is_measure, is_draw_tool, is_select_tool, is_style, effective_tool: self.active_tool, cursor_world: response.hover_pos().filter(|c| rect.contains(*c)).map(|hp| s2w(rect, &self.home_map.viewport, hp)) };
+        let rail_guide = self.map_guide_band_spec(flags).is_some();
+        let rail_pointer = self.handle_map_opacity_pointer(ui, rect.intersect(tab_clip), rail_guide);
         // Qt: a press on the canvas gives it the keyboard focus, so Delete is the map's again.
-        if response.is_pointer_button_down_on() {
+        if !rail_pointer && response.is_pointer_button_down_on() {
             self.home_map.legend_focus = false;
         }
 
         // C++ 은 그리기 줄을 열어도 도구가 이동 그대로다 — 그릴 대상을 눌러야 그리기 도구가 켜진다.
         let effective_tool = self.active_tool;
-        let capture = self.handle_align_map_input(ui, &response, rect);
+        let capture = rail_pointer || self.handle_align_map_input(ui, &response, rect);
         let capture = capture || self.handle_polygon_capture_input(ui, &response, rect);
         // A held handle of the selected shape: the map does not pan and the click selects nothing new.
         let capture = capture || self.handle_vertex_handles(ui, &response, rect);
@@ -105,7 +108,7 @@ impl StrataAppState {
                 self.home_map.cad.preview_markers_world.clear();
             }
         }
-        if response.hovered() {
+        if !rail_pointer && response.hovered() {
             crate::map_wheel_zoom::apply_map_wheel_zoom(
                 ui,
                 rect,
@@ -116,7 +119,7 @@ impl StrataAppState {
         }
         let capture_owns_drag = (capture || self.modal_window_open())
             && response.dragged_by(egui::PointerButton::Primary);
-        if response.dragged() && !capture_owns_drag {
+        if response.dragged() && !capture_owns_drag && !rail_pointer {
             let d = response.drag_delta();
             self.home_map
                 .viewport
@@ -266,19 +269,10 @@ impl StrataAppState {
 
         self.paint_gyeongju_heritage_canvas(ctx, &p, rect, is_trench || is_measure || is_style);
         self.paint_map_hud(
-            ctx,
             ui,
             &p,
             rect,
-            MapToolFlags {
-                is_trench,
-                is_measure,
-                is_draw_tool,
-                is_select_tool,
-                is_style,
-                effective_tool,
-                cursor_world: response.hover_pos().filter(|c| rect.contains(*c)).map(|hp| s2w(rect, &self.home_map.viewport, hp)),
-            },
+            flags,
         );
         self.paint_map_overlays(ctx, ui, &p, rect);
         self.paint_selected_shape(&p, rect);
@@ -288,5 +282,6 @@ impl StrataAppState {
         self.render_merge_ask(ctx);
         self.paint_polygon_sketch(&p, rect, response.hover_pos());
         self.paint_align_marks(&p, rect);
+        self.paint_map_opacity_rail(ctx, ui, &p, rect, rail_guide);
     }
 }

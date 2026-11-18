@@ -4,6 +4,10 @@ use strata_canvas2d::map_tools::MapToolKind;
 use crate::app_state::{MainTab, StrataAppState};
 use crate::dialogs_modal::ActiveModalDialog;
 
+#[cfg(test)]
+#[path = "opacity_placement_input_tests.rs"]
+mod opacity_placement_input_tests;
+
 #[path = "gui_shell_escape.rs"]
 mod escape;
 #[path = "native_menu_input.rs"]
