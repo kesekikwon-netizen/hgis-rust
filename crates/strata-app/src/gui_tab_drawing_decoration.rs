@@ -128,7 +128,7 @@ impl StrataAppState {
                 Pos2::new(tx, bar_y0 - 2.6 * px_per_mm),
                 egui::Align2::CENTER_CENTER,
                 dist_lbl,
-                egui::FontId::proportional(dist_font_sz),
+                layout_font(&sheet_p, dist_font_sz),
                 ink,
             );
         }
@@ -143,7 +143,7 @@ impl StrataAppState {
             ),
             egui::Align2::CENTER_CENTER,
             scale_text(self.drawing.sheet.scale_denominator),
-            egui::FontId::proportional(scale_font_sz),
+            layout_font(&sheet_p, scale_font_sz),
             ink,
         );
 
@@ -158,7 +158,7 @@ impl StrataAppState {
                 strata_types::crs::WorkCrs::Epsg5186 => "중부원점(GRS80) · EPSG:5186",
                 _ => "동부원점(GRS80) · EPSG:5187",
             },
-            egui::FontId::proportional(crs_font_sz),
+            layout_font(&sheet_p, crs_font_sz),
             ink,
         );
 
@@ -179,7 +179,7 @@ impl StrataAppState {
                     Pos2::new(nc.x, nc.y + nr * 0.52),
                     egui::Align2::CENTER_CENTER,
                     "N",
-                    egui::FontId::proportional(9.5),
+                    layout_font(&sheet_p, 9.5),
                     ink,
                 );
             }
@@ -188,7 +188,7 @@ impl StrataAppState {
                     Pos2::new(nc.x, north_rect.top() + north_rect.height() * 0.16),
                     egui::Align2::CENTER_CENTER,
                     "N",
-                    egui::FontId::proportional((8.5 * s).clamp(4.8, 9.5)),
+                    layout_font(&sheet_p, (8.5 * s).clamp(4.8, 9.5)),
                     ink,
                 );
                 let tip = Pos2::new(nc.x, north_rect.top() + north_rect.height() * 0.34);
@@ -222,7 +222,7 @@ impl StrataAppState {
                     c_pos,
                     egui::Align2::CENTER_CENTER,
                     "N",
-                    egui::FontId::proportional(7.5),
+                    layout_font(&sheet_p, 7.5),
                     ink,
                 );
             }
@@ -249,13 +249,17 @@ impl StrataAppState {
                     Pos2::new(nc.x + 6.5, north_rect.top() + 5.0),
                     egui::Align2::CENTER_CENTER,
                     "N",
-                    egui::FontId::proportional(7.5),
+                    layout_font(&sheet_p, 7.5),
                     ink,
                 );
             }
         }
         self.place_sheet_item(f, SheetItem::NorthArrow, start, north_rect);
     }
+}
+
+fn layout_font(painter: &egui::Painter, size: f32) -> egui::FontId {
+    crate::gui_theme_fonts::layout_font(painter.ctx(), size)
 }
 
 /// The scale under the scale bar (`KaDrawingStudio.cpp:2915`).

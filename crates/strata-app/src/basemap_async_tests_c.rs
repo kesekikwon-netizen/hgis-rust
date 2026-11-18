@@ -190,7 +190,7 @@ fn test_map1b_f2_context_menu_refresh_clears_failed_marks_of_both_fetchers() {
     app.basemap_textures.insert((TileKind::Satellite, 10, 1, 1), ctx.load_texture("dummy_bg", one_px(), egui::TextureOptions::LINEAR));
     app.cadastral_cells.insert((16, 1, 1), ctx.load_texture("dummy_cad", one_px(), egui::TextureOptions::LINEAR));
     trigger_context_menu_refresh(&mut app, &ctx);
-    assert!(app.basemap_textures.is_empty() && app.cadastral_cells.len() == 0, "map.refresh must have run");
+    assert!(app.basemap_textures.is_empty() && app.cadastral_cells.is_empty(), "map.refresh must have run");
 
     let (bg_retried, cad_retried) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
     run_frame(&ctx, rect, |ctx, p| {

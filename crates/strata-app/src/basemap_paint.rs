@@ -63,6 +63,8 @@ impl CadastralCellCache {
     pub fn get(&self, k: &CadKey) -> Option<&egui::TextureHandle> { self.0.get(k) }
     pub fn insert(&mut self, k: CadKey, v: egui::TextureHandle) { self.0.insert(k, v); }
     #[must_use]
+    pub fn is_empty(&self) -> bool { self.0.is_empty() }
+    #[must_use]
     pub fn len(&self) -> usize { self.0.len() }
     pub fn retain_keys(&mut self, keep: &HashSet<CadKey>) { self.0.retain(|k, _| keep.contains(k)); }
 }
