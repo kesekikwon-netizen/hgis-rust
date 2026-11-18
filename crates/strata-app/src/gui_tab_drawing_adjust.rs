@@ -16,10 +16,16 @@ impl StrataAppState {
     /// wheel zooms around the pointer by the steps of the map (a fifth to the notch, a third of that with
     /// Ctrl). `map_rect` is the frame on the screen, which shows the paper at `px_per_mm`.
     pub(crate) fn adjust_sheet_map(&mut self, ui: &egui::Ui, map_rect: Rect, px_per_mm: f32) {
-        if !self.drawing.map_adjust_active || self.drawing.rail_pointer_owns {
+        if !self.drawing.map_adjust_active {
             return;
         }
+        // The rail is a child raised over the desk (`KaDrawingStudio.cpp:1196`, `:1236`). It eats the
+        // pointer only while it has it. The map tool stays registered: egui 0.31 hit-tests the previous
+        // pass, so skipping `interact` here makes the press that leaves the card miss the frame.
         let response = ui.interact(map_rect, ui.id().with("drawing_map_adjust"), egui::Sense::click_and_drag());
+        if self.drawing.rail_pointer_owns {
+            return;
+        }
         if response.hovered() {
             // Qt::OpenHandCursor, closed while the map is held (`KaDrawingTools.cpp:49`, `:70`).
             ui.ctx().set_cursor_icon(if response.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });

@@ -176,7 +176,8 @@ fn a_selection_change_during_the_drag_keeps_the_remembered_layer() {
     assert!((row(&app, A) - 0.7).abs() < 0.02);
 }
 
-/// Blank drag and a slider drag do not pan the sheet. A drag on the map frame still does.
+/// Blank drag and a slider drag do not pan the sheet. A drag on the map frame still does,
+/// by the same ground shift as `KaDrawingTools.cpp:55-100` (`centre -= dx * m/px`, `centre += dy * m/px`).
 #[test]
 fn card_drag_and_slider_click_do_not_pan_the_sheet() {
     let (mut app, ctx) = app();
@@ -185,7 +186,8 @@ fn card_drag_and_slider_click_do_not_pan_the_sheet() {
     let (host, card) = card_and_host(&paint(&mut app, &ctx, vec![]));
     let from = card.min + Vec2::new(14.0, 12.0);
     let by = Vec2::new(90.0, -40.0);
-    paint(&mut app, &ctx, vec![Event::PointerMoved(from), press(from, true)]);
+    paint(&mut app, &ctx, vec![Event::PointerMoved(from)]);
+    paint(&mut app, &ctx, vec![press(from, true)]);
     paint(&mut app, &ctx, vec![Event::PointerMoved(from + by)]);
     paint(&mut app, &ctx, vec![press(from + by, false)]);
     let (_, moved) = card_and_host(&paint(&mut app, &ctx, vec![]));
@@ -195,23 +197,30 @@ fn card_drag_and_slider_click_do_not_pan_the_sheet() {
 
     let from = opacity_pos(moved, 0.3);
     let to = opacity_pos(moved, 0.55);
-    paint(&mut app, &ctx, vec![Event::PointerMoved(from), press(from, true)]);
+    paint(&mut app, &ctx, vec![Event::PointerMoved(from)]);
+    paint(&mut app, &ctx, vec![press(from, true)]);
     paint(&mut app, &ctx, vec![Event::PointerMoved(to)]);
     paint(&mut app, &ctx, vec![press(to, false)]);
     assert!((row(&app, A) - 0.55).abs() < 0.02, "slider did not set opacity");
     assert_eq!(app.drawing.sheet_center, Some([250_000.0, 400_000.0]), "slider drag panned the sheet");
 
+    // Left of the map middle: the legend sits on the right of the frame, the card on the lower left of the desk.
+    // The press is the frame after the slider release. The tool must already be registered or this press misses.
     let map = app.drawing.paper_on_screen.expect("map frame")[1];
-    let items: Vec<Rect> = app.drawing.item_rects.iter().map(|(_, placed, off)| placed.translate(*off)).collect();
-    let from = (0..8)
-        .flat_map(|row| (0..8).map(move |col| Pos2::new(map.left() + map.width() * (col as f32 + 0.5) / 8.0, map.top() + map.height() * (row as f32 + 0.5) / 8.0)))
-        .find(|at| map.contains(*at) && !moved.contains(*at) && items.iter().all(|item| !item.expand(12.0).contains(*at)))
-        .expect("a free point on the map frame");
-    let to = from + Vec2::new(36.0, -18.0);
+    let px_per_mm = app.drawing.screen_px_per_mm.expect("screen scale");
+    let from = Pos2::new(map.left() + map.width() * 0.35, map.center().y);
+    assert!(map.contains(from) && !moved.contains(from), "adjust point is not on open map: {from:?} map {map:?} card {moved:?}");
+    let by = Vec2::new(36.0, -18.0);
+    let to = from + by;
     paint(&mut app, &ctx, vec![Event::PointerMoved(from), press(from, true)]);
     paint(&mut app, &ctx, vec![Event::PointerMoved(to)]);
     paint(&mut app, &ctx, vec![press(to, false)]);
-    assert_ne!(app.drawing.sheet_center, Some([250_000.0, 400_000.0]), "map-frame drag should still pan");
+    let metres_per_px = f64::from(app.drawing.sheet.scale_denominator) / 1000.0 / f64::from(px_per_mm);
+    let before = [250_000.0, 400_000.0];
+    let want = [before[0] - f64::from(by.x) * metres_per_px, before[1] + f64::from(by.y) * metres_per_px];
+    let got = app.drawing.sheet_center.expect("panned centre");
+    assert!((got[0] - want[0]).abs() < 1e-4 && (got[1] - want[1]).abs() < 1e-4, "map drag {got:?} want {want:?} (m/px {metres_per_px})");
+    assert!(app.drawing.map_adjust_active, "map drag ended adjust");
     assert_eq!(app.home_map.viewport.center_xy, [111_111.0, 222_222.0], "sheet pan moved the map");
     assert!(host.contains_rect(moved));
 }
