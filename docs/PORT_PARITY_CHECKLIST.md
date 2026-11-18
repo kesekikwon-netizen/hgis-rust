@@ -33,7 +33,7 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 | 지도에서 빈 곳 끌기 | `partial` | `KaLayerOpacityRail.cpp:218-249` | `gui_tab_map_opacity_placement.rs:111-135` | 세션 메모리만. 프로세스를 끄면 사라진다 |
 | 기본 위치 | `divergent` | `:207` `move(10, 10+inset)` 왼쪽 위 | `gui_tab_map_opacity_placement.rs:69-71` 왼쪽 아래 | 주석이 소유자 UI11이라고 적는다. 이식 버그로 되돌리지 않는다 |
 | 디스크 키 `ui/opacityRail/map` | `missing` | `:13-15`, `:101-105`, `:248-249` `QSettings` | egui `Id::new("ka_map_opacity_placement")` `:44-46`, `:160-163` | ini에 쓰지 않는다 |
-| 도면 카드 | `missing` | `KaDrawingStudio.cpp:1196` 키 `"drawing"`, `:1198-1230`, `:2563-2575` | `gui_tab_drawing*.rs`에 레일 생성 없음 | 도면 위치를 저장할 카드가 없다 |
+| 도면 카드 | `missing` | `KaDrawingStudio.cpp:1196` 키 `"drawing"`, `:1198-1230`, `:2563-2575` | `gui_tab_drawing_sheet.rs:19-22`는 고정 안내 사각형만 그린다 | 슬라이더·끌기·레이어 적용이 없다. WU-02는 그 안내를 카드로 바꾼다 |
 | 디스크 키 `ui/opacityRail/drawing` | `missing` | 위와 같은 `QSettings` 키 | 없음 | 지도 키와 따로다 |
 | 값의 적용 대상 | `divergent` | `MainWindow.cpp:989-1000` 현재 레이어만. 도면은 `m_railLayer` | `apply_rail_opacity` `gui_tab_map_opacity.rs:44-49` | 전역 `layer_opacity`, 배경 투명도, 그림 행을 같이 쓴다 |
 | 범위 | `partial` | 투명도 0–100, 밝기 −255–255 (`:41-42`, `:60-61`) | 같은 범위로 주석과 키 처리 | 밝기 기본 저장값은 Rust 새 조사에서 `0.5` (`real_survey_load.rs:29`). C++ 슬라이더 초기값은 0 |
@@ -120,7 +120,7 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 |---|---|---|---|---|
 | 지적 5 km | `partial` | 11-14 | `MainWindowCadastral.cpp`, `CadastralPortal.cpp` | `cadastral_download_ui_*.rs` |
 | 지적 선 색·지번 | `partial` | 11-14 | `MainWindowCadastral.cpp:56-80` | `gui_ribbon_menus_a.rs` |
-| 수치지형 내려받기 | `partial` | 재확인 | `KaTopographicBrowser.cpp` | 창은 있다. 「도엽 확인」만 `missing` (`WB2`) |
+| 수치지형 내려받기 | `partial` | 재확인 | `KaTopographicBrowser.cpp` | 리본 「수치지형」은 `topo_download_run.rs:86-95`가 받아 둔 파일을 올리거나 `press_ngii_order`로 숨은 주문을 시작한다. 그 파일은 Windows 전용 `strata_ngii_run`을 조건 없이 쓴다. 옛 창의 「도엽 확인」은 `ngii_topographic_state.rs:30`에서 `WB2`로 꺼져 있다 |
 | 받아 둔 수치지형 폴더 | `partial` | 11-14 | `KaTopographicImportDialog.cpp` | `dlg_topographic_import.rs` |
 | 유산 | `partial` | 재확인 | `KaHeritageBrowser.cpp` | `heritage_run_start.rs`. 실제 사이트 미검증 |
 | 시추 단추 | `divergent` | 커밋 | C++에 없는 기능 | 전용 단추는 리본 클릭 파일에서 안 보였다. 지질 메뉴 문구에 시추주상도가 남아 있다 (`gui_ribbon_menus_a.rs:24-26`) |
@@ -139,7 +139,7 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 
 | 기능 | 상태 | 확인 | C++ | Rust |
 |---|---|---|---|---|
-| 정합 세션 | `partial` | 커밋 | `MainWindowAlign.cpp`, `KaAlignMapTool.cpp` | UI4 래스터 저장, MENU18 대상 자석. 점 짝 창·월드 파일은 ALIGN0에 남음 |
+| 정합 세션 | `partial` | 재확인 | `MainWindowAlign.cpp:627-880`, `GeorefService.cpp` | 래스터는 점 2개 이상이면 `gui_ribbon_align_actions.rs:11-37`이 `create_aligned_raster`로 월드 파일·`.prj`·`정합백업`을 쓴다 (`raster_alignment.rs:18-89`). 벡터·CAD 세션과 먹선 Multiply 스타일은 없다 |
 | CAD DXF·DWG 안내 | `partial` | 11-14 | `KaCadImport.cpp` | `dlg_cad_import_notice.rs`. DWG는 GPL LibreDWG를 쓰지 않음. DXF 드라이버는 엔진에 켜져 있다 |
 | 용지 설정 | `partial` | 커밋 | `KaPaperDialog.cpp` | MENU19. A4 가로 317×220(C++ 현장 용지) 대 297×210은 11-14에 차이로 남음. 오늘 수치를 다시 재지 않음 |
 | 도면 스튜디오 | `partial` | 커밋 | `KaDrawingStudio.cpp` | 범례 둥근 테 MENU20. 투명도 카드는 `missing`(1.1) |
@@ -199,7 +199,7 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 
 ### WU-02 도면 투명도 카드
 
-- 목표: `KaDrawingStudio.cpp:1196-1234`, `:2563-2575`처럼 도면에 카드를 붙이고, 조판이 기억하는 레이어에 투명도·밝기를 적용하고, 캐시를 다시 그리게 한다.
+- 목표: `KaDrawingStudio.cpp:1196-1234`, `:2563-2575`처럼 도면에 카드를 붙이고, 조판이 기억하는 레이어에 투명도·밝기를 적용하고, 캐시를 다시 그리게 한다. `gui_tab_drawing_sheet.rs:19-22`의 고정 안내 사각형은 카드가 아니다. 카드가 생기면 그 안내를 남기지 않는다.
 - 의존: WU-01의 적용 함수를 재사용한다. 위치 저장(WU-03)은 하지 않아도 이 단위는 끝이다.
 - 검증: 도면에서 고른 그림 레이어의 값만 바뀐다. 지도를 건드리지 않는다. 생산 egui 입력으로 빈 곳 끌기와 슬라이더 클릭이 도면 이동으로 새지 않는다.
 
@@ -213,9 +213,9 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 
 ### WU-04 시굴 「구역에 깔기」가 도형을 만들거나, 만들기 전에는 침묵
 
-- 목표: `TrenchGridGenerator` / `strata-geo` 배치 결과를 `trial_trench`에 쓰거나, 쓰기 전에는 「배치했습니다」를 내지 않고 단추를 끈다.
-- 볼 파일: `dlg_trench_generator.rs`, `strata-geo`의 트렌치 계획.
-- 검증: 빈 `trenches`에서 단추를 누르면 성공 문장만 생기지 않는다. 만드는 경로를 고르면 임시 조사의 `trial_trench` 개수가 계산 결과와 같다.
+- 목표: `TrenchGridGenerator` / `strata-geo` 배치 결과를 GPKG `trial_trench`에 쓰거나, 쓰기 전에는 「배치했습니다」를 내지 않고 단추를 끈다.
+- 볼 파일: `dlg_trench_generator.rs:56-71`. 그 클릭은 `trenches.len()`으로 문장만 만든다. 대화상자가 `strata_geo::trench_grid` 타입을 쓰는 것과, 메모리의 `real_survey.trenches`는 그 표가 아니다. 열 때 그 벡터는 비운다.
+- 검증: 빈 목록에서 단추를 누르면 성공 문장만 생기지 않는다. 만드는 경로를 고르면 임시 조사의 `trial_trench` 개수가 계산 결과와 같고, 저장 뒤 다시 열어도 그 개수가 남는다.
 
 ### WU-05 등고선의 고정 248점 제거
 
@@ -225,7 +225,8 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 ### WU-06 제출 꾸러미의 최소 실물
 
 - 목표: `지시 R2`를 끄고, 5179 SHP와 `MANIFEST.sha256`, 오류가 있으면 한 번 묻고 `README_submit.txt`에 적는다. 조성된 도면이 없으면 `조사도면.pdf`를 만들지 않고 이유를 알린다(`docs/RUST_PLAN.md` R2). DXF는 제출 경로가 아니다.
-- 검증: 임시 조사에서 패키지 폴더의 SHP를 다시 열어 도형 수와 EPSG:5179를 확인한다. 체크리스트 실패가 패키지를 막지 않고 README에 남는다. 지도에는 패키지를 올리지 않는다.
+- 쓸 코드: `strata-check-export`의 `submit_builder` (`#[cfg(feature = "gdal")]`, `lib.rs:21-22`). 앱은 그 기능을 켜지 않는다 (`crates/strata-check-export/Cargo.toml:17`, `strata-app/Cargo.toml`은 기능 없이 의존). `submit_export.rs`의 고정 `(0,0)–(100,100)` 다각형과 자리 표시 PDF는 제품 경로에 붙이지 않는다.
+- 검증: 임시 조사에서 패키지 폴더의 SHP를 다시 열어 도형 수와 EPSG:5179를 확인한다. 그 도형은 고정 네모가 아니다. 체크리스트 실패가 패키지를 막지 않고 README에 남는다. 지도에는 패키지를 올리지 않는다.
 
 ### WU-07 더보기가 계정 창으로 떨어지지 않게
 
@@ -233,15 +234,17 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 - 한 단위에 구현을 다 넣지 않는다. 첫 단위는 sink를 없애고, 아직 없는 기능은 계정 창이 아니라 꺼 둔 툴팁으로 보내는 것이다.
 - 검증: 각 항목의 클릭 시험이 `AccountSettings`가 아닌지 본다. 「API 키」만 계정 창이다.
 
-### WU-08 정합 점 짝의 다음 한 단계
+### WU-08 정합의 남은 한 단계 (래스터 저장은 하지 않음)
 
-- 목표: `docs/research/align/ALIGN0.md`의 남은 단계 중 하나. 추천은 월드 파일·`.prj` 쓰기(그 문서의 3단계). 그림 레이어와 `align_fit`은 이미 있다.
-- 검증: 임시 그림에 대해 쓴 월드 파일을 GDAL이 같은 범위로 읽는다. 원본 그림 바이트는 그대로다.
+- 이미 있음: 점 2개 이상에서 `apply_align_move`가 `create_aligned_raster`로 월드 파일, `.prj`, `정합백업`을 쓴다 (`gui_ribbon_align_actions.rs:15-37`, `raster_alignment.rs:88-89`). 이 단위에서 그 쓰기를 다시 만들지 않는다.
+- 목표: 벡터·CAD 정합 세션이거나, 맞춘 스캔의 먹선 스타일(`GeorefService.cpp`의 Multiply·대비) 중 하나. 둘을 한 변경에 넣지 않는다. 추천은 먹선 스타일인데, 원본 그림 바이트는 그대로 두고 표시만 바꾼다.
+- 검증: 고른 쪽의 시험이 수정 전에 실패한다. 래스터 「이동」이 쓰던 월드 파일 바이트는 그대로다.
 
-### WU-09 수치지형 「도엽 확인」을 고정 응답에 연결
+### WU-09 수치지형 옛 창을 리본 주문과 겹치지 않게
 
-- 목표: `ngii_topographic_state.rs`의 꺼 둔 단추를, 이미 있는 `strata-net` 클라이언트와 고정 응답에만 연결한다. 실제 로그인·주문 단추는 사진 실행 단계에 넣지 않는다(인수인계의 안전 규칙).
-- 검증: 시험이 네트워크 없이 도엽 번호 목록을 채운다. 계정 창을 열지 않는다.
+- 이미 있음: 리본 「수치지형」은 `open_topographic_download` (`topo_download_run.rs:86-95`)가 받아 둔 합본을 올리거나 숨은 주문을 시작한다. 새 「도엽 확인」 클라이언트를 만들지 않는다.
+- 남은 것: `ngii_topographic_state.rs`의 꺼 둔 「도엽 확인」은 그 리본과 다른 옛 창이다. 그 단추를 두 번째 주문으로 살리지 말고, 리본과 같은 진입으로 붙이거나 옛 창을 닫는다.
+- 검증: 리본 경로의 기존 시험이 유지된다. 실제 로그인·신청은 넣지 않는다. Linux 컴파일은 WU-11이다.
 
 ### WU-10 작업공간 읽기의 첫 조각
 
