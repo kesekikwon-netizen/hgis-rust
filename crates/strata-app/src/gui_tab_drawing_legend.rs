@@ -86,7 +86,7 @@ impl StrataAppState {
         let s = (px_per_mm / 1.65).clamp(0.42, 1.3);
         let base_leg_r = f.mm_to_rect(self.drawing.sheet.legend_rect);
         let row_h = (self.drawing.sheet.legend_font_pt as f32 * 1.35).max(12.0) * s;
-        let leg_w = base_leg_r.width().clamp(42.0 * s, map_rect.width() * 0.42);
+        let leg_w = base_leg_r.width().max(42.0 * s).min(map_rect.width() * 0.42);
         let columns = legend_columns(leg_w / px_per_mm, self.drawing.sheet.legend_font_pt as f32, rows);
         // Each column is wide enough for the longest layer name (its symbol, the gap and the margin: 16
         // units, and 10 for the frame), as far as 42 % of the map allows.

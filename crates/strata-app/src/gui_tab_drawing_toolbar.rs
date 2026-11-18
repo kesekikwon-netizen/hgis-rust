@@ -80,6 +80,9 @@ impl StrataAppState {
                         cell_resp.widget_info(|| {
                             egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), *lbl)
                         });
+                        if i == 5 {
+                            crate::modal_paper_account::note_paper_trigger(ui.ctx(), crate::modal_paper_account::PaperTrigger::Sheet, cell_r, cell_resp.clicked());
+                        }
                           if cell_resp.clicked() {
                             match i {
                                 0 => {

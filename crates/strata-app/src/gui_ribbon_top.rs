@@ -163,6 +163,10 @@ impl StrataAppState {
                 if chip_secondary {
                     self.open_ribbon_context_menu(label, btn_rect);
                 }
+                if label == "도면" {
+                    crate::modal_paper_account::note_paper_trigger(ui.ctx(), crate::modal_paper_account::PaperTrigger::Ribbon, btn_rect,
+                        chip_clicked && self.modals.active == Some(crate::dialogs_modal::ActiveModalDialog::PaperSetup));
+                }
                 if self.ribbon.sub_tool_label() == Some(label) {
                     self.ribbon.sub_toolbar_origin = Some(btn_rect);
                 }

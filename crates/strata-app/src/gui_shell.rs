@@ -25,12 +25,13 @@ impl StrataAppState {
     pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) -> escape::PendingCanvasInput {
         let pending = self.pending_canvas_input(ctx);
         // C++ 모달 창(KaFeatureFormDialog·조사구역 설정·도형 속성) 뒤에서는 주 창 단축키가 듣지 않는다 — 창이 Enter·Esc 를 맡는다.
-        if self.modal_window_open() {
+        if self.modal_window_open() || self.modals.active == Some(ActiveModalDialog::PaperSetup) {
             return pending;
         }
         let wants_kb = ctx.wants_keyboard_input();
         let mut save_requested: Option<bool> = None;
         let mut open_requested = false;
+        let mut paper_requested = false;
         // KaCaptureMapTool::keyPressEvent (target/cpp-ref/src/app/KaCaptureMapTool.cpp:379-391) and
         // target/cpp-ref/src/app/MainWindowUndo.cpp:486-495 apply Esc, Enter, Backspace and Delete to capture.
         let capture = !wants_kb && self.modals.active.is_none() && self.capture_active();
@@ -100,7 +101,9 @@ impl StrataAppState {
                     // MainWindowRibbon.cpp:354-360 — 「그리기」 단추와 같다.
                     self.toggle_draw_sub_tools();
                 } else if i.key_pressed(egui::Key::L) {
-                    self.modals.active = Some(ActiveModalDialog::PaperSetup);
+                    // Same entry as the ribbon, target/cpp-ref/src/app/MainWindowExport.cpp:204-217.
+                    self.handle_ribbon_click("도면");
+                    paper_requested = self.modals.active == Some(ActiveModalDialog::PaperSetup);
                 } else if i.key_pressed(egui::Key::P) {
                     // MainWindowExport.cpp:186-194 + KaPrintDialog.cpp:124 — Ctrl+P 도 같은 인쇄 창.
                     self.open_studio_tab(MainTab::Print);
@@ -118,6 +121,7 @@ impl StrataAppState {
             }
             None
         });
+        if paper_requested { crate::modal_paper_account::paper_keyboard_entry(ctx); }
         let pending = pending.with_history(self, ctx, history);
         if open_requested {
             self.open_survey_file_dialog();
@@ -280,3 +284,7 @@ mod contextual_tools_input_tests;
 #[cfg(test)]
 #[path = "align_snap_input_tests.rs"]
 mod align_snap_input_tests;
+
+#[cfg(test)]
+#[path = "paper_setup_input_tests.rs"]
+mod paper_setup_input_tests;

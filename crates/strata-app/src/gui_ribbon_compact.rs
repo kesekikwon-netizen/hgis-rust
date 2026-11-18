@@ -12,6 +12,7 @@ impl StrataAppState {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(6.0, 4.0);
                 for (group, items) in UX_RIBBON_GROUPS {
+                    let mut paper_opened = false;
                     let group_response = crate::gui_shell::native_menu_button(ui, group, |ui| {
                         ui.set_min_width(190.0);
                         for &label in items {
@@ -24,6 +25,7 @@ impl StrataAppState {
                                 } else {
                                     self.handle_ribbon_click(label);
                                 }
+                                paper_opened = label == "도면" && self.modals.active == Some(crate::dialogs_modal::ActiveModalDialog::PaperSetup);
                                 ui.close_menu();
                             } else if response.secondary_clicked() {
                                 self.open_ribbon_context_menu(label, response.rect);
@@ -50,6 +52,9 @@ impl StrataAppState {
                             }
                         }
                     });
+                    if items.contains(&"도면") {
+                        crate::modal_paper_account::note_paper_trigger(ui.ctx(), crate::modal_paper_account::PaperTrigger::Ribbon, group_response.response.rect, paper_opened);
+                    }
                     if self.ribbon.sub_tool_label().is_some_and(|label| items.contains(&label)) {
                         self.ribbon.sub_toolbar_origin = Some(group_response.response.rect);
                     }

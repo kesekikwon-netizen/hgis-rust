@@ -40,7 +40,7 @@ impl StrataAppState {
         let seg_count = 4usize;
         let max_bar_w = (chrome_crs_r.left() - chrome_bar_r.left() - 6.0 * px_per_mm).max(36.0 * s);
         let raw_bar_w = ((seg_m * (seg_count as f64) * px_per_meter) as f32)
-            .clamp(38.0 * s, max_bar_w.min(chrome_bar_r.width().max(68.0 * s)));
+            .max(38.0 * s).min(max_bar_w.min(chrome_bar_r.width().max(68.0 * s)));
         let seg_w = raw_bar_w / (seg_count as f32);
         let bar_x0 = chrome_bar_r.left();
         let bar_y0 = map_rect.bottom() + 9.5 * px_per_mm;
