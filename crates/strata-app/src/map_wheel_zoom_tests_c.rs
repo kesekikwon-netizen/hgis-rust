@@ -114,7 +114,7 @@ fn assert_wheel_outcome(app: &mut crate::app_state::StrataAppState, ctx: &egui::
 fn table_driven_wheel_zoom_only_ignores_cpp_modals_menus_and_address_popup() {
     type Setup = fn(&mut crate::app_state::StrataAppState);
     let cases: &[(&str, Want, Setup)] = &[
-        // 12 C++ modal ActiveModalDialog variants
+        // C++ exec() modals, plus QMessageBox::about (MainWindow.cpp:3048).
         ("NewSurvey", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::NewSurvey)),
         ("SurveyContour", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::SurveyContour)),
         ("AccountSettings", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::AccountSettings)),
@@ -126,6 +126,7 @@ fn table_driven_wheel_zoom_only_ignores_cpp_modals_menus_and_address_popup() {
         ("ControlPoint", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::ControlPoint)),
         ("SurveyArea", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::SurveyArea)),
         ("LineColor", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::LineColor)),
+        ("About", Want::Ignore, |a| a.modals.active = Some(ActiveModalDialog::About)),
         // 4 modal_window_open() dialogs
         ("survey_area_setup", Want::Ignore, |a| a.home_map.survey_area_setup = Some(SurveyAreaSetup::default())),
         ("feature_form", Want::Ignore, |a| a.home_map.feature_form = FeatureForm::new(&survey_table_with_row(), 1)),
