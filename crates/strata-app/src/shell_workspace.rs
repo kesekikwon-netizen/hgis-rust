@@ -234,7 +234,7 @@ impl StrataAppState {
         }
         if ui
             .add(egui::Button::new(egui::RichText::new("→ 제출 5179").size(11.5).color(Color32::from_rgb(94, 93, 89))).frame(false))
-            .on_hover_text("제출 꾸러미는 EPSG:5179(UTM-K)로 자동 변환됩니다.")
+            .on_hover_text(submit_chip_tooltip("EPSG:5179"))
             .clicked()
         {
             self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage);
@@ -263,5 +263,24 @@ impl StrataAppState {
             ui.colored_label(Color32::from_rgb(181, 87, 58), egui::RichText::new(unsaved).size(11.5))
                 .on_hover_text("아직 파일에 쓰지 않은 편집입니다. 「저장」(Ctrl+S)으로 씁니다.");
         }
+    }
+}
+
+/// KaStatusBar.cpp:203-205. `upload_crs` is the full auth id (setUploadCrs, line 140, EPSG:5179).
+#[must_use]
+pub(crate) fn submit_chip_tooltip(upload_crs: &str) -> String {
+    format!("제출용 파일은 작업 좌표계와 상관없이 항상 {upload_crs}로 변환되어 나갑니다. 누르면 「검수·제출」을 엽니다.")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::submit_chip_tooltip;
+
+    #[test]
+    fn the_submit_chip_says_a_click_opens_the_audit() {
+        assert_eq!(
+            submit_chip_tooltip("EPSG:5179"),
+            "제출용 파일은 작업 좌표계와 상관없이 항상 EPSG:5179로 변환되어 나갑니다. 누르면 「검수·제출」을 엽니다."
+        );
     }
 }
