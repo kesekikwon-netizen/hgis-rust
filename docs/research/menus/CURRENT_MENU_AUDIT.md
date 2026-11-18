@@ -61,6 +61,8 @@ python scripts/menu_audit.py
 
 ## CI와 배포의 구분
 
+MENU17은 정합·그리기·버퍼 세 도구줄의 실제 입력·연결·재배치만 별도 완료 행으로 추적한다. 원본 화면 좌표를 기대하던 기존 선·점 검사3개는 실제 이름 있는 버튼 응답을 찾도록 입구만 옮겼다. 기대 기록·도형·취소·레거시 격리 검사는 유지하며 역변환한 검사 본문이 원래 파일과 정확히 같은지 확인한다. 쉽게그리기와 구간 분리는 비활성 안내를 추가했지만 기능은 미구현이다. 용지 설정·둥근 범례·좌하단 이동형 투명도·정합 대상 자석·나머지 연결형 팝업은 남아 있다. 이 작은 범위를 전체 UI 완료로 확대하지 않는다.
+
 기초 앱 커밋 `31a2600b7ef20d9ad491f767f550148016edda0f`의 [CI](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44124055946)는 exact HEAD와 세 작업 모두 성공을 확인했다. MENU7 커밋 `1c2bcbd41005536cdda5256dbcfdaf942903146f`도 [해당 CI](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44145487817)의 HEAD와 세 작업 성공을 별도로 확인했다. 이 결과를 이후 커밋의 CI 성공으로 대신하지 않는다. 커밋별 로컬 검사, 실행 파일 교체, 원격 CI 상태를 각각 기록하며 실행 중인 작업을 완료로 표시하지 않는다.
 
 MENU8 `520936e`의 [CI](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44152251586)와 MENU9 `af14394`의 [CI](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44157555710)도 각각 exact HEAD와 세 작업 성공을 확인했다. MENU10의 로컬 통과와 원격 CI 완료는 별도로 기록한다.

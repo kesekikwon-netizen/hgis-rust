@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use eframe::egui::{self, Event, Key, Modifiers, PointerButton, Pos2, RawInput, Rect, Shape};
+use eframe::egui::{self, Event, Key, Modifiers, PointerButton, Pos2, RawInput, Rect};
 use strata_canvas2d::map_tools::MapToolKind;
 use strata_storage::gpkg_wkt::wkt_to_parts;
 use strata_storage::wkb_codec::WkbGeometry;
@@ -74,16 +74,12 @@ impl PointHarness {
         self.frame(vec![Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::default() }]);
     }
 
-    fn draw_row_button_pos(&mut self, actual_x: f32) -> Option<Pos2> {
-        let out = self.frame(vec![]);
-        let want_x = actual_x / 1.5;
-        let want_w = 55.0 / 1.5;
-        out.shapes.iter().find_map(|c| match &c.shape {
-            Shape::Rect(r) if (r.rect.width() - want_w).abs() < 0.5 && (r.rect.min.x - want_x).abs() < 2.0 => {
-                Some(r.rect.center())
-            }
-            _ => None,
-        })
+    fn draw_row_button_pos(&mut self, icon: &str) -> Option<Pos2> {
+        // target/cpp-ref/src/app/KaDrawSketchTools.cpp:96-114: locate the actual action after reflow.
+        self.frame(vec![]);
+        self.frame(vec![]);
+        let response = self.ctx.read_response(crate::gui_ribbon_bar::context_tool_id(icon))?;
+        (response.enabled() && self.ctx.screen_rect().contains_rect(response.rect)).then_some(response.rect.center())
     }
 
     fn artifact_count(&self) -> usize {
@@ -94,13 +90,13 @@ impl PointHarness {
 #[test]
 fn clicking_draw_row_artifact_button_and_map_inserts_point_opens_form_and_skips_legacy_scene() {
     let mut h = PointHarness::new();
-    let artifact_btn = h.draw_row_button_pos(1189.0).expect("artifact button in draw row");
+    let artifact_btn = h.draw_row_button_pos("artifact").expect("artifact button in draw row");
     h.press(artifact_btn, PointerButton::Primary);
 
     assert_eq!(h.app.edit_layer_key.as_deref(), Some("artifact_point"));
     assert_eq!(h.app.active_tool, MapToolKind::PlacePoint);
     assert_eq!(h.app.status_left_message(), "유물 — 좌클릭으로 점 찍기");
-    assert!(h.draw_row_button_pos(1264.0).is_none(), "sketch finish/undo/cancel stay hidden for points");
+    assert!(h.draw_row_button_pos("check").is_none(), "sketch finish/undo/cancel stay hidden for points");
 
     let spot = Pos2::new(760.0, 480.0);
     h.press(spot, PointerButton::Primary);
@@ -110,7 +106,7 @@ fn clicking_draw_row_artifact_button_and_map_inserts_point_opens_form_and_skips_
     assert!(h.app.home_map.scene.active_rubberband.is_empty(), "legacy scene rubberband untouched");
     assert!(h.app.home_map.scene.polygons.is_empty(), "legacy scene polygons untouched");
     assert!(h.app.home_map.scene.heritage_badges_world.is_empty(), "legacy transient markers untouched");
-    assert!(h.draw_row_button_pos(1264.0).is_none(), "sketch buttons never appear after point click");
+    assert!(h.draw_row_button_pos("check").is_none(), "sketch buttons never appear after point click");
 
     // Accept the pre-filled form ("2") with Enter.
     h.key(Key::Enter);
@@ -132,7 +128,7 @@ fn clicking_draw_row_artifact_button_and_map_inserts_point_opens_form_and_skips_
 fn point_capture_right_click_enter_escape_and_double_click_match_cpp_canvas_rules() {
     let mut h = PointHarness::new();
     h.app.ribbon.continuous_draw = true;
-    let artifact_btn = h.draw_row_button_pos(1189.0).expect("artifact button");
+    let artifact_btn = h.draw_row_button_pos("artifact").expect("artifact button");
     h.press(artifact_btn, PointerButton::Primary);
     let before = h.artifact_count();
 

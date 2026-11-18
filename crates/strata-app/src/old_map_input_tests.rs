@@ -48,7 +48,7 @@ fn choices(h: &mut Harness, name: &str) {
 
 #[test]
 fn old_map_input_primary_icon_opens_both_choices() {
-    for width in [1680, 2560, 1280] {
+    for width in [1680, 2560] {
         let mut h = start();
         h.size[0] = width;
         let at = icon(&mut h);
@@ -59,7 +59,7 @@ fn old_map_input_primary_icon_opens_both_choices() {
 
 #[test]
 fn old_map_input_secondary_icon_opens_both_choices() {
-    for width in [1680, 2560, 1280] {
+    for width in [1680, 2560] {
         let mut h = start();
         h.size[0] = width;
         let at = icon(&mut h);
@@ -147,15 +147,20 @@ fn old_map_input_1919_missing_key_stays_in_footer_without_changing_data() {
 
 #[test]
 fn old_map_input_compact_entry_keeps_both_choices() {
-    let mut h = start();
-    h.size[0] = 800;
-    let at = h.point_at("배경 지도");
-    h.press(at, PointerButton::Primary);
-    let at = h.point_at("옛 지도");
-    h.press(at, PointerButton::Primary);
-    choices(&mut h, "old-map-compact-800");
-    choose(&mut h, "▤  대동여지도");
-    assert!(h.app.old_map_shown());
+    // target/cpp-ref/src/app/KaBeginnerRibbon.cpp:255-282: use measured caption fit, including 1280.
+    for width in [800, 1280] {
+        for button in [PointerButton::Primary, PointerButton::Secondary] {
+            let mut h = start();
+            h.size[0] = width;
+            let at = h.point_at("배경 지도");
+            h.press(at, PointerButton::Primary);
+            let at = h.point_at("옛 지도");
+            h.press(at, button);
+            choices(&mut h, &format!("old-map-compact-{width}-{button:?}"));
+            choose(&mut h, "▤  대동여지도");
+            assert!(h.app.old_map_shown());
+        }
+    }
 }
 
 #[test]

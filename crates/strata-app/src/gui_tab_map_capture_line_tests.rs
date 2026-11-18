@@ -100,16 +100,12 @@ impl LineHarness {
         (t.layer.features.len(), pts.len())
     }
 
-    fn draw_row_button_pos(&mut self, actual_x: f32) -> Option<Pos2> {
-        let out = self.frame(vec![]);
-        let want_x = actual_x / 1.5;
-        let want_w = 55.0 / 1.5;
-        out.shapes.iter().find_map(|c| match &c.shape {
-            Shape::Rect(r) if (r.rect.width() - want_w).abs() < 0.5 && (r.rect.min.x - want_x).abs() < 2.0 => {
-                Some(r.rect.center())
-            }
-            _ => None,
-        })
+    fn draw_row_button_pos(&mut self, icon: &str) -> Option<Pos2> {
+        // target/cpp-ref/src/app/KaDrawSketchTools.cpp:96-114: locate the actual action after reflow.
+        self.frame(vec![]);
+        self.frame(vec![]);
+        let response = self.ctx.read_response(crate::gui_ribbon_bar::context_tool_id(icon))?;
+        (response.enabled() && self.ctx.screen_rect().contains_rect(response.rect)).then_some(response.rect.center())
     }
 }
 
@@ -193,7 +189,7 @@ fn undo_vertex_keys_and_escape_work_for_line_sketch() {
 #[test]
 fn draw_row_buttons_work_and_line_sketch_paints_open_polyline_without_fill() {
     let mut h = LineHarness::new();
-    assert!(h.draw_row_button_pos(1264.0).is_none(), "sketch buttons hidden while empty");
+    assert!(h.draw_row_button_pos("check").is_none(), "sketch buttons hidden while empty");
     h.two_points();
     h.press(Pos2::new(900.0, 480.0), PointerButton::Primary);
     assert_eq!(h.app.draw_sketch.points.len(), 3);
@@ -224,18 +220,18 @@ fn draw_row_buttons_work_and_line_sketch_paints_open_polyline_without_fill() {
 
     // On-screen undo, cancel, and finish buttons in the draw row
     // (target/cpp-ref/src/app/KaDrawSketchTools.cpp:96-114,144-169).
-    let undo_pos = h.draw_row_button_pos(1324.0).expect("undo button visible");
+    let undo_pos = h.draw_row_button_pos("undo").expect("undo button visible");
     h.press(undo_pos, PointerButton::Primary);
     assert_eq!(h.app.draw_sketch.points.len(), 2);
     assert_eq!(h.app.status_left_message(), "꼭짓점 하나를 되돌렸습니다.");
 
-    let cancel_pos = h.draw_row_button_pos(1384.0).expect("cancel button visible");
+    let cancel_pos = h.draw_row_button_pos("stop").expect("cancel button visible");
     h.press(cancel_pos, PointerButton::Primary);
     assert!(h.app.draw_sketch.points.is_empty());
     assert_eq!(h.app.status_left_message(), "그리던 도형을 지웠습니다.");
 
     h.two_points();
-    let finish_pos = h.draw_row_button_pos(1264.0).expect("finish button visible");
+    let finish_pos = h.draw_row_button_pos("check").expect("finish button visible");
     h.press(finish_pos, PointerButton::Primary);
     assert_eq!(h.last_line_len(), (2, 2));
 }

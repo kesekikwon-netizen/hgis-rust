@@ -11,6 +11,7 @@ use super::ribbon_types::{DrawSubTarget, RibbonCategory, SubToolsMode};
 pub struct KaBeginnerRibbon {
     pub active_category: RibbonCategory,
     pub sub_toolbar_visible: bool,
+    pub(crate) sub_toolbar_origin: Option<eframe::egui::Rect>,
     // KaPaleoMenu::install — 리본 우클릭/클릭 팝업 메뉴 상태
     pub paleo_menu_open: bool,
     pub geology_menu_open: bool,
@@ -35,6 +36,7 @@ impl Default for KaBeginnerRibbon {
         Self {
             active_category: RibbonCategory::Survey,
             sub_toolbar_visible: false,
+            sub_toolbar_origin: None,
             paleo_menu_open: false,
             geology_menu_open: false,
             dem_menu_open: false,
@@ -55,6 +57,18 @@ impl Default for KaBeginnerRibbon {
 }
 
 impl KaBeginnerRibbon {
+    pub(crate) fn sub_tool_label(&self) -> Option<&'static str> {
+        if !self.sub_toolbar_visible {
+            return None;
+        }
+        match self.sub_mode {
+            SubToolsMode::Draw => Some("그리기"),
+            SubToolsMode::Buffer => Some("버퍼"),
+            SubToolsMode::Align => Some("정합"),
+            SubToolsMode::None => None,
+        }
+    }
+
     #[must_use]
     pub const fn categories() -> &'static [RibbonCategory] {
         &[
@@ -72,13 +86,7 @@ impl KaBeginnerRibbon {
     pub const fn is_map_only_tool(tool: MapToolKind) -> bool {
         matches!(
             tool,
-            MapToolKind::DrawPolygon
-                | MapToolKind::DrawLine
-                | MapToolKind::PlacePoint
-                | MapToolKind::TrenchPlace
-                | MapToolKind::GeorefAlign
-                | MapToolKind::Measure
-                | MapToolKind::FeatureCardNote
+            MapToolKind::DrawPolygon | MapToolKind::DrawLine | MapToolKind::PlacePoint | MapToolKind::TrenchPlace | MapToolKind::GeorefAlign | MapToolKind::Measure | MapToolKind::FeatureCardNote
         )
     }
 
@@ -101,11 +109,7 @@ impl KaBeginnerRibbon {
     }
 
     /// C++ `KaRibbonBar::setActiveTool` — 도구 전환 시 미완성 러버밴드 버퍼 초기화 및 하단 상태바 안내 문구 매핑
-    pub fn switch_active_tool_clearing_rubberband(
-        active_tool: &mut MapToolKind,
-        sketch_buffer: &mut Vec<[f64; 2]>,
-        next_tool: MapToolKind,
-    ) -> &'static str {
+    pub fn switch_active_tool_clearing_rubberband(active_tool: &mut MapToolKind, sketch_buffer: &mut Vec<[f64; 2]>, next_tool: MapToolKind) -> &'static str {
         if *active_tool != next_tool {
             sketch_buffer.clear();
             *active_tool = next_tool;
@@ -119,20 +123,12 @@ impl KaBeginnerRibbon {
         match tool {
             MapToolKind::Pan => "지도를 드래그하여 이동하거나 마우스 휠로 확대/축소하세요.",
             MapToolKind::Select => "피처를 클릭하여 선택하거나 드래그하여 다중 선택하세요.",
-            MapToolKind::DrawPolygon => {
-                "시작점을 클릭하세요. [Shift]: 직교/45도 스냅, [우클릭]: 폐합 완료"
-            }
+            MapToolKind::DrawPolygon => "시작점을 클릭하세요. [Shift]: 직교/45도 스냅, [우클릭]: 폐합 완료",
             MapToolKind::DrawLine => "선 시작점을 클릭하세요. [우클릭]: 선 작도 완료",
             MapToolKind::PlacePoint => "지도 위 원하는 위치를 클릭하여 유물·기준점을 배치하세요.",
-            MapToolKind::TrenchPlace => {
-                "조사구역 내부를 클릭하여 표준 시굴 트렌치(20m×2m / L자형)를 배치하세요."
-            }
-            MapToolKind::GeorefAlign => {
-                "정점을 클릭하여 드래그 이동하세요. [Delete]: 선택 정점 삭제"
-            }
-            MapToolKind::Measure => {
-                "클릭하여 측정을 시작하세요. [우클릭/더블클릭]: 측정 완료, [ESC]: 취소"
-            }
+            MapToolKind::TrenchPlace => "조사구역 내부를 클릭하여 표준 시굴 트렌치(20m×2m / L자형)를 배치하세요.",
+            MapToolKind::GeorefAlign => "정점을 클릭하여 드래그 이동하세요. [Delete]: 선택 정점 삭제",
+            MapToolKind::Measure => "클릭하여 측정을 시작하세요. [우클릭/더블클릭]: 측정 완료, [ESC]: 취소",
             MapToolKind::FeatureCardNote => "유구를 클릭하여 조사카드 상세 기록 창을 여세요.",
         }
     }

@@ -11,30 +11,34 @@
 //! `&mut self` 메서드로 옮겼고, 각 메서드 머리의 alias 줄이 원래 지역변수 이름을
 //! 되살린다.
 
-#[path = "gui_ribbon_align.rs"]
-mod gui_ribbon_align;
-#[path = "gui_ribbon_align_actions.rs"]
-mod gui_ribbon_align_actions;
-#[path = "align_source_pane.rs"]
-mod align_source_pane;
 #[path = "align_map_input.rs"]
 mod align_map_input;
 #[path = "align_picker.rs"]
 pub(crate) mod align_picker;
+#[path = "align_source_pane.rs"]
+mod align_source_pane;
+#[path = "gui_ribbon_align.rs"]
+mod gui_ribbon_align;
+#[path = "gui_ribbon_align_actions.rs"]
+mod gui_ribbon_align_actions;
 #[path = "gui_ribbon_appbar.rs"]
 mod gui_ribbon_appbar;
-#[path = "gui_ribbon_compact.rs"]
-mod gui_ribbon_compact;
-#[path = "gui_ribbon_tabs.rs"]
-mod gui_ribbon_tabs;
 #[path = "gui_ribbon_click_a.rs"]
 mod gui_ribbon_click_a;
 #[path = "gui_ribbon_click_b.rs"]
 mod gui_ribbon_click_b;
+#[path = "gui_ribbon_compact.rs"]
+mod gui_ribbon_compact;
 #[path = "gui_ribbon_consts.rs"]
 mod gui_ribbon_consts;
+#[path = "gui_ribbon_context_card.rs"]
+mod gui_ribbon_context_card;
 #[path = "gui_ribbon_draw.rs"]
 mod gui_ribbon_draw;
+#[path = "gui_ribbon_draw_row.rs"]
+mod gui_ribbon_draw_row;
+#[path = "gui_ribbon_draw_snap.rs"]
+mod gui_ribbon_draw_snap;
 #[path = "gui_ribbon_menu_actions.rs"]
 mod gui_ribbon_menu_actions;
 #[path = "gui_ribbon_menus_a.rs"]
@@ -47,19 +51,22 @@ mod gui_ribbon_region;
 mod gui_ribbon_region_b;
 #[path = "gui_ribbon_search.rs"]
 mod gui_ribbon_search;
-#[path = "gui_ribbon_subtoolbar.rs"]
-mod gui_ribbon_subtoolbar;
-#[path = "gui_ribbon_draw_row.rs"]
-mod gui_ribbon_draw_row;
 #[path = "gui_ribbon_snap_assist.rs"]
 mod gui_ribbon_snap_assist;
+#[path = "gui_ribbon_subtoolbar.rs"]
+mod gui_ribbon_subtoolbar;
 #[path = "gui_ribbon_tabbar.rs"]
 mod gui_ribbon_tabbar;
+#[path = "gui_ribbon_tabs.rs"]
+mod gui_ribbon_tabs;
 #[path = "gui_ribbon_top.rs"]
 mod gui_ribbon_top;
 
 pub use gui_ribbon_align::*;
 pub use gui_ribbon_consts::*;
+
+#[cfg(test)]
+pub(crate) use gui_ribbon_context_card::context_tool_id;
 
 #[cfg(test)]
 #[path = "gui_ribbon_tests_align.rs"]

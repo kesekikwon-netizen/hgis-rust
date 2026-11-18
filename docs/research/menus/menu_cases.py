@@ -8,14 +8,26 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "crates/strata-app/src/gui_tab_map_capture_point_tests.rs": "97d7149278ada297c9c0aa140b7a0e1a98d44b5e74a1ca715ec5c9e6ae6d5dae",
+    "crates/strata-app/src/gui_tab_map_capture_line_tests.rs": "3a2aafdadb5f7d4e60965e650fa5b843b44908edf876a3b0f21a5a622cc11915",
+    "crates/strata-app/src/gui_ribbon_bar.rs": "c8f3a76cc13a18438342c8fb474e3ecd2400d4f926ef21d71afcadbaee907281",
+    "target/cpp-ref/src/app/MainWindowAlign.cpp": "946a77771a34ba954f383dc3682a2ccd821aae911e9af3096b914d116222105b",
+    "target/cpp-ref/src/app/KaBeginnerRibbon.cpp": "8d4d89ee9cc919dac2988adcd4ca2bf0fdaa3b0d84aa3dfe396542b08c91e383",
+    "crates/strata-app/src/contextual_tools_input_tests_b.rs": "b29b2934b70aeaf69239c346a5e2345edec4da73e651c6363316c1bb9d17d640",
+    "crates/strata-app/src/contextual_tools_input_tests_a.rs": "8ec1a7fc0b37a0cd373cfbcd17d00b079d9058dede4ffb892c67e87819780a3d",
+    "crates/strata-app/src/contextual_tools_input_tests.rs": "517cfea130ec83efc9b1c8a1872f3916cea965279902dfd3f5e6c1abd1142baa",
+    "crates/strata-app/src/gui_ribbon_compact.rs": "081df6fa367cd4535cd84cd52dbda8c47077b2f58c2b996d4dae9b72d4d1c4a7",
+    "crates/strata-app/src/gui_ribbon_top.rs": "66464c2ef218636044da8996860261d25b45b8f6256aff0a4853f80594e1395f",
+    "crates/strata-app/src/gui_ribbon_draw_snap.rs": "4efdb4a19e83f77a972472e40cea696986f1f5ae64a47ac3ea141173e4ecf3d0",
+    "crates/strata-app/src/gui_ribbon_context_card.rs": "e487ab97c772bbb5c5e70d92a39ea430325ffeba0aa6ed01f46333649038646c",
     "target/cpp-ref/src/app/MainWindowOffline.cpp": "d9d3a872cb39ab21a45f910703838441699d78bd3d7abdb77c49b2f1ba3df9f2",
     "crates/strata-app/src/gui_ribbon_menu_actions.rs": "6e9f51cc99384fb501703fd07a4751ca9f0324a275845a8998b53b7b9b4143cc",
     "crates/strata-app/src/gui_ribbon_menus_a.rs": "fd52bf69b813365fe2c08db65baa92eecb8f9ba8136b818cb1f71a4861e7dd39",
     "crates/strata-app/src/gui_ribbon_menus_b.rs": "d03a1d4fcfe7a325973ee389e1f4466b8465c63e1925b78d875d4b9fe453df48",
-    "crates/strata-app/src/ribbon_state.rs": "5c6d8158c2c27c0e9a3af3e3e2706b25826dcb7f6418d1fb23c35f1cbfc7d849",
+    "crates/strata-app/src/ribbon_state.rs": "1bb9e98cb0589181ac49d7984fe44f2bd370d960df81525d7845d46bd9af4b0e",
     "crates/strata-app/src/app_state_lifecycle.rs": "6a101d0cbb00120fba385d37f284a1b2288095dd3fa79363815ce0d9bb20a6c8",
     "crates/strata-app/src/ref_tile_history.rs": "9604e7e16f6df86d117c5d1daff3392083616fe026030bb10f96b49fbb9fb303",
-    "crates/strata-app/src/old_map_input_tests.rs": "e434d2a27536d05bf45b3791c2c5c2207220fecd30776f5212c7c32ee7da6423",
+    "crates/strata-app/src/old_map_input_tests.rs": "d09a78a111a7da9865b8c44dc44a9f564129daf5c2d1b6d2b8497a626401d500",
     "crates/strata-app/src/map_wheel_zoom_tests_c.rs": "ff71283f35722327c763eef80909120b2afbfd3eddd32af5dc63ba9e98887f1f",
     "crates/strata-app/src/app_state_buffer_save.rs": "7caffda784665f3bdba5389250ad9cbb95fabd096258dc58cfa9e56ab3c62e15",
     "crates/strata-app/src/app_state.rs": "065816726ef2adda4f4a845ef634d4e32bb23cf6f26d822038b7f43738cda3d4",
@@ -30,7 +42,7 @@ REVIEWED_DIGESTS = {
     "crates/strata-app/src/app_state_buffer.rs": "0770a23334564133a086287aabbf9617819430f7f37b19c614f93aa4756835a4",
     "crates/strata-app/src/buffer_crs_input_tests.rs": "64fc108063a810c1a0fce5615a295929a9998882a77b312bcd19f001312ba27b",
     "crates/strata-app/src/buffer_crs_input_tests_a.rs": "90f67775090b1407983d9337a6d22651b658051db9fd378134ad5622bec3b7f0",
-    "crates/strata-app/src/gui_ribbon_subtoolbar.rs": "467c2d2fdc9fe4f3a903fc4adce1bc76f42e611237ffab927262c57abbd67625",
+    "crates/strata-app/src/gui_ribbon_subtoolbar.rs": "6b9f6e91bcf86baa956b7682797efa198394778fe82c684e2cb4f32d304463e4",
     "target/cpp-ref/src/app/MainWindowRibbon.cpp": "c954bede33a7ca5ae6bf09d461bcaa0bb258b0376164bdd5b9e9e587e9bbc39d",
     "target/cpp-ref/src/core/BufferAnalysis.cpp": "9795f866d6fbc023a64c742a29e1a61bbb4922af04f900cf586935c961930f58",
     "target/cpp-ref/src/core/NearbyHeritageCollect.cpp": "12623197b9872e362d5dd174dbdf7c1938e19d223ee2bbb8af1614645699b7fc",
@@ -38,7 +50,7 @@ REVIEWED_DIGESTS = {
     "crates/strata-app/src/app_state_draw_commit.rs": "033d2c1f7207a56fc3369799df0b0b9b012758c8d0caf1586e82d744de846eba",
     "crates/strata-app/src/app_state_split.rs": "98b3643ea77207403f7c1ccb6c1f1d5e7966a9046fa0df4855828766d06fb233",
     "crates/strata-app/src/split_crs_input_tests.rs": "59ec0c651a218a4e790f85aeec94774ebb01cb9ffdd16236d41926054a1be15c",
-    "crates/strata-app/src/gui_ribbon_draw_row.rs": "b2f12457aee3cc8a4666db4ae9cdb2004e55fd25d460c7a313f1eada73cf11a8",
+    "crates/strata-app/src/gui_ribbon_draw_row.rs": "072960d19d43731f65384681e28281dc01b76de8261895246a293dcaa83622d9",
     "crates/strata-app/src/app_state_draw_row.rs": "5b951af734c6f5fcd6fd4d73f19f9e0030d0fce528a15cebf232c654cbae3de9",
     "crates/strata-app/src/gui_layer_panel_rows.rs": "1955ac7e8659910c4854ae3a5684db2434175d922b961cd4d8b15ad5be5955ea",
     "target/cpp-ref/src/core/LayerOps.cpp": "73a209387bcb18992e18016c6610092f7c8a1d9fcedd0da7fcaa03bb9d568afb",
@@ -80,7 +92,7 @@ REVIEWED_DIGESTS = {
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
     "crates/strata-app/src/popup_input_harness.rs": "12bc498a781ee060c639507ff22bd1ee5bf67603f2bbc96a5e103070f81a4371",
     "crates/strata-app/src/shell_workspace.rs": "b2d833287f100313db7a19a66ebb4cb78b283b1ed123afbd5017471edccc8142",
-    "crates/strata-app/src/gui_shell.rs": "1d34bf95ec64d486e90247513e989873ab4beaaac8246279ffaed1278d77931e",
+    "crates/strata-app/src/gui_shell.rs": "f15238d82e466dc72b82af4d1cc666adacef021c48c45c28d397257d4ed0c5ce",
     "crates/strata-app/src/gui_shell_escape.rs": "37a738f061a24b7bc01fac480a840e09dc93abf53162e56d1da0b70cbd2c45e7",
     "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
@@ -316,7 +328,7 @@ def build_cases(root):
         ['현재 전환은 work_crs만 바꾸고 두 렌더러는 경계 숫자를 바로 사용한다는 소스 단서. MENU15는 저장 CRS와 재열기 변환을 검사했으며 전환 직후 표시의 별도 실제 재현·수정이 남음'])
     add('buffer.export-excel', '버퍼 > 엑셀 내보내기 진입점', 1, '미구현',
         [('MainWindowRibbon.cpp', 'exportNearbyHeritageExcel'), ('MainWindowExport.cpp', 'void MainWindow::exportNearbyHeritageExcel')],
-        [('gui_ribbon_subtoolbar.rs', 'ui.add_enabled_ui(false')],
+        [('gui_ribbon_subtoolbar.rs', 'ui.add_enabled(false')],
         ['주변 경계·조사구역·유적', '활성 조건·방향·거리·파일 선택 취소'],
         ['현재 W-H1로 항상 비활성인 단추와 MENU14 PNG를 확인. C++ 수집·저장기 연결 필요; 다른 내보내기 전체가 미구현이라는 뜻은 아님'])
     add('map.scale-labels', '지도 > 축척 막대 > 숫자와 단위', 1, '부분 구현',
@@ -379,7 +391,32 @@ def build_cases(root):
         add('key.' + key.lower(), title + ' / ' + key, 2, '검증 안 됨', ['MainWindowRibbon.cpp', 'MainWindowChrome.cpp'],
             ['gui_shell.rs'], ['메뉴·모달·텍스트 포커스', '축소·확대 후 복귀', 'Ctrl 등 수식키'], ['MORE0의 과거 판정을 갱신하고 현재 키 처리·복귀 UI 대조'])
     add('chrome.compact', '그리기 도구 줄·작은 메뉴 > 화면 넘침·클릭 영역', 2, '부분 구현', ['MainWindowRibbon.cpp'],
-        ['gui_ribbon_draw_row.rs', 'gui_ribbon_compact.rs'], ['480~1920 너비', '200% DPI', '그리기 진행 중'], ['기존 UI6 근거 연결; MENU16의1280 폭 실제 그림에서 상단 긴 이름의 겹침·잘림도 관찰. 그리기 도구 줄 넘침·글꼴 의존 표시와 함께 후속 공통 UI에서 수정'])
+        ['gui_ribbon_draw_row.rs', 'gui_ribbon_compact.rs'], ['480~1920 너비', '200% DPI', '그리기 진행 중'], ['MENU17의 세 도구줄·실측 이름 폭·좁은 창 재배치는 별도 완료 행. 다른 팝업·도면·정합 분할 화면 전체와 네이티브 OS 입력은 남음'])
+    add('chrome.connected-tools', '정합·그리기·버퍼 > 연결형 도구줄·폭 변경·기존 동작', 2, '완료',
+        [('KaBeginnerRibbon.cpp', 'QList<int> KaBeginnerRibbon::lookWidths'),
+         ('MainWindowRibbon.cpp', 'void MainWindow::showSubToolsDraw'), ('MainWindowRibbon.cpp', 'void MainWindow::showSubToolsBuffer'),
+         ('MainWindowAlign.cpp', 'void MainWindow::showSubToolsAlign'), 'KaSnapSettingsWidget.cpp'],
+        ['gui_ribbon_subtoolbar.rs', 'gui_ribbon_context_card.rs', 'gui_ribbon_draw_row.rs', 'gui_ribbon_draw_snap.rs',
+         'gui_ribbon_top.rs', 'gui_ribbon_compact.rs', 'ribbon_state.rs', 'gui_shell.rs',
+         'contextual_tools_input_tests.rs', 'contextual_tools_input_tests_a.rs', 'contextual_tools_input_tests_b.rs', 'old_map_input_tests.rs',
+         'gui_ribbon_bar.rs', 'gui_tab_map_capture_line_tests.rs', 'gui_tab_map_capture_point_tests.rs'],
+        ['생산 egui·추적 데모와 첫당사 이미지의 임시 사본·빈 키 읽기·오프라인 자식 검사',
+         '480×480·640×480·800×600·1280×720·1680×960·2560×1440 및 200% DPI의 세 도구줄 범위',
+         '480×360의 실제 도구줄 스크롤·지도 확대 불변·실제 닫기',
+         '버퍼500·1000 반복·닫기·재열기·기록·이력·조사 바이트 유지',
+         '그리기 선택·면·선·유물·연속 토글·미연결 비활성 안내·실제 지도 캡처·대상 드롭다운 Esc·입력 복귀',
+         '준비한 래스터의 다섯 정합 동작·부족한 점의 이동 오류 하단 표시·저장 거부·세션 닫기·이미지 바이트 보존',
+         '1280의 실측 이름 폭에 따른 축약 메뉴와 기존 옛지도 기본·보조 입력 근거 연결'], [],
+        '세 도구줄의 기존 동작·연결·재배치 범위다. 정합 변환 수학·실제 자석·구간 분리·쉽게그리기·엑셀·다른 팝업 전체나 실제 OS 입력의 완료 판정이 아니다. 실제 자석과 미연결 작업은 별도 미구현 행, 다른 화면은 부분 행으로 추적한다',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 연결형 정합·그리기·버퍼 도구줄')}])
+    add('draw.easy', '그리기 > 쉽게그리기', 1, '미구현', [('MainWindowRibbon.cpp', '&MainWindow::startEasyDraw')],
+        [('gui_ribbon_draw_row.rs', 'let enabled = id != "easy"')],
+        ['자동 점 붙이기·별도 메모리 레이어·취소·되돌리기'],
+        ['MENU17 이전 실제 콜백 없는 활성 단추를 소스에서 확인. 이제 비활성 안내만 표시하며, 기능 연결은 여전히 미구현'])
+    add('draw.clip-layers', '그리기 > 구간 분리', 1, '미구현', [('MainWindowRibbon.cpp', '&MainWindow::clipOverlappingLayers')],
+        [('gui_ribbon_draw_row.rs', 'let enabled = label != "구간 분리"')],
+        ['두 레이어·겹치는 구간·원본 보존·빈 결과·취소·되돌리기'],
+        ['MENU17 이전 실제 콜백 없는 활성 단추를 소스에서 확인. 이제 비활성 안내만 표시하며, 기능 연결은 여전히 미구현'])
     # First-party named actions: target/cpp-ref/src/app/MainWindowContextMenus.cpp:112-448.
     titles = {
         'layer.zoom': '이 레이어로 이동', 'layer.draw': '그리기·편집 시작', 'layer.vertices': '꼭짓점 수정',
