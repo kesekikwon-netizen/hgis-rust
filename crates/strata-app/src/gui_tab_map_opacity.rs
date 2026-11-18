@@ -24,7 +24,7 @@ enum RailKind {
     Drawing,
 }
 
-pub(super) fn rail_index(kind: RailKind) -> usize {
+fn rail_index(kind: RailKind) -> usize {
     match kind {
         RailKind::Map => 0,
         RailKind::Drawing => 1,
@@ -72,7 +72,7 @@ impl StrataAppState {
         self.left_layers.entries[i].opacity = t.clamp(0.0, 1.0);
     }
 
-    pub(crate) fn paint_opacity_card(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, p: &egui::Painter, card_r: Rect, title: &str, kind: RailKind) {
+    fn paint_opacity_card(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, p: &egui::Painter, card_r: Rect, title: &str, kind: RailKind) {
         p.rect_filled(card_r, 6.0, Color32::from_rgba_unmultiplied(252, 251, 247, 248));
         p.rect_stroke(card_r, 6.0, Stroke::new(1.0, Color32::from_rgb(185, 182, 172)), egui::StrokeKind::Middle);
         p.text(

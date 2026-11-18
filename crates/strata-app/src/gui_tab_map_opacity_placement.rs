@@ -107,14 +107,6 @@ impl StrataAppState {
         constrained(host, size, wanted, top_inset, bottom_reserve)
     }
 
-    pub(crate) fn map_opacity_rect(&self, ctx: &egui::Context, host: Rect, guide: bool) -> Rect {
-        self.opacity_rect(ctx, host, super::RailKind::Map, guide)
-    }
-
-    pub(crate) fn drawing_opacity_rect(&self, ctx: &egui::Context, host: Rect) -> Rect {
-        self.opacity_rect(ctx, host, super::RailKind::Drawing, false)
-    }
-
     fn rail_title(&self, kind: super::RailKind) -> Option<String> {
         match kind {
             super::RailKind::Map => self.right_inspector.selected_layer_key.clone(),
