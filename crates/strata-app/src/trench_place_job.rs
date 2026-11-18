@@ -2,6 +2,7 @@
 //! The click only starts the worker. A later frame applies the cells if the inputs are unchanged.
 
 use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use strata_geo::trench_plan::{build_for_target_ratio, build_in_area, Cell, PickedArea};
@@ -18,9 +19,19 @@ pub(super) struct Planned {
     pub(super) append_keep: bool,
 }
 
+/// Shared with a cloned app: one receiver, so a clone does not take the result away.
+#[derive(Clone)]
 pub(crate) struct TrenchPlaceJob {
     stamp: String,
-    rx: Receiver<Planned>,
+    rx: Arc<Mutex<Receiver<Planned>>>,
+}
+
+impl std::fmt::Debug for TrenchPlaceJob {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TrenchPlaceJob")
+            .field("stamp", &self.stamp)
+            .finish_non_exhaustive()
+    }
 }
 
 pub(super) fn place_stamp(app: &StrataAppState) -> String {
@@ -95,25 +106,32 @@ pub(super) fn start_auto_plan(app: &mut StrataAppState, picked: &PickedArea) {
         };
         let _ = tx.send(planned);
     });
-    app.trench_place_job = Some(TrenchPlaceJob { stamp, rx });
+    app.trench_place_job = Some(TrenchPlaceJob {
+        stamp,
+        rx: Arc::new(Mutex::new(rx)),
+    });
     app.show_status_message("배치를 계산하는 중입니다…");
 }
 
 pub(crate) fn poll_trench_place(app: &mut StrataAppState, ctx: &eframe::egui::Context) {
-    let Some(job) = app.trench_place_job.take() else {
+    let Some(job) = app.trench_place_job.clone() else {
         return;
     };
-    match job.rx.try_recv() {
-        Err(TryRecvError::Empty) => {
-            app.trench_place_job = Some(job);
-            ctx.request_repaint_after(Duration::from_millis(30));
-        }
+    let received = job
+        .rx
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .try_recv();
+    match received {
+        Err(TryRecvError::Empty) => ctx.request_repaint_after(Duration::from_millis(30)),
         Err(TryRecvError::Disconnected) => {
+            app.trench_place_job = None;
             app.show_status_message(
                 "시굴격자 계산이 중단되었습니다. 다시 적용하세요. 기존 격자는 유지됩니다.",
             );
         }
         Ok(plan) => {
+            app.trench_place_job = None;
             if job.stamp == place_stamp(app) {
                 finish_plan(app, plan);
             } else {
