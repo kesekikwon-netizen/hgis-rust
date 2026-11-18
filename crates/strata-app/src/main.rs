@@ -207,6 +207,8 @@ mod topo_download;
 mod diag_layout;
 mod snap_shot;
 mod snap_shot_run;
+mod cad_crs_stated;
+mod cad_crs_notice;
 mod dlg_cad_import_notice;
 mod dlg_cadastral_download;
 mod dlg_drawing_print;
