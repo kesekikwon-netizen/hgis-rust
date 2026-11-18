@@ -23,13 +23,13 @@ fn click_slider(h: &mut Harness, row: usize) {
 }
 fn raster() -> Harness {
     let mut h = start();
-    h.app.right_inspector.selected_layer_key = Some("위성".to_owned());
+    h.app.right_inspector.selected_layer_key = Some("위성지도 (VWorld)".to_owned());
     h.frame(vec![]);
     h
 }
 fn opacity(h: &Harness, want: f32) {
     // 1e-6 is >8 f32 epsilons on the normalized0..1 range and <0.001 percent; not a world-coordinate tolerance.
-    let got = h.app.rail_opacity("위성");
+    let got = h.app.rail_opacity("위성지도 (VWorld)");
     assert!((got - want).abs() < 1e-6, "slider value {got} expected {want}");
 }
 fn brightness(h: &Harness) -> i32 {
@@ -131,14 +131,20 @@ fn slider_enter_and_space_preserve_pending_capture_and_ignore_stale_pointer_posi
         h.press(host.center() + delta, PointerButton::Primary);
     }
     assert_eq!(h.app.draw_sketch.points.len(), 3, "real EPSG5187 draft setup");
+    // start_edit_feature_poly makes 유구면 the current layer (MainWindow.cpp:991).
+    let layer = h.app.right_inspector.selected_layer_key.clone().expect("current layer");
     click_slider(&mut h, 0);
-    opacity(&h, 0.5);
+    let read = |h: &Harness| {
+        let got = h.app.rail_opacity(&layer);
+        assert!((got - 0.5).abs() < 1e-6, "slider value {got} expected 0.5");
+    };
+    read(&h);
     let points = h.app.draw_sketch.points.clone();
     let before = snapshot(&h);
     h.frame(vec![Event::PointerMoved(host.center())]);
     for pressed in [Key::Enter, Key::Space] {
         key(&mut h, pressed);
-        opacity(&h, 0.5);
+        read(&h);
         assert_eq!(h.app.draw_sketch.points, points, "slider key committed pending capture");
     }
     assert!(snapshot(&h) == before, "slider key changed original data/history/bytes");
