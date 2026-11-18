@@ -66,3 +66,5 @@ MENU17은 정합·그리기·버퍼 세 도구줄의 실제 입력·연결·재�
 기초 앱 커밋 `31a2600b7ef20d9ad491f767f550148016edda0f`의 [CI](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44124055946)는 exact HEAD와 세 작업 모두 성공을 확인했다. MENU7 커밋 `1c2bcbd41005536cdda5256dbcfdaf942903146f`도 [해당 CI](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44145487817)의 HEAD와 세 작업 성공을 별도로 확인했다. 이 결과를 이후 커밋의 CI 성공으로 대신하지 않는다. 커밋별 로컬 검사, 실행 파일 교체, 원격 CI 상태를 각각 기록하며 실행 중인 작업을 완료로 표시하지 않는다.
 
 MENU8 `520936e`의 [CI](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44152251586)와 MENU9 `af14394`의 [CI](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44157555710)도 각각 exact HEAD와 세 작업 성공을 확인했다. MENU10의 로컬 통과와 원격 CI 완료는 별도로 기록한다.
+
+MENU18은 정합 대상의 점·선 자석 미리보기·확정과 로컬 자료 역할·범위·Esc/우클릭만 별도 완료 행으로 추적한다. 실제 입력13개, 지적/사용자/현재 참조의 세 실패와 일반 참조 제외 대조, 불변 자료/CRS 변경·대기·실패·복제 유닛과 원본 바이트 보존을 확인했다. C++의 CAD/문자·교차/자기 자석·모든 CRS/대용량·정합 저장 전체는 이 행의 범위 밖이며 전체 정합 행은 부분 구현을 유지한다. 전체 및 엄격 Clippy의 소스 지문은 일치한다. 용지 설정·둥근 범례·이동형 좌하단 투명도와 다른 팝업, 기존 데이터 보존/분할/캡처/메뉴 감사는 계속 진행한다. 직전85a0dad의 CI44219973776은 exact HEAD와 세 작업 성공을 확인했으며 이후 커밋의 성공을 대신하지 않는다.

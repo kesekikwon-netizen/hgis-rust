@@ -21,6 +21,8 @@ use crate::ref_vector::raster::{Raster, RasterView};
 pub(crate) mod clip;
 #[path = "ref_vector_data.rs"]
 pub(crate) mod data;
+#[path = "ref_vector_snap.rs"]
+pub(crate) mod snap;
 #[path = "ref_vector_elevation.rs"]
 pub(crate) mod elevation;
 #[path = "ref_vector_labels.rs"]

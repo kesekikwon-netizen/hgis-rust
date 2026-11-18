@@ -140,6 +140,7 @@ impl PendingCanvasInput {
                 }
                 CanvasAction::Escape(action) => match action {
                     EscapeAction::AlignPoint => {
+                        app.align.cancel_target_action();
                         app.align.pending_source = None;
                         app.status_bar_hint = app.align.status_text();
                     }

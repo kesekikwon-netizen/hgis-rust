@@ -276,3 +276,7 @@ mod old_map_input_tests;
 #[cfg(test)]
 #[path = "contextual_tools_input_tests.rs"]
 mod contextual_tools_input_tests;
+
+#[cfg(test)]
+#[path = "align_snap_input_tests.rs"]
+mod align_snap_input_tests;

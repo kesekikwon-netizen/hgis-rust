@@ -1,4 +1,8 @@
-use rstar::RTree;
+use rstar::{primitives::Line, RTree};
+
+#[cfg(test)]
+#[path = "snap_index_tests.rs"]
+mod tests;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SnapKind {
@@ -16,7 +20,7 @@ pub struct SnapHit {
 #[derive(Debug, Default, Clone)]
 pub struct SnapIndex {
     tree: RTree<[f64; 2]>,
-    segments: Vec<[[f64; 2]; 2]>,
+    segments: RTree<Line<[f64; 2]>>,
 }
 
 impl SnapIndex {
@@ -26,43 +30,28 @@ impl SnapIndex {
 
     pub fn rebuild(&mut self, vertices: Vec<[f64; 2]>, segments: Vec<[[f64; 2]; 2]>) {
         self.tree = RTree::bulk_load(vertices);
-        self.segments = segments;
+        self.segments = RTree::bulk_load(segments.into_iter().map(|[from, to]| Line::new(from, to)).collect());
     }
 
     pub fn query(&self, cursor: [f64; 2], tolerance: f64) -> Option<SnapHit> {
-        if let Some(&v) = self.tree.nearest_neighbor(&cursor) {
-            let d = ((v[0] - cursor[0]).powi(2) + (v[1] - cursor[1]).powi(2)).sqrt();
-            if d <= tolerance {
-                return Some(SnapHit {
-                    point: v,
-                    kind: SnapKind::Vertex,
-                    distance: d,
-                });
+        // Nearest vertex/segment, target/cpp-ref/src/core/LayerOps.cpp:2852-2872;
+        // preserve the existing alignment nearest_on policy. R-tree search is data-dependent, worst O(n).
+        let mut best = self
+            .tree
+            .nearest_neighbor(&cursor)
+            .map(|&point| SnapHit {
+                point,
+                kind: SnapKind::Vertex,
+                distance: (point[0] - cursor[0]).hypot(point[1] - cursor[1]),
+            })
+            .filter(|hit| hit.distance <= tolerance);
+        if let Some(segment) = self.segments.nearest_neighbor(&cursor) {
+            let point = segment.nearest_point(&cursor);
+            let distance = (point[0] - cursor[0]).hypot(point[1] - cursor[1]);
+            if distance <= tolerance && best.is_none_or(|hit| distance < hit.distance) {
+                best = Some(SnapHit { point, kind: SnapKind::Segment, distance });
             }
         }
-        let mut best_seg: Option<SnapHit> = None;
-        for seg in &self.segments {
-            let proj = project_point_to_segment(cursor, seg[0], seg[1]);
-            let d = ((proj[0] - cursor[0]).powi(2) + (proj[1] - cursor[1]).powi(2)).sqrt();
-            if d <= tolerance && best_seg.is_none_or(|b| d < b.distance) {
-                best_seg = Some(SnapHit {
-                    point: proj,
-                    kind: SnapKind::Segment,
-                    distance: d,
-                });
-            }
-        }
-        best_seg
+        best
     }
-}
-
-fn project_point_to_segment(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
-    let dx = b[0] - a[0];
-    let dy = b[1] - a[1];
-    let len2 = dx * dx + dy * dy;
-    if len2 < 1e-12 {
-        return a;
-    }
-    let t = (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2).clamp(0.0, 1.0);
-    [a[0] + t * dx, a[1] + t * dy]
 }

@@ -13,6 +13,12 @@
 
 #[path = "align_map_input.rs"]
 mod align_map_input;
+#[path = "align_snap.rs"]
+mod align_snap;
+#[path = "align_snap_sources.rs"]
+mod align_snap_sources;
+#[path = "align_snap_worker.rs"]
+mod align_snap_worker;
 #[path = "align_picker.rs"]
 pub(crate) mod align_picker;
 #[path = "align_source_pane.rs"]

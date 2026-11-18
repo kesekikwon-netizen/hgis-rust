@@ -1,5 +1,9 @@
 //! Right-map pairing and link overlay, target/cpp-ref/src/app/KaAlignMapTool.cpp:464-555, KaImageView.cpp:29-86.
 use super::align_source_pane::mark;
+use super::{
+    align_snap::{Operation, Resolution},
+    align_snap_sources::Sources,
+};
 use crate::app_state::StrataAppState;
 use crate::gui_tab_map::{s2w, w2s};
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
@@ -7,34 +11,36 @@ use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 impl StrataAppState {
     pub(crate) fn apply_pending_align_view(&mut self, ctx: &egui::Context) {
         let Some((epsg, extent)) = self.align.pending_view.take() else { return };
-        if epsg != strata_types::crs::CrsCode::from(self.work_crs).epsg_number() { return; }
+        if epsg != strata_types::crs::CrsCode::from(self.work_crs).epsg_number() {
+            return;
+        }
         self.home_map.set_view_extent(extent);
         self.home_map.viewport.meters_per_pixel *= 1.25;
         self.home_map.note_view();
         ctx.request_repaint();
     }
-    fn align_map_point(&self, rect: Rect, at: Pos2) -> [f64; 2] {
-        let point = s2w(rect, &self.home_map.viewport, at);
-        if !self.home_map.cad.snap_enabled {
-            return point;
-        }
-        let reach = self.home_map.cad.snap_tolerance_px * self.home_map.viewport.meters_per_pixel;
-        let (mut lines, points) = self.survey_snap_parts();
-        let within = [point[0] - reach, point[1] - reach, point[0] + reach, point[1] + reach];
-        for row in self.left_layers.entries.iter().filter(|row| row.snap_enabled && self.home_map.real_survey.is_layer_visible(&row.label_ko)) {
-            lines.extend(self.ref_vectors.runs_within(&row.layer_key, within));
-        }
-        crate::gui_tab_drawing::sheet_coord_points::nearest_on(point, &lines, &points, reach).unwrap_or(point)
-    }
-
     pub(crate) fn handle_align_map_input(&mut self, ui: &egui::Ui, response: &egui::Response, rect: Rect) -> bool {
-        if !self.align_split_shown() {
+        if !self.align_split_shown() || self.active_tool != strata_canvas2d::map_tools::MapToolKind::GeorefAlign {
             return false;
         }
+        let sources = Sources::capture(self);
+        let blocked = !response.enabled() || self.modal_window_open() || self.app_popup_menu_open();
         let Some(session) = &mut self.align.raster else { return false };
         session.map_rect = Some(rect);
-        if session.task.0.is_some() {
+        session.target_cursor = None;
+        if session.task.0.is_some() || blocked {
+            session.snap.cancel();
+            session.drag = None;
             return true;
+        }
+        if session.snap.prepare(sources) && matches!(session.drag, Some((false, _))) {
+            session.drag = None;
+        }
+        if session.snap.waiting() {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(30));
+        }
+        if response.hovered() || response.dragged_by(egui::PointerButton::Primary) {
+            session.target_cursor = ui.input(|i| i.pointer.hover_pos()).filter(|at| rect.contains(*at));
         }
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
@@ -42,39 +48,84 @@ impl StrataAppState {
         if response.secondary_clicked() {
             self.align.pending_source = None;
             session.drag = None;
+            session.snap.cancel();
             self.status_bar_hint = self.align.status_text();
             return true;
         }
         if self.align.pending_source.is_none() && response.drag_started_by(egui::PointerButton::Primary) {
             if let Some(at) = ui.input(|i| i.pointer.press_origin()) {
-                session.drag = self.align.pairs.iter().enumerate().find(|(_, p)| w2s(rect, &self.home_map.viewport, p.map).distance(at) <= 10.0).map(|(index, _)| (false, index));
+                session.drag = self
+                    .align
+                    .pairs
+                    .iter()
+                    .enumerate()
+                    .find(|(_, p)| w2s(rect, &self.home_map.viewport, p.map).distance(at) <= 10.0)
+                    .map(|(index, _)| (false, index));
             }
         }
         if response.drag_stopped_by(egui::PointerButton::Primary) {
             if let (Some((false, index)), Some(at)) = (session.drag.take(), response.interact_pointer_pos()) {
-                let point = self.align_map_point(rect, at);
-                self.align.move_pair(index, false, point);
-                self.status_bar_hint = self.align.status_text();
+                if rect.contains(at) {
+                    let raw = s2w(rect, &self.home_map.viewport, at);
+                    let reach = self.home_map.cad.snap_tolerance_px * self.home_map.viewport.meters_per_pixel;
+                    session.snap.defer(Operation::Move(index), raw, reach, &self.align.pairs, self.align.pending_source);
+                }
             }
         } else if response.clicked() {
             if let Some(at) = response.interact_pointer_pos() {
-                let point = self.align_map_point(rect, at);
-                if self.align.accept_map(point) {
-                    self.status_bar_hint = self.align.status_text();
+                if self.align.pending_source.is_some() {
+                    let raw = s2w(rect, &self.home_map.viewport, at);
+                    let reach = self.home_map.cad.snap_tolerance_px * self.home_map.viewport.meters_per_pixel;
+                    session.snap.defer(Operation::Pick, raw, reach, &self.align.pairs, self.align.pending_source);
                 } else {
                     self.status_bar_hint = "왼쪽 도면에서 먼저 모서리를 찍으세요".to_owned();
                 }
             }
         }
+        // Popup owners consume Escape later in the frame; do not commit delayed input before them.
+        // target/cpp-ref/src/app/KaAlignMapTool.cpp:538-555 and MainWindow.cpp:256-268.
+        if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            let outcome = session.snap.take_ready_action(&self.align.pairs, self.align.pending_source);
+            match outcome {
+                Ok(Some((Operation::Pick, point))) => {
+                    self.align.accept_map(point);
+                    self.status_bar_hint = self.align.status_text();
+                }
+                Ok(Some((Operation::Move(index), point))) => {
+                    self.align.move_pair(index, false, point);
+                    self.status_bar_hint = self.align.status_text();
+                }
+                Err(why) => self.show_status_message(why),
+                Ok(None) if session.snap.has_action() => self.status_bar_hint = "도면을 정리하는 중…".to_owned(),
+                Ok(None) => {}
+            }
+        }
         true
+    }
+
+    fn align_target_preview(&self, rect: Rect) -> Option<([f64; 2], bool)> {
+        let session = self.align.raster.as_ref()?;
+        let raw = s2w(rect, &self.home_map.viewport, session.target_cursor?);
+        let reach = self.home_map.cad.snap_tolerance_px * self.home_map.viewport.meters_per_pixel;
+        match session.snap.resolve(&Sources::capture(self), raw, reach) {
+            Resolution::Ready { point, snapped } => Some((point, snapped)),
+            Resolution::Waiting | Resolution::Failed(_) => None,
+        }
     }
 
     pub(crate) fn paint_align_marks(&self, p: &egui::Painter, rect: Rect) {
         if !self.align_split_shown() {
             return;
         }
+        let preview = self.align_target_preview(rect);
+        let drag = self.align.raster.as_ref().and_then(|s| s.drag);
         for (index, pair) in self.align.pairs.iter().enumerate() {
-            mark(p, w2s(rect, &self.home_map.viewport, pair.map), index, false);
+            let point = if drag == Some((false, index)) { preview.map_or(pair.map, |(point, _)| point) } else { pair.map };
+            mark(p, w2s(rect, &self.home_map.viewport, point), index, false);
+        }
+        if let Some((point, true)) = preview {
+            // target/cpp-ref/src/app/KaAlignMapTool.cpp:464-479, 16-point blue circle.
+            p.circle(w2s(rect, &self.home_map.viewport, point), 8.0, Color32::from_white_alpha(220), Stroke::new(2.0, Color32::from_rgb(30, 103, 198)));
         }
     }
 
@@ -87,14 +138,17 @@ impl StrataAppState {
         let Some(session) = &self.align.raster else { return };
         let (Some(source), Some(map)) = (session.source_rect, session.map_rect) else { return };
         let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("alignment_links"))).with_clip_rect(source.union(map));
-        for pair in &self.align.pairs {
-            let (a, b) = (session.view.screen(source, pair.src), w2s(map, &self.home_map.viewport, pair.map));
+        let preview = self.align_target_preview(map);
+        for (index, pair) in self.align.pairs.iter().enumerate() {
+            let target = if session.drag == Some((false, index)) { preview.map_or(pair.map, |(point, _)| point) } else { pair.map };
+            let (a, b) = (session.view.screen(source, pair.src), w2s(map, &self.home_map.viewport, target));
             if source.contains(a) && map.contains(b) {
                 link(&p, a, b, false);
             }
         }
-        if let (Some(point), Some(cursor)) = (self.align.pending_source, ctx.input(|i| i.pointer.hover_pos()).filter(|p| map.contains(*p))) {
-            link(&p, session.view.screen(source, point), cursor, true);
+        if let (Some(point), Some(cursor)) = (self.align.pending_source, session.target_cursor) {
+            let endpoint = preview.map_or(cursor, |(point, _)| w2s(map, &self.home_map.viewport, point));
+            link(&p, session.view.screen(source, point), endpoint, true);
         }
     }
 }

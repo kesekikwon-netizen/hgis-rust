@@ -9,6 +9,9 @@ use strata_canvas2d::map_tools::MapToolKind;
 
 impl StrataAppState {
     pub(crate) fn apply_align_move(&mut self) -> Result<(), String> {
+        if self.align.raster.as_ref().is_some_and(|session| session.snap.has_action() || session.drag.is_some()) {
+            return Err("도면을 정리하는 중…".to_owned());
+        }
         if self.align.pairs.len() < 2 {
             return Err("점을 2개 이상 찍은 뒤 「이동」을 누르세요".to_owned());
         }
@@ -44,6 +47,7 @@ impl StrataAppState {
     }
 
     pub(crate) fn restore_align_originals(&mut self) -> (bool, String) {
+        self.align.cancel_target_action();
         let Some(session) = &mut self.align.raster else { return (true, "되돌릴 맞추기가 없습니다".to_owned()) };
         if session.task.0.is_some() {
             return (false, "도면을 정리하는 중…".to_owned());
@@ -68,6 +72,9 @@ impl StrataAppState {
     }
 
     pub(crate) fn save_align_result(&mut self) -> (String, String) {
+        if self.align.raster.as_ref().is_some_and(|session| session.snap.has_action() || session.drag.is_some()) {
+            return (String::new(), "도면을 정리하는 중…".to_owned());
+        }
         if let Some(task) = self.align.raster.as_mut().and_then(|session| session.task.0.as_mut()) {
             if let Purpose::Apply { save } = &mut task.purpose {
                 *save = true;

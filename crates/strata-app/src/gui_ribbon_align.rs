@@ -25,7 +25,17 @@ pub struct AlignSessionState {
 }
 
 impl AlignSessionState {
+    pub(crate) fn cancel_target_action(&mut self) {
+        // Cancel transient input only; keep source pixels, completed pairs and original data.
+        // target/cpp-ref/src/app/KaAlignMapTool.cpp:538-576.
+        if let Some(session) = &mut self.raster {
+            session.snap.cancel();
+            session.drag = None;
+            session.target_cursor = None;
+        }
+    }
     pub(crate) fn set_source(&mut self, xy: [f64; 2]) {
+        self.cancel_target_action();
         self.pending_source = Some(xy);
     }
     pub(crate) fn accept_map(&mut self, xy: [f64; 2]) -> bool {
@@ -54,6 +64,7 @@ impl AlignSessionState {
         true
     }
     fn invalidate(&mut self) {
+        self.cancel_target_action();
         self.applied = false;
         self.transform = None;
     }
@@ -85,6 +96,7 @@ impl AlignSessionState {
     /// C++ `KaAlignMapTool::removeLastPair()` — `KaAlignMapTool.cpp:319-329`.
     /// 왼쪽 점만 찍혀 있으면 그것부터 지우고, 아니면 마지막 점 쌍을 지운다.
     pub fn remove_last_pair(&mut self) -> bool {
+        self.cancel_target_action();
         if self.pending_source.take().is_some() {
             return true;
         }

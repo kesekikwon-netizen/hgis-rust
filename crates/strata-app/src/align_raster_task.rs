@@ -57,6 +57,8 @@ pub(crate) struct RasterSession {
     pub map_rect: Option<eframe::egui::Rect>,
     pub selected: Option<usize>,
     pub drag: Option<(bool, usize)>,
+    pub snap: super::super::align_snap::Resolver,
+    pub target_cursor: Option<eframe::egui::Pos2>,
 }
 
 impl RasterSession {
@@ -81,12 +83,18 @@ impl RasterSession {
             map_rect: None,
             selected: None,
             drag: None,
+            snap: Default::default(),
+            target_cursor: None,
         })
     }
 }
 
 impl StrataAppState {
     pub(crate) fn poll_align_task(&mut self, ctx: &eframe::egui::Context) {
+        // Deactivation cannot leave a deferred target release alive (KaAlignMapTool.cpp:555-576).
+        if self.active_tab != crate::app_state::MainTab::Map || self.active_tool != strata_canvas2d::map_tools::MapToolKind::GeorefAlign || !self.align_split_shown() {
+            self.align.cancel_target_action();
+        }
         let Some(session) = &mut self.align.raster else { return };
         let Some(task) = session.task.0.take() else { return };
         let result = match task.receive.try_recv() {
