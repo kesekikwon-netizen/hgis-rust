@@ -180,12 +180,19 @@ pub(crate) fn render_survey_contour(
             } else if let Some(note) = app.modals.contour_build_note.clone() {
                 note
             } else {
-                survey_contour_sheet::contour_preview(
+                match survey_contour_sheet::poll_contour_preview(
                     path,
                     app.modals.contour_interval_m,
                     app.modals.contour_exclude_suspicious,
-                )
+                ) {
+                    survey_contour_sheet::PreviewPoll::Pending => {
+                        ctx.request_repaint();
+                        survey_contour_sheet::READING.to_owned()
+                    }
+                    survey_contour_sheet::PreviewPoll::Ready(text) => text,
+                }
             };
+            let preview_pending = summary == survey_contour_sheet::READING;
             egui::Frame::NONE
                 .fill(Color32::from_rgb(225, 240, 218))
                 .stroke(Stroke::new(1.0, Color32::from_rgb(155, 195, 145)))
@@ -215,8 +222,10 @@ pub(crate) fn render_survey_contour(
                 .fill(Color32::from_rgb(181, 87, 58))
                 .corner_radius(6.0)
                 .min_size(Vec2::new(108.0, 30.0));
-                // Empty path: KaSurveyContourDialog.cpp:126-131. A file runs the package write.
-                if ui.add(make_btn).clicked() {
+                // Empty path: KaSurveyContourDialog.cpp:126-131. A file runs the package write
+                // only after the worker has finished reading it.
+                let make = ui.add_enabled(path_empty || !preview_pending, make_btn);
+                if make.clicked() {
                     if path_empty {
                         app.modals.contour_empty_rejected = true;
                     } else {

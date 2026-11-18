@@ -104,7 +104,11 @@ fn safe_stem(path: &str) -> String {
 fn discard(staging: &Path) {
     let _ = std::fs::remove_dir_all(staging);
     if let Some(parent) = staging.parent() {
-        if parent.read_dir().ok().is_some_and(|mut entries| entries.next().is_none()) {
+        if parent
+            .read_dir()
+            .ok()
+            .is_some_and(|mut entries| entries.next().is_none())
+        {
             let _ = std::fs::remove_dir(parent);
         }
     }

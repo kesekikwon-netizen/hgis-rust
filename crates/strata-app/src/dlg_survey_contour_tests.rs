@@ -132,6 +132,16 @@ fn open_contour(path: &str) -> (StrataAppState, egui::Context, Vec<String>) {
     for _ in 0..3 {
         (_, texts) = frame(&mut app, &ctx, vec![]);
     }
+    for _ in 0..100 {
+        if !texts
+            .iter()
+            .any(|text| text == super::survey_contour_sheet::READING)
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        (_, texts) = frame(&mut app, &ctx, vec![]);
+    }
     (app, ctx, texts)
 }
 

@@ -5,9 +5,9 @@
 //! (`SurveyPointReader::read`) plus the TIN and `contours.gpkg` write.
 
 use std::path::Path;
-use std::sync::Mutex;
-use std::time::UNIX_EPOCH;
 
+#[path = "survey_contour_preview_job.rs"]
+mod job;
 #[path = "survey_contour_parse.rs"]
 mod parse;
 
@@ -24,23 +24,27 @@ struct Sheet {
     points: Vec<Elev>,
 }
 
-struct Slot {
-    key: String,
-    sheet: Sheet,
+/// Point count and elevation range for `path`, or a fatal line from the C++ reader.
+///
+/// This reads the file on the calling thread. The dialog uses [`job::poll`], which
+/// does the read on a worker so a frame does not wait on disk (`AGENTS.md`).
+#[cfg(test)]
+pub(crate) fn contour_preview(path: &str, interval_m: f64, exclude_suspicious: bool) -> String {
+    preview_of(&read_sheet(Path::new(path)), interval_m, exclude_suspicious)
 }
 
-static CACHE: Mutex<Option<Slot>> = Mutex::new(None);
+fn preview_of(sheet: &Sheet, interval_m: f64, exclude_suspicious: bool) -> String {
+    let Some(fatal) = sheet.fatal.clone() else {
+        return format_points(&sheet.points, interval_m, exclude_suspicious);
+    };
+    fatal
+}
 
-/// Point count and elevation range for `path`, or a fatal line from the C++ reader.
-pub(crate) fn contour_preview(path: &str, interval_m: f64, exclude_suspicious: bool) -> String {
-    let sheet = sheet_for(path);
-    if let Some(fatal) = sheet.fatal {
-        return fatal;
-    }
+fn format_points(points: &[Elev], interval_m: f64, exclude_suspicious: bool) -> String {
     let mut count = 0usize;
     let mut min_cm = 0i32;
     let mut max_cm = 0i32;
-    for point in sheet.points {
+    for point in points {
         if exclude_suspicious && point.suspicious {
             continue;
         }
@@ -71,37 +75,6 @@ pub(crate) fn contour_preview(path: &str, interval_m: f64, exclude_suspicious: b
         text.push_str("줄이 많습니다. 간격을 넓히세요.");
     }
     text
-}
-
-fn sheet_for(path: &str) -> Sheet {
-    let key = cache_key(path);
-    let mut guard = CACHE.lock().unwrap_or_else(|poison| poison.into_inner());
-    if let Some(slot) = guard.as_ref() {
-        if slot.key == key {
-            return slot.sheet.clone();
-        }
-    }
-    let sheet = read_sheet(Path::new(path));
-    *guard = Some(Slot {
-        key,
-        sheet: sheet.clone(),
-    });
-    sheet
-}
-
-fn cache_key(path: &str) -> String {
-    match std::fs::metadata(path) {
-        Ok(meta) => {
-            let stamp = meta
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_nanos())
-                .unwrap_or(0);
-            format!("{path}\0{}\0{stamp}", meta.len())
-        }
-        Err(_) => format!("missing\0{path}"),
-    }
 }
 
 fn read_sheet(path: &Path) -> Sheet {
@@ -160,7 +133,7 @@ fn dxf_sheet(path: &Path) -> Sheet {
 
 /// Points the preview counted, for the package writer. `Err` is the preview's fatal line.
 pub(crate) fn contour_xyz(path: &str, exclude_suspicious: bool) -> Result<Vec<[f64; 3]>, String> {
-    let sheet = sheet_for(path);
+    let sheet = job::sheet_if_ready(path).unwrap_or_else(|| read_sheet(Path::new(path)));
     if let Some(fatal) = sheet.fatal {
         return Err(fatal);
     }
@@ -194,6 +167,8 @@ pub(super) fn format_cm(cm: i32) -> String {
     let frac = tenths % 10;
     format!("{sign}{whole}.{frac}")
 }
+
+pub(crate) use job::{poll as poll_contour_preview, PreviewPoll, READING};
 
 #[cfg(test)]
 #[path = "survey_contour_sheet_tests.rs"]
