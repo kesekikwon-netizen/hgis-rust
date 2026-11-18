@@ -198,8 +198,6 @@ fn the_received_maps_move_with_the_survey_folder() {
     assert_eq!(file_of(&opened, SOIL.key), dir.path().join("나/ka-hgis-reference-ab12").join(SOIL.file_name));
 }
 
-/// MainWindow.cpp:1425-1436 greys the 1919 menu and leaves the layer. Restoring without the key
-/// keeps the row, and the next save still has it.
 #[test]
 fn restoring_the_1919_row_without_the_history_key_keeps_it() {
     let dir = tempfile::tempdir().unwrap();

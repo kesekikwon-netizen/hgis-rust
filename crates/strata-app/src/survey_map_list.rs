@@ -157,8 +157,6 @@ impl StrataAppState {
         true
     }
 
-    /// A map of tiles needs no file. Without the history-GIS key the 1919 menu row is grey
-    /// (MainWindow.cpp:1425-1436) and the layer stays, so the next save still has it.
     fn restore_tile_row(&mut self, layer: &'static RefTileLayer) -> bool {
         if layer.key == MAP_1919.key {
             let key = (self.history_gis_key_reader)();

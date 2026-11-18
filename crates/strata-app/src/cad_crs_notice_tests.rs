@@ -59,14 +59,13 @@ fn stated_reads_the_file_name_and_the_header_words() {
     expect(drawing, &["산5174", "374-1답"], &[]);
 }
 
-/// A header that names 베셀 중부원점 offers EPSG:5174, and the work CRS is not the only line.
 #[test]
 fn a_bessel_central_header_offers_5174_and_more_than_the_work_crs() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("도면.dxf");
     std::fs::write(&path, "베셀 중부원점").unwrap();
     assert_eq!(crs_label("EPSG:5186"), "GRS80 중부원점(2010)");
-    let notice = notice_for(&path, "EPSG:5187");
+    let notice = notice_for(&path, "EPSG:5187", &[]);
     let crs: Vec<_> = notice
         .menu
         .iter()
@@ -112,4 +111,21 @@ fn a_bessel_central_header_offers_5174_and_more_than_the_work_crs() {
     app.apply_cad_notice(&offered);
     assert!(app.modals.active.is_none());
     assert_eq!(app.status_left_message(), chosen);
+}
+
+#[test]
+fn a_recent_crs_leads_when_the_header_states_nothing() {
+    let notice = notice_for(
+        Path::new("C:/a/도면.dxf"),
+        "EPSG:5187",
+        &["EPSG:2097".to_owned()],
+    );
+    let first = notice
+        .menu
+        .iter()
+        .find(|line| matches!(line.kind, CadNoticeKind::OtherCrs { .. }));
+    assert_eq!(
+        first.map(|line| line.label.as_str()),
+        Some("베셀 중부원점 (EPSG:2097)")
+    );
 }

@@ -1,5 +1,4 @@
 //! What a CAD drawing says its CRS is (`CadCrsHints.cpp:27-94`, `CadCrsGuess.cpp:52-86`).
-//! File text stands in for entity texts (`KaCadImport.cpp:141-144`) until the drawing reader exists.
 
 use std::path::Path;
 
@@ -70,23 +69,18 @@ pub(crate) fn crs_label(auth_id: &str) -> &str {
         .unwrap_or(auth_id)
 }
 
-/// `CadCrsHints.cpp:82-94` `stated`, plus the file text standing in for entity texts
-/// (`KaCadImport.cpp:141-144`) until the drawing reader exists.
+/// `CadCrsHints.cpp:82-94` `stated`.
 #[must_use]
 pub(crate) fn stated_auth_ids(path: &Path, texts: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     if let Some(id) = prj_auth(path) {
         add_auth(&mut out, &id);
     }
-    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+    if let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) {
         stated_from_stem(stem, &mut out);
     }
     for text in texts {
         from_text(text, &mut out);
-    }
-    if let Ok(bytes) = std::fs::read(path) {
-        let end = bytes.len().min(65_536);
-        from_text(&String::from_utf8_lossy(&bytes[..end]), &mut out);
     }
     out
 }
@@ -101,7 +95,7 @@ fn add_auth(out: &mut Vec<String>, auth_id: &str) {
 }
 
 fn prj_auth(path: &Path) -> Option<String> {
-    // `CadCrsHints.cpp:32-44` — the `.prj` beside the drawing. PROJ equality of an unnamed WKT is not here.
+    // `CadCrsHints.cpp:32-44` — the `.prj` beside the drawing.
     let stem = path.file_stem()?.to_str()?;
     let folder = path.parent()?;
     let mut found = None;

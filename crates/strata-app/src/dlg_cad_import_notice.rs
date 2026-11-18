@@ -41,7 +41,8 @@ pub(crate) fn render_cad_import_notice(
             );
             ui.add_space(8.0);
             // KaCadImportNotice.cpp:53-68 — candidates other than the one in use, then the two actions.
-            let notice = crate::cad_crs_notice::notice_for(std::path::Path::new(&app.modals.cad_import_path), app.work_crs.auth_id());
+            let used_auth_id = app.work_crs.auth_id(); // stand-in for the placed id (`KaCadImport.cpp:166`)
+            let notice = crate::cad_crs_notice::notice_for(std::path::Path::new(&app.modals.cad_import_path), used_auth_id, &[]);
             let mut picked = None;
             ui.horizontal(|ui| {
                 crate::gui_shell::native_menu_button(ui, "다른 위치로 바꾸기", |ui| {
