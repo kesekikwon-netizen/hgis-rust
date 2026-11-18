@@ -29,7 +29,9 @@ pub(crate) const MAP_1919: RefTileLayer = RefTileLayer {
 impl StrataAppState {
     /// The menu row 「1919 조선지형도 1:5만」 (`MainWindow::addHistoryGisMap1919`), with the stored key.
     pub(crate) fn add_history_map_1919(&mut self) {
-        self.add_history_map_1919_with(&strata_secrets::vworld::VworldSettings::load_history_gis_api_key());
+        // target/cpp-ref/src/app/MainWindowOffline.cpp:469: retain the same key-store boundary.
+        let key = (self.history_gis_key_reader)();
+        self.add_history_map_1919_with(&key);
     }
 
     /// The same with the key given.

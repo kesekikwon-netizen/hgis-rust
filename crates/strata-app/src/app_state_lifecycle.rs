@@ -88,6 +88,7 @@ impl StrataAppState {
             heritage: crate::heritage_run::HeritageRun::default(),
             heritage_run_requested: false,
             history_gis_key: String::new(),
+            history_gis_key_reader: strata_secrets::vworld::VworldSettings::load_history_gis_api_key,
             active_tool: MapToolKind::Pan,
             ribbon: KaBeginnerRibbon::default(),
             left_layers: LeftLayerPanel::new_empty(),

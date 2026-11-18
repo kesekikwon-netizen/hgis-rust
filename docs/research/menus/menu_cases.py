@@ -8,8 +8,17 @@ when their evidence is reviewed, never recomputed by the report generator.
 import re
 
 REVIEWED_DIGESTS = {
+    "target/cpp-ref/src/app/MainWindowOffline.cpp": "d9d3a872cb39ab21a45f910703838441699d78bd3d7abdb77c49b2f1ba3df9f2",
+    "crates/strata-app/src/gui_ribbon_menu_actions.rs": "6e9f51cc99384fb501703fd07a4751ca9f0324a275845a8998b53b7b9b4143cc",
+    "crates/strata-app/src/gui_ribbon_menus_a.rs": "fd52bf69b813365fe2c08db65baa92eecb8f9ba8136b818cb1f71a4861e7dd39",
+    "crates/strata-app/src/gui_ribbon_menus_b.rs": "d03a1d4fcfe7a325973ee389e1f4466b8465c63e1925b78d875d4b9fe453df48",
+    "crates/strata-app/src/ribbon_state.rs": "5c6d8158c2c27c0e9a3af3e3e2706b25826dcb7f6418d1fb23c35f1cbfc7d849",
+    "crates/strata-app/src/app_state_lifecycle.rs": "6a101d0cbb00120fba385d37f284a1b2288095dd3fa79363815ce0d9bb20a6c8",
+    "crates/strata-app/src/ref_tile_history.rs": "9604e7e16f6df86d117c5d1daff3392083616fe026030bb10f96b49fbb9fb303",
+    "crates/strata-app/src/old_map_input_tests.rs": "e434d2a27536d05bf45b3791c2c5c2207220fecd30776f5212c7c32ee7da6423",
+    "crates/strata-app/src/map_wheel_zoom_tests_c.rs": "ff71283f35722327c763eef80909120b2afbfd3eddd32af5dc63ba9e98887f1f",
     "crates/strata-app/src/app_state_buffer_save.rs": "7caffda784665f3bdba5389250ad9cbb95fabd096258dc58cfa9e56ab3c62e15",
-    "crates/strata-app/src/app_state.rs": "efd95dba1a426bd2a13369abf045873b52e19fe3ce431c49d2cb95a85a0d099f",
+    "crates/strata-app/src/app_state.rs": "065816726ef2adda4f4a845ef634d4e32bb23cf6f26d822038b7f43738cda3d4",
     "crates/strata-app/src/real_survey_types.rs": "17a17ae02492972420f85643d45eb02a789a96be1a0854f38bdcbf29cbab99f9",
     "crates/strata-app/src/buffer_save_input_tests.rs": "b947a5cdf11c836127e512c35bc35dd4fde45f534021490bb7ed07d4ce96d427",
     "crates/strata-app/src/buffer_save_input_tests_a.rs": "4b92a76601d9e844bbbb92bd8a7d88725596ff42588aaa13a139d191dcdbf0ac",
@@ -69,9 +78,9 @@ REVIEWED_DIGESTS = {
     "target/cpp-ref/src/app/MainWindow.cpp": "017360b61d6204525a527591140169fc1fb64596335cdf920a5a8dd6fe75eb19",
     "crates/strata-app/src/menu_selection_keys_tests.rs": "c54de8904932f32f702074cdeec77f8d4ae33e118386ce66d5b7aff8e5d09021",
     "crates/strata-app/src/menu_capture_keys_tests.rs": "4b60110121a0c63830d04308e281d67779f9f0ee35265ef2b4e260801bda8658",
-    "crates/strata-app/src/popup_input_harness.rs": "a5afd08239bf3dec538c7eb2e3287ce2be8486d6474b2dadb97b0ac3d615099c",
+    "crates/strata-app/src/popup_input_harness.rs": "12bc498a781ee060c639507ff22bd1ee5bf67603f2bbc96a5e103070f81a4371",
     "crates/strata-app/src/shell_workspace.rs": "b2d833287f100313db7a19a66ebb4cb78b283b1ed123afbd5017471edccc8142",
-    "crates/strata-app/src/gui_shell.rs": "5bd35cd837bd5f651c5069205357fe472b88c0a0548e3facb6b989e7c0992ddc",
+    "crates/strata-app/src/gui_shell.rs": "1d34bf95ec64d486e90247513e989873ab4beaaac8246279ffaed1278d77931e",
     "crates/strata-app/src/gui_shell_escape.rs": "37a738f061a24b7bc01fac480a840e09dc93abf53162e56d1da0b70cbd2c45e7",
     "crates/strata-app/src/native_menu_input.rs": "03e8b7fe31bee033005d145c058f6d59779593758ba2245f4bb51e7c6704f216",
     "crates/strata-app/src/native_popup_escape_tests.rs": "cc6778efc5f5aa6dd97f2b2bd2ce1ffcd7d282fd30964de874f6e503e90b0f9c",
@@ -344,8 +353,25 @@ def build_cases(root):
             ['gui_ribbon_menus_a.rs', 'gui_ribbon_menu_actions.rs'], ['조사구역·계정 유무', '받는 중·캐시 있음', '설정 취소·실패'], ['MENU0·CADMENU0의 각 하위 행을 현 소스에서 재대조; 실제 사이트 성공으로 로컬 검사를 확대하지 않음'])
     add('fetch.heritage', '자료 받기 > 유산 > 지역·내려받기·취소·재시도', 1, '부분 구현', ['HeritageIntranetFlow.cpp', 'KaHeritageBrowser.cpp'],
         ['dlg_heritage_browser.rs', 'heritage_download_worker_tests.rs'], ['폼 필드 종류', '부모 창 숨김', '전송 실패·재시작·조사 전환'], ['유산 로컬 WebView 근거 연결; 실제 사이트 로그인·완료 미검증'])
-    add('map.old', '배경 지도 > 옛 지도 > 대동여지도 / 1919 조선지형도', 2, '부분 구현', [('MainWindowRibbon.cpp', 'old_map')],
-        ['gui_ribbon_menus_b.rs', 'gui_ribbon_click_b.rs'], ['첫 클릭', '선택·해제', '지도·도면 탭', '우측 중복 항목 제거'], ['UI1 근거 연결; 새 목록의 선택·활성·취소 조건 최종 재대조'])
+    add('map.old', '배경 지도 > 옛 지도 > 대동여지도 / 1919 조선지형도 전체', 2, '부분 구현',
+        [('MainWindowRibbon.cpp', 'oldMaps->setPopupMode'), ('MainWindowOffline.cpp', 'void MainWindow::addHistoryGisMap1919')],
+        ['gui_ribbon_menus_a.rs', 'gui_ribbon_menus_b.rs', 'gui_ribbon_menu_actions.rs', 'ref_tile_history.rs'],
+        ['첫 클릭·반복·선택·해제', '지도·도면·키보드', '계정·실제 지도 영상·저장·재열기'],
+        ['최신 사용자 아이콘 불동작은 MENU16에서 실제 재현·수정했고 좁은 포인터 진입은 별도 완료 행',
+         '실제 서비스 영상·인증, 전체 키보드 선택·도면 탭·범례 표시와 저장 왕복은 미검증 분기가 남음'])
+    add('map.old-input', '옛 지도 > 실제 아이콘·글자 > 두 선택·취소와 그리기 복귀 입력', 1, '완료',
+        [('MainWindowRibbon.cpp', 'oldMaps->setPopupMode'), ('MainWindowOffline.cpp', 'void MainWindow::addDaedongyeojidoMap'),
+         ('MainWindowOffline.cpp', 'void MainWindow::addHistoryGisMap1919')],
+        ['gui_ribbon_menu_actions.rs', 'gui_ribbon_menus_a.rs', 'gui_ribbon_menus_b.rs', 'ribbon_state.rs',
+         'app_state.rs', 'app_state_lifecycle.rs', 'ref_tile_history.rs', 'old_map_input_tests.rs', 'popup_input_harness.rs', 'gui_shell.rs'],
+        ['추적 데모 임시 사본·생산 egui·1680/2560/1280 폭의 실제 아이콘 기본·보조 클릭',
+         '글자 클릭·아이콘 다시 눌러 닫기·800 폭 축약 메뉴',
+         '실제 두 선택 경로·중복 없는 범례·표시·변경 표시·조사 기록과 파일 바이트 보존',
+         '1919는 새 고정물의 가짜/빈 키 읽기·기본 생산 읽기는 기존 함수 유지',
+         'Esc와 실제 지도 바깥 클릭으로 닫기·미완성 세 점·원본·이력 보존·다음 지도 클릭은 네 번째 점',
+         '기존 관련 키보드9개·새 UI8개·원래 아이콘2개 실패·포인터 캡처 변이의2개 실패와 정확 복구'], [],
+        '첫 클릭은 메뉴 열기만 맡고 이후에는 실제 메뉴 경계로 닫는다. 메뉴가 열려 있을 때 투명한 앱 내부 입력 배경이 지도 클릭을 받는다. 실패 키는 하단 문구이며 별도 창을 만들지 않는다. OS 입력·원본 쓰기·실제 계정/사이트·온라인 WMS/WMTS 영상 검증은 아니다.',
+        [{'kind': 'headless_production_ui', 'evidence': ref('docs/RESULTS.md', '### 옛지도 아이콘과 메뉴 닫기의 입력 소유권')}])
     for key, title in [('legend', '범례 이동·크기·글자'), ('paper', '용지·축척'), ('north', '방위표'), ('coords', '좌표점·격자')]:
         add('sheet.' + key, '도면 > ' + title, 2, '부분 구현', ['KaDrawingStudio.cpp'],
             ['gui_tab_drawing.rs', 'tab_drawing.rs'], ['선택 없음·한 항목·여러 항목', '용지 안·밖', '작은 화면·DPI'], ['SHEET0와 UI1~UI6의 기존 근거 연결; 항목별 속성·취소·저장 상태 재대조'])
@@ -353,7 +379,7 @@ def build_cases(root):
         add('key.' + key.lower(), title + ' / ' + key, 2, '검증 안 됨', ['MainWindowRibbon.cpp', 'MainWindowChrome.cpp'],
             ['gui_shell.rs'], ['메뉴·모달·텍스트 포커스', '축소·확대 후 복귀', 'Ctrl 등 수식키'], ['MORE0의 과거 판정을 갱신하고 현재 키 처리·복귀 UI 대조'])
     add('chrome.compact', '그리기 도구 줄·작은 메뉴 > 화면 넘침·클릭 영역', 2, '부분 구현', ['MainWindowRibbon.cpp'],
-        ['gui_ribbon_draw_row.rs', 'gui_ribbon_compact.rs'], ['480~1920 너비', '200% DPI', '그리기 진행 중'], ['기존 UI6 공통 반응형 근거 연결; 그리기 도구 줄 넘침과 세트 버튼 글꼴 의존 표시 남음'])
+        ['gui_ribbon_draw_row.rs', 'gui_ribbon_compact.rs'], ['480~1920 너비', '200% DPI', '그리기 진행 중'], ['기존 UI6 근거 연결; MENU16의1280 폭 실제 그림에서 상단 긴 이름의 겹침·잘림도 관찰. 그리기 도구 줄 넘침·글꼴 의존 표시와 함께 후속 공통 UI에서 수정'])
     # First-party named actions: target/cpp-ref/src/app/MainWindowContextMenus.cpp:112-448.
     titles = {
         'layer.zoom': '이 레이어로 이동', 'layer.draw': '그리기·편집 시작', 'layer.vertices': '꼭짓점 수정',

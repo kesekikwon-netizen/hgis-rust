@@ -9,6 +9,7 @@ impl StrataAppState {
     /// 팝업 메뉴를 그린다. 항목을 고르면 닫고 실제 동작을 실행한다.
     pub(crate) fn render_ribbon_context_menus(&mut self, ctx: &egui::Context) {
         let anchor = self.ribbon.context_menu_anchor;
+        let mut old_map_rect = None;
         // ── 고지형 (7항목, KaPaleoMenu::install)
         if self.ribbon.paleo_menu_open {
             let mut open = true;
@@ -221,10 +222,12 @@ impl StrataAppState {
         // ── 옛 지도 (2항목, MainWindowRibbon.cpp:492-500 & 12-oldmap.png / 14-drawing.png)
         if self.ribbon.old_map_menu_open {
             let mut picked: Option<&'static str> = None;
-            egui::Window::new("ka_old_map_menu")
-                .title_bar(false)
-                .resizable(false)
-                .fixed_pos(anchor)
+            // target/cpp-ref/src/app/MainWindowRibbon.cpp:490: QMenu owns outside presses until dismissal.
+            let id = egui::Id::new("ka_old_map_menu");
+            let area = egui::Area::new(id).kind(egui::UiKind::Modal).sense(egui::Sense::hover()).fixed_pos(anchor).order(egui::Order::Foreground);
+            let shown = egui::Modal::new(id)
+                .area(area)
+                .backdrop_color(Color32::TRANSPARENT)
                 .show(ctx, |ui| {
                     for item in ["▤  대동여지도", "▤  1919 조선지형도 1:5만"] {
                         let row = ui.add_sized([196.0, 26.0], egui::Button::new(egui::RichText::new(item).size(12.5)).fill(Color32::TRANSPARENT).stroke(Stroke::NONE));
@@ -235,6 +238,7 @@ impl StrataAppState {
                         }
                     }
                 });
+            old_map_rect = Some(shown.response.rect);
             if let Some(item) = picked {
                 self.ribbon.old_map_menu_open = false;
                 self.active_tab = MainTab::Map;
@@ -247,6 +251,6 @@ impl StrataAppState {
                 }
             }
         }
-        self.render_ribbon_context_menus_b(ctx, anchor);
+        self.render_ribbon_context_menus_b(ctx, anchor, old_map_rect);
     }
 }

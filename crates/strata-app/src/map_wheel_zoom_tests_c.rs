@@ -87,7 +87,8 @@ fn assert_wheel_outcome(app: &mut crate::app_state::StrataAppState, ctx: &egui::
     assert_overlay_visible(ctx, label);
     // Application-modal backdrops own this point: KaDrawingPdfProgress.cpp:14,
     // KaClosePrompt.cpp:52-56 (target/cpp-ref/src/app); wheel behavior is unchanged.
-    let under = if matches!(label, "PdfPreparing" | "ka_close_prompt") { Order::Foreground } else { Order::Background };
+    // target/cpp-ref/src/app/MainWindowRibbon.cpp:490: the old-map menu now owns outside pointer input too.
+    let under = if matches!(label, "PdfPreparing" | "ka_close_prompt" | "ka_old_map_menu") { Order::Foreground } else { Order::Background };
     assert_eq!(
         ctx.layer_id_at(OVER_UNCOVERED_MAP).map(|l| l.order),
         Some(under),

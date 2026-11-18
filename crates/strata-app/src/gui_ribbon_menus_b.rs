@@ -9,7 +9,7 @@ use crate::dialogs_modal::ActiveModalDialog;
 
 impl StrataAppState {
     /// 팝업 메뉴 뒷부분. `anchor` 는 앞부분과 같은 값을 쓴다.
-    pub(crate) fn render_ribbon_context_menus_b(&mut self, ctx: &egui::Context, anchor: Pos2) {
+    pub(crate) fn render_ribbon_context_menus_b(&mut self, ctx: &egui::Context, anchor: Pos2, old_map_rect: Option<egui::Rect>) {
         // ── 더보기 (MainWindowRibbon.cpp:628-710 — 불러오기·배경 / 화면 / 계정과 키 / 상태와 정보)
         if self.ribbon.more_menu_open {
             let mut picked: Option<&'static str> = None;
@@ -116,9 +116,14 @@ impl StrataAppState {
             }
         }
         // target/cpp-ref/src/app/MainWindowContextMenus.cpp:192: QMenu closes on Escape as well as an outside click.
+        // target/cpp-ref/src/app/MainWindowRibbon.cpp:490: the opening click belongs to the whole toolbutton.
+        let just_opened = std::mem::take(&mut self.ribbon.context_menu_just_opened);
         let outside = ctx.input(|i| {
-            i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|p| {
-                !(anchor.x - 16.0 <= p.x && p.x <= anchor.x + 450.0 && anchor.y - 36.0 <= p.y && p.y <= anchor.y + 420.0)
+            !just_opened && i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|p| {
+                old_map_rect.map_or_else(
+                    || !(anchor.x - 16.0 <= p.x && p.x <= anchor.x + 450.0 && anchor.y - 36.0 <= p.y && p.y <= anchor.y + 420.0),
+                    |rect| !rect.contains(p),
+                )
             })
         });
         if outside || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {

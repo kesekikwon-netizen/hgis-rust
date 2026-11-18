@@ -268,3 +268,7 @@ mod buffer_crs_input_tests;
 #[cfg(test)]
 #[path = "buffer_save_input_tests.rs"]
 mod buffer_save_input_tests;
+
+#[cfg(test)]
+#[path = "old_map_input_tests.rs"]
+mod old_map_input_tests;

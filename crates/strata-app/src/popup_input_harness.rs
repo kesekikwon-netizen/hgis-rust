@@ -26,9 +26,7 @@ impl Harness {
         }
         app.handle_ribbon_click("그리기");
         app.start_edit_feature_poly();
-        let ctx = egui::Context::default();
-        crate::gui_theme_fonts::configure_korean_fonts_and_theme(&ctx, &app.theme);
-        let mut h = Self { app, ctx, time: 0.0, _directory: directory, textures: Default::default(), size: [1680, 960] };
+        let mut h = Self::new(app, directory);
         for _ in 0..3 {
             h.frame(vec![]);
         }
@@ -38,6 +36,11 @@ impl Harness {
         }
         assert_eq!(h.app.draw_sketch.points.len(), 3, "actual canvas capture setup");
         h
+    }
+    pub(super) fn new(app: StrataAppState, directory: tempfile::TempDir) -> Self {
+        let ctx = egui::Context::default();
+        crate::gui_theme_fonts::configure_korean_fonts_and_theme(&ctx, &app.theme);
+        Self { app, ctx, time: 0.0, _directory: directory, textures: Default::default(), size: [1680, 960] }
     }
     pub(super) fn frame(&mut self, events: Vec<Event>) -> egui::FullOutput {
         self.frame_with_modifiers(events, egui::Modifiers::default())

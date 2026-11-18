@@ -18,6 +18,7 @@ impl StrataAppState {
         self.ribbon.topo_menu_open = false;
         self.ribbon.old_map_menu_open = false;
         self.ribbon.more_menu_open = false;
+        self.ribbon.context_menu_just_opened = true;
         self.ribbon.context_menu_anchor = Pos2::new(anchor.left(), anchor.bottom() + 2.0);
         match label {
             // 고지형 and 지질 are plain buttons in the C++ (MainWindowRibbon.cpp:462-470, 501-507): no menu.

@@ -177,6 +177,7 @@ pub struct StrataAppState {
     pub(crate) heritage_run_requested: bool,
     /// The history-GIS key the tiles of the 1919 map are asked for with (ref_tile_history.rs); never shown.
     pub(crate) history_gis_key: String,
+    pub(crate) history_gis_key_reader: fn() -> String,
     pub active_tool: MapToolKind,
     pub ribbon: KaBeginnerRibbon,
     pub left_layers: LeftLayerPanel,
