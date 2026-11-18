@@ -82,7 +82,7 @@ fn test_survey_save_commits_1000_features_and_verifies_pragma_integrity_ok(
         buf.add_unsaved_feature(wkt, attrs);
     }
 
-    crate::survey_gpkg_save::save_survey(&path, &tables)
+    crate::survey_gpkg_save::save_survey(&path, &tables, &Default::default())
         .map_err(|e| StrataError::Storage(format!("{e:?}")))?;
 
     let reopened = crate::survey_gpkg_read::read_survey_tables(&path)?;

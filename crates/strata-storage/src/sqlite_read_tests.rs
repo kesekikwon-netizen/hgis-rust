@@ -75,7 +75,7 @@ pub(super) fn build_base_survey(path: &Path) {
             });
         }
     }
-    save_survey(path, &tables).expect("save base survey");
+    save_survey(path, &tables, &Default::default()).expect("save base survey");
 }
 
 pub(super) fn append_wal_only_feature(conn: &Connection) {

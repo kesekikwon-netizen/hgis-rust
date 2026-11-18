@@ -28,7 +28,7 @@ fn save_migrates_the_copy_and_keeps_unknown_tables_byte_for_byte() -> StrataResu
     let keep = |p| rows(p, "SELECT hex(id) || hex(memo) || hex(raw) FROM site_notes UNION ALL SELECT hex(name) || hex(metadata) || hex(content) FROM qgis_projects");
     let before = keep(&path)?;
     let tables = read_survey_tables(&path)?;
-    save_survey(&path, &tables).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
+    save_survey(&path, &tables, &Default::default()).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
 
     assert_eq!(keep(&path)?, before);
     assert_eq!(rows(&path, "SELECT sql FROM sqlite_master WHERE name = 'feature_poly'")?, vec![
@@ -63,7 +63,7 @@ fn the_stamp_merges_into_existing_gdal_metadata_and_never_lowers_a_newer_one() -
             xml(existing)
         )).map_err(db)?;
         let tables = read_survey_tables(&path)?;
-        save_survey(&path, &tables).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
+        save_survey(&path, &tables, &Default::default()).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
         assert_eq!(rows(&path, "SELECT metadata FROM gpkg_metadata")?, vec![xml(want)], "{name}");
         assert_eq!(rows(&path, "SELECT CAST(count(*) AS TEXT) FROM gpkg_metadata_reference")?, vec!["1"], "{name}");
     }
@@ -114,7 +114,7 @@ fn a_read_only_or_locked_original_is_saved_beside_it() -> StrataResult<()> {
         let before = sha256_fingerprint(path)?;
         let mut tables = read_survey_tables(path)?;
         table(&mut tables, "feature_poly").layer.features.push(new_feature(NEW_POLY, &[("kind", "수혈")]));
-        let written = save_survey(path, &tables).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
+        let written = save_survey(path, &tables, &Default::default()).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
         assert_eq!(written, std::path::absolute(dir.path().join(sibling))?);
         assert_eq!(sha256_fingerprint(path)?, before, "the original stays as it was");
         assert_eq!(rows(&written, "SELECT CAST(count(*) AS TEXT) FROM feature_poly")?, vec!["3"]);
@@ -146,7 +146,7 @@ fn a_side_file_save_keeps_the_originals_idle_wal_rows() -> StrataResult<()> {
     let hold = std::fs::OpenOptions::new().read(true).share_mode(0x1 | 0x2).open(&idle)?;
     let mut tables = read_survey_tables(&idle)?;
     table(&mut tables, "feature_poly").layer.features.push(new_feature(NEW_POLY, &[("kind", "수혈")]));
-    let written = save_survey(&idle, &tables).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
+    let written = save_survey(&idle, &tables, &Default::default()).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
     drop(hold);
     assert_eq!(written, std::path::absolute(dir.path().join("idle-저장.gpkg"))?);
     assert_eq!(rows(&written, "SELECT memo FROM site_notes")?, vec!["WAL 안의 행"]);

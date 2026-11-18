@@ -29,12 +29,7 @@ pub struct RealTrenchPoly {
     pub center: [f64; 2],
 }
 
-/// 「주변 Nm」 경계선들과 「Nm」 글자 자리.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct DistanceRing {
-    pub lines: Vec<Vec<[f64; 2]>>,
-    pub labels: Vec<[f64; 2]>,
-}
+pub use strata_types::buffer::DistanceRing;
 
 #[derive(Debug, Clone)]
 pub struct RealSurveyData {

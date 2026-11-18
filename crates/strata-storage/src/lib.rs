@@ -41,6 +41,7 @@ pub mod survey_gpkg_ddl;
 pub mod survey_gpkg_migrate;
 pub mod survey_gpkg_read;
 pub mod survey_gpkg_save;
+pub mod survey_gpkg_buffers;
 pub mod topo_sheet;
 pub mod wkb_codec;
 pub mod workflow_guide;

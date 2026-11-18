@@ -63,7 +63,7 @@ fn save_writes_a_new_feature_like_gdal_and_keeps_everything_else() -> StrataResu
     let mut tables = read_survey_tables(&path)?;
     table(&mut tables, "feature_poly").layer.features.push(new_feature(NEW_POLY, &[("kind", "수혈"), ("period", "삼국")]));
 
-    let written = save_survey(&path, &tables).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
+    let written = save_survey(&path, &tables, &Default::default()).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
     assert_eq!(written, std::path::absolute(&path)?);
     assert!(leftovers(dir.path())?.is_empty(), "{:?}", leftovers(dir.path())?);
 
@@ -99,7 +99,7 @@ fn changed_and_removed_rows_follow_the_opened_baseline() -> StrataResult<()> {
     poly.layer.features.retain(|f| f.fid != 2);
     poly.layer.features[0].attributes.insert("kind".to_owned(), "주거지(수정)".to_owned());
 
-    save_survey(&path, &tables).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
+    save_survey(&path, &tables, &Default::default()).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
     assert_eq!(rows(&path, "SELECT fid || '|' || kind || '|' || period || '|' || feature_no FROM feature_poly")?,
                vec!["1|주거지(수정)|청동기시대|1호"]);
     assert_eq!(rows(&path, "SELECT hex(geom) FROM feature_poly WHERE fid = 1")?, blob1, "unchanged geometry is not rewritten");
@@ -122,7 +122,7 @@ fn rows_added_elsewhere_make_the_save_stop_with_the_original_intact() -> StrataR
     }
     let before = sha256_fingerprint(&path)?;
     table(&mut tables, "feature_poly").layer.features.retain(|f| f.fid != 2);
-    assert!(save_survey(&path, &tables).is_err());
+    assert!(save_survey(&path, &tables, &Default::default()).is_err());
     assert_eq!(sha256_fingerprint(&path)?, before);
     assert!(leftovers(dir.path())?.is_empty());
     Ok(())
@@ -136,7 +136,7 @@ fn an_edit_that_cannot_be_written_fails_with_the_layer_and_leaves_the_original()
     let before = sha256_fingerprint(&path)?;
     let mut tables = read_survey_tables(&path)?;
     table(&mut tables, "feature_poly").layer.features.push(new_feature("POLYGON Z ((0 0 1,1 0 1,1 1 1,0 0 1))", &[]));
-    match save_survey(&path, &tables) {
+    match save_survey(&path, &tables, &Default::default()) {
         Err(SaveFailure::Layer { table, .. }) => assert_eq!(table, "feature_poly"),
         other => panic!("expected a layer failure, got {other:?}"),
     }
@@ -155,7 +155,7 @@ fn a_multipolygon_edit_is_stored_as_separate_features() -> StrataResult<()> {
         "MULTIPOLYGON (((0 0,1 0,1 1,0 0)),((5 5,6 5,6 6,5 5)))",
         &[("kind", "조각")],
     ));
-    save_survey(&path, &tables).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
+    save_survey(&path, &tables, &Default::default()).map_err(|e| StrataError::Storage(format!("{e:?}")))?;
     assert_eq!(rows(&path, "SELECT kind FROM feature_poly WHERE fid > 2 ORDER BY fid")?, vec!["조각", "조각"]);
     assert_eq!(rows(&path, "SELECT hex(substr(geom, 41, 5)) FROM feature_poly WHERE fid > 2")?, vec!["0103000000", "0103000000"]);
     Ok(())

@@ -24,7 +24,7 @@ fn workspace_file_actions_save_reopen_and_import_dxf_csv_roundtrip() -> StrataRe
             std::collections::BTreeMap::new(),
         );
     }
-    crate::survey_gpkg_save::save_survey(&gpkg_path, &tables)
+    crate::survey_gpkg_save::save_survey(&gpkg_path, &tables, &Default::default())
         .map_err(|e| strata_types::error::StrataError::Storage(format!("{e:?}")))?;
     let reopened = crate::survey_gpkg_read::read_survey_tables(&gpkg_path)?;
     let area = reopened.iter().find(|t| t.table == DomainLayerKey::SurveyArea.id());

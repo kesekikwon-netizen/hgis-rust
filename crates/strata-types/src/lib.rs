@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 
 pub mod crs;
+pub mod buffer;
 pub mod error;
 pub mod file_name;
 pub mod process;

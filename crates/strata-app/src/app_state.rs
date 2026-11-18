@@ -34,6 +34,8 @@ mod app_state_draw_row;
 mod app_state_popup_input;
 #[path = "app_state_buffer.rs"]
 mod app_state_buffer;
+#[path = "app_state_buffer_save.rs"]
+mod app_state_buffer_save;
 #[path = "app_state_erase.rs"]
 mod app_state_erase;
 #[path = "app_state_merge.rs"]

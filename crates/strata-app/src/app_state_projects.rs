@@ -219,7 +219,7 @@ impl StrataAppState {
                 return false;
             }
         }
-        let written = match save_survey(path, &self.survey_tables) {
+        let written = match save_survey(path, &self.survey_tables, &self.home_map.real_survey.distance_rings) {
             Ok(written) => written,
             Err(SaveFailure::Layer { table, .. }) => {
                 let title = crate::gui_tab_home::saved_gpkg_layer_title(&table);
@@ -232,7 +232,10 @@ impl StrataAppState {
             }
         };
         // C++ :963-985 — 저장된 파일(잠겨 있었으면 옆 「-저장.gpkg」)로 맞춘다.
-        if let Ok(tables) = strata_storage::survey_gpkg_read::read_survey_tables(&written) {
+        let reloaded = strata_storage::survey_gpkg_read::read_survey_tables(&written)
+            .map_err(|e| e.to_string())
+            .and_then(|tables| strata_storage::survey_gpkg_buffers::read_buffers(&written, tables));
+        if let Ok((tables, _)) = reloaded {
             self.survey_tables = tables;
         }
         // 빼 둔 레이어(되돌리기 단계 안)는 저장하지 않았고 목록에도 없다 — 다시 읽은 표에서도 뺀다.

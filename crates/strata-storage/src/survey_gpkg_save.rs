@@ -7,9 +7,11 @@
 //! 작업공간(.qgz·qgis_projects 쓰기)과 복구 사본은 아직 없다.
 
 use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use rusqlite::Connection;
+use strata_types::buffer::DistanceRing;
 
 use crate::gpkg_sql_functions::register_gpkg_sql_functions;
 use crate::sqlite_read::{open_survey_read_only, SqliteReadError};
@@ -39,7 +41,7 @@ pub fn copy_survey_snapshot(src: &Path, dst: &Path) -> Result<(), String> {
 
 /// 지금 메모리의 조사 표를 `path` 에 저장하고, 실제로 쓴 파일 경로를 돌려준다(원본이 잠겨 있었으면
 /// 옆 「-저장.gpkg」).
-pub fn save_survey(path: &Path, tables: &[SurveyFileTable]) -> Result<PathBuf, SaveFailure> {
+pub fn save_survey(path: &Path, tables: &[SurveyFileTable], buffer_updates: &BTreeMap<u32, DistanceRing>) -> Result<PathBuf, SaveFailure> {
     let msg = |s: &str| SaveFailure::Message(s.to_owned());
     let target = std::path::absolute(path).map_err(|e| SaveFailure::Message(e.to_string()))?;
     let dir = target.parent().ok_or_else(|| msg("저장 경로가 없습니다."))?;
@@ -47,7 +49,7 @@ pub fn save_survey(path: &Path, tables: &[SurveyFileTable]) -> Result<PathBuf, S
     let generation = gen_dir.join("survey.gpkg");
     let built = copy_survey_snapshot(&target, &generation)
         .map_err(SaveFailure::Message)
-        .and_then(|()| build_generation(&generation, tables));
+        .and_then(|()| build_generation(&generation, tables, buffer_updates));
     let result = match built {
         Ok(()) => publish(&generation, &target),
         Err(e) => Err((e, false)),
@@ -68,7 +70,7 @@ pub fn save_survey(path: &Path, tables: &[SurveyFileTable]) -> Result<PathBuf, S
 }
 
 /// 세대 사본을 이전하고(실패는 적어 두고 계속) 편집을 쓰고 확인한다. 연결은 끝날 때 닫는다.
-fn build_generation(generation: &Path, tables: &[SurveyFileTable]) -> Result<(), SaveFailure> {
+fn build_generation(generation: &Path, tables: &[SurveyFileTable], buffer_updates: &BTreeMap<u32, DistanceRing>) -> Result<(), SaveFailure> {
     let db = |e: rusqlite::Error| SaveFailure::Message(format!("다음 세대 조사 파일을 만들지 못했습니다: {e}"));
     let conn = Connection::open(generation).map_err(db)?;
     register_gpkg_sql_functions(&conn).map_err(db)?;
@@ -82,7 +84,11 @@ fn build_generation(generation: &Path, tables: &[SurveyFileTable]) -> Result<(),
             .map_err(|detail| SaveFailure::Layer { table: t.table.clone(), detail })?;
         expected.push((t.table.as_str(), n));
     }
+    crate::survey_gpkg_buffers::write_buffers(&tx, buffer_updates).map_err(SaveFailure::Message)?;
     tx.commit().map_err(db)?;
+    if !buffer_updates.is_empty() {
+        crate::survey_gpkg_buffers::read_buffers_from_conn(&conn).map_err(SaveFailure::Message)?;
+    }
     // C++ publishSurveyGeneration -> validateForOpen(:511). 도형 수는 메모리와 같아야 한다.
     let ok: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(db)?;
     if ok != "ok" {

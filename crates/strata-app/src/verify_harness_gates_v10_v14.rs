@@ -87,7 +87,7 @@ pub(crate) fn push_v10_to_v14_gates(gates: &mut Vec<GateResult>) {
             if let Some(t) = tables.iter_mut().find(|t| t.layer.key == Some(DomainLayerKey::SurveyArea)) {
                 t.layer.add_unsaved_feature("POLYGON ((0 0,10 0,10 10,0 0))".to_owned(), Default::default());
             }
-            strata_storage::survey_gpkg_save::save_survey(&gpkg_p, &tables).is_ok()
+            strata_storage::survey_gpkg_save::save_survey(&gpkg_p, &tables, &Default::default()).is_ok()
         })
         && strata_storage::survey_gpkg_read::read_survey_tables(&gpkg_p)
             .is_ok_and(|t| t.iter().any(|t| t.layer.key == Some(DomainLayerKey::SurveyArea) && t.layer.features.len() == 1))

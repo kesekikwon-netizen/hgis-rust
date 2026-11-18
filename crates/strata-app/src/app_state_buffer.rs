@@ -1,7 +1,7 @@
 //! 주변유적경계 500m·1000m — C++ `runSiteBuffer500/1000`(MainWindowRibbon.cpp:816-839), 쓸 면 레이어 고르기
 //! `NearbyHeritageExport::resolveSourceLayer`(NearbyHeritageCollect.cpp:127-142), 경계 만들기
 //! `BufferAnalysis::addDistanceRing`(BufferAnalysis.cpp). 도형 셈은 strata-engine(GEOS), 좌표계는 PROJ.
-//! 면은 열어 둔 조사 표의 편집 버퍼(저장 안 한 것 포함)에서 읽는다. 저장할 때 조사 파일에 굽는 것은 아직 없다.
+//! Source edits stay in memory; explicit save bakes the result (target/cpp-ref/tests/test_buffer.cpp:166-198).
 
 use strata_storage::gpkg_wkt::wkt_to_parts;
 use strata_storage::survey_gpkg_read::SurveyFileTable;
@@ -75,7 +75,15 @@ impl StrataAppState {
         if labels.is_empty() {
             return Err("동서남북 거리 글자를 넣지 못했습니다");
         }
-        self.home_map.real_survey.distance_rings.insert(meters, DistanceRing { lines, labels });
+        self.install_distance_ring(meters, DistanceRing { crs: self.work_crs, lines, labels });
+        // target/cpp-ref/src/core/BufferAnalysis.cpp:258-291: project layer additions are unsaved work.
+        self.is_dirty = true;
+        Ok(())
+    }
+
+    // target/cpp-ref/src/core/BufferAnalysis.cpp:258-291: creation and saved-layer restoration use the same identity.
+    pub(crate) fn install_distance_ring(&mut self, meters: u32, ring: DistanceRing) {
+        self.home_map.real_survey.distance_rings.insert(meters, ring);
         let title = format!("주변 {meters}m");
         for (key, label) in [(format!("user:buffer_ring_{meters}"), title.clone()), (format!("user:buffer_label_{meters}"), format!("{title} 거리"))] {
             self.left_layers.entries.retain(|e| e.layer_key != key);
@@ -94,7 +102,6 @@ impl StrataAppState {
                 },
             );
         }
-        Ok(())
     }
 
     /// 버퍼 줄 「500m」·「1000m」 — runSiteBuffer500/1000. 주변유적 수는 유산 자료가 진짜가 되면 붙인다(C++ 은 그때만 센다).

@@ -165,7 +165,7 @@ mod tests {
         let path = tmp.path().join("경주시_성동동.gpkg");
         GpkgRepository::create_new_survey(&path, WorkCrs::Epsg5187)?;
         let tables = crate::survey_gpkg_read::read_survey_tables(&path)?;
-        let written = crate::survey_gpkg_save::save_survey(&path, &tables)
+        let written = crate::survey_gpkg_save::save_survey(&path, &tables, &Default::default())
             .map_err(|e| strata_types::error::StrataError::Storage(format!("{e:?}")))?;
         assert_eq!(written, std::path::absolute(&path)?);
         assert!(!tmp.path().join("경주시_성동동-저장.gpkg").exists());
@@ -187,7 +187,7 @@ mod tests {
             .ok_or_else(|| strata_types::error::StrataError::Storage("feature_poly".into()))?;
         poly.layer.add_unsaved_feature("POLYGON ((0 0,1 0,1 1,0 0))".to_owned(), Default::default());
         crate::survey_gpkg_save::copy_survey_snapshot(&orig, &copy).map_err(strata_types::error::StrataError::Storage)?;
-        crate::survey_gpkg_save::save_survey(&copy, &tables)
+        crate::survey_gpkg_save::save_survey(&copy, &tables, &Default::default())
             .map_err(|e| strata_types::error::StrataError::Storage(format!("{e:?}")))?;
         let hash_after = sha256_fingerprint(&orig)?;
         assert!(!hash_before.is_empty());

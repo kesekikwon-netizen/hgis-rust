@@ -45,9 +45,11 @@ impl StrataAppState {
         let read = validate_survey_for_open(&target).and_then(|()| {
             let sets = crate::gui_layer_panel::layer_sets::persistence::read(&target)?;
             let tables = read_survey_tables(&target).map_err(|e| e.to_string())?;
-            Ok((tables, sets))
+            let (tables, buffers) = strata_storage::survey_gpkg_buffers::read_buffers(&target, tables)?;
+            let buffers = self.buffers_in_work_crs(buffers)?;
+            Ok((tables, buffers, sets))
         });
-        let (tables, sets) = match read {
+        let (tables, buffers, sets) = match read {
             Ok(t) => t,
             Err(msg) => {
                 self.home_map.draw_guide_message = Some(format!("조사 열기 실패: {msg}"));
@@ -67,6 +69,9 @@ impl StrataAppState {
             }
         }
         self.survey_tables = tables;
+        for (meters, ring) in buffers {
+            self.install_distance_ring(meters, ring);
+        }
         self.left_layers.apply_default_basemaps();
         self.survey_path = Some(target.clone());
         // The received maps it had when it was saved (survey_map_list.rs).
