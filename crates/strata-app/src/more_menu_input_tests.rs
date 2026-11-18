@@ -6,6 +6,7 @@ use super::popup_input_harness::Harness;
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::ActiveModalDialog;
 use eframe::egui::{Event, Key, PointerButton, Pos2};
+use strata_canvas2d::map_tools::MapToolKind;
 
 const DEFERRED_TIP: &str = "아직 Rust 판에서 연결하지 않았습니다 (지시 WU-07)";
 const MAP_TIP: &str =
@@ -168,11 +169,33 @@ fn about_row_shows_the_gpl_notice_and_not_account_settings() {
         "the about box let F9 through"
     );
     press_text(&mut h, "확인");
-    assert!(
-        h.app.modals.active.is_none(),
-        "확인 left {:?}",
-        h.app.modals.active
+    assert!(h.app.modals.active.is_none(), "확인 left {:?}", h.app.modals.active);
+}
+
+/// QMessageBox::about blocks the map. A click outside the box must not place a trench or a sketch point.
+#[test]
+fn about_blocks_map_clicks() {
+    let mut h = start();
+    open_more(&mut h);
+    press_text(&mut h, "정보");
+    assert_eq!(h.app.modals.active, Some(ActiveModalDialog::About));
+    assert!(h.app.modal_window_open());
+    h.frame(vec![]);
+    let outside = Pos2::new(12.0, 420.0);
+    assert_eq!(
+        h.ctx.layer_id_at(outside),
+        Some(eframe::egui::LayerId::new(eframe::egui::Order::Foreground, eframe::egui::Id::new("ka_modal_about"))),
+        "a click outside the box reaches the map"
     );
+    h.app.active_tool = MapToolKind::TrenchPlace;
+    let trenches = h.app.home_map.real_survey.trenches.len();
+    h.press(outside, PointerButton::Primary);
+    assert_eq!(h.app.home_map.real_survey.trenches.len(), trenches);
+    h.app.edit_layer_key = Some("feature_poly".to_owned());
+    h.app.active_tool = MapToolKind::DrawPolygon;
+    h.press(outside, PointerButton::Primary);
+    assert!(h.app.draw_sketch.points.is_empty(), "the about box let a sketch point through");
+    assert_eq!(h.app.modals.active, Some(ActiveModalDialog::About), "an outside click dismissed the box");
 }
 
 #[test]

@@ -31,8 +31,8 @@ impl StrataAppState {
     pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) -> escape::PendingCanvasInput {
         let pending = self.pending_canvas_input(ctx);
         // C++ 모달 창(KaFeatureFormDialog·조사구역 설정·도형 속성) 뒤에서는 주 창 단축키가 듣지 않는다 — 창이 Enter·Esc 를 맡는다.
-        // QMessageBox::about (MainWindow.cpp:3048) blocks those keys too.
-        if self.modal_window_open() || matches!(self.modals.active, Some(ActiveModalDialog::PaperSetup | ActiveModalDialog::About)) {
+        // QMessageBox::about is inside modal_window_open (MainWindow.cpp:3048).
+        if self.modal_window_open() || self.modals.active == Some(ActiveModalDialog::PaperSetup) {
             return pending;
         }
         let wants_kb = ctx.wants_keyboard_input();

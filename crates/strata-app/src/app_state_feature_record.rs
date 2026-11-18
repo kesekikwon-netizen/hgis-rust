@@ -19,6 +19,8 @@ impl StrataAppState {
             || self.home_map.survey_area_setup.is_some()
             || self.home_map.feature_record.is_some()
             || self.home_map.rename_layer.is_some()
+            // QMessageBox::about is application-modal (MainWindow.cpp:3048).
+            || self.modals.active == Some(crate::dialogs_modal::ActiveModalDialog::About)
     }
 
     /// 그 표의 도형 `fid` 로 창을 연다.

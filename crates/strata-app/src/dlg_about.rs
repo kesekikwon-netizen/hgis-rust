@@ -34,30 +34,24 @@ pub(crate) fn about_notice_text() -> String {
 }
 
 pub(crate) fn render_about(ctx: &egui::Context, open: &mut bool) {
-    // QMessageBox::about closes on Escape (Qt default for QDialog).
-    if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-        *open = false;
-    }
-    egui::Window::new("ka_modal_about")
-        .title_bar(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .default_width(460.0)
+    // QMessageBox::about is application-modal: a click outside does not reach the map and does not
+    // dismiss the box. Escape closes it (the OK button is the default). No shade: the C++ box does not dim the app.
+    let mut dismiss = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+    egui::Modal::new(egui::Id::new("ka_modal_about"))
+        .backdrop_color(Color32::TRANSPARENT)
+        .frame(egui::Frame::window(&ctx.style()))
         .show(ctx, |ui| {
+            ui.set_min_width(420.0);
             render_strata_modal_header(ui, "정보", open);
-            egui::ScrollArea::vertical()
-                .max_height(420.0)
-                .show(ui, |ui| {
-                    ui.set_min_width(420.0);
-                    ui.label(
-                        egui::RichText::new(about_notice_text())
-                            .size(13.0)
-                            .color(Color32::from_rgb(30, 30, 28)),
-                    );
-                });
+            egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                ui.label(egui::RichText::new(about_notice_text()).size(13.0).color(Color32::from_rgb(30, 30, 28)));
+            });
             ui.add_space(8.0);
             if ui.button("확인").clicked() {
-                *open = false;
+                dismiss = true;
             }
         });
+    if dismiss {
+        *open = false;
+    }
 }
