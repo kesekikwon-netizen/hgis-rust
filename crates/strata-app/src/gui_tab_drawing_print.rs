@@ -67,10 +67,8 @@ impl SheetPdf {
         let (send, receive) = channel();
         let (target, cancel) = (self.target.clone(), Arc::clone(&self.cancel));
         std::thread::spawn(move || {
-            let written = (|| {
-                drop(send.send(Made::Saving));
-                put_pdf(&target, &pdf, &cancel)
-            })();
+            drop(send.send(Made::Saving));
+            let written = put_pdf(&target, &pdf, &cancel);
             drop(send.send(Made::Done(written.map(|()| 0))));
         });
         self.stage = Stage::Making(receive);

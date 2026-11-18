@@ -65,6 +65,8 @@ pub(crate) struct RasterInput {
     primitives: Vec<ClippedPrimitive>,
     textures: Textures,
     scale: f32,
+    /// Full-page pixel size. The print tests paint the whole page; the sheet PDF uses `region_mm`.
+    #[allow(dead_code)]
     size: [usize; 2],
     paper_mm: [f64; 2],
     design_px_per_mm: f32,
@@ -72,6 +74,7 @@ pub(crate) struct RasterInput {
 }
 
 impl RasterInput {
+    #[cfg(test)]
     pub(crate) fn paint(self) -> Picture {
         sheet_raster::paint(&self.primitives, &self.textures, self.scale, self.size)
     }
