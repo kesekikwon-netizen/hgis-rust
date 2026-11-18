@@ -4,6 +4,9 @@
 //! there is none. The DEM run is this app's own (owner 2026-11-15: 「수치지형도와 같은 구역의 dem을 별도로
 //! 받아야한다」): the C++ fetches a Copernicus DEM and takes the NGII one only as a file the user picks.
 
+// The hidden-browser caller is Windows-only. Tests on every OS still construct these values.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use std::path::{Path, PathBuf};
 
 use strata_net::ngii_auto::{Account, Product, Scope, Stage, DEFAULT_PURPOSE, DEM_PAGE_SCRIPT, PAGE_SCRIPT};

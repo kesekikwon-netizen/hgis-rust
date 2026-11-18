@@ -1,5 +1,8 @@
 //! Serial disk work after actual site events (`target/cpp-ref/src/app/MainWindow.cpp:3135-3148`).
 
+// Queued by the Windows hidden-browser path. Tests on every OS still build these tasks.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 

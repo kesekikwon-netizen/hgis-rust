@@ -1,5 +1,8 @@
 //! Event facts and map acceptance (`target/cpp-ref/src/app/MainWindow.cpp:3135-3148`).
 
+// `take_heritage_event` is called from the Windows session. Tests call it on every OS.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use super::{Group, Kind, Phase, Task};
 use crate::app_state::StrataAppState;
 use crate::download_jobs::StopCode;

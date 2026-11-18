@@ -3,6 +3,9 @@
 //! `KaTopographicImportDialog.cpp` publishPrepared `:871-995`; the phase is the sixth of the run's gauge
 //! line, 「지도에 올리기」).
 
+// Started from the Windows session (`drive_ngii_order`). Tests call the same functions on every OS.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
 use serde_json::{Map, Value};

@@ -7,6 +7,9 @@
 //! (`MainWindowRibbon.cpp:405-413`); the owner asked for the DEM of the same area as the topographic
 //! sheets to be fetched by the button (2026-11-15).
 
+// Started from the Windows session (`drive_ngii_order`). Tests call the same functions on every OS.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};

@@ -202,6 +202,7 @@ fn browser_cleanup_without_an_explicit_outcome_is_not_success() {
 }
 
 #[test]
+#[cfg(windows)]
 fn browser_options_preserve_the_existing_network_gate() {
     let (mut app, dir) = start();
     let options = app

@@ -1,5 +1,8 @@
 //! One whole-run gauge (`target/cpp-ref/src/app/MainWindow.cpp:3135-3148`, owner exception HER-API1).
 
+// The hidden-browser caller is Windows-only (`heritage_run.rs`). Tests on every OS still use this module.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use std::path::PathBuf;
 
 use strata_net::heritage_auto::HeritageConfig;

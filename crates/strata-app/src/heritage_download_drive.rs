@@ -1,5 +1,8 @@
 //! Hidden run lifetime (`target/cpp-ref/src/app/KaHeritageBrowser.cpp:479-488`, HER-API1).
 
+// `heritage_browser_ended` is called from the Windows session. Tests call it on every OS.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use super::{Download, Phase};
 use crate::app_state::StrataAppState;
 use crate::download_jobs::StopCode;

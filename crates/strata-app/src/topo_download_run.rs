@@ -1,15 +1,25 @@
 //! The running side of the 「수치지형」 and 「DEM」 buttons: a press is checked, the hidden run is started
 //! inside the app's window and fed every frame, and the gauge line follows it.
 
+// `run` and the gauge fields are driven by the Windows session. Linux still builds the tests.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use std::path::PathBuf;
+#[cfg(windows)]
 use std::sync::Arc;
 
+#[cfg(windows)]
 use strata_net::ngii_auto::{AutoConfig, AutoEvent, Stage, PORTAL_HOME};
+// `strata-ngii-run` is a Windows-only crate (`lib.rs`: the session is WebView2). The dependency is
+// declared the same way in `strata-app/Cargo.toml`.
+#[cfg(windows)]
 use strata_ngii_run::{NgiiRun, RunOptions};
 use strata_secrets::accounts::{AccountKind, AccountSettings};
 
 use super::post::TopoPost;
-use super::{gauge_state, topo_request, OrderOf, RunFacts, TopoFacts, TopoRequest};
+use super::{topo_request, OrderOf, TopoFacts, TopoRequest};
+#[cfg(windows)]
+use super::{gauge_state, RunFacts};
 use crate::app_state::{MainTab, StrataAppState};
 use crate::download_jobs::{DownloadJobHandle, DownloadJobState, StopCode};
 
@@ -18,6 +28,7 @@ use crate::download_jobs::{DownloadJobHandle, DownloadJobState, StopCode};
 pub(crate) struct TopoDownload {
     /// What a press came to; the next frame, which has the app's window, starts the run or shows why not.
     pending: Option<Result<TopoRequest, (StopCode, String)>>,
+    #[cfg(windows)]
     run: Option<NgiiRun>,
     job: Option<DownloadJobHandle>,
     shown: Option<DownloadJobState>,
@@ -40,7 +51,11 @@ impl Clone for TopoDownload {
 
 impl TopoDownload {
     fn is_busy(&self) -> bool {
-        self.run.is_some() || self.pending.is_some() || self.post.is_some()
+        #[cfg(windows)]
+        let run_open = self.run.is_some();
+        #[cfg(not(windows))]
+        let run_open = false;
+        run_open || self.pending.is_some() || self.post.is_some()
     }
 
     /// The order is of a survey that is no longer open: a press that waits is forgotten, a run is told to
@@ -48,6 +63,7 @@ impl TopoDownload {
     /// map), and the work after a run is handed back to be told the same.
     pub(crate) fn abandon(&mut self) -> Option<TopoPost> {
         self.pending = None;
+        #[cfg(windows)]
         if let (false, Some(run)) = (self.cancelled, self.run.as_mut()) {
             self.cancelled = true;
             run.stop();
@@ -57,6 +73,7 @@ impl TopoDownload {
 }
 
 /// Where the hidden browser keeps the working files of a session (removed when the session ends).
+#[cfg(windows)]
 fn browser_data_parent() -> PathBuf {
     std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("ka-hgis").join("webview")
 }
@@ -134,14 +151,25 @@ impl StrataAppState {
         }
         let first = DownloadJobState::Running { fraction: None, stage: Some("[1/6] 도엽 확인".to_owned()) };
         let (_, job) = self.download_jobs.add_job(of.job_title(), first.clone(), now);
-        let config = AutoConfig { portal_url: PORTAL_HOME.to_owned(), script: of.script().to_owned(), download_directory: request.downloads, account: request.account, product: of.product(), test_mode: false, diagnostics: self.snap.is_some() };
-        let options = RunOptions { data_parent: browser_data_parent(), config, network_allowed: Arc::new(strata_net::network::is_allowed) };
-        match NgiiRun::start(frame, options) {
-            Ok(mut run) => {
-                run.prepare_sheets(request.scope);
-                *slot = TopoDownload { run: Some(run), job: Some(job), shown: Some(first), ..TopoDownload::default() };
+        #[cfg(windows)]
+        {
+            let config = AutoConfig { portal_url: PORTAL_HOME.to_owned(), script: of.script().to_owned(), download_directory: request.downloads, account: request.account, product: of.product(), test_mode: false, diagnostics: self.snap.is_some() };
+            let options = RunOptions { data_parent: browser_data_parent(), config, network_allowed: Arc::new(strata_net::network::is_allowed) };
+            match NgiiRun::start(frame, options) {
+                Ok(mut run) => {
+                    run.prepare_sheets(request.scope);
+                    *slot = TopoDownload { run: Some(run), job: Some(job), shown: Some(first), ..TopoDownload::default() };
+                }
+                Err(_) => job.report_stopped(StopCode::App1, "보이지 않는 브라우저를 시작하지 못했습니다. Windows 의 WebView2 구성 요소를 확인한 뒤 다시 눌러 주세요."),
             }
-            Err(_) => job.report_stopped(StopCode::App1, "보이지 않는 브라우저를 시작하지 못했습니다. Windows 의 WebView2 구성 요소를 확인한 뒤 다시 눌러 주세요."),
+        }
+        // This app's wording. There is no WebView2 session on this OS, so the order stops the way a
+        // failed `NgiiRun::start` does on Windows instead of leaving a gauge that never moves
+        // (`heritage_run_start.rs`, `begin_run_in_window` under `cfg(not(windows))`).
+        #[cfg(not(windows))]
+        {
+            let _ = (slot, frame, request);
+            job.report_stopped(StopCode::App1, "이 판에서는 보이지 않는 브라우저를 열 수 없습니다(Windows 전용).".to_owned());
         }
     }
 
@@ -161,55 +189,58 @@ impl StrataAppState {
             Some(Err((code, reason))) => drop(self.download_jobs.add_job(of.job_title(), DownloadJobState::Stopped { code, reason }, now)),
             None => {}
         }
-        let Some(run) = slot.run.as_mut() else {
-            return;
-        };
-        // The gauge's own cancel.
-        if !slot.cancelled && slot.job.as_ref().is_some_and(DownloadJobHandle::is_cancelled) {
-            slot.cancelled = true;
-            run.stop();
-        }
-        for event in run.frame(frame) {
-            if let AutoEvent::SheetDownloaded { path, record } = event {
-                slot.received.push((path, record));
+        #[cfg(windows)]
+        {
+            let Some(run) = slot.run.as_mut() else {
+                return;
+            };
+            // The gauge's own cancel.
+            if !slot.cancelled && slot.job.as_ref().is_some_and(DownloadJobHandle::is_cancelled) {
+                slot.cancelled = true;
+                run.stop();
             }
-        }
-        let (sheets, cancelled) = (slot.received.len(), slot.cancelled);
-        let state = run.with_state(|m| {
-            let (_, received, total) = m.current_file();
-            gauge_state(&RunFacts { stage: m.stage(), phase: m.phase(), attention: m.attention(), failure_phase: m.failure_phase(), status: m.status(), received, total, sheets, cancelled })
-        });
-        // A run that came to its end goes on to its sixth phase: what was received is put on the map.
-        let goes_on = run.stage() == Stage::Complete && !cancelled;
-        let state = if goes_on { DownloadJobState::Running { fraction: None, stage: Some("[6/6] 지도에 올리기".to_owned()) } } else { state };
-        let over = matches!(run.stage(), Stage::Complete | Stage::Stopped);
-        if slot.shown.as_ref() != Some(&state) {
-            if let Some(job) = &slot.job {
-                report(job, &state);
+            for event in run.frame(frame) {
+                if let AutoEvent::SheetDownloaded { path, record } = event {
+                    slot.received.push((path, record));
+                }
             }
-            // A scripted run has nobody watching the gauge: its lines go to the log (phases and the
-            // site's own words only; where the pages stand is named without query or form values).
-            if self.snap.is_some() {
-                eprintln!("[SNAP] {} {state:?} | {} | {}", of.log_name(), run.page_outline(), run.with_state(|m| m.last_diagnostic().to_owned()));
+            let (sheets, cancelled) = (slot.received.len(), slot.cancelled);
+            let state = run.with_state(|m| {
+                let (_, received, total) = m.current_file();
+                gauge_state(&RunFacts { stage: m.stage(), phase: m.phase(), attention: m.attention(), failure_phase: m.failure_phase(), status: m.status(), received, total, sheets, cancelled })
+            });
+            // A run that came to its end goes on to its sixth phase: what was received is put on the map.
+            let goes_on = run.stage() == Stage::Complete && !cancelled;
+            let state = if goes_on { DownloadJobState::Running { fraction: None, stage: Some("[6/6] 지도에 올리기".to_owned()) } } else { state };
+            let over = matches!(run.stage(), Stage::Complete | Stage::Stopped);
+            if slot.shown.as_ref() != Some(&state) {
+                if let Some(job) = &slot.job {
+                    report(job, &state);
+                }
+                // A scripted run has nobody watching the gauge: its lines go to the log (phases and the
+                // site's own words only; where the pages stand is named without query or form values).
+                if self.snap.is_some() {
+                    eprintln!("[SNAP] {} {state:?} | {} | {}", of.log_name(), run.page_outline(), run.with_state(|m| m.last_diagnostic().to_owned()));
+                }
+                slot.shown = Some(state);
             }
-            slot.shown = Some(state);
-        }
-        // The session is closed and its folder removed over the next frames; then the run is let go.
-        if over && run.finished() {
-            if self.snap.is_some() {
-                let files: Vec<_> = slot.received.iter().map(|(path, _)| path.display().to_string()).collect();
-                eprintln!("[SNAP] {} 끝: 받은 도엽 자료 {} — {files:?}", of.log_name(), files.len());
-                eprintln!("[SNAP] {} 경과: {}", of.log_name(), run.with_state(|m| m.answer_trace().join(" | ")));
-                eprintln!("[SNAP] {} 브라우저: {}", of.log_name(), run.reported().join(" | "));
-            }
-            let portal: Vec<_> = run.with_state(|m| m.portal_records().iter().filter_map(serde_json::Value::as_object).cloned().collect());
-            slot.run = None;
-            let (job, received) = (slot.job.take(), std::mem::take(&mut slot.received));
-            if let (true, Some(job)) = (goes_on, job) {
-                slot.post = match of {
-                    OrderOf::Sheets => self.begin_topographic_post(received, portal, job),
-                    OrderOf::Dem => self.begin_dem_post(received, job),
-                };
+            // The session is closed and its folder removed over the next frames; then the run is let go.
+            if over && run.finished() {
+                if self.snap.is_some() {
+                    let files: Vec<_> = slot.received.iter().map(|(path, _)| path.display().to_string()).collect();
+                    eprintln!("[SNAP] {} 끝: 받은 도엽 자료 {} — {files:?}", of.log_name(), files.len());
+                    eprintln!("[SNAP] {} 경과: {}", of.log_name(), run.with_state(|m| m.answer_trace().join(" | ")));
+                    eprintln!("[SNAP] {} 브라우저: {}", of.log_name(), run.reported().join(" | "));
+                }
+                let portal: Vec<_> = run.with_state(|m| m.portal_records().iter().filter_map(serde_json::Value::as_object).cloned().collect());
+                slot.run = None;
+                let (job, received) = (slot.job.take(), std::mem::take(&mut slot.received));
+                if let (true, Some(job)) = (goes_on, job) {
+                    slot.post = match of {
+                        OrderOf::Sheets => self.begin_topographic_post(received, portal, job),
+                        OrderOf::Dem => self.begin_dem_post(received, job),
+                    };
+                }
             }
         }
     }

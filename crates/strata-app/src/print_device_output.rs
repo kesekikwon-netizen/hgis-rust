@@ -88,7 +88,8 @@ pub(crate) fn dispatch(mut request: PrintRequest, raster: RasterInput, cancel: A
     Ok(receipt)
 }
 
-#[cfg(test)]
+// The only caller is `print_device_probe_tests`, which is itself `cfg(all(test, windows))`.
+#[cfg(all(test, windows))]
 pub(super) fn request_bytes(request: &PrintRequest, image: &Path) -> Result<Vec<u8>, String> {
     serde_json::to_vec(&Payload { version: 1, image, request, page_images: &[] }).map_err(|why| why.to_string())
 }
