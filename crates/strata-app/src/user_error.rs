@@ -145,10 +145,11 @@ pub(crate) fn open_log_folder(folder: &Path) -> bool {
     }
     #[cfg(windows)]
     {
-        std::process::Command::new("explorer")
-            .arg(folder)
-            .spawn()
-            .is_ok()
+        let mut cmd = std::process::Command::new("explorer");
+        cmd.arg(folder);
+        // A console must not flash (`strata_types::process::no_window`). The folder window is the point.
+        strata_types::process::no_window(&mut cmd);
+        cmd.spawn().is_ok()
     }
     #[cfg(not(windows))]
     {
