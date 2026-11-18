@@ -53,7 +53,7 @@ fn declining_the_checklist_question_writes_nothing() {
     app.submit_parent_override = Some(parent.clone());
     app.begin_submit_package();
     assert!(
-        matches!(app.submit_phase, Some(SubmitPhase::AskErrors { .. })),
+        matches!(app.submit_phase, Some(SubmitPhase::Errors { .. })),
         "{:?}",
         app.submit_phase
     );
@@ -92,7 +92,7 @@ fn package_reopens_as_5179_and_stays_off_the_map() {
     app.accept_submit_errors();
     assert!(matches!(
         app.submit_phase,
-        Some(SubmitPhase::AskUnsaved { .. })
+        Some(SubmitPhase::Unsaved { .. })
     ));
     app.answer_submit_unsaved(false);
     let out = app
@@ -156,20 +156,20 @@ fn package_reopens_as_5179_and_stays_off_the_map() {
 }
 
 fn reopen(shp: &Path) -> (u64, bool) {
-    let ds = gdal::Dataset::open(shp).expect("shp");
-    let layer = ds.layer(0).expect("layer");
-    let srs = layer.spatial_ref().expect("srs");
-    let code = if srs.auth_name().as_deref() == Some("EPSG") {
-        srs.auth_code().ok()
-    } else {
-        let mut probe = srs.clone();
-        probe.auto_identify_epsg().expect("identify");
-        probe.auth_code().ok()
+    let count = {
+        let ds = gdal::Dataset::open(shp).expect("shp");
+        let layer = ds.layer(0).expect("layer");
+        let srs = layer.spatial_ref().expect("srs");
+        let code = if srs.auth_name().as_deref() == Some("EPSG") {
+            srs.auth_code().ok()
+        } else {
+            let mut probe = srs.clone();
+            probe.auto_identify_epsg().expect("identify");
+            probe.auth_code().ok()
+        };
+        assert_eq!(code, Some(5179), "SubmitShp.cpp:193-196");
+        layer.feature_count()
     };
-    assert_eq!(code, Some(5179), "SubmitShp.cpp:193-196");
-    let count = layer.feature_count();
-    drop(layer);
-    drop(ds);
     let mut outside = false;
     read_shapefile(shp, "UTF-8", &[], &mut |row| {
         if let Shapes::Polygons(polys) = &row.shapes {

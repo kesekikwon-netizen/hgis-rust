@@ -13,15 +13,15 @@ use crate::app_state::StrataAppState;
 /// The question in front of the folder (`KaSubmitFlow.cpp:84-122`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum SubmitPhase {
-    AskErrors {
+    Errors {
         errors: usize,
         summary: String,
     },
-    AskUnsaved {
+    Unsaved {
         summary: String,
         errors_remain: bool,
     },
-    AskEncoding {
+    Encoding {
         summary: String,
         errors_remain: bool,
         save_first: bool,
@@ -89,14 +89,14 @@ impl StrataAppState {
         self.modals.active = Some(crate::dialogs_modal::ActiveModalDialog::ExportSubmitPackage);
         let (errors, summary) = checklist(self);
         self.submit_phase = Some(if errors > 0 {
-            SubmitPhase::AskErrors { errors, summary }
+            SubmitPhase::Errors { errors, summary }
         } else if self.is_dirty {
-            SubmitPhase::AskUnsaved {
+            SubmitPhase::Unsaved {
                 summary,
                 errors_remain: false,
             }
         } else {
-            SubmitPhase::AskEncoding {
+            SubmitPhase::Encoding {
                 summary,
                 errors_remain: false,
                 save_first: false,
@@ -110,16 +110,16 @@ impl StrataAppState {
 
     /// 「그래도 만들기」 (`KaSubmitFlow.cpp:90-94`).
     pub(crate) fn accept_submit_errors(&mut self) {
-        let Some(SubmitPhase::AskErrors { summary, .. }) = self.submit_phase.clone() else {
+        let Some(SubmitPhase::Errors { summary, .. }) = self.submit_phase.clone() else {
             return;
         };
         self.submit_phase = Some(if self.is_dirty {
-            SubmitPhase::AskUnsaved {
+            SubmitPhase::Unsaved {
                 summary,
                 errors_remain: true,
             }
         } else {
-            SubmitPhase::AskEncoding {
+            SubmitPhase::Encoding {
                 summary,
                 errors_remain: true,
                 save_first: false,
@@ -129,7 +129,7 @@ impl StrataAppState {
 
     /// `KaSubmitFlow.cpp:107-120`. `save_first` is 「저장하고 만들기」.
     pub(crate) fn answer_submit_unsaved(&mut self, save_first: bool) {
-        let Some(SubmitPhase::AskUnsaved {
+        let Some(SubmitPhase::Unsaved {
             summary,
             errors_remain,
         }) = self.submit_phase.clone()
@@ -141,7 +141,7 @@ impl StrataAppState {
             self.show_status_message(SAVE_FAILED);
             return;
         }
-        self.submit_phase = Some(SubmitPhase::AskEncoding {
+        self.submit_phase = Some(SubmitPhase::Encoding {
             summary,
             errors_remain,
             save_first,
@@ -153,7 +153,7 @@ impl StrataAppState {
         &mut self,
         encoding: SubmitEncoding,
     ) -> Result<PathBuf, String> {
-        let Some(SubmitPhase::AskEncoding {
+        let Some(SubmitPhase::Encoding {
             summary,
             errors_remain,
             save_first,
