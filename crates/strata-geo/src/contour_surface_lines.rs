@@ -12,11 +12,19 @@ pub(super) fn chain(grid: &HeightGrid, level: f64) -> Vec<Vec<[f64; 2]>> {
             let Some(se) = at(grid, col + 1, row + 1) else { continue };
             let hits = [cross(nw, ne, level), cross(ne, se, level), cross(se, sw, level), cross(sw, nw, level)];
             let hits: Vec<[f64; 2]> = hits.into_iter().flatten().collect();
-            if hits.len() >= 2 {
-                segs.push((hits[0], hits[1]));
-            }
             if hits.len() == 4 {
-                segs.push((hits[2], hits[3]));
+                // The centre decides the saddle (`docs/research/post/contour.md` does not spell the
+                // pairing; a centre below the level keeps the two high corners apart).
+                let centre = (nw.2 + ne.2 + sw.2 + se.2) / 4.0;
+                if centre >= level {
+                    segs.push((hits[0], hits[1]));
+                    segs.push((hits[2], hits[3]));
+                } else {
+                    segs.push((hits[0], hits[3]));
+                    segs.push((hits[1], hits[2]));
+                }
+            } else if hits.len() >= 2 {
+                segs.push((hits[0], hits[1]));
             }
         }
     }

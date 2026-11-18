@@ -133,7 +133,7 @@ fn dxf_sheet(path: &Path) -> Sheet {
 
 /// Points the preview counted, for the package writer. `Err` is the preview's fatal line.
 pub(crate) fn contour_xyz(path: &str, exclude_suspicious: bool) -> Result<Vec<[f64; 3]>, String> {
-    let sheet = job::sheet_if_ready(path).unwrap_or_else(|| read_sheet(Path::new(path)));
+    let sheet = read_sheet(Path::new(path));
     if let Some(fatal) = sheet.fatal {
         return Err(fatal);
     }
@@ -168,7 +168,7 @@ pub(super) fn format_cm(cm: i32) -> String {
     format!("{sign}{whole}.{frac}")
 }
 
-pub(crate) use job::{poll as poll_contour_preview, PreviewPoll, READING};
+pub(crate) use job::{invalidate as invalidate_contour_preview, poll as poll_contour_preview, PreviewPoll, READING};
 
 #[cfg(test)]
 #[path = "survey_contour_sheet_tests.rs"]

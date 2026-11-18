@@ -6,6 +6,7 @@
 
 use std::path::Path;
 
+use geos::Geom;
 use gdal::raster::{Buffer, RasterCreationOptions};
 use gdal::spatial_ref::SpatialRef;
 use gdal::vector::{
@@ -33,9 +34,14 @@ pub fn write_contour_package(
     points: &[[f64; 3]],
     interval_m: f64,
     cell_m: f64,
+    max_edge_m: f64,
+    clip: &[Vec<[f64; 2]>],
 ) -> Result<ContourOutput, EngineError> {
-    let (grid, lines) = surface_contours(points, interval_m, cell_m)
+    let (grid, mut lines) = surface_contours(points, interval_m, cell_m, max_edge_m)
         .map_err(|text| EngineError(text.to_owned()))?;
+    if !clip.is_empty() {
+        lines = clip_to_rings(lines, clip);
+    }
     let tif = dir.join("surface.tif");
     let gpkg = dir.join("contours.gpkg");
     if let Err(e) = write_tif(&tif, epsg, &grid)
@@ -132,6 +138,79 @@ fn write_gpkg(
     work.commit()?;
     dataset.close()?;
     Ok(())
+}
+
+/// Keeps the parts of each contour that lie in the union of the outer rings.
+/// A ring GEOS cannot use is ignored; a line GEOS cannot cut is kept whole
+/// (`SurveyContourClip.cpp` keeps a feature when the cut fails).
+fn clip_to_rings(lines: Vec<SurfaceContour>, rings: &[Vec<[f64; 2]>]) -> Vec<SurfaceContour> {
+    let Ok(mask) = union_rings(rings) else {
+        return lines;
+    };
+    let mut out = Vec::new();
+    for line in lines {
+        match cut(&mask, &line) {
+            Some(parts) => {
+                for xy in parts {
+                    if xy.len() >= 2 {
+                        out.push(SurfaceContour { xy, ..line.clone() });
+                    }
+                }
+            }
+            None => out.push(line),
+        }
+    }
+    out
+}
+
+fn union_rings(rings: &[Vec<[f64; 2]>]) -> Result<geos::Geometry, EngineError> {
+    let mut mask: Option<geos::Geometry> = None;
+    for ring in rings {
+        if ring.len() < 3 {
+            continue;
+        }
+        let mut closed = ring.clone();
+        if closed.first() != closed.last() {
+            closed.push(closed[0]);
+        }
+        let wkt = format!(
+            "POLYGON(({}))",
+            closed.iter().map(|p| format!("{} {}", p[0], p[1])).collect::<Vec<_>>().join(", ")
+        );
+        let Ok(poly) = geos::Geometry::new_from_wkt(&wkt) else {
+            continue;
+        };
+        mask = Some(match mask {
+            None => poly,
+            Some(have) => have.union(&poly)?,
+        });
+    }
+    mask.ok_or_else(|| EngineError("no clip ring".to_owned()))
+}
+
+fn cut(mask: &geos::Geometry, line: &SurfaceContour) -> Option<Vec<Vec<[f64; 2]>>> {
+    let wkt = format!(
+        "LINESTRING({})",
+        line.xy.iter().map(|p| format!("{} {}", p[0], p[1])).collect::<Vec<_>>().join(", ")
+    );
+    let geom = geos::Geometry::new_from_wkt(&wkt).ok()?;
+    let hit = geom.intersection(mask).ok()?;
+    Some(line_parts(&hit).unwrap_or_default())
+}
+
+fn line_parts<G: geos::Geom>(geom: &G) -> Result<Vec<Vec<[f64; 2]>>, EngineError> {
+    use geos::GeometryTypes;
+    match geom.geometry_type()? {
+        GeometryTypes::LineString => Ok(vec![crate::geom::ring_points(geom)?]),
+        GeometryTypes::MultiLineString | GeometryTypes::GeometryCollection => {
+            let mut out = Vec::new();
+            for i in 0..geom.get_num_geometries()? {
+                out.extend(line_parts(&geom.get_geometry_n(i)?)?);
+            }
+            Ok(out)
+        }
+        _ => Ok(Vec::new()),
+    }
 }
 
 fn elev_label(level: f64, interval_m: f64) -> String {

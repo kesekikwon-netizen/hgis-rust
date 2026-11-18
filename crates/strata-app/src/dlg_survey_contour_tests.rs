@@ -6,7 +6,11 @@
 use eframe::egui::{self, Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Shape};
 use gdal::vector::LayerAccess;
 
+use std::sync::Mutex;
+
 use crate::app_state::StrataAppState;
+
+static PRESS: Mutex<()> = Mutex::new(());
 use crate::dialogs_modal::ActiveModalDialog;
 
 fn collect_texts(shape: &Shape, out: &mut Vec<String>) {
@@ -217,6 +221,8 @@ fn sample_csv_preview_matches_point_count_and_elevation_range() {
 }
 
 fn press_make(app: &mut StrataAppState, ctx: &egui::Context) {
+    // One build at a time: the worker slot is process-wide.
+    let _guard = PRESS.lock().unwrap_or_else(|poison| poison.into_inner());
     let (nodes, _) = frame(app, ctx, vec![]);
     let at = nodes
         .iter()
@@ -233,7 +239,15 @@ fn press_make(app: &mut StrataAppState, ctx: &egui::Context) {
     frame(app, ctx, vec![Event::PointerMoved(at)]);
     frame(app, ctx, vec![press(true)]);
     frame(app, ctx, vec![press(false)]);
-    frame(app, ctx, vec![]);
+    for _ in 0..200 {
+        frame(app, ctx, vec![]);
+        let settled = !super::survey_contour_job::running()
+            && (app.modals.active.is_none() || app.modals.contour_build_note.is_some());
+        if settled {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
 }
 
 /// A four-corner slope becomes four contour lines in the survey folder and a reference row.
@@ -262,6 +276,7 @@ fn sample_csv_writes_the_package_and_shows_the_contour_layer() {
     assert_eq!(row.feature_count, 4);
     assert_eq!(row.group, strata_types::schema::LegendGroup::ReferenceMap);
     assert!(row.read_only);
+    assert!(app.ref_vectors.spec_of("contour:slope:lines").is_some());
     assert!(app
         .left_layers
         .entries

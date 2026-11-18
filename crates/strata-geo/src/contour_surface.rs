@@ -56,6 +56,7 @@ pub fn surface_contours(
     points: &[[f64; 3]],
     interval_m: f64,
     cell_m: f64,
+    max_edge_m: f64,
 ) -> Result<(HeightGrid, Vec<SurfaceContour>), &'static str> {
     if points.len() < 3 {
         return Err("등고선을 만들려면 점이 3개 이상 필요합니다.");
@@ -63,12 +64,12 @@ pub fn surface_contours(
     if interval_m <= 0.0 || cell_m <= 0.0 {
         return Err("등고선 간격과 결과 폴더가 필요합니다.");
     }
-    let grid = height_grid(points, cell_m)?;
+    let grid = height_grid(points, cell_m, max_edge_m)?;
     let lines = contour_lines(&grid, interval_m);
     Ok((grid, lines))
 }
 
-fn height_grid(points: &[[f64; 3]], cell: f64) -> Result<HeightGrid, &'static str> {
+fn height_grid(points: &[[f64; 3]], cell: f64, max_edge_m: f64) -> Result<HeightGrid, &'static str> {
     let (min_x, min_y, max_x, max_y, min_z, max_z) = bounds(points);
     if (max_z - min_z).abs() < 1e-9 || collinear(points) {
         return Err("점이 일직선이라 삼각망을 만들 수 없습니다.");
@@ -91,8 +92,9 @@ fn height_grid(points: &[[f64; 3]], cell: f64) -> Result<HeightGrid, &'static st
     let faces: Vec<[Vertex; 3]> = tri
         .inner_faces()
         .map(|face| face.vertices().map(|v| *v.data()))
+        .filter(|face| max_edge_m <= 0.0 || longest(face) <= max_edge_m)
         .collect();
-    if faces.is_empty() {
+    if tri.inner_faces().next().is_none() {
         return Err("점이 일직선이라 삼각망을 만들 수 없습니다.");
     }
     let mut values = vec![NODATA; width * height];
@@ -113,6 +115,11 @@ fn height_grid(points: &[[f64; 3]], cell: f64) -> Result<HeightGrid, &'static st
         height,
         values,
     })
+}
+
+fn longest(face: &[Vertex; 3]) -> f64 {
+    let edge = |a: Vertex, b: Vertex| (a.pos.x - b.pos.x).hypot(a.pos.y - b.pos.y);
+    edge(face[0], face[1]).max(edge(face[1], face[2])).max(edge(face[2], face[0]))
 }
 
 fn bounds(points: &[[f64; 3]]) -> (f64, f64, f64, f64, f64, f64) {

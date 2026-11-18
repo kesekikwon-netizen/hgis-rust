@@ -52,7 +52,7 @@ pub(crate) fn poll(path: &str, interval_m: f64, exclude_suspicious: bool) -> Pre
     PreviewPoll::Pending
 }
 
-pub(super) fn sheet_if_ready(path: &str) -> Option<Sheet> {
-    let cache = CACHE.lock().unwrap_or_else(|poison| poison.into_inner());
-    cache.get(path).and_then(|entry| entry.sheet.clone())
+pub(crate) fn invalidate(path: &str) {
+    let mut cache = CACHE.lock().unwrap_or_else(|poison| poison.into_inner());
+    cache.remove(path);
 }

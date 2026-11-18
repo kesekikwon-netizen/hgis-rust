@@ -13,7 +13,7 @@ fn a_north_slope_emits_one_line_per_interval() {
         [0.0, 100.0, 10.0],
         [100.0, 100.0, 10.0],
     ];
-    let (_grid, lines) = surface_contours(&points, 2.0, 10.0).unwrap();
+    let (_grid, lines) = surface_contours(&points, 2.0, 10.0, 0.0).unwrap();
     let mut levels: Vec<i32> = lines
         .iter()
         .map(|line| (line.elevation_m * 100.0).round() as i32)
@@ -35,12 +35,35 @@ fn a_north_slope_emits_one_line_per_interval() {
 #[test]
 fn two_points_and_a_straight_line_are_refused() {
     assert!(
-        surface_contours(&[[0.0, 0.0, 1.0], [1.0, 1.0, 2.0]], 1.0, 1.0)
+        surface_contours(&[[0.0, 0.0, 1.0], [1.0, 1.0, 2.0]], 1.0, 1.0, 0.0)
             .unwrap_err()
             .contains("3개")
     );
     let straight = [[0.0, 0.0, 1.0], [10.0, 0.0, 2.0], [20.0, 0.0, 3.0]];
-    assert!(surface_contours(&straight, 1.0, 1.0)
+    assert!(surface_contours(&straight, 1.0, 1.0, 0.0)
         .unwrap_err()
         .contains("일직선"));
+}
+
+#[test]
+fn a_low_saddle_does_not_join_across_the_middle() {
+    let grid = super::HeightGrid {
+        west: 0.0,
+        north: 1.0,
+        cell: 1.0,
+        width: 2,
+        height: 2,
+        values: vec![10.0, 0.0, 0.0, 10.0],
+    };
+    let lines = super::lines::chain(&grid, 9.0);
+    assert!(lines.iter().all(|line| {
+        line.windows(2).all(|w| (w[0][0] - w[1][0]).hypot(w[0][1] - w[1][1]) < 0.5)
+    }));
+}
+
+#[test]
+fn a_long_edge_leaves_the_surface_empty() {
+    let points = [[0.0, 0.0, 1.0], [100.0, 0.0, 2.0], [0.0, 100.0, 3.0]];
+    let (_grid, lines) = surface_contours(&points, 0.5, 10.0, 10.0).unwrap();
+    assert!(lines.is_empty());
 }

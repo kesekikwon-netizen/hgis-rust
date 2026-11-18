@@ -55,6 +55,7 @@ pub(crate) fn render_survey_contour(
                 {
                     app.modals.contour_empty_rejected = false;
                     app.modals.contour_build_note = None;
+                    survey_contour_sheet::invalidate_contour_preview(app.modals.contour_file_path.trim());
                 }
                 // KaSurveyContourDialog.cpp:142-145 — 「측량 좌표」, filter dxf/xlsx/xls/csv.
                 if ui
@@ -65,6 +66,7 @@ pub(crate) fn render_survey_contour(
                         app.modals.contour_file_path = picked.display().to_string();
                         app.modals.contour_empty_rejected = false;
                         app.modals.contour_build_note = None;
+                        survey_contour_sheet::invalidate_contour_preview(app.modals.contour_file_path.trim());
                     }
                 }
             });
@@ -167,6 +169,7 @@ pub(crate) fn render_survey_contour(
                     }
                 });
             }
+            survey_contour_job::poll(app);
             // KaSurveyContourDialog.cpp:105,126-131 — column note until a file is chosen, and
             // 「좌표 파일을 고르세요.」 when accept is clicked with an empty path.
             // A chosen file uses showPreview (`:211-230`). Making the lines is order W-29.
@@ -193,6 +196,7 @@ pub(crate) fn render_survey_contour(
                 }
             };
             let preview_pending = summary == survey_contour_sheet::READING;
+            let path_for_job = path.to_owned();
             egui::Frame::NONE
                 .fill(Color32::from_rgb(225, 240, 218))
                 .stroke(Stroke::new(1.0, Color32::from_rgb(155, 195, 145)))
@@ -224,16 +228,16 @@ pub(crate) fn render_survey_contour(
                 .min_size(Vec2::new(108.0, 30.0));
                 // Empty path: KaSurveyContourDialog.cpp:126-131. A file runs the package write
                 // only after the worker has finished reading it.
-                let make = ui.add_enabled(path_empty || !preview_pending, make_btn);
+                let busy = preview_pending || survey_contour_job::running_for(&path_for_job);
+                if busy {
+                    ctx.request_repaint();
+                }
+                let make = ui.add_enabled(path_empty || !busy, make_btn);
                 if make.clicked() {
                     if path_empty {
                         app.modals.contour_empty_rejected = true;
-                    } else {
-                        app.modals.contour_build_note = None;
-                        match survey_contour_make::make_survey_contours(app) {
-                            Ok(()) => app.modals.active = None,
-                            Err(text) => app.modals.contour_build_note = Some(text),
-                        }
+                    } else if let Err(text) = survey_contour_job::start(app) {
+                        app.modals.contour_build_note = Some(text);
                     }
                 }
             });
@@ -242,6 +246,8 @@ pub(crate) fn render_survey_contour(
 
 #[path = "survey_contour_make.rs"]
 mod survey_contour_make;
+#[path = "survey_contour_job.rs"]
+mod survey_contour_job;
 #[path = "survey_contour_sheet.rs"]
 mod survey_contour_sheet;
 

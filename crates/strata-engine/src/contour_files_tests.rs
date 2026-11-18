@@ -20,7 +20,7 @@ fn slope() -> [[f64; 3]; 4] {
 #[test]
 fn the_package_has_the_slope_levels_and_a_real_grid() {
     let dir = tempfile::tempdir().unwrap();
-    let out = write_contour_package(dir.path(), 5187, &slope(), 2.0, 10.0).unwrap();
+    let out = write_contour_package(dir.path(), 5187, &slope(), 2.0, 10.0, 0.0, &[]).unwrap();
     assert_eq!((out.lines, out.points), (4, 4));
 
     let gpkg = Dataset::open(dir.path().join("contours.gpkg")).unwrap();
@@ -54,6 +54,8 @@ fn two_points_write_nothing() {
         &[[0.0, 0.0, 1.0], [1.0, 1.0, 2.0]],
         1.0,
         1.0,
+        0.0,
+        &[],
     )
     .unwrap_err();
     assert!(err.0.contains("3개"), "{err}");
