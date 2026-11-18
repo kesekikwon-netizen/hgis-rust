@@ -29,7 +29,7 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 | 조각 | 상태 | C++ | Rust | 차이 |
 |---|---|---|---|---|
 | 지도 카드 생성 | `done` | `src/app/MainWindow.cpp:963` 키 `"map"` | `gui_tab_map_opacity.rs`, `gui_tab_map_opacity_placement.rs` | 카드는 지도에 있다 |
-| 프레임 NoFocus, 슬라이더 ClickFocus | `partial` | `KaLayerOpacityRail.cpp:22`, `:47`, `:67` | MENU22가 고친 뒤의 `gui_tab_map_opacity_keys.rs` | 인수인계는 생산 입력 15개로 적는다. 이 Linux 실행의 시험 수는 현황 문서 6절 |
+| 프레임 NoFocus, 슬라이더 ClickFocus | `partial` | `KaLayerOpacityRail.cpp:22`, `:47`, `:67` | MENU22가 고친 뒤의 `gui_tab_map_opacity_keys.rs` | 인수인계는 생산 입력 15개로 적는다. 확인은 Windows CI |
 | 지도에서 빈 곳 끌기 | `partial` | `KaLayerOpacityRail.cpp:218-249` | `gui_tab_map_opacity_placement.rs:111-135` | 세션 메모리만. 프로세스를 끄면 사라진다 |
 | 기본 위치 | `divergent` | `:207` `move(10, 10+inset)` 왼쪽 위 | `gui_tab_map_opacity_placement.rs:69-71` 왼쪽 아래 | 주석이 소유자 UI11이라고 적는다. 이식 버그로 되돌리지 않는다 |
 | 디스크 키 `ui/opacityRail/map` | `missing` | `:13-15`, `:101-105`, `:248-249` `QSettings` | egui `Id::new("ka_map_opacity_placement")` `:44-46`, `:160-163` | ini에 쓰지 않는다 |
@@ -69,7 +69,7 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 | 유산 「받기」 | `partial` | `dlg_heritage_browser_footer.rs:60-76`이 조건이 맞으면 `start_heritage_fetch`. 실제 사이트는 `CURSOR_HANDOVER.md`가 미검증으로 적는다 |
 | 폴리곤 묶기·나누기 | `partial` | `gui_ribbon_draw_row.rs:104` → `merge_selected_polygons`. `app_state_split.rs:80` `split_polygons_with_line`. 범례의 묶기 항목은 여전히 꺼져 있다 |
 | 홈 | `divergent` | `gui_tab_home.rs:25-26`이 `render_home_explorer`만 그린다. C++ `KaStartPage`가 아니다. UI5 `ab8c8f1` |
-| 인쇄 | `partial` | UI3 커밋이 미리보기 탭과 Windows 인쇄를 넣었다. 이 Linux 세션은 프린터를 보지 않았다. 나눈 장 PDF는 위 표대로 꺼져 있다 |
+| 인쇄 | `partial` | 미리보기 탭과 Windows 인쇄 보조 프로세스가 있다. 나눈 장 PDF는 꺼져 있다. 항목별 대조는 5절 |
 
 ### 1.4 저장소에 없는 것
 
@@ -183,7 +183,7 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 | 연결 상태 | `partial` | 11-14 | `KaHomeConnectionCard.cpp` | 홈 탐색 안으로 옮겨졌는지 오늘 다시 열지 않음 |
 | 시작 스플래시 | `missing` | 11-14 | `KaStartupSplash.cpp` | `main.rs`가 홈으로 바로 연다. 제품 결정은 시작 시 홈만 |
 | API 키 | `partial` | 11-14 | `KaApiKeyDialog.cpp` | `dialogs_account.rs`, `key_stores.rs`. 키 값은 읽지 않음 |
-| 포털 계정 | `partial` | 11-14 | `KaHeritageSetupDialogs.cpp` 등 | DPAPI는 Windows. Linux 시험이 대신하지 못함 |
+| 포털 계정 | `partial` | 11-14 | `KaHeritageSetupDialogs.cpp` 등 | DPAPI와 계정 저장은 Windows. 확인은 Windows CI |
 | ini의 최근 조사·마지막 폴더 | `partial` | 11-14 | `MainWindowSession.cpp:1336-1364` | `recent_surveys.rs`. 테마·창 위치는 11-14에 없음. 투명도 위치 키도 없음 |
 
 ## 3. 닫는 작업 단위
@@ -244,20 +244,43 @@ C++는 카드가 두 개다. 같은 클래스이고 기억 키만 다르다.
 
 - 이미 있음: 리본 「수치지형」은 `open_topographic_download` (`topo_download_run.rs:86-95`)가 받아 둔 합본을 올리거나 숨은 주문을 시작한다. 새 「도엽 확인」 클라이언트를 만들지 않는다.
 - 남은 것: `ngii_topographic_state.rs`의 꺼 둔 「도엽 확인」은 그 리본과 다른 옛 창이다. 그 단추를 두 번째 주문으로 살리지 말고, 리본과 같은 진입으로 붙이거나 옛 창을 닫는다.
-- 검증: 리본 경로의 기존 시험이 유지된다. 실제 로그인·신청은 넣지 않는다. Linux 컴파일은 WU-11이다.
+- 검증: Windows CI에서 리본 경로의 기존 시험이 유지된다. 실제 로그인·신청은 넣지 않는다.
 
 ### WU-10 작업공간 읽기의 첫 조각
 
 - 목표: C++가 저장한 조사의 내장 프로젝트에서 레이어 켜짐과 순서만 읽는다. 쓰는 쪽은 아직 C++ 바이트를 유지한다(`docs/RUST_PLAN.md` 2D의 「안 되면」).
 - 검증: 저장소에 이미 있는 데모 사본(사용자 원본 아님)을 열면 켜짐이 C++ 저장과 같다. 저장 뒤 `qgis_projects` 바이트가 그대로다.
 
-### WU-11 Linux에서 워크스페이스가 컴파일되게
+### WU-11 떨어짐 (소유자 결정 2026-11-18, Windows only)
 
-- 목표: Windows 전용 조각을 `cfg(windows)` 밖으로 새지 않게 한다. `topo_download_run.rs:8`의 `strata_ngii_run`, `heritage_download_tests.rs:205`의 `browser_options`, `sqlite_read_more_tests.rs`와 `account_migration.rs:17`의 Linux clippy unused import.
-- 검증: Linux에서 `cargo build --workspace`, `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`가 컴파일 오류 없이 끝나고, 시험 요약 줄이 로그에 있다. Windows에서 수치지형·유산 받기 코드는 그대로 컴파일된다.
-- 이 단위는 현장 기능이 아니다. Linux에서 다른 단위의 시험을 돌리려면 먼저다.
+- 상태: dropped. Linux 빌드, Linux 시험, Linux CI, Windows 전용 코드를 Linux에서 컴파일되게 하는 수정은 하지 않는다.
+- 검증: Windows CI. 이 단위를 다시 열지 않는다.
 
-WU-01과 WU-04, WU-05, WU-07은 파일이 겹치지 않으면 동시에 맡길 수 있다. WU-02는 WU-01 다음이 안전하다. WU-03의 도면 키는 WU-02 다음이다. WU-06은 그림 PDF(WU 없음, 이미 `partial`)와 벡터 PDF를 한 일로 합치지 않는다. WU-11은 나머지 단위의 Linux 검증을 막으므로, 클라우드에서 시험할 거면 같이 맡긴다.
+### WU-12 인쇄·조판 대조
+
+Windows만. 항목별 근거는 5절. 한 번에 하지 않고 아래 세 조각으로 나눈다. 용지 210×297, 현장 317×220, A3, 방향, 300/600 DPI 선택, 미리보기는 다시 만들지 않는다.
+
+#### WU-12a 조판 PDF를 벡터로
+
+- 목표: 「PDF 내보내기」가 지금 화면의 300 DPI 그림(`sheet_pdf_file.rs:10`, `gui_tab_drawing_print.rs:99-121`)이 아니라, C++ `KaDrawingStudio.cpp:3819-3855`처럼 글자를 고를 수 있는 조판 PDF가 된다. 표제, 범례, 방위, 지도 프레임, 축척 막대의 자리와 문구가 5절의 C++ 줄과 같다. 글꼴은 맑은 고딕(`LayoutService.cpp:394`).
+- 파일: `crates/strata-layout/src/sheet_pdf_export.rs`(빈 네모 경로, 제품 단추에 붙이지 않음), `crates/strata-app/src/gui_tab_drawing_print.rs`, `gui_tab_drawing_chrome.rs`, `gui_tab_drawing_legend.rs`.
+- 검증: Windows에서 임시 용지의 PDF를 열어 페이지 크기가 용지 mm와 같고, 제목 문자열이 텍스트로 들어 있다. 그림만 있는 PDF는 실패다.
+- 끝: 그 검사가 수정 전에 실패하고 수정 후에 통과한다. 제출 꾸러미(WU-06)에 넣는 일은 이 단위가 아니다.
+
+#### WU-12b 나눈 장 PDF
+
+- 목표: `KaPrintDialog.cpp:193-204`의 「나눈 장을 PDF로 저장…」. 지금은 `dlg_drawing_print_actions.rs:20`에서 `지시 W-50`으로 꺼져 있다. 쪽 나눔은 `print_plan.rs`의 타일 계산을 쓴다.
+- 검증: Windows에서 용지보다 큰 도면이 겹침만큼 겹치는 여러 PDF 쪽이 되고, 취소하면 파일이 없다.
+- 끝: 단추를 켜고, 그 검사가 통과한다.
+
+#### WU-12c 프린터 여백과 인쇄 영수증
+
+- 목표: 프린터를 모를 때 C++는 사방 5 mm다(`KaPrintDialog.cpp:36`, `:363-378`). Rust 계획(`print_plan.rs`)은 장치 카탈로그의 인쇄 가능 사각형만 쓴다. 그 5 mm와, 고른 Windows 프린터의 최소 여백을 맞춘다.
+- 파일: `print_plan.rs`, `print_device.rs`, `scripts/print-device.ps1`.
+- 검증: Windows CI 또는 Windows 시험이 카탈로그 없이 5 mm를 쓰고, 기록된 프린터 응답으로는 그 최소 여백을 쓴다. 실제 용지를 뽑는 일은 시험에 넣지 않는다. 영수증의 쪽 수·용지 mm가 요청과 같다(`print_device.rs:47-58`).
+- 끝: 그 시험이 통과한다. 미리보기(`dlg_drawing_print_preview.rs`)는 그대로 둔다.
+
+WU-01과 WU-04, WU-05, WU-07은 파일이 겹치지 않으면 동시에 맡길 수 있다. WU-02는 WU-01 다음이 안전하다. WU-03의 도면 키는 WU-02 다음이다. WU-06은 그림 PDF와 벡터 PDF를 한 일로 합치지 않는다. WU-12a가 벡터 PDF다. WU-11은 하지 않는다. 모든 단위의 확인은 Windows CI다.
 
 ## 4. 이 목록이 아닌 것
 
@@ -265,3 +288,35 @@ WU-01과 WU-04, WU-05, WU-07은 파일이 겹치지 않으면 동시에 맡길 �
 - 스크린샷의 로컬 브랜치 내용은 추정하지 않는다.
 - 격자선 지우기와 dotak 저장소는 이 이식의 구멍이 아니다.
 - Google Drive의 연구 문서는 이 환경에서 열리지 않았다. 공개 트리에 Drive 본문을 옮기지 않는다.
+
+## 5. 인쇄·조판 대조
+
+2026-11-18. C++ `gogohak1` `b036c09` (`/tmp/cpp-ref`)와 Rust `f1835fa`의 용지·조판·인쇄·PDF. 확인은 Windows CI. 이 절을 Linux에서 돌리거나 고치지 않는다.
+
+| id | 항목 | 상태 | C++ | Rust | 차이 |
+|---|---|---|---|---|---|
+| PL-01 | A4 세로 210×297 mm | `done` | `KaDrawingStudio.h:58-59` | `sheet_drawing.rs:46-47`, `modal_paper.rs:40-41` | 기본 용지가 같다 |
+| PL-02 | A4 가로 현장 용지 317×220 mm | `done` | `KaDrawingStudio.h:60-67`, `KaPaperDialog.cpp:149-168` | `sheet_drawing.rs:48-54`, `preset_dimensions_mm` `:99-103` | 좌·우·위 10 mm. 297×210 레거시는 따로 구분 |
+| PL-03 | A3 297×420 mm | `done` | `KaPaperDialog.cpp:162-164` | `sheet_geometry.rs:19`, 인쇄 선택 `dlg_drawing_print_options.rs:41` | 가로면 바꾼다 |
+| PL-04 | 방향 (세로/가로) | `done` | `KaPaperDialog.cpp:145-170` | `modal_paper.rs:57-62`, `preset_dimensions_mm` | A4 가로만 현장 용지 |
+| PL-05 | 직접 입력 용지 | `partial` | `KaPaperDialog.cpp:146-170` 프리셋 id 2, 스핀 | `modal_paper.rs`와 MENU19 카드 | 창은 있다. 프린터 용지와의 일치는 PL-16 |
+| PL-06 | 축척 분모 | `partial` | `TilePrint::scaleLabel`, `StandardScales` | 도면 칩 `gui_tab_drawing_right_b.rs:15`, 목록 `standard_scales.rs:17` | 칩과 표준 목록이 한 집합인지는 이 절에서 재지 않음 |
+| PL-07 | 축척 막대 | `partial` | `LayoutService.cpp` 조판 항목 | `sheet_drawing.rs:218`, `gui_tab_drawing_chrome.rs` | 자리와 스타일 단추는 있다. PDF에는 그림으로만 들어간다 |
+| PL-08 | 인쇄 미리보기 | `partial` | `KaPrintDialog.cpp:455-456` | `dlg_drawing_print_preview.rs:5-29` | 현재 용지를 축소해 그린다. QPrinter 미리보기는 아니다 |
+| PL-09 | 프린터 목록 | `partial` | `KaPrintDialog.cpp:90-96` `QPrinterInfo` | `print_device.rs:8-11`, `print_device_process.rs:8-18` `powershell.exe` | Windows 보조 프로세스. 시험은 빈 카탈로그 |
+| PL-10 | 해상도 300 / 600 DPI | `partial` | `TilePrint.cpp:352-353`, 기본 `TilePrint.h:85` 300. 600 문구는 「가는 선이 많은 실측도」 | `print_state.rs:47` 기본 300, `dlg_drawing_print_options.rs:58` 「600 DPI (고정밀 제출용)」 | 두 값은 같다. 600의 문구가 다르다 |
+| PL-11 | 여러 장 나누기·겹침·재단선·전체 장 | `partial` | `TilePrint.cpp:37-40`, `:271-290` | `print_plan.rs:92-115`, 기본 겹침 10 mm·재단선·전체 장 `print_state.rs:48-50` | 계산은 있다. 나눈 장 파일은 PL-14 |
+| PL-12 | 표제란 | `partial` | `LayoutService.cpp:411-421` 맑은 고딕 15 pt | `gui_tab_drawing_chrome.rs:75-119` | 칸과 줄은 있다. 글꼴은 PL-18 |
+| PL-13 | 범례 | `partial` | `LayoutService.cpp` `QgsLayoutItemLegend` | `gui_tab_drawing_legend.rs`, 둥근 테 MENU20 | 화면 범례다. QGIS 범례 렌더는 아니다 |
+| PL-14 | 나눈 장 PDF | `missing` | `KaPrintDialog.cpp:193-204`, `:238` `saveTilesAs` | `dlg_drawing_print_actions.rs:19-20` 툴팁 `지시 W-50` | 단추가 꺼져 있다 |
+| PL-15 | 도면을 조사 파일에 저장 | `missing` | `KaDrawingStudio.cpp`의 `user_sheet`, `KaDrawingSheetSet` | `gui_tab_drawing_sheets.rs` 세션 메모리. 저장은 GPKG와 `.strata-maps.json` | 다시 열면 조판이 없다. 작업공간 읽기(WU-10)와 겹친다 |
+| PL-16 | 여백 | `partial` | 프린터를 모르면 사방 5 mm, 알면 그 최소값 `KaPrintDialog.cpp:36`, `:363-378` | `print_plan.rs`는 장치 카탈로그의 인쇄 가능 사각형만 사용 | 5 mm 기본이 없다 |
+| PL-17 | 방위표 | `partial` | `LayoutService.cpp:488-494` PNG `north_arrow` | `gui_tab_drawing_put.rs` 「방위 (도북)」 항목 | 항목은 있다. C++ PNG와 같은 그림인지는 확인하지 않음 |
+| PL-18 | 글꼴 | `divergent` | `LayoutService.cpp:243`, `:394` 맑은 고딕 | 조판 글자는 `egui::FontId::proportional`. 맑은 고딕 등록은 지도 라벨 `gui_theme_fonts.rs:13` | 조판 PDF·표제에 그 글꼴이 고정돼 있지 않다 |
+| PL-19 | PDF 내보내기 | `divergent` | `KaDrawingStudio.cpp:3819-3855` 조판을 300 DPI로. 글자가 텍스트 | `sheet_pdf_file.rs:10` 300 DPI, `gui_tab_drawing_print.rs:99-121`는 화면 그림. `sheet_pdf_export.rs:27-40`의 빈 네모는 이 단추 경로가 아니다 | 해상도 숫자는 같고 결과물은 그림이다. 큰 용지는 1억 화소 아래로 낮춘다 (`sheet_pdf_file.rs:21-26`) |
+| PL-20 | 지도 프레임 | `partial` | `LayoutService` 조판 지도 항목 | `DrawingSheet::map_frame`, 도면 탭이 그린다 | 화면 프레임은 있다. PDF에서는 그림 안에 들어간다 |
+| PL-21 | 도면 좌표 격자 기본값 | `divergent` | `KaDrawingStudio.cpp:1553` 근처 사용자 설정 전 꺼짐 | `sheet_drawing.rs:73` `grid_enabled: true` | 처음 용지에 격자가 켜져 있다 |
+
+합계 21행: `done` 4, `partial` 12, `missing` 2, `divergent` 3.
+
+WU-12a가 PL-12·13·17·18·19·20, WU-12b가 PL-14, WU-12c가 PL-16이다. PL-01–04·08·10·11은 다시 만들지 않는다. PL-15는 WU-10에 둔다.

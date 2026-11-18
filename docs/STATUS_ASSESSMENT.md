@@ -31,11 +31,11 @@ Strata(실행 파일 이름 `ka-hgis`)는 고고학 현장용 데스크톱 GIS�
 | `strata-secrets` | 키·계정 저장. Windows에서는 DPAPI | 키 값은 코드에 없다 |
 | `strata-types`, `strata-canvas2d`, `strata-mapengine`, `strata-topo`, `strata-paleo`, `strata-terrain3d` | 공용 타입, 지도 보기, 라벨, 수치지형 묶음, 고지형, 3D | 3D 탭은 안내 문구와 비활성 경로가 남아 있다 |
 
-Rust 소스 약 1,119개 파일, 158,125줄(`find crates -name '*.rs'`). 소스에서 센 `#[test]`는 약 1,908개, `#[ignore]` 2개다. 이것은 통과한 시험 수가 아니다. 이 Linux 세션의 `cargo test`는 컴파일이 끝나기 전에 멈췄고 실행은 0건이다(6절). C++ 기준본은 `src`+`tests` 헤더·cpp 107,245줄, 파일 792개.
+Rust 소스 약 1,119개 파일, 158,125줄(`find crates -name '*.rs'`). 소스에서 센 `#[test]`는 약 1,908개, `#[ignore]` 2개다. 통과 여부의 기준은 Windows CI다(6절). C++ 기준본은 `src`+`tests` 헤더·cpp 107,245줄, 파일 792개.
 
 ### 빌드와 실행
 
-이 체크아웃은 Linux다. C++ 시절 문서의 `powershell.exe` / `ka-hgis.exe` 경로는 여기 쓰지 않는다. GDAL·PROJ는 시스템에 설치하지 않고 크레이트가 소스에서 빌드한다. PATH에 `cmake`와 `sqlite3`가 있어야 한다(이 러너에는 둘 다 있다).
+검증 기계는 Windows다. GDAL·PROJ는 시스템에 설치하지 않고 크레이트가 소스에서 빌드한다. PATH에 `cmake`와 `sqlite3`가 있어야 한다. 실행 파일은 `target/release/ka-hgis.exe`다.
 
 ```bash
 cargo build --workspace -j 3
@@ -46,7 +46,7 @@ cargo build --release -p strata-app -j 3
 ./target/release/ka-hgis --verify-all
 ```
 
-이 네 줄은 Windows CI가 도는 명령이다. 이 Linux 체크아웃에서는 첫 명령이 `topo_download_run.rs`의 Windows 전용 크레이트에서 실패한다(6절). `--smoke-quit`과 `--verify-all`은 그 바이너리가 생긴 뒤에만 의미가 있다.
+이 명령은 Windows CI(`.github/workflows/ci.yml`)가 도는 검증이다. `--smoke-quit`과 `--verify-all`은 그 빌드가 만든 `ka-hgis.exe`로 확인한다. Linux 빌드·시험·CI는 범위 밖이다(소유자 결정 2026-11-18).
 
 Windows CI(`.github/workflows/ci.yml`)는 같은 세 검사를 `windows-latest`에서 하고, 이어서 `ka-hgis --verify-all`, 그리고 `strata-engine`·`strata-check-export`의 `--features gdal`을 별도 잡으로 돌린다. 앱 의존성이 이미 `gdal`을 켜므로 워크스페이스 빌드에도 GDAL 소스 빌드가 들어간다. 첫 빌드는 수십 분이다. 증분 빌드가 꼬이면 `cargo clean -p strata-app` 뒤 다시 빌드한다(인수인계 문서의 LLVM `anon` / LNK1120 사례).
 
@@ -84,7 +84,7 @@ Windows CI(`.github/workflows/ci.yml`)는 같은 세 검사를 `windows-latest`�
 - 2026-11-17: 유산 파이프(HER-CODEX, 고정 응답·숨은 세션), UI1–UI6(옛 지도, 범례 크기, 인쇄 탭, 래스터 정합, 홈을 폴더 탐색으로, 작은 화면), MENU1–4, SNAP1.
 - 2026-11-18: MENU5–22. 팝업·키보드가 그리던 도형을 지우지 않게 하고, CRS 실패를 거절하고, 버퍼 저장, 용지 카드, 둥근 범례, 지도 투명도 카드 이동과 슬라이더 포커스.
 
-GitHub Actions run [44252014705](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44252014705)는 이 HEAD에서 `check-and-test`, `gdal-feature`, `newest-stable`이 모두 success다(Windows, 45분 44초). 그 앞 7개 `main` 푸시도 success다. 이 Linux 러너의 숫자는 6절이다. Windows CI 성공을 Linux 결과로 적지 않는다.
+GitHub Actions run [44252014705](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44252014705)는 이 HEAD에서 `check-and-test`, `gdal-feature`, `newest-stable`이 모두 success다(Windows, 45분 44초). 그 앞 7개 `main` 푸시도 success다. 문서 PR [44297770561](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44297770561)도 같은 세 잡이 success다.
 
 ## 3. 기능이 어디까지 왔는가
 
@@ -133,57 +133,25 @@ GitHub Actions run [44252014705](https://github.com/kesekikwon-netizen/hgis-rust
 4. 제출 꾸러미가 꺼져 있어 이 앱만으로는 5179 SHP + PDF + MANIFEST를 만들지 못한다. 검수 창은 열리므로 끝난 것처럼 보인다.
 5. 받은 지도 목록은 조사 파일 옆 `.strata-maps.json`이다. C++는 조사 파일 안 작업공간이다. 두 앱이 같은 조사를 열면 참조 지도·색·도면 장이 같이 오지 않는다.
 6. 복구 사본(C++ 2분)은 없다. 제품 결정은 자동 저장 없음이다. 두 문장을 한 구현으로 합치지 말고, 복구 사본을 넣을지 소유자가 정해야 한다.
-7. CI는 Windows다. 이 Linux 러너에서는 `cargo build`가 `strata_ngii_run`(Windows 전용 의존)에서 멈추고, 시험은 0건 실행이다. DPAPI, WebView2, 숨은 인쇄도 Linux가 대신하지 못한다. 6절.
+7. 검증은 Windows CI뿐이다. Linux 빌드·시험·CI는 범위 밖이다(소유자 결정 2026-11-18). DPAPI, WebView2, 인쇄 보조 프로세스는 Windows 기능이다.
 8. `AGENTS.md`는 구현자가 `main`에 푸시하지 않고 사용자에게 보고하지 않는다고 적는다. `CURSOR_HANDOVER.md`와 `RUST_PLAN.md` §6은 끝나면 `main`에 올리고 바탕화면 실행 파일을 바꾼다고 적는다. 누가 합치는지가 문서마다 다르다.
 9. 공개 저장소다. 키·계정·조사 좌표를 문서와 로그에 넣지 않는다. Drive 본문 URL도 인수인계가 공개 트리에 복사하지 말라고 한다.
 10. 파일당 300줄 분할이 기능 하나를 여러 파일로 찢어, 입구를 찾을 때 파일 이름 규칙(`*_a`, `*_b`)을 알아야 한다.
 
-## 6. Linux 빌드·시험
+## 6. 검증
 
-툴체인 `rustc 1.99.1 (58cf8f9c3 2026-10-13)`. 명령은 저장소 루트, `-j 3`.
+기준은 Windows CI다. Linux 빌드, Linux 시험, Linux CI는 하지 않는다(소유자 결정 2026-11-18). WU-11은 그 결정으로 떨어졌다.
 
-같은 SHA의 Windows CI [44252014705](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44252014705)는 `check-and-test`, `gdal-feature`, `newest-stable`이 success다. 아래는 그 결과가 아니다. 이 Linux 러너에서 다시 돌린 결과다.
+| 기준 | 실행 | 결과 |
+|---|---|---|
+| 제품 `main` `f1835fa` | [44252014705](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44252014705) | `check-and-test`, `gdal-feature`, `newest-stable` success |
+| 이 문서 PR `fa7c62a` | [44297770561](https://github.com/kesekikwon-netizen/hgis-rust/actions/runs/44297770561) | 같은 세 잡 success |
 
-환경이 두 번 막았다. 제품을 고친 것은 아니다.
-
-1. 11:02Z. Clang이 GCC 14를 고르는데 `libstdc++.so`는 GCC 13에만 있었다. PROJ CMake가 링크에 실패하고 세 명령이 바로 exit 101. 시험은 0개. `libstdc++-14-dev` 설치 후 단순 `c++` 링크는 된다.
-2. 11:11Z. `cpal` → `alsa-sys`가 `alsa.pc`를 찾지 못했다. `libasound2-dev`와 X11·Wayland 개발 패키지를 설치한 뒤 코드 진단까지 갔다.
-
-그 다음 실행:
-
-| 명령 | 종료 | 시험을 실행했는가 | 진단 |
-|---|---|---|---|
-| `cargo build --workspace -j 3` | 101 | 해당 없음 | 오류 1. `strata-app` 바이너리가 안 만들어진다 |
-| `cargo test --workspace -j 3` | 101 | 아니오. 로그에 `test result`가 없다. 통과 0, 실패 0, 무시 0 | 오류 2. 시험 하니스가 컴파일되지 않는다 |
-| `cargo clippy --workspace --all-targets -- -D warnings` | 101 | 해당 없음 | unused import 7건에서 멈춘다. 나머지 크레이트까지 끝나지 않았다 |
-
-빌드 오류는 하나다.
-
-```
-error[E0432]: unresolved import `strata_ngii_run`
- --> crates/strata-app/src/topo_download_run.rs:8:5
-use strata_ngii_run::{NgiiRun, RunOptions};
-```
-
-`strata-ngii-run`은 `crates/strata-app/Cargo.toml`의 `[target.'cfg(windows)'.dependencies]`에만 있다. 그 파일을 부르는 쪽은 `cfg`가 없다. Windows CI는 의존이 연결되어 통과한다. Linux에서는 앱이 빌드되지 않는다.
-
-시험 컴파일은 그 오류에 하나를 더한다. `heritage_download.rs:71`의 `browser_options`는 `#[cfg(windows)]`이고, `heritage_download_tests.rs:205`의 `browser_options_preserve_the_existing_network_gate`는 조건이 없다. Linux에서 E0599.
-
-Clippy(`-D warnings`)가 보고하고 멈춘 unused import:
-
-- `crates/strata-storage/src/sqlite_read_more_tests.rs:5` `BTreeMap`
-- 같은 파일 `:10` `WorkCrs`, `:11` `DomainLayerKey`, `:14` `snapshot_dir`, `:16` `LayerEditBuffer`, `:17` `GpkgRepository`와 `SurveyWorkspace` (6건)
-- `crates/strata-secrets/src/account_migration.rs:17` `AccountSettings` (1건)
-
-저장소 시험 파일의 그 이름들은 `#[cfg(windows)]` 본문에서만 쓰인다. Windows clippy는 쓰인 것으로 보고, Linux clippy는 안 쓰인 것으로 본다. `AccountSettings`는 이 파일 안에서 다른 사용이 검색되지 않았다. Windows 잡이 success인 이유까지 로그 한 줄로 다시 열지는 않았다.
-
-정리하면, 이 머신에서는 워크스페이스 시험이 한 건도 돌지 않았다. 기능이 깨졌다는 실행 결과가 아니라, Linux에서 컴파일이 끝나지 않는다는 결과다. 현장 판정은 여전히 Windows CI다. 클라우드 에이전트가 Linux에서 `cargo test`로 완료를 확인하려면 위의 `cfg`를 먼저 맞춰야 한다.
+도구 체인은 `rust-toolchain.toml`의 Rust 1.99.1. 잡은 `.github/workflows/ci.yml`의 `windows-latest`다. 인쇄 보조 프로세스는 `powershell.exe`와 `scripts/print-device.ps1`이다.
 
 ## 7. 다음 순서
 
-위가 먼저다. 각 항목의 검증 가능한 단위는 대조표 끝의 WU 목록이다.
-
-Linux에서 시험으로 다음 단위를 확인할 거면, 대조표 WU-11(Windows 전용 `cfg`가 Linux 컴파일을 막지 않게)을 먼저 둔다. 현장 순서는 아래다.
+위가 먼저다. 각 항목의 검증은 Windows CI다. 단위는 대조표의 WU 목록이다. WU-11은 하지 않는다.
 
 1. **투명도 세 조각.** (a) 슬라이더는 고른 레이어만 바꾼다. (b) 도면에도 C++와 같은 카드를 붙인다. (c) 지도 `ui/opacityRail/map`과 도면 `ui/opacityRail/drawing`을 사용자 ini에 따로 저장하고, 연 뒤 늦은 읽기가 사용자가 이미 옮긴 자리를 덮지 않게 한다. (c)의 도면 키는 (b)가 있어야 의미가 있다. 지도 키만 먼저 넣어도 된다. 기본 위치는 C++의 왼쪽 위 `(10, 10+inset)`이 아니라, 주석이 적은 소유자 UI11의 왼쪽 아래다. 그 차이를 되돌리지 않는다.
 2. **거짓 성공 두 곳.** 시굴 「구역에 깔기」와 등고선 「점 248개」. 계산을 연결하거나, 연결 전까지 단추를 끄고 만든 것처럼 말하지 않는다.
@@ -192,7 +160,7 @@ Linux에서 시험으로 다음 단위를 확인할 거면, 대조표 WU-11(Wind
 5. **정합의 나머지.** 래스터의 점 짝·월드 파일·백업은 연결되어 있다. 다시 만들지 않는다. 남은 것은 벡터·CAD 세션과 맞춘 스캔의 먹선 스타일이다.
 6. **작업공간 2D.** C++가 조사 파일 안에 넣는 레이어 순서·색·참조 지도·도면 장. 옆의 `.strata-maps.json`은 그 전까지의 임시 목록이다.
 7. **수치지형 옛 창.** 리본은 이미 숨은 주문으로 간다. 꺼져 있는 「도엽 확인」을 두 번째 구현으로 살리지 않는다. 실제 사이트 로그인은 사용자 허락 뒤에만 한다.
-8. **도면 PDF의 급.** 지금 「PDF 내보내기」는 300 DPI 그림이다. 제출 꾸러미가 요구하는 벡터 PDF, 그리고 꺼져 있는 나눈 장 PDF(W-50)는 다른 단위다. 인쇄 실물은 Windows에서만 확인한다.
+8. **인쇄·조판 (WU-12).** 용지 210×297과 현장 317×220, 미리보기, 300/600 DPI 선택은 있다. 「PDF 내보내기」는 300 DPI 그림이고, 나눈 장 PDF는 꺼져 있다. 표제·범례·방위·글꼴을 C++ 조판과 맞추는 일은 대조표 5절이다. 확인은 Windows다.
 
 `fea3e42`를 이 순서에 넣지 않는다. 그 커밋이 푸시되기 전에는 로컬 PC의 작업 복사본으로만 다룬다. 내용이 필요하면 그 브랜치를 원격에 올린 뒤 다시 읽는다.
 
@@ -213,3 +181,5 @@ Linux에서 시험으로 다음 단위를 확인할 거면, 대조표 WU-11(Wind
 | 투명도 기본 모서리를 C++ 왼쪽 위로 되돌리는 일을 추천하지 않음 | 코드가 소유자 UI11로 왼쪽 아래를 명시 | `gui_tab_map_opacity_placement.rs:69-71` |
 | 래스터 정합의 월드 파일은 이미 쓴다 | 후속 대조가 `create_aligned_raster`를 가리켰고, 그 함수가 월드 파일과 `.prj`를 쓴다 | `raster_alignment.rs:88-89`, `gui_ribbon_align_actions.rs:37` |
 | 제출 실물은 `submit_builder`이고 `submit_export.rs`가 아니다 | 빌더는 `gdal` 기능 뒤에 있고 앱이 그 기능을 켜지 않는다. 다른 파일은 고정 네모를 쓴다 | `strata-check-export/src/lib.rs:21-22`, `Cargo.toml:17` |
+| Linux 작업은 하지 않음 | 소유자 결정 2026-11-18. 검증은 Windows CI | WU-11 dropped |
+| 인쇄·조판은 WU-12로 나눔 | 용지 크기는 이미 같고 PDF는 그림이다 | 대조표 5절 |
