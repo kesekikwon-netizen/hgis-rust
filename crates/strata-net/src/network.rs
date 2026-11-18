@@ -264,6 +264,10 @@ pub(crate) fn run_curl_url_with_stdin(
 #[path = "network_tests.rs"]
 mod network_tests;
 
+#[cfg(test)]
+#[path = "network_launch_count_tests.rs"]
+mod network_launch_count_tests;
+
 #[path = "network_local.rs"]
 mod network_local;
 #[path = "network_until.rs"]
