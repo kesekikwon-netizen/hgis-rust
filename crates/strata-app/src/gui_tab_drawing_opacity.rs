@@ -1,9 +1,37 @@
 //! Drawing opacity card values. The card itself is the map rail (`gui_tab_map_opacity_placement.rs`).
 //! `KaDrawingStudio.cpp:1196-1234` remembers `m_railLayer` and asks the layout cache to draw again.
+//! Positions are `ui/opacityRail/map` and `ui/opacityRail/drawing` (`KaLayerOpacityRail.cpp:13-15`, `:101-105`).
 use super::RailKind;
 use crate::app_state::StrataAppState;
+use eframe::egui::Vec2;
+use strata_storage::qt_ini::{escaped_point, read_point, IniFile};
+
+const RAIL_SECTION: &str = "ui";
+
+fn rail_key(kind: RailKind) -> &'static str {
+    // Qt `iniEscapedKey` writes `/` as `\` (`qsettings.cpp:505-506`), so `ui/opacityRail/map` is this key.
+    match kind {
+        RailKind::Map => "opacityRail\\map",
+        RailKind::Drawing => "opacityRail\\drawing",
+    }
+}
 
 impl StrataAppState {
+    /// Read both points. A card the user has already dragged keeps its offset and does not take the new point.
+    pub(crate) fn reload_opacity_rails(&mut self) {
+        let Some(path) = self.settings_ini.clone() else { return };
+        let Ok(file) = IniFile::read(&path) else { return };
+        self.opacity_rail_ini = [RailKind::Map, RailKind::Drawing].map(|kind| file.value(RAIL_SECTION, rail_key(kind)).and_then(read_point));
+    }
+
+    pub(super) fn write_opacity_rail(&self, kind: RailKind, offset: Vec2) {
+        let Some(path) = self.settings_ini.clone() else { return };
+        let Ok(mut file) = IniFile::read(&path) else { return };
+        let point = (offset.x.round() as i32, offset.y.round() as i32);
+        file.set_value(RAIL_SECTION, rail_key(kind), &escaped_point(point.0, point.1));
+        let _ = file.write(&path);
+    }
+
     pub(super) fn drawing_brightness_unit(&self, title: &str) -> f32 {
         let value = self
             .picture_index(title)

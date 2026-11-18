@@ -7,6 +7,8 @@ use eframe::egui::{self, Id, Pos2, Rect, Vec2};
 struct Placement {
     offset: Option<Vec2>,
     gesture: Option<Gesture>,
+    /// This gesture changed the card. A click that does not move stays false (MENU22).
+    gesture_moved: bool,
 }
 #[derive(Clone, Copy)]
 enum Gesture {
@@ -93,10 +95,15 @@ impl StrataAppState {
         let adjustable = self.rail_title(kind).is_some();
         let size = Vec2::new(260.0_f32.min(host.width()), if adjustable { 86.0 } else { 34.0 });
         let (top_inset, bottom_reserve, default_bottom) = rail_insets(kind, host, guide);
-        // Owner UI11: an unmoved card is the lower left, above the controls that already sit there.
-        let wanted = state
-            .offset
-            .map_or(Pos2::new(host.left() + 12.0, host.bottom() - size.y - default_bottom), |offset| host.min + offset);
+        // A drag wins over a point read from ini. An unmoved card is the lower left (UI11), or the saved point.
+        let saved = self.opacity_rail_ini[super::rail_index(kind)];
+        let wanted = if let Some(offset) = state.offset {
+            host.min + offset
+        } else if let Some((x, y)) = saved {
+            host.min + Vec2::new(x as f32, y as f32)
+        } else {
+            Pos2::new(host.left() + 12.0, host.bottom() - size.y - default_bottom)
+        };
         constrained(host, size, wanted, top_inset, bottom_reserve)
     }
 
@@ -189,11 +196,18 @@ impl StrataAppState {
                         let moved = constrained(host, card.size(), pos - grab, top_inset, bottom_reserve);
                         if moved.min != card.min {
                             state.offset = Some(moved.min - host.min);
+                            state.gesture_moved = true;
                             card = moved;
                         }
                     }
                 }
                 PhysicalEvent::Release(egui::PointerButton::Primary) | PhysicalEvent::FocusLost => {
+                    if state.gesture_moved {
+                        state.gesture_moved = false;
+                        if let Some(offset) = state.offset {
+                            self.write_opacity_rail(kind, offset);
+                        }
+                    }
                     if state.gesture.is_some() {
                         state.gesture = Some(Gesture::Control);
                         owned = true;

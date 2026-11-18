@@ -24,6 +24,13 @@ enum RailKind {
     Drawing,
 }
 
+pub(super) fn rail_index(kind: RailKind) -> usize {
+    match kind {
+        RailKind::Map => 0,
+        RailKind::Drawing => 1,
+    }
+}
+
 fn slider_rect(card: Rect, row: usize) -> Rect {
     let y = card.top() + 40.0 + row as f32 * 24.0;
     Rect::from_min_max(Pos2::new(card.left() + 52.0, y - 10.0), Pos2::new(card.right() - 42.0, y + 10.0))
@@ -196,3 +203,7 @@ impl StrataAppState {
 #[cfg(test)]
 #[path = "gui_tab_map_opacity_layer_tests.rs"]
 mod layer_tests;
+
+#[cfg(test)]
+#[path = "opacity_rail_disk_tests.rs"]
+mod disk_tests;

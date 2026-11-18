@@ -56,6 +56,7 @@ impl StrataAppState {
             survey_path: None,
             survey_tables: Vec::new(),
             settings_ini: None,
+            opacity_rail_ini: [None, None],
             recent_surveys: Vec::new(),
             edit_layer_key: None,
             draw_sketch: crate::draw_sketch::DrawSketch::default(),

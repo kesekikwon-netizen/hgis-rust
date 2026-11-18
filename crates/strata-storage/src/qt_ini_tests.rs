@@ -29,10 +29,7 @@ fn escaped_strings_match_qt6_bytes() {
 #[test]
 fn escaped_string_lists_match_qt6_bytes() {
     let two = ["C:/a b/경주시.gpkg\t경주시\t1794142119965".to_owned(), "D:/x,y/z.gpkg\tq;r\t5".to_owned()];
-    assert_eq!(
-        escaped_string_list(&two),
-        r#"C:/a b/경주시.gpkg\t경주시\t1794142119965, "D:/x,y/z.gpkg\tq;r\t5""#
-    );
+    assert_eq!(escaped_string_list(&two), r#"C:/a b/경주시.gpkg\t경주시\t1794142119965, "D:/x,y/z.gpkg\tq;r\t5""#);
     assert_eq!(escaped_string_list(&[]), "@Invalid()");
     assert_eq!(escaped_string_list(&["C:/only.gpkg\tonly\t1".to_owned()]), r"C:/only.gpkg\tonly\t1");
 }
@@ -92,6 +89,30 @@ fn missing_keys_and_sections_are_added_like_qt() {
     let mut empty = IniFile::from_text(String::new());
     empty.set_value("Survey", "LastDir", "C:/y");
     assert_eq!(empty.text(), "[Survey]\r\nLastDir=C:/y\r\n");
+}
+
+/// `QSettings::setValue("ui/opacityRail/map", QPoint)` — `/` in the key is `\`, and the value is `@Point(x y)`.
+/// A string reader does not turn that into text, so the two apps can share the point.
+#[test]
+fn point_bytes_match_qt6_qsettings() {
+    assert_eq!(escaped_point(12, 34), "@Point(12 34)");
+    assert_eq!(escaped_point(-8, 0), "@Point(-8 0)");
+    assert_eq!(read_point("@Point(12 34)"), Some((12, 34)));
+    assert_eq!(read_point("@Point(-8 0)"), Some((-8, 0)));
+    assert_eq!(read_point("@Point(12  34)"), None);
+    assert_eq!(read_point("@@Point(1 2)"), None);
+    assert_eq!(read_string("@Point(12 34)"), "");
+    let mut ini = IniFile::from_text(SHAPED.to_owned());
+    ini.set_value("ui", "opacityRail\\map", &escaped_point(18, 240));
+    ini.set_value("ui", "opacityRail\\drawing", &escaped_point(40, 180));
+    let text = ini.text().to_owned();
+    assert!(text.contains("look=paper\r\n"), "other key in [ui] was rewritten");
+    assert!(text.contains("[RecentSurveys]\r\n"));
+    assert!(text.contains("opacityRail\\map=@Point(18 240)\r\n"));
+    assert!(text.contains("opacityRail\\drawing=@Point(40 180)\r\n"));
+    let again = IniFile::from_text(text);
+    assert_eq!(read_point(again.value("ui", "opacityRail\\map").expect("map")), Some((18, 240)));
+    assert_eq!(read_point(again.value("ui", "opacityRail\\drawing").expect("drawing")), Some((40, 180)));
 }
 
 /// 파일이 없으면 빈 글로 읽고, 쓰면 폴더까지 만든다. UTF-8 이 아니면 읽기를 거절한다.
