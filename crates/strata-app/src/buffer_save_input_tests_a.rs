@@ -68,6 +68,8 @@ fn buffer_save_input_failed_save_retains_previous_file_edits_and_rings_then_retr
     assert_eq!(h.app.home_map.real_survey.distance_rings.get(&500), Some(&replacement));
     assert_eq!(std::fs::read(&path).expect("protected previous generation"), previous);
     h.save("buffer-save-failed-preserved");
+    // The failed save now opens the field error (`KaUserError`). Esc closes it, then Ctrl+S can run.
+    key(&mut h, Key::Escape, Modifiers::NONE);
     key(&mut h, Key::Z, Modifiers::CTRL);
     key(&mut h, Key::S, Modifiers::CTRL);
     assert!(!h.app.is_dirty);

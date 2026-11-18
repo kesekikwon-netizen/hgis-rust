@@ -23,6 +23,12 @@ fn frame(
     ctx.run(raw, |ctx| app.render_field_error(ctx)).shapes
 }
 
+/// A new egui window has no body on the frame that opens it. The next frame paints the labels.
+fn shown(app: &mut StrataAppState, ctx: &egui::Context) -> Vec<egui::epaint::ClippedShape> {
+    let _ = frame(app, ctx, Vec::new());
+    frame(app, ctx, Vec::new())
+}
+
 fn walk(shape: &Shape, f: &mut impl FnMut(&Shape)) {
     f(shape);
     if let Shape::Vec(v) = shape {
@@ -104,7 +110,7 @@ fn the_window_shows_the_three_headings_and_no_log_button_without_a_folder() {
     app.log_folder.clear();
     sample(&mut app);
     let ctx = egui::Context::default();
-    let shown = texts(&frame(&mut app, &ctx, Vec::new()));
+    let shown = texts(&shown(&mut app, &ctx));
     assert!(shown.iter().any(|t| t == "무엇이 안 됐나"), "{shown:?}");
     assert!(shown.iter().any(|t| t == "왜 그런가"));
     assert!(shown.iter().any(|t| t == "어떻게 하나"));
@@ -121,7 +127,7 @@ fn the_log_button_opens_the_folder_and_leaves_the_window_open() {
     app.log_opener_records = Some(Vec::new());
     sample(&mut app);
     let ctx = egui::Context::default();
-    let first = frame(&mut app, &ctx, Vec::new());
+    let first = shown(&mut app, &ctx);
     let at = center(&first, "로그 폴더 열기").expect("painted 로그 폴더 열기");
     let still = click(&mut app, &ctx, at);
     let shown = texts(&still);

@@ -181,11 +181,12 @@ fn the_menu_paints_both_choices_and_keep_is_a_click_on_the_label() {
         armed: false,
     });
     let ctx = egui::Context::default();
-    let first = paint(
+    let _ = paint(
         &mut app,
         &ctx,
         vec![Event::PointerMoved(Pos2::new(200.0, 200.0))],
     );
+    let first = paint(&mut app, &ctx, Vec::new());
     assert!(
         center(&first, "겹친 곳 지우기").is_some(),
         "the menu is painted"
