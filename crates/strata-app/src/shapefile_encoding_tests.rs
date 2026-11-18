@@ -19,29 +19,30 @@ use crate::ref_vector::data::{LoadSpec, Look, PolygonFill};
 /// One square and a Korean name written as CP949. The `.cpg` is then UTF-8, so the first read is wrong.
 fn korean_square(dir: &Path) -> PathBuf {
     let path = dir.join("유적.shp");
-    let mut file = DriverManager::get_driver_by_name("ESRI Shapefile")
-        .unwrap()
-        .create_vector_only(&path)
-        .unwrap();
-    let layer = file
-        .create_layer(LayerOptions {
-            name: "유적",
-            srs: None,
-            ty: OGRwkbGeometryType::wkbPolygon,
-            options: Some(&["ENCODING=CP949"]),
-        })
-        .unwrap();
-    FieldDefn::new("name", OGRFieldType::OFTString)
-        .unwrap()
-        .add_to_layer(&layer)
-        .unwrap();
-    let mut feature = Feature::new(layer.defn()).unwrap();
-    feature.set_field_string(0, "가상 고분군").unwrap();
-    feature.set_geometry(Geometry::from_wkt("POLYGON ((200000 450000, 200100 450000, 200100 450100, 200000 450100, 200000 450000))").unwrap()).unwrap();
-    feature.create(&layer).unwrap();
-    drop(feature);
-    drop(layer);
-    drop(file);
+    {
+        let mut file = DriverManager::get_driver_by_name("ESRI Shapefile")
+            .unwrap()
+            .create_vector_only(&path)
+            .unwrap();
+        let layer = file
+            .create_layer(LayerOptions {
+                name: "유적",
+                srs: None,
+                ty: OGRwkbGeometryType::wkbPolygon,
+                options: Some(&["ENCODING=CP949"]),
+            })
+            .unwrap();
+        FieldDefn::new("name", OGRFieldType::OFTString)
+            .unwrap()
+            .add_to_layer(&layer)
+            .unwrap();
+        let mut feature = Feature::new(layer.defn()).unwrap();
+        feature.set_field_string(0, "가상 고분군").unwrap();
+        feature
+            .set_geometry(Geometry::from_wkt("POLYGON ((200000 450000, 200100 450000, 200100 450100, 200000 450100, 200000 450000))").unwrap())
+            .unwrap();
+        feature.create(&layer).unwrap();
+    }
     std::fs::write(path.with_extension("cpg"), "UTF-8\n").unwrap();
     path
 }

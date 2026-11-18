@@ -4,7 +4,9 @@
 
 use eframe::egui::{self, RichText};
 
-use super::user_error::{self, format_body, FieldError};
+use super::user_error::{self, FieldError};
+#[cfg(test)]
+use super::user_error::format_body;
 use crate::app_state::StrataAppState;
 
 const INK: egui::Color32 = egui::Color32::from_rgb(30, 30, 28);
@@ -29,7 +31,8 @@ impl StrataAppState {
         ));
     }
 
-    /// The plain three-part body, for tests and the window.
+    /// The plain three-part body, for tests.
+    #[cfg(test)]
     #[must_use]
     pub(crate) fn field_error_text(&self) -> String {
         self.field_error

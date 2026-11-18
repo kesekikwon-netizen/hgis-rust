@@ -34,7 +34,8 @@ impl FieldError {
     }
 }
 
-/// `formatBody` (`KaUserError.cpp:34-41`).
+/// `formatBody` (`KaUserError.cpp:34-41`). The window paints the same headings; tests lock this string.
+#[cfg(test)]
 #[must_use]
 pub(crate) fn format_body(spec: &FieldError) -> String {
     let mut parts = vec!["무엇이 안 됐나".to_owned(), spec.what.trim().to_owned()];
@@ -51,6 +52,7 @@ pub(crate) fn format_body(spec: &FieldError) -> String {
     parts.join("\n")
 }
 
+#[cfg(test)]
 fn html_paragraph(text: &str) -> String {
     text.trim()
         .replace('&', "&amp;")
@@ -61,6 +63,7 @@ fn html_paragraph(text: &str) -> String {
 }
 
 /// `formatBodyHtml` (`KaUserError.cpp:44-54`).
+#[cfg(test)]
 #[must_use]
 pub(crate) fn format_body_html(spec: &FieldError) -> String {
     let mut html = String::new();

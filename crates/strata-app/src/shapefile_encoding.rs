@@ -22,6 +22,7 @@ impl StrataAppState {
     }
 
     /// The name the map writes for this shapefile, in the encoding the layer is using now.
+    #[cfg(test)]
     pub(crate) fn shapefile_label_text(&mut self, key: &str) -> Vec<String> {
         self.ref_vectors.shapefile_names(key)
     }
