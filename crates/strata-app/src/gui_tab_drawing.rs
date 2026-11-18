@@ -64,6 +64,8 @@ pub(crate) mod sheet_scene;
 impl StrataAppState {
     /// C++ `KaDrawingStudio.cpp` 도면 스튜디오 (좌측 레이어/파일함 + 중앙 도면 용지 & 하단 7버튼 툴바 + 우측 도면 항목/방위/도면 정보) 1:1 재현
     pub(crate) fn render_drawing_tab_ui(&mut self, ui: &mut egui::Ui) {
+        // Snapshot focus before the inspector's text fields see a press on the card (`KaLayerOpacityRail.cpp:18-28`).
+        self.remember_drawing_opacity_focus(ui.ctx());
         if ui.available_width()<1100.0 {
             eframe::egui::TopBottomPanel::top("drawing_compact_layers").frame(eframe::egui::Frame::NONE).exact_height(36.0)
                 .show_inside(ui,|ui| self.paint_compact_layer_menu(ui,true));
@@ -78,3 +80,7 @@ impl StrataAppState {
 #[cfg(test)]
 #[path = "gui_tab_drawing_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "drawing_opacity_input_tests.rs"]
+mod drawing_opacity_input_tests;

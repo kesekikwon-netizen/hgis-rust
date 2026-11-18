@@ -75,7 +75,7 @@ impl StrataAppState {
     /// coordinate points are placed (one tool of the sheet at a time).
     pub(crate) fn move_sheet_items(&mut self, ui: &egui::Ui, paper: Rect, px_per_mm: f32) {
         let painted = std::mem::take(&mut self.drawing.item_rects);
-        if self.drawing.map_adjust_active || self.drawing.coord_callout_mode {
+        if self.drawing.map_adjust_active || self.drawing.coord_callout_mode || self.drawing.rail_pointer_owns {
             return;
         }
         let pressed: Option<Pos2> = ui.input(|i| i.pointer.press_origin().filter(|_| i.pointer.primary_pressed()));

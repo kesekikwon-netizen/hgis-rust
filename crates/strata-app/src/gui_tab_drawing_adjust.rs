@@ -16,7 +16,7 @@ impl StrataAppState {
     /// wheel zooms around the pointer by the steps of the map (a fifth to the notch, a third of that with
     /// Ctrl). `map_rect` is the frame on the screen, which shows the paper at `px_per_mm`.
     pub(crate) fn adjust_sheet_map(&mut self, ui: &egui::Ui, map_rect: Rect, px_per_mm: f32) {
-        if !self.drawing.map_adjust_active {
+        if !self.drawing.map_adjust_active || self.drawing.rail_pointer_owns {
             return;
         }
         let response = ui.interact(map_rect, ui.id().with("drawing_map_adjust"), egui::Sense::click_and_drag());
