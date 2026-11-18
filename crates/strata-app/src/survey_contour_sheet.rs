@@ -16,7 +16,7 @@ use parse::{read_table, Elev};
 /// `SurveyPointReader.cpp:114`.
 const OPEN_FAIL: &str = "파일을 열지 못했습니다. 다른 프로그램이 파일을 열고 있는지 확인하세요.";
 /// 이 앱의 말. C++ opens these with GDAL; that reader is order W-29.
-const DEFERRED_BINARY: &str = "엑셀·DXF는 아직 읽지 않습니다 (지시 W-29).";
+const DEFERRED_BINARY: &str = "엑셀은 아직 읽지 않습니다 (지시 W-29).";
 
 #[derive(Debug, Clone)]
 struct Sheet {
@@ -115,10 +115,11 @@ fn read_sheet(path: &Path) -> Sheet {
         }
     };
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    if ext.eq_ignore_ascii_case("xlsx")
-        || ext.eq_ignore_ascii_case("xls")
-        || ext.eq_ignore_ascii_case("dxf")
-    {
+    if ext.eq_ignore_ascii_case("dxf") {
+        return dxf_sheet(path);
+    }
+    // gdal-src 0.3.0 build.rs never turns on the XLSX driver (it needs expat and is not a cargo feature).
+    if ext.eq_ignore_ascii_case("xlsx") || ext.eq_ignore_ascii_case("xls") {
         return Sheet {
             fatal: Some(DEFERRED_BINARY.to_owned()),
             points: Vec::new(),
@@ -134,6 +135,41 @@ fn read_sheet(path: &Path) -> Sheet {
             points: Vec::new(),
         },
     }
+}
+
+fn dxf_sheet(path: &Path) -> Sheet {
+    match strata_engine::read_dxf_survey_points(path) {
+        Ok(points) => Sheet {
+            fatal: None,
+            points: points
+                .into_iter()
+                .map(|p| Elev {
+                    x: p[0],
+                    y: p[1],
+                    z: p[2],
+                    suspicious: p[2] == 0.0 || p[2].abs() >= 999.0,
+                })
+                .collect(),
+        },
+        Err(_) => Sheet {
+            fatal: Some(OPEN_FAIL.to_owned()),
+            points: Vec::new(),
+        },
+    }
+}
+
+/// Points the preview counted, for the package writer. `Err` is the preview's fatal line.
+pub(crate) fn contour_xyz(path: &str, exclude_suspicious: bool) -> Result<Vec<[f64; 3]>, String> {
+    let sheet = sheet_for(path);
+    if let Some(fatal) = sheet.fatal {
+        return Err(fatal);
+    }
+    Ok(sheet
+        .points
+        .into_iter()
+        .filter(|point| !(exclude_suspicious && point.suspicious))
+        .map(|point| [point.x, point.y, point.z])
+        .collect())
 }
 
 /// `qRound(meters * 100)` (`SurveyContourMath.h:10`).

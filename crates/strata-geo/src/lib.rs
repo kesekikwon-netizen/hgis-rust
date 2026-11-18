@@ -11,6 +11,7 @@ pub mod boolean_split;
 pub mod buffer_round;
 pub mod cadastral_parcel;
 pub mod cluster_traverse;
+pub mod contour_surface;
 pub mod contour_tin;
 pub mod crs_transform;
 pub mod gcp_solve;

@@ -7,9 +7,6 @@ use eframe::egui::{self, Color32, Stroke, Vec2};
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::render_strata_modal_header;
 
-/// Order W-29 is the TIN, the GeoPackage and the reference layers.
-const DEFERRED_W29: &str = "아직 Rust 판에서 연결하지 않았습니다 (지시 W-29)";
-
 /// `KaSurveyContourDialog.cpp:142-145`. Tests never open a native dialog.
 fn pick_contour_file() -> Option<std::path::PathBuf> {
     if cfg!(test) {
@@ -57,6 +54,7 @@ pub(crate) fn render_survey_contour(
                     .changed()
                 {
                     app.modals.contour_empty_rejected = false;
+                    app.modals.contour_build_note = None;
                 }
                 // KaSurveyContourDialog.cpp:142-145 — 「측량 좌표」, filter dxf/xlsx/xls/csv.
                 if ui
@@ -66,6 +64,7 @@ pub(crate) fn render_survey_contour(
                     if let Some(picked) = pick_contour_file() {
                         app.modals.contour_file_path = picked.display().to_string();
                         app.modals.contour_empty_rejected = false;
+                        app.modals.contour_build_note = None;
                     }
                 }
             });
@@ -178,6 +177,8 @@ pub(crate) fn render_survey_contour(
                 "좌표 파일을 고르세요.".to_owned()
             } else if path_empty {
                 "DXF·엑셀의 점번호, X(북), Y(동), 표고는 자동으로 읽습니다.".to_owned()
+            } else if let Some(note) = app.modals.contour_build_note.clone() {
+                note
             } else {
                 survey_contour_sheet::contour_preview(
                     path,
@@ -214,20 +215,24 @@ pub(crate) fn render_survey_contour(
                 .fill(Color32::from_rgb(181, 87, 58))
                 .corner_radius(6.0)
                 .min_size(Vec2::new(108.0, 30.0));
-                // W-29 still owns the TIN, contours.gpkg and the reference-map group.
-                // Until then the button only rejects an empty path (KaSurveyContourDialog.cpp:126-131).
-                let make = ui.add_enabled(path_empty, make_btn);
-                if path_empty {
-                    if make.clicked() {
+                // Empty path: KaSurveyContourDialog.cpp:126-131. A file runs the package write.
+                if ui.add(make_btn).clicked() {
+                    if path_empty {
                         app.modals.contour_empty_rejected = true;
+                    } else {
+                        app.modals.contour_build_note = None;
+                        match survey_contour_make::make_survey_contours(app) {
+                            Ok(()) => app.modals.active = None,
+                            Err(text) => app.modals.contour_build_note = Some(text),
+                        }
                     }
-                } else {
-                    make.on_disabled_hover_text(DEFERRED_W29);
                 }
             });
         });
 }
 
+#[path = "survey_contour_make.rs"]
+mod survey_contour_make;
 #[path = "survey_contour_sheet.rs"]
 mod survey_contour_sheet;
 

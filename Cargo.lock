@@ -5420,6 +5420,7 @@ dependencies = [
  "geos",
  "libsqlite3-sys",
  "proj",
+ "strata-geo",
  "tempfile",
 ]
 
