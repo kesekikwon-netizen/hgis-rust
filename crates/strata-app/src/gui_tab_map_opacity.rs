@@ -21,32 +21,22 @@ use super::gui_tab_map_format::BrightRow;
 use super::gui_tab_map_geom::{brightness_row_text, is_raster_image_layer};
 /// `KaLayerOpacityRail.cpp:18-177` — 좌상단 투명도(0~100) · 밝기(-255~255) 레일
 impl StrataAppState {
-    /// The legend row called `title` whose picture is faded by the row's own opacity: the background tiles
-    /// (`gui_tab_map_basemap.rs` basemap_opacity), the reference tiles (`ref_tile_layers.rs`) and the
-    /// reference vector layers (`ref_vector.rs`).
-    fn picture_row_index(&self, title: &str) -> Option<usize> {
-        self.left_layers.entries.iter().position(|e| {
-            e.label_ko == title
-                && (e.group == strata_types::schema::LegendGroup::Basemap
-                    || crate::ref_tile_layers::ref_tile_layer(&e.layer_key).is_some()
-                    || self.ref_vectors.has(&e.layer_key))
-        })
+    /// Legend row whose Korean title is the current layer name (`MainWindow.cpp:991` `currentLayer()`).
+    fn legend_row_index(&self, title: &str) -> Option<usize> {
+        self.left_layers.entries.iter().position(|e| e.label_ko == title)
     }
 
     /// What the 투명도 rail shows for the selected row (0 = clear, 1 = solid).
     pub(crate) fn rail_opacity(&self, title: &str) -> f32 {
-        self.picture_row_index(title).map_or(self.home_map.real_survey.layer_opacity, |i| self.left_layers.entries[i].opacity)
+        self.legend_row_index(title).map_or(self.home_map.real_survey.layer_opacity, |i| self.left_layers.entries[i].opacity)
     }
 
-    /// The 투명도 rail was moved to `t` for the selected row. C++ applies it to the current layer
-    /// (`MainWindow.cpp:994` LayerOps::applyLayerOpacity), the same property the legend menu sets
-    /// (`MainWindowContextMenus.cpp:381`).
+    /// The 투명도 rail was moved to `t` for the selected row. C++ applies it to that layer only
+    /// (`MainWindow.cpp:989-1000` `LayerOps::applyLayerOpacity`), the same property the legend menu sets
+    /// (`MainWindowContextMenus.cpp:381`). A title with no legend row is left alone (`canAdjustOpacity` is false).
     pub(crate) fn apply_rail_opacity(&mut self, title: &str, t: f32) {
-        self.home_map.real_survey.layer_opacity = t;
-        self.home_map.set_basemap_opacity(t);
-        if let Some(i) = self.picture_row_index(title) {
-            self.left_layers.entries[i].opacity = t;
-        }
+        let Some(i) = self.legend_row_index(title) else { return };
+        self.left_layers.entries[i].opacity = t.clamp(0.0, 1.0);
     }
 
     pub(crate) fn paint_opacity_card(
@@ -179,16 +169,18 @@ impl StrataAppState {
                     self.home_map.real_survey.layer_brightness = t;
                     self.home_map.set_basemap_brightness((t - 0.5) * 2.0);
                 }
+                let shown = self.rail_opacity(title);
                 ctx.data_mut(|d| {
                     d.insert_temp(
                         egui::Id::new(("ka_layer_op_br", title)),
-                        (
-                            self.home_map.real_survey.layer_opacity,
-                            self.home_map.real_survey.layer_brightness,
-                        ),
+                        (shown, self.home_map.real_survey.layer_brightness),
                     );
                 });
         }
     }
 }
 }
+
+#[cfg(test)]
+#[path = "gui_tab_map_opacity_layer_tests.rs"]
+mod layer_tests;
