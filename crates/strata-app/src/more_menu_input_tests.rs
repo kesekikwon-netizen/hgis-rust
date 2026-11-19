@@ -199,7 +199,7 @@ fn about_blocks_map_clicks() {
 }
 
 #[test]
-fn wide_map_row_toggles_the_same_focus_as_f11() {
+fn wide_map_row_toggles_the_same_focus_as_ctrl_f11() {
     let mut h = start();
     open_more(&mut h);
     hover(&mut h, "지도 넓게 보기");
@@ -214,7 +214,17 @@ fn wide_map_row_toggles_the_same_focus_as_f11() {
     assert!(h.app.right_inspector.map_focused);
     assert_eq!(h.app.status_left_message(), WIDE_ON);
     assert!(!h.app.ribbon.more_menu_open);
+    // F11 is full screen (MainWindow.cpp:270-278). Map focus is Ctrl+F11 (KaShellFocus.h:27).
     key(&mut h, Key::F11);
+    assert!(h.app.right_inspector.map_focused, "F11 is not map focus");
+    assert_eq!(h.app.status_left_message(), WIDE_ON);
+    let ctrl = eframe::egui::Modifiers { ctrl: true, command: true, ..Default::default() };
+    for pressed in [true, false] {
+        h.frame_with_modifiers(
+            vec![Event::Key { key: Key::F11, physical_key: None, pressed, repeat: false, modifiers: ctrl }],
+            ctrl,
+        );
+    }
     assert!(!h.app.right_inspector.map_focused);
     assert_eq!(h.app.status_left_message(), WIDE_OFF);
 }
