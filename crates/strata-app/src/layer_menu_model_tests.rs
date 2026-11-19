@@ -84,10 +84,10 @@ fn separators_and_deferred_rows() {
     assert_eq!(
         outline(&m),
         "~레이어 불러오기 (SHP·DXF·GPKG) | 이름 바꾸기 (두 번 클릭) 면·외곽선 색 ~도형 속성 >라벨·명칭 속성 >투명도 | 이 레이어로 이동 전체 보기 같은 묶음의 맨 아래로 | \
-         그리기·편집 시작 ~꼭짓점 수정 ~폴리곤 묶기 면적 확인 ~>시굴격자 | ~제출 꾸러미 만들기… | ~그린 도형 모두 지우기… 레이어 삭제"
+         그리기·편집 시작 ~꼭짓점 수정 ~폴리곤 묶기 면적 확인 ~>시굴격자 | 제출 꾸러미 만들기… | ~그린 도형 모두 지우기… 레이어 삭제"
     );
     assert_eq!(find(&m, "layer.attributes").tooltip, "아직 Rust 판에서 연결하지 않았습니다 (지시 CM2a-3)");
-    assert_eq!(find(&m, "layer.export").tooltip, "아직 Rust 판에서 연결하지 않았습니다 (지시 R2)");
+    assert_eq!(find(&m, "layer.export").tooltip, "현재 조사 전체를 검수한 뒤 5179 SHP·조사도면.pdf·MANIFEST 제출 꾸러미를 만듭니다. 검수 오류가 남아 있으면 한 번 묻고 README에 적습니다.");
     assert_eq!(find(&m, "layer.trenchCreate").tooltip, "아직 Rust 판에서 연결하지 않았습니다 (지시 W-T1)");
     assert_eq!(find(&m, "layer.remove").tooltip, "목록에서 제거합니다. 원본 파일은 보존하며 Ctrl+Z로 복원할 수 있습니다.");
 }

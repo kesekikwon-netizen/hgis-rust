@@ -100,6 +100,8 @@ impl StrataAppState {
             "layer.bottom" => {
                 self.layer_to_group_bottom(key.unwrap_or_default());
             }
+            // KaSubmitFlow.cpp:81 — the same ask as 「제출 꾸러미 만들기…」 in the review window.
+            "layer.export" => self.begin_submit_package(),
             // removeLayersFromTree — 그 줄(묶음 머리면 그 묶음의 레이어 모두). 깨진 한글 바로잡기는 .shp 레이어에만 보인다.
             "layer.remove" => match (key, self.home_map.layer_menu_group) {
                 (Some(k), _) => {
