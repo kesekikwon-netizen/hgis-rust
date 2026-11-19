@@ -9,6 +9,9 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 
+use strata_layout::sheet_composer::{SheetOrientation, SheetPaperSize};
+use strata_layout::sheet_pdf_vector::extracted_text;
+
 use super::super::sheet_pdf_file::{picture_size, print_dpi, render_note, SHEET_DPI};
 use super::CANCELLED;
 use crate::app_state::StrataAppState;
@@ -25,16 +28,6 @@ fn until_made(app: &mut StrataAppState) {
     assert!(app.drawing.pdf.0.is_none(), "the PDF was not made within two minutes");
 }
 
-/// The JPEG inside a PDF of one picture, and the size the PDF says it has.
-fn picture_of(pdf: &[u8]) -> (image::RgbImage, String) {
-    let head = pdf.windows(10).position(|w| w == b"/DCTDecode").unwrap();
-    let start = head + pdf[head..].windows(7).position(|w| w == b"stream\n").unwrap() + 7;
-    let end = start + pdf[start..].windows(10).position(|w| w == b"\nendstream").unwrap();
-    let size_at = pdf[..head].windows(6).rposition(|w| w == b"/Width").unwrap();
-    let size = String::from_utf8_lossy(&pdf[size_at..head]).into_owned();
-    (image::load_from_memory(&pdf[start..end]).unwrap().to_rgb8(), size)
-}
-
 /// 300 DPI, lower for a paper too large to draw at it (never more than a hundred million pixels); the words
 /// of the progress window name the paper and the resolution, and warn about a large paper (`renderNote`).
 #[test]
@@ -49,26 +42,53 @@ fn a_sheet_pdf_has_300_dpi_and_a_large_paper_less() {
     assert!(render_note([210.0, 297.0], 300.0).starts_with("PDF를 그리는 중… (용지 210×297 mm · 300 DPI)"));
 }
 
-/// The PDF holds the sheet as the screen paints it, at 300 DPI: white paper at the corner, the light map
-/// frame, and the dark lines and letters of the sheet; the status line names the file.
+/// The file is a vector page: the title is text, the survey ring is a path, and the page is A4 portrait.
+/// A picture of the sheet (one JPEG) does not pass.
 #[test]
-fn a_sheet_pdf_is_the_sheet_as_a_picture() {
+fn a_sheet_pdf_is_vector_text_and_paths() {
     let dir = tempfile::tempdir().unwrap();
     let target = dir.path().join("도면.pdf");
     let mut app = StrataAppState::new_startup();
+    app.drawing.title_ko = "유구배치도".to_owned();
+    app.drawing.sheet.scale_denominator = 5_000;
+    // Work CRS EPSG:5187, metres. The ring's east side is 100 m from the centre.
+    app.drawing.sheet_center = Some([200_000.0, 400_000.0]);
+    app.home_map.real_survey.survey_rings = vec![vec![
+        [200_000.0, 400_000.0],
+        [200_100.0, 400_000.0],
+        [200_100.0, 400_050.0],
+    ]];
     app.start_sheet_pdf(target.clone());
     until_made(&mut app);
     let pdf = std::fs::read(&target).unwrap();
     assert!(pdf.starts_with(b"%PDF-1.4"));
-    let (picture, size) = picture_of(&pdf);
-    assert!(size.starts_with("/Width 2480 /Height 3508"), "{size}");
-    assert_eq!(picture.dimensions(), (2480, 3508));
-    let corner = picture.get_pixel(20, 20).0;
-    assert!(corner.iter().all(|c| *c > 245), "{corner:?}");
-    let dark = picture.pixels().filter(|p| p.0.iter().all(|c| *c < 80)).count();
-    assert!(dark > 2_000, "{dark} dark pixels");
+    assert!(!pdf.windows(10).any(|window| window == b"/DCTDecode"), "the page is one picture");
+    let text = extracted_text(&pdf);
+    assert!(text.contains("유구배치도"), "{text}");
+    assert!(text.contains("축척 1 : 5000"), "{text}");
+    let raw = String::from_utf8_lossy(&pdf);
+    assert!(raw.contains("Malgun Gothic"));
+    assert!(raw.contains("/MediaBox [0 0 595.28 841.89]"), "A4 portrait is 210×297 mm");
+    assert!(raw.contains(" m") && raw.contains(" l"), "the survey ring is not a path");
+    // 100 m east at 1:5000 is 20 mm to the right of the map centre (EPSG:5187 metres).
+    let east = app.drawing.sheet.world_to_sheet_mm([200_000.0, 400_000.0], [200_100.0, 400_000.0]);
+    let x = format!("{:.2}", strata_layout::sheet_pdf_export::mm_to_pdf_points(east[0]));
+    let y = format!("{:.2}", strata_layout::sheet_pdf_export::mm_to_pdf_points(app.drawing.sheet.height_mm - east[1]));
+    assert!(raw.contains(&format!("{x} {y} l")), "the ring is not at the paper scale");
     assert_eq!(app.status_left_message(), format!("저장: {}", target.display()));
     assert!(!dir.path().join("도면.pdf.part").exists());
+}
+
+/// The page box follows the sheet: the field sheet is 317×220 mm and A3 portrait is 297×420 mm.
+#[test]
+fn the_pdf_page_box_follows_the_field_sheet_and_a3() {
+    let mut app = StrataAppState::new_startup();
+    app.drawing.sheet.change_paper(SheetPaperSize::A4, SheetOrientation::Landscape);
+    let field = app.vector_sheet_pdf(None, [0, 0]).unwrap();
+    assert!(String::from_utf8_lossy(&field).contains("/MediaBox [0 0 898.58 623.62]"));
+    app.drawing.sheet.change_paper(SheetPaperSize::A3, SheetOrientation::Portrait);
+    let a3 = app.vector_sheet_pdf(None, [0, 0]).unwrap();
+    assert!(String::from_utf8_lossy(&a3).contains("/MediaBox [0 0 841.89 1190.55]"));
 }
 
 /// 취소 leaves no file, and a file of that name stays as it was (KaDrawingPdfProgress.cpp:60-84).

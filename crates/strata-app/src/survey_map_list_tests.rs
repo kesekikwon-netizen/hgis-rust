@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use super::list_path;
 use crate::app_state::StrataAppState;
-use crate::ref_tile_layers::{ensure_row, TERRAIN_MAP};
+use crate::ref_tile_layers::{ensure_row, history::MAP_1919, TERRAIN_MAP};
 use crate::ref_vector::cadastral::layer::{write_kept, Style, CADASTRAL_KEY};
 use crate::ref_vector::map::SOIL;
 use crate::topo_download::dem::{add_to_list, DemEntry, DEM_KEY, RELIEF_KEY};
@@ -196,4 +196,23 @@ fn the_received_maps_move_with_the_survey_folder() {
     let mut opened = StrataAppState::new_startup();
     assert!(opened.open_survey_gpkg(&moved));
     assert_eq!(file_of(&opened, SOIL.key), dir.path().join("나/ka-hgis-reference-ab12").join(SOIL.file_name));
+}
+
+#[test]
+fn restoring_the_1919_row_without_the_history_key_keeps_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut app, path) = survey(dir.path(), "현장");
+    app.history_gis_key_reader = String::new;
+    ensure_row(&mut app.left_layers, &MAP_1919);
+    assert!(app.save_survey_project());
+    assert!(std::fs::read_to_string(list_path(&path)).unwrap().contains(MAP_1919.key));
+
+    let mut opened = StrataAppState::new_startup();
+    opened.history_gis_key_reader = String::new;
+    assert!(opened.open_survey_gpkg(&path));
+    assert!(opened.left_layers.entries.iter().any(|entry| entry.layer_key == MAP_1919.key));
+    assert!(opened.history_gis_key.is_empty());
+    assert!(opened.save_survey_project());
+    let again = std::fs::read_to_string(list_path(&path)).unwrap();
+    assert!(again.contains(MAP_1919.key), "{again}");
 }

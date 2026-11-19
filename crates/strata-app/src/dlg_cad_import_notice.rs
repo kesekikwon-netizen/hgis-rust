@@ -35,68 +35,37 @@ pub(crate) fn render_cad_import_notice(
             ui.add_space(6.0);
             ui.label(
                 egui::RichText::new(
-                    "도면에 적힌 좌표가 어느 좌표계인지 확인하고 지도에 올립니다. 도면에 좌표계가 적혀 있지 않으면 두 점을 찍어 맞추세요.",
+                    "도면에 적힌 좌표가 어느 좌표계인지 확인하고 지도에 올립니다. 다른 곳이면 「다른 위치로 바꾸기」를 누르세요.",
                 )
                 .size(12.0),
             );
             ui.add_space(8.0);
+            // KaCadImportNotice.cpp:53-68 — candidates other than the one in use, then the two actions.
+            let used_auth_id = app.work_crs.auth_id(); // stand-in for the placed id (`KaCadImport.cpp:166`)
+            let notice = crate::cad_crs_notice::notice_for(std::path::Path::new(&app.modals.cad_import_path), used_auth_id, &[]);
+            let mut picked = None;
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("도면 좌표계").size(12.0).strong());
-                ui.label(
-                    egui::RichText::new(app.work_crs.auth_id())
-                        .size(12.0)
-                        .monospace(),
-                );
-            });
-            ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                let add_btn = egui::Button::new(
-                    egui::RichText::new("이 좌표계로 지도에 올리기")
-                        .color(Color32::WHITE)
-                        .strong()
-                        .size(12.5),
-                )
-                .fill(Color32::from_rgb(181, 87, 58))
-                .corner_radius(6.0)
-                .min_size(Vec2::new(170.0, 30.0));
-                if ui
-                    .add(add_btn)
-                    .on_hover_text(
-                        "고른 좌표계로 도면을 지도에 올립니다. 나중에 정합에서 미세 조정할 수 있습니다.",
-                    )
-                    .clicked()
-                {
-                    // Not carried over yet (user_files.rs): the button says so instead of saying it loaded.
-                    let name = std::path::Path::new(&app.modals.cad_import_path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                    app.show_status_message(format!("CAD 도면(DXF·DWG)은 아직 지도에 올리지 못합니다: {name}"));
-                    app.modals.active = None;
-                }
-                if ui
-                    .add(
-                        egui::Button::new(
-                            egui::RichText::new("두 점으로 맞추기").size(12.0),
-                        )
-                        .min_size(Vec2::new(130.0, 30.0)),
-                    )
-                    .on_hover_text("도면 위 두 점과 지도 위 두 점을 찍어 맞춥니다.")
-                    .clicked()
-                {
-                    app.active_tab = crate::app_state::MainTab::Map;
-                    app.home_map.draw_guide_message =
-                        Some("두 점으로 맞추기 — 도면 위 점 하나를 찍으세요.".to_owned());
-                    app.modals.active = None;
+                crate::gui_shell::native_menu_button(ui, "다른 위치로 바꾸기", |ui| {
+                    for line in &notice.menu {
+                        if matches!(line.kind, crate::cad_crs_notice::CadNoticeKind::NoCoordinates) {
+                            ui.separator();
+                        }
+                        if ui.button(&line.label).clicked() {
+                            picked = Some(line.kind.clone());
+                        }
+                    }
+                });
+                if ui.add(egui::Button::new(egui::RichText::new(notice.align_label).size(12.0)).min_size(Vec2::new(110.0, 30.0))).clicked() {
+                    picked = Some(crate::cad_crs_notice::CadNoticeKind::Align);
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .add(
-                            egui::Button::new(egui::RichText::new("취소").size(12.0))
-                                .min_size(Vec2::new(70.0, 30.0)),
-                        )
-                        .clicked()
-                    {
+                    if ui.add(egui::Button::new(egui::RichText::new("취소").size(12.0)).min_size(Vec2::new(70.0, 30.0))).clicked() {
                         app.modals.active = None;
                     }
                 });
             });
+            if let Some(kind) = picked {
+                app.apply_cad_notice(&kind);
+            }
         });
 }

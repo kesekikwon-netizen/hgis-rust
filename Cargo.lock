@@ -5460,6 +5460,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strata-types",
+ "ttf-parser",
 ]
 
 [[package]]

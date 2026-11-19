@@ -38,9 +38,7 @@ if manual {
             );
         });
 } else {
-    let trench_count = app.home_map.real_survey.trenches.len().max(1);
-    let total_trench_area: f64 =
-        app.home_map.real_survey.trenches.iter().map(|t| t.area_m2).sum();
+    let (trench_count, total_trench_area) = crate::trench_place::placed_trench_totals(app);
     // pickAutoFillArea — 고른(없으면 fid 가 가장 큰) 조사구역의 넓이, 열어 둔 조사 표에서.
     let survey_area: f64 = app.trench_survey_area_m2().max(1.0);
     let ratio_pct =
@@ -94,7 +92,7 @@ if manual {
             .color(Color32::from_rgb(95, 94, 88)),
     );
     // KaTrenchDialog.cpp:114-135 — m_afterPlace (배치 후 편집)
-    if !app.home_map.real_survey.trenches.is_empty() {
+    if trench_count > 0 {
         ui.add_space(6.0);
         ui.label(
             egui::RichText::new(

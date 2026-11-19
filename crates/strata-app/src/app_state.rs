@@ -187,6 +187,8 @@ pub struct StrataAppState {
     pub drawing: DrawingTabState,
     pub accounts: AccountDialogState,
     pub modals: ModalDialogController,
+    /// Background 「구역에 깔기」 search (`KaTrenchDialogPlan.cpp:121`).
+    pub(crate) trench_place_job: Option<crate::trench_place::TrenchPlaceJob>,
 }
 
 #[cfg(test)]
