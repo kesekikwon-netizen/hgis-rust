@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn rail_blank_drag_keeps_search_focus_before_slider_takes_it() {
     let mut h = start();
-    h.app.right_inspector.selected_layer_key = Some("위성".to_owned());
+    h.app.right_inspector.selected_layer_key = Some("위성지도 (VWorld)".to_owned());
     let search = h.point_at("     레이어 찾기");
     h.press(search, PointerButton::Primary);
     assert!(h.ctx.wants_keyboard_input(), "actual search lacks focus");
@@ -80,13 +80,13 @@ fn rail_owns_blank_and_slider_presses_during_real_polygon_capture() {
 #[test]
 fn rail_slider_and_interrupted_blank_drag_keep_separate_owners() {
     let mut h = start();
-    h.app.right_inspector.selected_layer_key = Some("위성".to_owned());
+    h.app.right_inspector.selected_layer_key = Some("위성지도 (VWorld)".to_owned());
     let (_, card) = rectangles(&mut h);
     let center = h.app.home_map.viewport.center_xy;
     let from = Pos2::new(card.left() + 80.0, card.top() + 40.0);
     drag(&mut h, from, Vec2::new(70.0, -6.0));
     close(rectangles(&mut h).1.min - card.min, Vec2::ZERO);
-    assert!(h.app.rail_opacity("위성") > 0.5);
+    assert!(h.app.rail_opacity("위성지도 (VWorld)") > 0.5);
     let at = card.min + Vec2::splat(5.0);
     h.frame(vec![Event::PointerMoved(at)]);
     h.frame(vec![button(at, PointerButton::Primary, true)]);

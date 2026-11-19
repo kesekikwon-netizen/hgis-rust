@@ -103,6 +103,9 @@ impl StrataAppState {
             log_folder: super::user_error::session_log_dir().to_string_lossy().into_owned(),
             log_opener_records: None,
             field_action_chosen: false,
+            submit_phase: None,
+            submit_parent_override: None,
+            trench_place_job: None,
         };
         // C++ `MainWindow.cpp:1493-1507` ensureStartupViewReady — 지도 탭을 처음 볼 때 한반도 전체.
         app.home_map.zoom_to_korea(app.work_crs);

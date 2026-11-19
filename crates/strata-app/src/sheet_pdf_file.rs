@@ -4,8 +4,6 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use super::sheet_raster::Picture;
-
 /// The resolution of a sheet's PDF (C++ `KaPdfExport::kSheetDpi`, PdfExportSettings.h:15).
 pub(crate) const SHEET_DPI: f32 = 300.0;
 /// A picture of more pixels than this is drawn at a lower resolution: A0 at 300 DPI has about 140 million.
@@ -42,16 +40,6 @@ pub(crate) fn render_note(paper_mm: [f64; 2], dpi: f32) -> String {
     } else {
         format!("{note}\n취소하면 그리기가 끝난 뒤 파일을 만들지 않습니다.")
     }
-}
-
-/// Packs the picture as a JPEG in a PDF of the paper.
-pub(crate) fn pack_pdf(paper_mm: [f64; 2], title: &str, picture: &Picture) -> Result<Vec<u8>, String> {
-    let (width, height) = (u32::try_from(picture.size[0]).unwrap_or(u32::MAX), u32::try_from(picture.size[1]).unwrap_or(u32::MAX));
-    let mut jpeg = Vec::new();
-    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 92)
-        .encode(&picture.rgb, width, height, image::ExtendedColorType::Rgb8)
-        .map_err(|why| format!("그림을 PDF에 담지 못했습니다: {why}"))?;
-    Ok(strata_layout::picture_pdf::picture_page_pdf(paper_mm, title, &jpeg, [width, height]))
 }
 
 /// Writes the PDF next to `target` first and then puts it in its place, unless 취소 came in the meantime;

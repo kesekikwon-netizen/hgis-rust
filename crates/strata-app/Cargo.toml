@@ -20,7 +20,8 @@ strata-paleo = { workspace = true }
 strata-canvas2d = { workspace = true }
 strata-terrain3d = { workspace = true }
 strata-layout = { workspace = true }
-strata-check-export = { workspace = true }
+# gdal: the submit package is submit_builder (ExportService.cpp:73-241), not the placeholder writer.
+strata-check-export = { workspace = true, features = ["gdal"] }
 # gdal: reference maps are kept as GeoPackage tables and received sheets are DXF, both through GDAL as in the C++
 # (PreparedReferenceMap.cpp:131-155, TopographicCatalog.cpp:181-209). Built from source by gdal-src (MIT).
 strata-engine = { workspace = true, features = ["gdal"] }

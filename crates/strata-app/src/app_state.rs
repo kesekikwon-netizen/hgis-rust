@@ -203,6 +203,12 @@ pub struct StrataAppState {
     pub(crate) log_opener_records: Option<Vec<String>>,
     /// The action button was the one that closed the window (`Result::ActionChosen`).
     pub(crate) field_action_chosen: bool,
+    /// `KaSubmitFlow.cpp:81` — the question before the folder dialog. `None` while the button is idle.
+    pub(crate) submit_phase: Option<crate::submit_package_run::SubmitPhase>,
+    /// Tests choose the folder. The product path uses the folder dialog (`KaSubmitFlow.cpp:126`).
+    pub(crate) submit_parent_override: Option<std::path::PathBuf>,
+    /// Background 「구역에 깔기」 search (`KaTrenchDialogPlan.cpp:121`).
+    pub(crate) trench_place_job: Option<crate::trench_place::TrenchPlaceJob>,
 }
 
 #[cfg(test)]

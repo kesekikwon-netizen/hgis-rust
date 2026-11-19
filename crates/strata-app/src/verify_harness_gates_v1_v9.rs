@@ -7,8 +7,8 @@
 use geo::{Coord, LineString, Polygon};
 use strata_canvas2d::canvas_painter::MapSceneModel;
 use strata_canvas2d::viewport::ViewportTransform;
-use strata_check_export::checklist_engine::ChecklistEngine;
-use strata_check_export::submit_package::export_submission_package;
+use strata_check_export::submit_builder::{export_submission_package, SubmitPackageInputs};
+use strata_engine::{SubmitEncoding, SubmitSource, SUBMIT_KEYS};
 use strata_geo::buffer_round::round_buffer_polygon;
 use strata_geo::trench_grid::{generate_standard_trenches, TrenchConfig, TrenchStandardLength};
 use strata_layout::pdf_geotiff::{render_geotiff_header_bytes, render_sheet_pdf_bytes};
@@ -20,7 +20,6 @@ use strata_secrets::dpapi::{protect_bytes, unprotect_bytes};
 use strata_secrets::secret_store::SecretStore;
 use strata_storage::wkb_codec::{decode_gpkg_wkb, encode_gpkg_wkb, WkbGeometry};
 use strata_terrain3d::viewport3d_renderer::{render_terrain3d_rgba, OrbitCamera3D};
-use strata_types::crs::SubmitCrs;
 use strata_types::schema::SurveySchemaV3;
 use strata_types::theme_tokens::ThemeTokens;
 
@@ -147,16 +146,47 @@ pub(crate) fn push_v1_to_v9_gates(gates: &mut Vec<GateResult>) {
         detail: format!("sheet={}x{}mm", sheet.width_mm, sheet.height_mm),
     });
 
-    // V9: 국가유산청 제출 꾸러미(EPSG:5179 SHP + PDF + MANIFEST.sha256 + README)
-    let findings = ChecklistEngine::evaluate_sheet(&sheet, SubmitCrs::Epsg5179, true);
+    // V9: the real submit folder (ExportService.cpp:73-241), not the placeholder square in submit_export.rs.
     let tmp_dir = std::env::temp_dir().join(format!("ka_hgis_v9_{}", std::process::id()));
-    let v9_ok = export_submission_package(&tmp_dir, &findings)
-        .is_ok_and(|m| m.crs == SubmitCrs::Epsg5179 && m.files_sha256.len() == 3);
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    let demo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../samples/demo_survey/demo.gpkg");
+    let gpkg = tmp_dir.join("demo.gpkg");
+    let out = tmp_dir.join("pkg");
+    let copied = std::fs::create_dir_all(&tmp_dir).is_ok() && std::fs::copy(&demo, &gpkg).is_ok();
+    let sources: Vec<(&'static str, Vec<SubmitSource>)> = SUBMIT_KEYS
+        .iter()
+        .map(|key| (*key, vec![SubmitSource { gpkg: gpkg.clone(), table: (*key).to_owned(), title: (*key).to_owned() }]))
+        .collect();
+    let summary = "- [error] 기준점이 2개 미만입니다\n";
+    let inputs = SubmitPackageInputs {
+        sources: &sources,
+        encoding: SubmitEncoding::Utf8,
+        survey_name: "demo",
+        survey_path: Some(&gpkg),
+        unsaved_edits_included: false,
+        checklist_summary: summary,
+        checklist_errors_remain: true,
+        reference_lines: &[],
+        app_line: "Strata 2.0.0 (unknown)",
+        block_on_checklist_errors: false,
+        composed_user_sheet: false,
+    };
+    let built = copied && export_submission_package(&out, &inputs, &mut |_, _, _| true).is_ok();
+    let prj = std::fs::read_to_string(out.join("survey_area.prj")).unwrap_or_default();
+    let readme = String::from_utf8_lossy(&std::fs::read(out.join("README_submit.txt")).unwrap_or_default()).into_owned();
+    let v9_ok = built
+        && out.join("MANIFEST.sha256").is_file()
+        && !out.join("조사도면.pdf").exists()
+        && !out.join("site_boundary_5179.shp").exists()
+        && prj.contains("False_Easting\",1000000.0")
+        && prj.contains("Central_Meridian\",127.5")
+        && readme.contains("조사도면.pdf 없음: 도면만들기에서 용지를 만든 뒤 다시 보내기 하세요.")
+        && readme.contains("- [error] 기준점이 2개 미만입니다");
     let _ = std::fs::remove_dir_all(&tmp_dir);
     gates.push(GateResult {
         gate_id: "V9",
         title_ko: "국가유산청 제출 꾸러미(EPSG:5179 + MANIFEST.sha256) 무결성",
         passed: v9_ok,
-        detail: "EPSG:5179 SHP + PDF + MANIFEST.sha256 verified".to_owned(),
+        detail: "EPSG:5179 SHP + README + MANIFEST.sha256, no placeholder square".to_owned(),
     });
 }

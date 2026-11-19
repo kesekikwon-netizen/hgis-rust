@@ -207,6 +207,8 @@ mod topo_download;
 mod diag_layout;
 mod snap_shot;
 mod snap_shot_run;
+mod cad_crs_stated;
+mod cad_crs_notice;
 mod dlg_cad_import_notice;
 mod dlg_cadastral_download;
 mod dlg_drawing_print;
@@ -223,16 +225,17 @@ mod dlg_survey_contour;
 mod dlg_topographic_browser;
 mod dlg_topographic_import;
 mod dlg_trench_generator;
+mod trench_place;
 
 #[cfg(test)]
 #[path = "dialogs_download_print_tests.rs"]
 mod dialogs_download_print_tests;
-
 mod modal_control;
 mod modal_downloads;
 mod modal_export;
 mod modal_export_footer;
 mod modal_export_table;
+mod submit_package_run;
 mod modal_paper_account;
 mod modal_reference;
 mod modal_reference_data;

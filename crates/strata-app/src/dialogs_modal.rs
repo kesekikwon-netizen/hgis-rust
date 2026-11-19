@@ -31,6 +31,8 @@ pub enum ActiveModalDialog {
     HeritageBrowser,
     TopographicImport,
     CadImportNotice,
+    /// `QMessageBox::about` titled 「정보」 (MainWindow.cpp:3048).
+    About,
 }
 
 pub use crate::modal_types::{topo_crs_label_ko, topo_default_crs_idx, topo_record_key, TOPO_CRS_CANDIDATES, TOPO_CRS_UNKNOWN};
@@ -52,6 +54,9 @@ pub fn render_strata_modal_header(ui: &mut egui::Ui, title: &str, open: &mut boo
     ui.add_space(8.0);
 }
 
+#[path = "dlg_about.rs"]
+mod dlg_about;
+
 pub(crate) use crate::modal_control::render_control_point;
 pub(crate) use crate::modal_downloads::render_dem_download;
 pub(crate) use crate::modal_downloads::render_paleo_source_download;
@@ -72,6 +77,7 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         ActiveModalDialog::PaperSetup => render_paper_setup(app, ctx, &mut open),
         ActiveModalDialog::DemDownload => render_dem_download(app, ctx, &mut open),
         ActiveModalDialog::AccountSettings => render_account_settings(app, ctx, &mut open),
+        ActiveModalDialog::About => dlg_about::render_about(ctx, &mut open),
         ActiveModalDialog::PaleoSourceDownload => render_paleo_source_download(app, ctx, &mut open),
         ActiveModalDialog::ExportSubmitPackage => render_export_submit_package(app, ctx, &mut open),
         ActiveModalDialog::ControlPoint => render_control_point(app, ctx, &mut open),
@@ -83,6 +89,9 @@ pub fn render_active_modal_dialogs(app: &mut StrataAppState, ctx: &egui::Context
         other => render_download_and_print_dialogs(app, ctx, other, &mut open),
     }
     if !open {
+        if matches!(kind, ActiveModalDialog::ExportSubmitPackage) {
+            app.submit_phase = None;
+        }
         app.modals.active = None;
     }
 }

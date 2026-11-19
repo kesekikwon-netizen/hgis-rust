@@ -157,15 +157,12 @@ impl StrataAppState {
         true
     }
 
-    /// A map of tiles needs no file. The 1919 map needs the stored history-GIS key and is left out without it
-    /// (its menu row is greyed then, MainWindow.cpp:1425).
     fn restore_tile_row(&mut self, layer: &'static RefTileLayer) -> bool {
         if layer.key == MAP_1919.key {
-            let key = strata_secrets::vworld::VworldSettings::load_history_gis_api_key();
-            if key.trim().is_empty() {
-                return false;
+            let key = (self.history_gis_key_reader)();
+            if !key.trim().is_empty() {
+                key.trim().clone_into(&mut self.history_gis_key);
             }
-            key.trim().clone_into(&mut self.history_gis_key);
         }
         ensure_row(&mut self.left_layers, layer);
         true

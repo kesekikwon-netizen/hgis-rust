@@ -48,6 +48,15 @@ pub(crate) struct LegendCard {
 mod tests;
 
 impl StrataAppState {
+    /// Layer, kind and site names the sheet legend paints, for the vector PDF.
+    pub(crate) fn sheet_legend_pdf_names(&self) -> Vec<String> {
+        self.sheet_legend_survey_rows().into_iter().map(|row| match row {
+            LegendRow::Layer(_, name) => name,
+            LegendRow::Kind(_, name) => name.to_owned(),
+            LegendRow::Site(badge) => format!("{} {}", badge.number, badge.name),
+        }).collect()
+    }
+
     /// The names of the layer rows of the legend.
     #[cfg(test)]
     pub(crate) fn sheet_legend_layer_names(&self) -> Vec<String> {
@@ -90,7 +99,7 @@ impl StrataAppState {
         let columns = legend_columns(leg_w / px_per_mm, self.drawing.sheet.legend_font_pt as f32, rows);
         // Each column is wide enough for the longest layer name (its symbol, the gap and the margin: 16
         // units, and 10 for the frame), as far as 42 % of the map allows.
-        let label = FontId::proportional(((self.drawing.sheet.legend_font_pt as f32 * s).clamp(4.5, 11.5) - 1.2 * s).max(4.0));
+        let label = crate::gui_theme_fonts::layout_font(f.sheet_p.ctx(), ((self.drawing.sheet.legend_font_pt as f32 * s).clamp(4.5, 11.5) - 1.2 * s).max(4.0));
         let widths = self.sheet_legend_survey_rows().into_iter().filter_map(|row| if let LegendRow::Layer(_, name) = row { Some(name) } else { None });
         let longest = widths.map(|name| f.sheet_p.layout_no_wrap(name, label.clone(), Color32::BLACK).size().x).fold(0.0, f32::max);
         let leg_w = leg_w.max(columns as f32 * (longest + 16.0 * s) + 10.0 * s).min(map_rect.width() * 0.42);
@@ -140,7 +149,7 @@ impl StrataAppState {
                     LegendRow::Kind(_, name) => (KIND_SQUARE_MM * 1.65, *name),
                     LegendRow::Site(badge) => (badge_look(badge.number, badge.colour, 1.65).diameter, badge.name.as_str()),
                 };
-                symbol + 14.0 + sheet_p.layout_no_wrap(name.to_owned(), FontId::proportional(font_pt - 1.2), ink).size().x
+                symbol + 14.0 + sheet_p.layout_no_wrap(name.to_owned(), crate::gui_theme_fonts::layout_font(sheet_p.ctx(), font_pt - 1.2), ink).size().x
             })
             .fold(1.0, f32::max);
         let title_width = self.legend_title_galley(&sheet_p, font_pt, ink).size().x + 10.0;
@@ -160,7 +169,7 @@ impl StrataAppState {
             Stroke::new(0.5, Color32::from_rgb(200, 198, 190)),
         );
 
-        let label_font = FontId::proportional((font_pt - 1.2) * s);
+        let label_font = crate::gui_theme_fonts::layout_font(sheet_p.ctx(), (font_pt - 1.2) * s);
         let bold = FontFamily::Name(LABEL_FONT_FAMILY.into());
         let number_family = if sheet_p.ctx().fonts(|fonts| fonts.families().contains(&bold)) { bold } else { FontFamily::Proportional };
         let column_w = (leg_w - 10.0 * s) / columns as f32;

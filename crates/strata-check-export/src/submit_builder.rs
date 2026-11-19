@@ -22,9 +22,18 @@ pub struct SubmitPackageInputs<'a> {
     pub reference_lines: &'a [String],
     /// `Strata <version> (<commit>)`.
     pub app_line: &'a str,
+    /// `ExportService.cpp:88-90`. The product path passes false (`KaSubmitFlow.cpp:148`).
+    pub block_on_checklist_errors: bool,
+    /// A composed `user_sheet` would become `조사도면.pdf` (`ExportService.cpp:114-115`, `:198-200`).
+    /// This unit does not write that PDF (WU-12a). 이 앱의 말: docs/RUST_PLAN.md R2 refuses the package.
+    pub composed_user_sheet: bool,
 }
 
 const CANCELED: &str = "제출 꾸러미 만들기를 취소했습니다. 이전 결과는 그대로입니다.";
+/// `ExportService.cpp:88-90`.
+const BLOCKED: &str = "검수 오류가 남아 있어 제출 꾸러미를 만들지 않았습니다. 「검수·제출」에서 오류 항목을 고친 뒤 다시 만드세요.";
+/// 이 앱의 말. C++ would write `조사도면.pdf` (`ExportService.cpp:198-200`); R2 does not, until the vector PDF.
+const COMPOSED_SHEET: &str = "조판된 도면 용지(user_sheet)가 있어 조사도면.pdf를 넣어야 합니다. 벡터 도면 PDF는 아직 만들지 않아 제출 꾸러미를 만들지 않았습니다.";
 
 /// ExportService.cpp:96-97 — the folder holds any entry, hidden and system ones included.
 fn has_entries(path: &Path) -> bool {
@@ -45,6 +54,10 @@ pub fn export_submission_package(
     inp: &SubmitPackageInputs<'_>,
     progress: &mut dyn FnMut(usize, usize, &str) -> bool,
 ) -> Result<PathBuf, String> {
+    // ExportService.cpp:88-90, before the folder check.
+    if inp.block_on_checklist_errors && inp.checklist_errors_remain {
+        return Err(BLOCKED.to_owned());
+    }
     // :93-105 the destination must be new or an empty folder.
     let final_path = std::path::absolute(out_dir).unwrap_or_else(|_| out_dir.to_path_buf());
     let existed = final_path.exists();
@@ -63,6 +76,10 @@ pub fn export_submission_package(
             "제출 위치를 만들 수 없습니다. 쓰기 권한이 있는 다른 폴더를 고르세요: {}",
             native(&parent)
         ));
+    }
+    // 이 앱의 말, after the folder check so a bad folder still uses the cpp text (ExportService.cpp:96-105).
+    if inp.composed_user_sheet {
+        return Err(COMPOSED_SHEET.to_owned());
     }
     // :107-111 a sibling keeps the final rename on one file system; dropping it removes only this run's folder.
     let staging = tempfile::Builder::new()
@@ -168,3 +185,7 @@ pub fn export_submission_package(
 #[cfg(test)]
 #[path = "submit_builder_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "submit_builder_wu06_tests.rs"]
+mod wu06_tests;
