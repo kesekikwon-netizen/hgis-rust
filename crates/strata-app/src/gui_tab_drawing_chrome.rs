@@ -116,7 +116,7 @@ impl StrataAppState {
                     Pos2::new(tb_r.left() + 3.5 * s, ly),
                     egui::Align2::LEFT_CENTER,
                     line,
-                    egui::FontId::proportional(tb_font_sz),
+                    crate::gui_theme_fonts::layout_font(tb_p.ctx(), tb_font_sz),
                     ink,
                 );
             }

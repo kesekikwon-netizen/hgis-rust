@@ -63,7 +63,8 @@ impl StrataAppState {
             | ActiveModalDialog::ControlPoint
             | ActiveModalDialog::SurveyArea
             | ActiveModalDialog::LineColor
-            | ActiveModalDialog::CadastralStyle => true,
+            | ActiveModalDialog::CadastralStyle
+            | ActiveModalDialog::About => true,
             ActiveModalDialog::NgiiTopoDownload
             | ActiveModalDialog::HeritageBrowser
             | ActiveModalDialog::CadastralDownload

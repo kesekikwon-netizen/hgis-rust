@@ -5,17 +5,25 @@
 //! requests off while permitting verified PC-local targets via
 //! [`crate::curl_stdin::output_with_url_on_stdin`] and [`allow_launch_urls`].
 
+#[cfg(test)]
+use std::cell::Cell;
 #[cfg(any(test, feature = "test-probe"))]
 use std::cell::RefCell;
 use std::io::{self, Write};
 use std::process::{Child, Command, Output, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::AtomicBool;
+#[cfg(not(test))]
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
 /// Environment variable that disables external requests when set to `"1"`.
 pub const OFFLINE_ENV: &str = "STRATA_OFFLINE";
 
 static DISABLED: AtomicBool = AtomicBool::new(false);
+#[cfg(not(test))]
 static ALLOWED_LAUNCHES: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+thread_local! { static ALLOWED_LAUNCHES: Cell<usize> = const { Cell::new(0) }; }
 
 /// Command captured by [`probe_dry_run`] without starting an OS process (tests only).
 #[cfg(any(test, feature = "test-probe"))]
@@ -79,10 +87,19 @@ pub fn is_allowed() -> bool {
         && !offline_from_env(std::env::var(OFFLINE_ENV).ok().as_deref())
 }
 
-/// Total number of command launches allowed by this module in the current process.
 #[must_use]
 pub fn allowed_launches() -> usize {
-    ALLOWED_LAUNCHES.load(Ordering::SeqCst)
+    #[cfg(test)]
+    { ALLOWED_LAUNCHES.with(Cell::get) }
+    #[cfg(not(test))]
+    { ALLOWED_LAUNCHES.load(Ordering::SeqCst) }
+}
+
+fn bump_allowed_launches() {
+    #[cfg(test)]
+    ALLOWED_LAUNCHES.with(|count| count.set(count.get() + 1));
+    #[cfg(not(test))]
+    { ALLOWED_LAUNCHES.fetch_add(1, Ordering::SeqCst); }
 }
 
 /// Decides from `url` alone whether a target cannot leave this PC (`NET0c2`).
@@ -159,7 +176,7 @@ where
     if !allowed {
         return false;
     }
-    ALLOWED_LAUNCHES.fetch_add(1, Ordering::SeqCst);
+    bump_allowed_launches();
     #[cfg(any(test, feature = "test-probe"))]
     PROBE.with(|slot| {
         if let Some(probe) = slot.borrow_mut().as_mut() {
@@ -189,7 +206,7 @@ fn record_cmd(cmd: &Command, stdin: &[u8]) -> RecordedCommand {
 
 fn record_allowed_launch(cmd: &Command, stdin: &[u8]) -> bool {
     let _ = (cmd, stdin);
-    ALLOWED_LAUNCHES.fetch_add(1, Ordering::SeqCst);
+    bump_allowed_launches();
     #[cfg(any(test, feature = "test-probe"))]
     {
         PROBE.with(|slot| {
@@ -263,6 +280,10 @@ pub(crate) fn run_curl_url_with_stdin(
 #[cfg(test)]
 #[path = "network_tests.rs"]
 mod network_tests;
+
+#[cfg(test)]
+#[path = "network_launch_count_tests.rs"]
+mod network_launch_count_tests;
 
 #[path = "network_local.rs"]
 mod network_local;

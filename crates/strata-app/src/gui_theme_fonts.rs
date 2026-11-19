@@ -10,6 +10,20 @@ pub fn configure_korean_fonts_and_theme(ctx: &egui::Context, tokens: &ThemeToken
     apply_theme_tokens(ctx, tokens);
 }
 
+/// C++ `QFont("Malgun Gothic")` on the sheet (`LayoutService.cpp:394`).
+pub const LAYOUT_FONT_FAMILY: &str = "Malgun Gothic";
+
+/// The sheet's letters: Malgun Gothic when that face is registered, otherwise the proportional face.
+pub fn layout_font(ctx: &egui::Context, size: f32) -> egui::FontId {
+    let named = egui::FontFamily::Name(LAYOUT_FONT_FAMILY.into());
+    let family = if ctx.fonts(|fonts| fonts.families().contains(&named)) {
+        named
+    } else {
+        egui::FontFamily::Proportional
+    };
+    egui::FontId::new(size, family)
+}
+
 /// The fonts of the app: Malgun Gothic first, and its bold face for the letters on the map.
 pub fn font_definitions() -> egui::FontDefinitions {
     let mut fonts = egui::FontDefinitions::default();
@@ -30,6 +44,12 @@ pub fn font_definitions() -> egui::FontDefinitions {
             if let Some(fam) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
                 fam.push("korean_sys".to_owned());
             }
+            // Layout letters name the face, the same string C++ passes to QFont
+            // (`LayoutService.cpp:394`). Proportional stays the fallback when the file is absent.
+            fonts.families.insert(
+                egui::FontFamily::Name(LAYOUT_FONT_FAMILY.into()),
+                vec!["korean_sys".to_owned()],
+            );
             break;
         }
     }

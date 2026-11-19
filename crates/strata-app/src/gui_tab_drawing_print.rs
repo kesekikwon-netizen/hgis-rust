@@ -1,9 +1,8 @@
-//! 「PDF 내보내기」 — the sheet painted again off the screen at print resolution and saved as a PDF of one
-//! picture (docs/RUST_PLAN.md R3-임시; C++ `savePdf` and `exportDrawingPdf`, KaDrawingStudio.cpp:3758-3855, and
-//! `KaDrawingPdfProgress`). A pass paints the sheet with its own context, its own tile stores and fetchers and
-//! its own reference pictures (made at once), so nothing of the screen's pictures is mixed in. Passes run once
-//! a frame until every tile they asked for has come or failed; then the picture is made, packed and written
-//! in the background. 취소 leaves no file, and a file of the same name stays as it was.
+//! 「PDF 내보내기」 — the sheet written as a vector PDF (C++ `savePdf` and `exportDrawingPdf`,
+//! KaDrawingStudio.cpp:3758-3855, `forceVectorOutput` in PdfExportSettings.cpp:9-26, and
+//! `KaDrawingPdfProgress`). A pass still settles the sheet on its own tile stores, so nothing of the
+//! screen's pictures is mixed in. When that pass is quiet the file is text and paths, not one picture.
+//! 취소 leaves no file, and a file of the same name stays as it was.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,7 +15,7 @@ use super::sheet_scene::SheetScene;
 use eframe::egui;
 
 pub(crate) use super::sheet_pdf_file::CANCELLED;
-use super::sheet_pdf_file::{pack_pdf, print_dpi, put_pdf, render_note, DESIGN_PX_PER_MM};
+use super::sheet_pdf_file::{print_dpi, put_pdf, render_note, DESIGN_PX_PER_MM};
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::ActiveModalDialog;
 
@@ -63,18 +62,14 @@ impl SheetPdf {
         }
     }
 
-    /// Tessellates the last pass and makes, packs and writes the picture in the background.
-    fn make(&mut self, title: String) {
-        let raster = self.scene.raster();
+    /// Writes the vector PDF in the background.
+    fn make(&mut self, pdf: Vec<u8>) {
         let (send, receive) = channel();
-        let (target, paper_mm, cancel) = (self.target.clone(), self.scene.paper_mm, Arc::clone(&self.cancel));
+        let (target, cancel) = (self.target.clone(), Arc::clone(&self.cancel));
         std::thread::spawn(move || {
-            let picture = raster.paint();
-            let written = pack_pdf(paper_mm, &title, &picture).and_then(|pdf| {
-                drop(send.send(Made::Saving));
-                put_pdf(&target, &pdf, &cancel)
-            });
-            drop(send.send(Made::Done(written.map(|()| picture.unknown_pictures))));
+            drop(send.send(Made::Saving));
+            let written = put_pdf(&target, &pdf, &cancel);
+            drop(send.send(Made::Done(written.map(|()| 0))));
         });
         self.stage = Stage::Making(receive);
     }
@@ -130,10 +125,19 @@ impl StrataAppState {
             Stage::Painting if cancelled => Some(Err(CANCELLED.to_owned())),
             Stage::Painting => {
                 job.scene.pass(self);
-                if job.scene.ready() {
-                    job.make(self.drawing.title_ko.clone());
+                if !job.scene.ready() {
+                    None
+                } else {
+                    let frame = self.drawing.sheet.map_frame;
+                    let jpeg = job.scene.basemap_jpeg([frame.x_mm, frame.y_mm, frame.width_mm, frame.height_mm]);
+                    match self.vector_sheet_pdf(jpeg.as_ref().map(|image| image.0.as_slice()), jpeg.as_ref().map(|image| image.1).unwrap_or([0, 0])) {
+                        Ok(pdf) => {
+                            job.make(pdf);
+                            None
+                        }
+                        Err(why) => Some(Err(why)),
+                    }
                 }
-                None
             }
             Stage::Making(receive) => match receive.try_recv() {
                 Ok(Made::Done(written)) => Some(written),

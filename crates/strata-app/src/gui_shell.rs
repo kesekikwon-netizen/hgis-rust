@@ -10,6 +10,8 @@ mod opacity_placement_input_tests;
 
 #[path = "gui_shell_escape.rs"]
 mod escape;
+#[path = "shell_focus.rs"]
+mod shell_focus;
 #[path = "native_menu_input.rs"]
 mod native_menu_input;
 pub(crate) use native_menu_input::menu_button as native_menu_button;
@@ -29,6 +31,7 @@ impl StrataAppState {
     pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) -> escape::PendingCanvasInput {
         let pending = self.pending_canvas_input(ctx);
         // C++ 모달 창(KaFeatureFormDialog·조사구역 설정·도형 속성) 뒤에서는 주 창 단축키가 듣지 않는다 — 창이 Enter·Esc 를 맡는다.
+        // QMessageBox::about is inside modal_window_open (MainWindow.cpp:3048).
         if self.modal_window_open() || self.modals.active == Some(ActiveModalDialog::PaperSetup) {
             return pending;
         }
@@ -41,15 +44,7 @@ impl StrataAppState {
         let capture = !wants_kb && self.modals.active.is_none() && self.capture_active();
         let history = ctx.input(|i| {
             if i.key_pressed(egui::Key::F9) {
-                self.right_inspector.left_panel_collapsed = !self.right_inspector.left_panel_collapsed;
-                self.home_map.draw_guide_message = Some(
-                    if self.right_inspector.left_panel_collapsed {
-                        "왼쪽 패널을 접었습니다. F9 키를 누르면 다시 펼칩니다."
-                    } else {
-                        "왼쪽 패널을 펼쳤습니다."
-                    }
-                    .to_owned(),
-                );
+                self.toggle_left_panel();
             }
             if i.key_pressed(egui::Key::F10) {
                 self.right_inspector.right_panel_collapsed = !self.right_inspector.right_panel_collapsed;
@@ -63,15 +58,7 @@ impl StrataAppState {
                 );
             }
             if i.key_pressed(egui::Key::F11) {
-                self.right_inspector.map_focused = !self.right_inspector.map_focused;
-                self.home_map.draw_guide_message = Some(
-                    if self.right_inspector.map_focused {
-                        "지도 넓게 보기 — Ctrl+F11 키를 다시 누르면 리본과 왼쪽 패널이 돌아옵니다."
-                    } else {
-                        "지도 넓게 보기를 끝냈습니다."
-                    }
-                    .to_owned(),
-                );
+                self.toggle_map_focus();
             }
             if !wants_kb && i.modifiers.is_none() && i.key_pressed(egui::Key::A) {
                 self.active_tab = MainTab::Map;
@@ -296,3 +283,7 @@ mod paper_setup_input_tests;
 #[cfg(test)]
 #[path = "legend_frame_input_tests.rs"]
 mod legend_frame_input_tests;
+
+#[cfg(test)]
+#[path = "more_menu_input_tests.rs"]
+mod more_menu_input_tests;
