@@ -137,8 +137,11 @@ fn old_map_input_1919_missing_key_stays_in_footer_without_changing_data() {
     let original = super::vertex_crs_input_tests::records(&h);
     let rows = h.app.left_layers.entries.clone();
     open_icon(&mut h);
-    choose(&mut h, "▤  1919 조선지형도 1:5만");
-    assert!(h.app.status_left_message().contains("역사지리정보DB API 키가 필요합니다"));
+    let (tip, enabled) = crate::ref_tile_layers::history::history_1919_menu(false);
+    assert!(!enabled);
+    assert_eq!(tip, "더보기 → API 키 입력에 역사지리정보DB 키를 저장하면 켤 수 있습니다");
+    let at = h.point_at("▤  1919 조선지형도 1:5만");
+    h.press(at, PointerButton::Primary);
     assert!(!h.app.is_dirty && h.app.modals.active.is_none());
     assert_eq!(h.app.left_layers.entries, rows);
     assert_eq!(super::vertex_crs_input_tests::records(&h), original);

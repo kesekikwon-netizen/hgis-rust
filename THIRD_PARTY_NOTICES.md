@@ -136,3 +136,14 @@ Its existing Windows dependencies include `windows-sys`/`windows-targets` (MIT o
 `unicode-segmentation` (MIT or Apache-2.0), and common Rust support crates recorded in Cargo.lock;
 `build.rs` only declares platform aliases through `cfg_aliases` (MIT).
 The product keeps using its existing main application window as the hidden browser parent.
+
+## Rust 앱(hgis-rust) 도면 PDF 글꼴 — `crates/strata-layout`
+
+조판 PDF는 그 페이지가 쓰는 글자만 추린 TrueType 부분집합을 `FontFile2`로 넣는다
+(`LayoutService.cpp:394`의 맑은 고딕). 글꼴 파일을 새로 배포하지 않는다. 기계에
+`C:\Windows\Fonts\malgun.ttf`가 있으면 그것을 읽고, 없으면 저장소에 이미 있는
+OFL 글꼴(있으면 Noto Sans KR, 아니면 `data/fonts/IBMPlexSansKR-Regular.ttf`)을 쓴다.
+
+| 크레이트 | 판 | 라이선스 | 하는 일 |
+| --- | --- | --- | --- |
+| `ttf-parser` | `=0.25.1` (2025-01-10) | MIT 또는 Apache-2.0 | TrueType 표(cmap, glyf, loca, hmtx)를 읽어 부분집합을 만든다. 네이티브 코드 없음 | https://github.com/harfbuzz/ttf-parser |

@@ -153,7 +153,11 @@ impl StrataAppState {
             }
             FileKind::GeoPackage => Err(Refused::NotYet(format!("GPKG 파일의 표는 아직 지도에 올리지 못합니다: {name}"))),
             FileKind::GeoJson => Err(Refused::NotYet(format!("GeoJSON 파일은 아직 지도에 올리지 못합니다: {name}"))),
-            FileKind::Cad => Err(Refused::NotYet(format!("CAD 도면(DXF·DWG)은 아직 지도에 올리지 못합니다: {name}"))),
+            FileKind::Cad => {
+                // `KaCadImportNotice.cpp:53-59`.
+                self.open_cad_crs_notice(path);
+                Err(Refused::NotYet(format!("CAD 도면(DXF·DWG)은 아직 지도에 올리지 못합니다: {name}")))
+            }
             FileKind::Picture => match self.add_raster_from_path(path) {
                 Some((title, words)) => Ok(Some(Added { title, words })),
                 None => Err(Refused::Unreadable),
