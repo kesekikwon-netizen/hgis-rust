@@ -13,6 +13,8 @@ pub(super) const NO_COLUMNS: &str = "X·Y·표고 칸을 찾지 못했습니다.
 
 #[derive(Debug, Clone)]
 pub(super) struct Elev {
+    pub x: f64,
+    pub y: f64,
     pub z: f64,
     pub suspicious: bool,
 }
@@ -47,6 +49,8 @@ pub(super) fn read_table(bytes: &[u8]) -> Result<Vec<Elev>, &'static str> {
 }
 
 struct Bucket {
+    x: f64,
+    y: f64,
     z_sum: f64,
     count: u32,
     suspicious: bool,
@@ -69,6 +73,8 @@ fn average_duplicates(rows: &[Vec<String>], cols: Columns) -> Vec<Elev> {
         };
         let key = (round_i64(x * 1000.0), round_i64(y * 1000.0));
         let entry = buckets.entry(key).or_insert(Bucket {
+            x,
+            y,
             z_sum: 0.0,
             count: 0,
             suspicious: false,
@@ -80,6 +86,8 @@ fn average_duplicates(rows: &[Vec<String>], cols: Columns) -> Vec<Elev> {
     buckets
         .into_values()
         .map(|bucket| Elev {
+            x: bucket.x,
+            y: bucket.y,
             z: bucket.z_sum / f64::from(bucket.count),
             suspicious: bucket.suspicious,
         })

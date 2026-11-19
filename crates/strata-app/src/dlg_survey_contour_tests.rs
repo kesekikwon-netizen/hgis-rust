@@ -4,8 +4,13 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use eframe::egui::{self, Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Shape};
+use gdal::vector::LayerAccess;
+
+use std::sync::Mutex;
 
 use crate::app_state::StrataAppState;
+
+static PRESS: Mutex<()> = Mutex::new(());
 use crate::dialogs_modal::ActiveModalDialog;
 
 fn collect_texts(shape: &Shape, out: &mut Vec<String>) {
@@ -131,6 +136,16 @@ fn open_contour(path: &str) -> (StrataAppState, egui::Context, Vec<String>) {
     for _ in 0..3 {
         (_, texts) = frame(&mut app, &ctx, vec![]);
     }
+    for _ in 0..100 {
+        if !texts
+            .iter()
+            .any(|text| text == super::survey_contour_sheet::READING)
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        (_, texts) = frame(&mut app, &ctx, vec![]);
+    }
     (app, ctx, texts)
 }
 
@@ -156,8 +171,7 @@ fn arbitrary_path_never_shows_fixed_counts_or_writes_section_line() {
         .find(|(l, _, _)| l == "등고선 만들기")
         .map(|(_, disabled, r)| (*disabled, r.expect("accept button bounds").center()))
         .unwrap_or_else(|| panic!("accept button missing: {nodes:?}"));
-    assert!(disabled, "등고선 만들기 stays off until W-29");
-    ctx.style_mut(|style| style.interaction.tooltip_delay = 0.0);
+    assert!(!disabled, "a chosen path can be built");
     let press = |pressed| Event::PointerButton {
         pos: at,
         button: PointerButton::Primary,
@@ -165,13 +179,6 @@ fn arbitrary_path_never_shows_fixed_counts_or_writes_section_line() {
         modifiers: Modifiers::default(),
     };
     frame(&mut app, &ctx, vec![Event::PointerMoved(at)]);
-    let (_, hovered) = frame(&mut app, &ctx, vec![Event::PointerMoved(at)]);
-    assert!(
-        hovered
-            .iter()
-            .any(|t| t == "아직 Rust 판에서 연결하지 않았습니다 (지시 W-29)"),
-        "disabled button must say generation is not connected: {hovered:?}"
-    );
     frame(&mut app, &ctx, vec![press(true)]);
     frame(&mut app, &ctx, vec![press(false)]);
     let (_, after) = frame(&mut app, &ctx, vec![]);
@@ -211,4 +218,109 @@ fn sample_csv_preview_matches_point_count_and_elevation_range() {
             .any(|t| t == "점 4개, 표고 10.0–15.3 m. 등고선 약 10줄."),
         "preview must match the four rows: {texts:?}"
     );
+}
+
+fn press_make(app: &mut StrataAppState, ctx: &egui::Context) {
+    // One build at a time: the worker slot is process-wide.
+    let _guard = PRESS.lock().unwrap_or_else(|poison| poison.into_inner());
+    let (nodes, _) = frame(app, ctx, vec![]);
+    let at = nodes
+        .iter()
+        .find(|(label, _, _)| label == "등고선 만들기")
+        .and_then(|(_, _, bounds)| *bounds)
+        .unwrap()
+        .center();
+    let press = |pressed| Event::PointerButton {
+        pos: at,
+        button: PointerButton::Primary,
+        pressed,
+        modifiers: Modifiers::default(),
+    };
+    frame(app, ctx, vec![Event::PointerMoved(at)]);
+    frame(app, ctx, vec![press(true)]);
+    frame(app, ctx, vec![press(false)]);
+    for _ in 0..200 {
+        frame(app, ctx, vec![]);
+        let settled = !super::survey_contour_job::running()
+            && (app.modals.active.is_none() || app.modals.contour_build_note.is_some());
+        if settled {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+/// A four-corner slope becomes four contour lines in the survey folder and a reference row.
+#[test]
+fn sample_csv_writes_the_package_and_shows_the_contour_layer() {
+    let dir = tempfile::tempdir().unwrap();
+    let survey = dir.path().join("현장.gpkg");
+    std::fs::write(&survey, b"survey-file").unwrap();
+    let csv = dir.path().join("slope.csv");
+    std::fs::write(&csv, "X,Y,Z\n0,0,10\n100,0,10\n0,100,20\n100,100,20\n").unwrap();
+    let (mut app, ctx, _) = open_contour(&csv.display().to_string());
+    app.survey_path = Some(survey);
+    app.modals.contour_interval_m = 2.0;
+    app.modals.contour_cell_size_m = 10.0;
+    press_make(&mut app, &ctx);
+
+    assert_eq!(app.modals.active, None);
+    assert!(app.is_dirty);
+    assert_eq!(app.status_bar_hint, "등고선 4줄, 색 구간 0개를 올렸습니다.");
+    let row = app
+        .left_layers
+        .entries
+        .iter()
+        .find(|entry| entry.label_ko == "등고선")
+        .unwrap();
+    assert_eq!(row.feature_count, 4);
+    assert_eq!(row.group, strata_types::schema::LegendGroup::ReferenceMap);
+    assert!(row.read_only);
+    assert!(app.ref_vectors.spec_of("contour:slope:lines").is_some());
+    assert!(app
+        .left_layers
+        .entries
+        .iter()
+        .all(|entry| entry.layer_key != "section_line"));
+    let gpkg = dir
+        .path()
+        .join("측량등고선")
+        .join("slope")
+        .join("contours.gpkg");
+    assert!(
+        gpkg.is_file()
+            && dir
+                .path()
+                .join("측량등고선")
+                .join("slope")
+                .join("surface.tif")
+                .is_file()
+    );
+    let dataset = gdal::Dataset::open(&gpkg).unwrap();
+    let mut elevs = Vec::new();
+    for feature in dataset.layer_by_name("contour_lines").unwrap().features() {
+        if let Some(gdal::vector::FieldValue::RealValue(z)) = feature.field(0).unwrap() {
+            elevs.push((z * 100.0).round() as i32);
+        }
+    }
+    elevs.sort();
+    assert_eq!(elevs, vec![1200, 1400, 1600, 1800]);
+}
+
+/// Two points are refused and the survey folder gains no contour package.
+#[test]
+fn too_few_points_write_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let survey = dir.path().join("현장.gpkg");
+    std::fs::write(&survey, b"survey-file").unwrap();
+    let csv = dir.path().join("two.csv");
+    std::fs::write(&csv, "X,Y,Z\n0,0,1\n1,1,2\n").unwrap();
+    let (mut app, ctx, _) = open_contour(&csv.display().to_string());
+    app.survey_path = Some(survey);
+    press_make(&mut app, &ctx);
+    let (_, after) = frame(&mut app, &ctx, vec![]);
+    assert!(after.iter().any(|text| text.contains("3개")), "{after:?}");
+    assert!(!dir.path().join("측량등고선").exists());
+    assert!(app.left_layers.entries.is_empty());
+    assert!(!app.is_dirty);
 }

@@ -101,12 +101,19 @@ fn missing_file_and_missing_columns_use_the_cpp_lines() {
 #[test]
 fn excel_and_dxf_are_not_pretended() {
     let dir = tempfile::tempdir().unwrap();
-    for name in ["book.xlsx", "book.xls", "points.dxf"] {
+    for name in ["book.xlsx", "book.xls"] {
         let path = dir.path().join(name);
         std::fs::write(&path, b"not a table").unwrap();
         let text = contour_preview(&path.display().to_string(), 0.5, true);
-        assert_eq!(text, "엑셀·DXF는 아직 읽지 않습니다 (지시 W-29).");
+        assert_eq!(text, "엑셀은 아직 읽지 않습니다 (지시 W-29).");
         assert!(!text.contains("248"));
-        assert!(!text.contains("24.5"));
     }
+    let dxf = dir.path().join("points.dxf");
+    std::fs::write(&dxf, b"not a drawing").unwrap();
+    let text = contour_preview(&dxf.display().to_string(), 0.5, true);
+    assert_eq!(
+        text,
+        "파일을 열지 못했습니다. 다른 프로그램이 파일을 열고 있는지 확인하세요."
+    );
+    assert!(!text.contains("248"));
 }

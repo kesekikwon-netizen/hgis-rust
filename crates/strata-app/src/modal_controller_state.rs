@@ -18,6 +18,8 @@ pub struct ModalDialogController {
     pub new_survey_error: Option<String>,
     pub contour_file_path: String,
     pub contour_empty_rejected: bool,
+    /// Shown in the preview after 「등고선 만들기」 fails. Cleared when the path changes.
+    pub contour_build_note: Option<String>,
     pub contour_interval_m: f64,
     pub contour_swap_axes: bool,
     pub contour_exclude_suspicious: bool,
@@ -130,12 +132,14 @@ impl Default for ModalDialogController {
             // target/cpp-ref/src/app/KaSurveyContourDialog.cpp:29,126-131 — starts with no file chosen.
             contour_file_path: String::new(),
             contour_empty_rejected: false,
+            contour_build_note: None,
             contour_interval_m: 0.5,
             contour_swap_axes: false,
             contour_exclude_suspicious: true,
             contour_use_breaklines: true,
             contour_advanced_open: false,
-            contour_max_edge_m: 50.0,
+            // KaSurveyContourDialog.cpp — 0 means the maximum edge is unused.
+            contour_max_edge_m: 0.0,
             contour_cell_size_m: 0.5,
             vworld_key_input: String::new(),
             heritage_id_input: String::new(),
