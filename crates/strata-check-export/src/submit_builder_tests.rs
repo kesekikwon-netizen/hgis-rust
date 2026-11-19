@@ -47,6 +47,8 @@ fn inputs<'a>(sources: &'a [(&'static str, Vec<SubmitSource>)], survey: &'a Path
         checklist_errors_remain: false,
         reference_lines: &[],
         app_line: APP_LINE,
+        block_on_checklist_errors: false,
+        composed_user_sheet: false,
     }
 }
 

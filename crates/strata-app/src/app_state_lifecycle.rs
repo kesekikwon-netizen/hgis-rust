@@ -99,6 +99,8 @@ impl StrataAppState {
             drawing: DrawingTabState::default(),
             accounts,
             modals: ModalDialogController::default(),
+            submit_phase: None,
+            submit_parent_override: None,
             trench_place_job: None,
         };
         // C++ `MainWindow.cpp:1493-1507` ensureStartupViewReady — 지도 탭을 처음 볼 때 한반도 전체.

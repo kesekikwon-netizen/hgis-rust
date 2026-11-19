@@ -189,6 +189,10 @@ pub struct StrataAppState {
     pub drawing: DrawingTabState,
     pub accounts: AccountDialogState,
     pub modals: ModalDialogController,
+    /// `KaSubmitFlow.cpp:81` — the question before the folder dialog. `None` while the button is idle.
+    pub(crate) submit_phase: Option<crate::submit_package_run::SubmitPhase>,
+    /// Tests choose the folder. The product path uses the folder dialog (`KaSubmitFlow.cpp:126`).
+    pub(crate) submit_parent_override: Option<std::path::PathBuf>,
     /// Background 「구역에 깔기」 search (`KaTrenchDialogPlan.cpp:121`).
     pub(crate) trench_place_job: Option<crate::trench_place::TrenchPlaceJob>,
 }
