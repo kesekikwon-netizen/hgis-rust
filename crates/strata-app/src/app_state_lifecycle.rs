@@ -98,6 +98,11 @@ impl StrataAppState {
             drawing: DrawingTabState::default(),
             accounts,
             modals: ModalDialogController::default(),
+            field_error: None,
+            // KaShellStartup.cpp:53-54 — the log folder is set once, from KaSessionLog::dir.
+            log_folder: super::user_error::session_log_dir().to_string_lossy().into_owned(),
+            log_opener_records: None,
+            field_action_chosen: false,
             submit_phase: None,
             submit_parent_override: None,
             trench_place_job: None,

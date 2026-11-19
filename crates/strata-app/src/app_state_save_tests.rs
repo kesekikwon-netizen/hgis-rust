@@ -123,3 +123,18 @@ fn saving_a_vanished_survey_file_creates_nothing_and_keeps_edits() {
     assert!(poly.layer.features.iter().any(|f| f.fid < 0), "the unsaved edit stays in memory");
 }
 
+/// A failed save opens the three-part field window (`KaUserError`, MainWindowSession.cpp:1006-1016).
+#[test]
+fn a_failed_save_shows_the_three_part_field_error() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (mut app, _) = opened_demo(dir.path());
+    add_poly(&mut app, "POLYGON Z ((0 0 1,1 0 1,1 1 1,0 0 1))");
+    app.handle_ribbon_click("저장");
+    let body = app.field_error_text();
+    assert!(body.contains("무엇이 안 됐나"), "{body}");
+    assert!(body.contains("왜 그런가"), "{body}");
+    assert!(body.contains("어떻게 하나"), "{body}");
+    assert!(body.contains("유구 (면)의 편집을 다음 세대 파일에 쓰지 못했습니다."), "{body}");
+    assert!(app.field_error.is_some());
+}
+

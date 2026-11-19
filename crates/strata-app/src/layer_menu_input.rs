@@ -71,7 +71,7 @@ impl StrataAppState {
             own_survey: table.is_some() && self.survey_path.is_some(),
             read_only: entry.read_only,
             reference_or_cadastral: reference,
-            shp: false,
+            shp: self.ref_vectors.file_of(key).is_some_and(|path| path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("shp"))),
             xyz: entry.group == LegendGroup::Basemap,
             at_group_bottom: same_group.last() == Some(&key),
             opacity: f64::from(entry.opacity),

@@ -79,6 +79,8 @@ pub struct HomeMapTabState {
     pub(crate) home_facts: std::collections::HashMap<String, strata_storage::survey_facts::Facts>,
     /// 열려 있는 「도형 속성」 창.
     pub(crate) feature_record: Option<crate::feature_record::FeatureRecordForm>,
+    /// 「겹친 곳 지우기 / 그대로 두기」 after a sketch (`MainWindowErase.cpp:136-141`).
+    pub(crate) drawn_erase: Option<crate::app_state::drawn_erase::DrawnErase>,
     pub grid_enabled: bool,
     pub cursor_world_xy: [f64; 2],
     /// 마우스가 지도 칸 위에 한 번이라도 왔는가 — 그 전에는 상태줄 좌표가 「X —    Y —」(KaStatusBar.cpp:173-175).
@@ -144,6 +146,7 @@ impl Default for HomeMapTabState {
             survey_area_setup: None,
             feature_form: None,
             feature_record: None,
+            drawn_erase: None,
             menu_hit: None,
             card: None,
             card_drafts: std::collections::BTreeMap::new(),

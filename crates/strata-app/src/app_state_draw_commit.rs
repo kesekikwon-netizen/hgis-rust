@@ -1,7 +1,8 @@
 //! 그린 면을 편집 레이어(메모리)에 넣기 — C++ `KaCaptureMapTool::finish`(KaCaptureMapTool.cpp:393-456,
 //! 작업 좌표계 → 레이어 좌표계)와 `MainWindow::onGeometryCaptured`(MainWindowEditing.cpp:782-920).
 //! 좌표계 옮기기와 면 고치기는 C++ 과 같은 PROJ·GEOS(strata-engine). 파일에는 「저장」(2C)이 쓴다.
-//! 그린 뒤 이름·번호 창은 app_state_feature_form.rs. 겹친 곳 지우기 제안(지시 4)·고친 면 알림 창은 아직 없다.
+//! 그린 뒤 이름·번호 창은 app_state_feature_form.rs. 같은 레이어에 겹치면 그 전에 「겹친 곳 지우기」를 묻는다
+//! (`MainWindowEditing.cpp:842-849`).
 
 use std::collections::BTreeMap;
 
@@ -218,6 +219,10 @@ impl StrataAppState {
         self.undo_tables.push(crate::app_state_layer_remove::UndoStep::Table(key.clone()));
         self.is_dirty = true;
         self.after_layer_edit(&key);
+        // Same layer only (`MainWindowErase.cpp:133-135`). The name form waits for the answer.
+        if tool == MapToolKind::DrawPolygon && self.queue_drawn_erase(&key, fid, notice.clone()) {
+            return;
+        }
         // 이름·번호 창(연속 그리기 꺼짐)과 그 뒤 상태 글 — app_state_feature_form.rs.
         self.after_capture(&key, fid, notice);
     }
