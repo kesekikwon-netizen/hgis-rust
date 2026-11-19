@@ -123,6 +123,8 @@ pub struct StrataAppState {
     /// C++ `RecentSurveys::userSettings()` 의 ini 파일. `new_startup` 은 비워 두고(시험이 사용자 ini 를
     /// 읽고 쓰지 않게) 실행 파일만 `attach_user_settings` 로 붙인다.
     pub settings_ini: Option<std::path::PathBuf>,
+    /// Points last read from `ui/opacityRail/map` and `ui/opacityRail/drawing` (`KaLayerOpacityRail.cpp:13-15`).
+    pub(crate) opacity_rail_ini: [Option<(i32, i32)>; 2],
     /// 홈 「최근 조사」 목록 — C++ `KaStartPage::reload` 의 `RecentSurveys::loadAll`.
     pub recent_surveys: Vec<strata_storage::recent_surveys::RecentSurvey>,
     /// C++ `m_editLayer` — 그리기 입구가 정한 대상 표.

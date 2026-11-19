@@ -15,13 +15,12 @@ impl StrataAppState {
         let (rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
         let p = ui.painter_at(rect);
         p.rect_filled(rect, 0.0, Color32::from_rgb(245, 243, 236));
+        // The card replaces the fixed hint. Own the press before the sheet map can pan (`KaDrawingStudio.cpp:1191-1197`).
+        self.sync_drawing_rail_layer(ui.ctx());
+        let rail_owns = self.handle_drawing_opacity_pointer(ui, rect);
+        self.drawing.rail_pointer_owns = rail_owns;
 
-        let hint_r = Rect::from_min_size(Pos2::new(rect.left() + 18.0, rect.top() + 16.0), Vec2::new(196.0, 30.0));
-        p.rect_filled(hint_r, 6.0, Color32::WHITE);
-        p.rect_stroke(hint_r, 6.0, Stroke::new(1.0, Color32::from_rgb(190, 188, 178)), egui::StrokeKind::Middle);
-        p.text(hint_r.center(), egui::Align2::CENTER_CENTER, "투명도·밝기: 조절할 레이어를 고르세요", egui::FontId::proportional(11.0), Color32::from_rgb(75, 74, 70));
-
-        // 1. 용지(mm) 비율에 맞춘 화면 용지 사각형 (상단 힌트 알약과 하단 7버튼 툴바 사이에 100% 수용)
+        // 1. 용지(mm) 비율에 맞춘 화면 용지 사각형 (카드와 하단 7버튼 툴바 사이에 100% 수용)
         let paper_w_mm = (self.drawing.sheet.width_mm.max(100.0)) as f32;
         let paper_h_mm = (self.drawing.sheet.height_mm.max(100.0)) as f32;
         let compact_v = rect.height() < 460.0;
@@ -55,7 +54,7 @@ impl StrataAppState {
         // The size the sheet is seen at: its PDF is drawn at this size too, so that it looks as the screen.
         self.drawing.screen_px_per_mm = Some(px_per_mm);
         self.drawing.paper_on_screen = Some([sheet_rect, map_rect]);
-        let mut f = self.sheet_frame_for(rect, sheet_rect, px_per_mm, p, compact_v);
+        let mut f = self.sheet_frame_for(rect, sheet_rect, px_per_mm, p.clone(), compact_v);
         // The editor includes the pasteboard; export keeps the paper clip (target/cpp-ref/src/app/KaDrawingStudio.cpp:3394-3401).
         f.sheet_p = f.p.clone();
         // 원문 순서 그대로: 지도 레이어 → 도곽 격자 → 범례 → 장식띠(표제란·축척·방위)
@@ -67,6 +66,8 @@ impl StrataAppState {
         self.paint_sheet_coord_points(&f);
         self.paint_sheet_toolbar(ui, &f);
         self.paint_sheet_popups(ui, &f);
+        let ctx = ui.ctx().clone();
+        self.paint_drawing_opacity_rail(&ctx, ui, &p, rect);
     }
 
     /// The values one sheet is painted with: the paper `sheet_rect` at `px_per_mm` points to the millimetre,
@@ -94,6 +95,24 @@ impl StrataAppState {
         let ink = Color32::from_rgb(17, 24, 39);
         let mc = map_rect.center();
         let map_p = sheet_p.with_clip_rect(map_rect);
-        SheetFrame { sheet_rect, map_rect, px_per_mm, px_per_meter, scale_denom, mc, scx, scy, half_w_m, half_h_m, chrome, ink, rect, p, sheet_p, map_p, compact_v }
+        SheetFrame {
+            sheet_rect,
+            map_rect,
+            px_per_mm,
+            px_per_meter,
+            scale_denom,
+            mc,
+            scx,
+            scy,
+            half_w_m,
+            half_h_m,
+            chrome,
+            ink,
+            rect,
+            p,
+            sheet_p,
+            map_p,
+            compact_v,
+        }
     }
 }

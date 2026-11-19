@@ -62,6 +62,26 @@ fn ini_escaped(s: &str, out: &mut String) {
     }
 }
 
+/// `variantToString` for `QPoint` (Qt 6.11.1 `qsettings.cpp:409-412`). A point is not a string, so this is
+/// `@Point(x y)` and not `@@Point`.
+#[must_use]
+pub fn escaped_point(x: i32, y: i32) -> String {
+    format!("@Point({x} {y})")
+}
+
+/// `stringToVariant` for `@Point(x y)` (`qsettings.cpp:483-486`). Two integers and one space. Anything else is
+/// not a point, including a string that merely starts with `@`.
+#[must_use]
+pub fn read_point(raw: &str) -> Option<(i32, i32)> {
+    let Unescaped::Text(text) = ini_unescaped(raw.as_bytes()) else { return None };
+    let inner = text.strip_prefix("@Point(")?.strip_suffix(')')?;
+    let (x, y) = inner.split_once(' ')?;
+    if y.contains(' ') {
+        return None;
+    }
+    Some((x.parse().ok()?, y.parse().ok()?))
+}
+
 /// 글자 값 하나(`setValue(key, QString)`)의 ini 글.
 #[must_use]
 pub fn escaped_string(s: &str) -> String {

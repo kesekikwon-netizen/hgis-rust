@@ -34,6 +34,8 @@ impl PixelView {
                 source_epsg: layer.source_epsg,
                 align_pending: true,
                 knock_out_white: false,
+                brightness: 0,
+                cache_epoch: 0,
                 shown: None,
                 reading: None,
             },

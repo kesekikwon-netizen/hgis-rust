@@ -19,7 +19,13 @@ impl StrataAppState {
         if !self.drawing.map_adjust_active {
             return;
         }
+        // The rail is a child raised over the desk (`KaDrawingStudio.cpp:1196`, `:1236`). It eats the
+        // pointer only while it has it. The map tool stays registered: egui 0.31 hit-tests the previous
+        // pass, so skipping `interact` here makes the press that leaves the card miss the frame.
         let response = ui.interact(map_rect, ui.id().with("drawing_map_adjust"), egui::Sense::click_and_drag());
+        if self.drawing.rail_pointer_owns {
+            return;
+        }
         if response.hovered() {
             // Qt::OpenHandCursor, closed while the map is held (`KaDrawingTools.cpp:49`, `:70`).
             ui.ctx().set_cursor_icon(if response.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });

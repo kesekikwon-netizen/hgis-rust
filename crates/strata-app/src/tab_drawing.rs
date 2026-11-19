@@ -49,6 +49,14 @@ pub struct DrawingTabState {
     pub sheet_set_menu_open: bool,
     /// KaTerrain3dLayoutStudio.cpp — 3D 입체지형 조판 모드
     pub terrain3d_layout_active: bool,
+    /// Layer the drawing card adjusts (`KaDrawingStudio.cpp:2565` `m_railLayer`).
+    pub(crate) rail_layer: Option<String>,
+    /// This frame's card press, so the sheet map does not pan under it.
+    pub(crate) rail_pointer_owns: bool,
+    /// Layout map cache generation (`KaDrawingStudio.cpp:1211` `invalidateCache`).
+    pub(crate) map_cache_epoch: u64,
+    /// Brightness of a drawing raster that is not a picture row. Pictures keep theirs on the layer.
+    pub(crate) rail_brightness: std::collections::BTreeMap<String, i32>,
 }
 
 /// An item of a sheet that the user can take with the mouse and put somewhere else on the paper.
@@ -113,6 +121,10 @@ impl Default for DrawingTabState {
             stored_sheets: Vec::new(),
             sheet_set_menu_open: false,
             terrain3d_layout_active: false,
+            rail_layer: None,
+            rail_pointer_owns: false,
+            map_cache_epoch: 0,
+            rail_brightness: std::collections::BTreeMap::new(),
         }
     }
 }

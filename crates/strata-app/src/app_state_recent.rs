@@ -52,6 +52,7 @@ impl StrataAppState {
     pub(crate) fn attach_user_settings(&mut self, ini: Option<PathBuf>) {
         self.settings_ini = ini;
         self.reload_recent_surveys();
+        self.reload_opacity_rails();
     }
 
     /// `--snap`(검증 캡처): 사용자 ini 는 읽기만 한다(지시 S0). `temp_dir` 에 사본을 만들어 붙이므로

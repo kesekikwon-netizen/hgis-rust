@@ -4,8 +4,8 @@
 use super::{placement, SliderControl};
 use eframe::egui::{self, Event, Id, Key, Rect, Response, Sense};
 
-pub(super) fn interact(ui: &egui::Ui, rect: Rect, id: Id, control: SliderControl) -> Response {
-    let requested = matches!(placement::focus_request(ui.ctx()), Some(placement::FocusRequest::Slider(wanted)) if wanted == control);
+pub(super) fn interact(ui: &egui::Ui, rect: Rect, id: Id, control: SliderControl, kind: super::RailKind) -> Response {
+    let requested = matches!(placement::focus_request(ui.ctx(), kind), Some(placement::FocusRequest::Slider(wanted)) if wanted == control);
     // Qt ClickFocus admits a click, not an additional Tab stop (KaLayerOpacityRail.cpp:47,69).
     let mut sense = Sense::CLICK | Sense::DRAG;
     if requested || ui.memory(|m| m.has_focus(id)) {
@@ -42,7 +42,9 @@ pub(super) fn keyboard_value(ui: &egui::Ui, response: &Response, control: Slider
     let accepted = ui.input_mut(|input| {
         let mut accepted = false;
         input.events.retain(|event| {
-            let Event::Key { key, pressed: true, .. } = event else { return true };
+            let Event::Key { key, pressed: true, .. } = event else {
+                return true;
+            };
             let next = match key {
                 Key::ArrowLeft => value - 1,
                 Key::ArrowRight => value + 1,

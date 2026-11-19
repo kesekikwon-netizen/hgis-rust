@@ -12,7 +12,12 @@ impl PictureLayer {
             Some(epsg) if epsg != work_epsg => Transformer::new(work_epsg, epsg).and_then(|carry| carry.transform_box(view)).ok()?,
             _ => view,
         };
-        let corners = [[in_source[0], in_source[1]], [in_source[2], in_source[1]], [in_source[2], in_source[3]], [in_source[0], in_source[3]]];
+        let corners = [
+            [in_source[0], in_source[1]],
+            [in_source[2], in_source[1]],
+            [in_source[2], in_source[3]],
+            [in_source[0], in_source[3]],
+        ];
         let pixels: Vec<[f64; 2]> = corners.iter().map(|c| pixel_at(&self.transform, *c)).collect::<Option<_>>()?;
         let (lo_c, hi_c) = pixels.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p[0]), hi.max(p[0])));
         let (lo_r, hi_r) = pixels.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p[1]), hi.max(p[1])));
@@ -30,8 +35,10 @@ impl PictureLayer {
         let shrink = (MOST_SIDE as f64 / (cols * density).max(rows * density)).min(1.0);
         // Pixel counts well inside usize: the picture's own size bounds them.
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let (window, size) =
-            ([c0 as usize, r0 as usize, cols as usize, rows as usize], [((cols * density * shrink).ceil() as usize).max(1), ((rows * density * shrink).ceil() as usize).max(1)]);
+        let (window, size) = (
+            [c0 as usize, r0 as usize, cols as usize, rows as usize],
+            [((cols * density * shrink).ceil() as usize).max(1), ((rows * density * shrink).ceil() as usize).max(1)],
+        );
         Some(Wanted { window, size })
     }
 
@@ -56,11 +63,18 @@ impl PictureLayer {
 
     /// What a reading brought, made a texture.
     pub(super) fn take_arrived(&mut self, ctx: &egui::Context) -> Option<String> {
-        let Some((want, receive)) = &self.reading else { return None };
+        let Some((want, receive)) = &self.reading else {
+            return None;
+        };
         match receive.try_recv() {
             Ok(Ok(mut rgba)) => {
                 if self.knock_out_white {
                     knock_out_paper(&mut rgba);
+                }
+                // The filter is part of the read, so dropping the texture and reading again shows it
+                // (`BasemapOps.cpp:2319-2322`, `KaDrawingStudio.cpp:1211-1213`).
+                if self.brightness != 0 {
+                    apply_brightness(&mut rgba, self.brightness);
                 }
                 let image = ColorImage::from_rgba_unmultiplied(want.size, &rgba);
                 let texture = ctx.load_texture(format!("{}#{:?}", self.key, want.window), image, TextureOptions::LINEAR);
@@ -79,5 +93,15 @@ impl PictureLayer {
             Err(TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(60)),
         }
         None
+    }
+}
+
+/// `QgsBrightnessContrastFilter::setBrightness` adds the offset to each sample and saturates (`BasemapOps.cpp:2319-2322`).
+fn apply_brightness(rgba: &mut [u8], brightness: i32) {
+    for px in rgba.chunks_exact_mut(4) {
+        for sample in &mut px[..3] {
+            let mixed = i32::from(*sample) + brightness;
+            *sample = u8::try_from(mixed.clamp(0, 255)).unwrap_or(0);
+        }
     }
 }
