@@ -12,6 +12,10 @@
 mod crs;
 mod crs_box;
 #[cfg(feature = "gdal")]
+mod contour_dxf;
+#[cfg(feature = "gdal")]
+mod contour_files;
+#[cfg(feature = "gdal")]
 mod dxf_lines;
 #[cfg(feature = "gdal")]
 mod elevation;
@@ -32,6 +36,10 @@ mod submit_shp_names;
 mod vector_table;
 
 pub use crs::{area_of_use, Transformer};
+#[cfg(feature = "gdal")]
+pub use contour_dxf::read_dxf_survey_points;
+#[cfg(feature = "gdal")]
+pub use contour_files::{write_contour_package, ContourOutput};
 #[cfg(feature = "gdal")]
 pub use dxf_lines::{dxf_layer_extents, read_dxf_lines, DxfFacts, DxfLayerExtent, DxfLine, DxfShape};
 #[cfg(feature = "gdal")]

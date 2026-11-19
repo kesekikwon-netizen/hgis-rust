@@ -5,9 +5,9 @@
 //! (`SurveyPointReader::read`) plus the TIN and `contours.gpkg` write.
 
 use std::path::Path;
-use std::sync::Mutex;
-use std::time::UNIX_EPOCH;
 
+#[path = "survey_contour_preview_job.rs"]
+mod job;
 #[path = "survey_contour_parse.rs"]
 mod parse;
 
@@ -16,7 +16,7 @@ use parse::{read_table, Elev};
 /// `SurveyPointReader.cpp:114`.
 const OPEN_FAIL: &str = "파일을 열지 못했습니다. 다른 프로그램이 파일을 열고 있는지 확인하세요.";
 /// 이 앱의 말. C++ opens these with GDAL; that reader is order W-29.
-const DEFERRED_BINARY: &str = "엑셀·DXF는 아직 읽지 않습니다 (지시 W-29).";
+const DEFERRED_BINARY: &str = "엑셀은 아직 읽지 않습니다 (지시 W-29).";
 
 #[derive(Debug, Clone)]
 struct Sheet {
@@ -24,23 +24,27 @@ struct Sheet {
     points: Vec<Elev>,
 }
 
-struct Slot {
-    key: String,
-    sheet: Sheet,
+/// Point count and elevation range for `path`, or a fatal line from the C++ reader.
+///
+/// This reads the file on the calling thread. The dialog uses [`job::poll`], which
+/// does the read on a worker so a frame does not wait on disk (`AGENTS.md`).
+#[cfg(test)]
+pub(crate) fn contour_preview(path: &str, interval_m: f64, exclude_suspicious: bool) -> String {
+    preview_of(&read_sheet(Path::new(path)), interval_m, exclude_suspicious)
 }
 
-static CACHE: Mutex<Option<Slot>> = Mutex::new(None);
+fn preview_of(sheet: &Sheet, interval_m: f64, exclude_suspicious: bool) -> String {
+    let Some(fatal) = sheet.fatal.clone() else {
+        return format_points(&sheet.points, interval_m, exclude_suspicious);
+    };
+    fatal
+}
 
-/// Point count and elevation range for `path`, or a fatal line from the C++ reader.
-pub(crate) fn contour_preview(path: &str, interval_m: f64, exclude_suspicious: bool) -> String {
-    let sheet = sheet_for(path);
-    if let Some(fatal) = sheet.fatal {
-        return fatal;
-    }
+fn format_points(points: &[Elev], interval_m: f64, exclude_suspicious: bool) -> String {
     let mut count = 0usize;
     let mut min_cm = 0i32;
     let mut max_cm = 0i32;
-    for point in sheet.points {
+    for point in points {
         if exclude_suspicious && point.suspicious {
             continue;
         }
@@ -73,37 +77,6 @@ pub(crate) fn contour_preview(path: &str, interval_m: f64, exclude_suspicious: b
     text
 }
 
-fn sheet_for(path: &str) -> Sheet {
-    let key = cache_key(path);
-    let mut guard = CACHE.lock().unwrap_or_else(|poison| poison.into_inner());
-    if let Some(slot) = guard.as_ref() {
-        if slot.key == key {
-            return slot.sheet.clone();
-        }
-    }
-    let sheet = read_sheet(Path::new(path));
-    *guard = Some(Slot {
-        key,
-        sheet: sheet.clone(),
-    });
-    sheet
-}
-
-fn cache_key(path: &str) -> String {
-    match std::fs::metadata(path) {
-        Ok(meta) => {
-            let stamp = meta
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_nanos())
-                .unwrap_or(0);
-            format!("{path}\0{}\0{stamp}", meta.len())
-        }
-        Err(_) => format!("missing\0{path}"),
-    }
-}
-
 fn read_sheet(path: &Path) -> Sheet {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
@@ -115,10 +88,11 @@ fn read_sheet(path: &Path) -> Sheet {
         }
     };
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    if ext.eq_ignore_ascii_case("xlsx")
-        || ext.eq_ignore_ascii_case("xls")
-        || ext.eq_ignore_ascii_case("dxf")
-    {
+    if ext.eq_ignore_ascii_case("dxf") {
+        return dxf_sheet(path);
+    }
+    // gdal-src 0.3.0 build.rs never turns on the XLSX driver (it needs expat and is not a cargo feature).
+    if ext.eq_ignore_ascii_case("xlsx") || ext.eq_ignore_ascii_case("xls") {
         return Sheet {
             fatal: Some(DEFERRED_BINARY.to_owned()),
             points: Vec::new(),
@@ -134,6 +108,41 @@ fn read_sheet(path: &Path) -> Sheet {
             points: Vec::new(),
         },
     }
+}
+
+fn dxf_sheet(path: &Path) -> Sheet {
+    match strata_engine::read_dxf_survey_points(path) {
+        Ok(points) => Sheet {
+            fatal: None,
+            points: points
+                .into_iter()
+                .map(|p| Elev {
+                    x: p[0],
+                    y: p[1],
+                    z: p[2],
+                    suspicious: p[2] == 0.0 || p[2].abs() >= 999.0,
+                })
+                .collect(),
+        },
+        Err(_) => Sheet {
+            fatal: Some(OPEN_FAIL.to_owned()),
+            points: Vec::new(),
+        },
+    }
+}
+
+/// Points the preview counted, for the package writer. `Err` is the preview's fatal line.
+pub(crate) fn contour_xyz(path: &str, exclude_suspicious: bool) -> Result<Vec<[f64; 3]>, String> {
+    let sheet = read_sheet(Path::new(path));
+    if let Some(fatal) = sheet.fatal {
+        return Err(fatal);
+    }
+    Ok(sheet
+        .points
+        .into_iter()
+        .filter(|point| !(exclude_suspicious && point.suspicious))
+        .map(|point| [point.x, point.y, point.z])
+        .collect())
 }
 
 /// `qRound(meters * 100)` (`SurveyContourMath.h:10`).
@@ -158,6 +167,8 @@ pub(super) fn format_cm(cm: i32) -> String {
     let frac = tenths % 10;
     format!("{sign}{whole}.{frac}")
 }
+
+pub(crate) use job::{invalidate as invalidate_contour_preview, poll as poll_contour_preview, PreviewPoll, READING};
 
 #[cfg(test)]
 #[path = "survey_contour_sheet_tests.rs"]
