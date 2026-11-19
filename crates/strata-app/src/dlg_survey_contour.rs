@@ -7,7 +7,25 @@ use eframe::egui::{self, Color32, Stroke, Vec2};
 use crate::app_state::StrataAppState;
 use crate::dialogs_modal::render_strata_modal_header;
 
-pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Context, open: &mut bool) {
+/// Order W-29 is the TIN, the GeoPackage and the reference layers.
+const DEFERRED_W29: &str = "아직 Rust 판에서 연결하지 않았습니다 (지시 W-29)";
+
+/// `KaSurveyContourDialog.cpp:142-145`. Tests never open a native dialog.
+fn pick_contour_file() -> Option<std::path::PathBuf> {
+    if cfg!(test) {
+        return None;
+    }
+    rfd::FileDialog::new()
+        .set_title("측량 좌표")
+        .add_filter("측량 좌표", &["dxf", "xlsx", "xls", "csv"])
+        .pick_file()
+}
+
+pub(crate) fn render_survey_contour(
+    app: &mut StrataAppState,
+    ctx: &egui::Context,
+    open: &mut bool,
+) {
     egui::Window::new("ka_modal_survey_contour")
         .title_bar(false)
         .resizable(false)
@@ -40,7 +58,16 @@ pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Contex
                 {
                     app.modals.contour_empty_rejected = false;
                 }
-                let _ = ui.add_sized([74.0, 26.0], egui::Button::new("찾기…"));
+                // KaSurveyContourDialog.cpp:142-145 — 「측량 좌표」, filter dxf/xlsx/xls/csv.
+                if ui
+                    .add_sized([74.0, 26.0], egui::Button::new("찾기…"))
+                    .clicked()
+                {
+                    if let Some(picked) = pick_contour_file() {
+                        app.modals.contour_file_path = picked.display().to_string();
+                        app.modals.contour_empty_rejected = false;
+                    }
+                }
             });
             ui.horizontal(|ui| {
                 ui.add_sized([74.0, 26.0], egui::Label::new("등고선 간격"));
@@ -74,7 +101,10 @@ pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Contex
             } else {
                 "▸ 고급 설정"
             };
-            if ui.button(egui::RichText::new(adv_label).size(12.5)).clicked() {
+            if ui
+                .button(egui::RichText::new(adv_label).size(12.5))
+                .clicked()
+            {
                 app.modals.contour_advanced_open = !app.modals.contour_advanced_open;
             }
             if app.modals.contour_advanced_open {
@@ -138,21 +168,21 @@ pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Contex
                     }
                 });
             }
-            // target/cpp-ref/src/app/KaSurveyContourDialog.cpp:105,126-131 — m_preview shows the
-            // column note before a file is chosen, and 「좌표 파일을 고르세요.」 when accept is clicked
-            // with an empty path. Fixed preview numbers for a non-empty path belong to a later order.
+            // KaSurveyContourDialog.cpp:105,126-131 — column note until a file is chosen, and
+            // 「좌표 파일을 고르세요.」 when accept is clicked with an empty path.
+            // A chosen file uses showPreview (`:211-230`). Making the lines is order W-29.
             ui.add_space(6.0);
-            let path_empty = app.modals.contour_file_path.trim().is_empty();
-            let line_est = ((23.7 / app.modals.contour_interval_m.max(0.1)).round() as usize)
-                .clamp(1, 500);
+            let path = app.modals.contour_file_path.trim();
+            let path_empty = path.is_empty();
             let summary = if path_empty && app.modals.contour_empty_rejected {
                 "좌표 파일을 고르세요.".to_owned()
             } else if path_empty {
                 "DXF·엑셀의 점번호, X(북), Y(동), 표고는 자동으로 읽습니다.".to_owned()
             } else {
-                format!(
-                    "점 248개, 표고 24.5–48.2 m. 등고선 약 {line_est}줄 (간격 {:.1} m). 의심점 3개 제외.",
-                    app.modals.contour_interval_m
+                survey_contour_sheet::contour_preview(
+                    path,
+                    app.modals.contour_interval_m,
+                    app.modals.contour_exclude_suspicious,
                 )
             };
             egui::Frame::NONE
@@ -169,7 +199,10 @@ pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Contex
                 });
             ui.add_space(8.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add_sized([68.0, 30.0], egui::Button::new("취소")).clicked() {
+                if ui
+                    .add_sized([68.0, 30.0], egui::Button::new("취소"))
+                    .clicked()
+                {
                     app.modals.contour_empty_rejected = false;
                     app.modals.active = None;
                 }
@@ -181,25 +214,22 @@ pub(crate) fn render_survey_contour(app: &mut StrataAppState, ctx: &egui::Contex
                 .fill(Color32::from_rgb(181, 87, 58))
                 .corner_radius(6.0)
                 .min_size(Vec2::new(108.0, 30.0));
-                if ui.add(make_btn).clicked() {
-                    if path_empty {
+                // W-29 still owns the TIN, contours.gpkg and the reference-map group.
+                // Until then the button only rejects an empty path (KaSurveyContourDialog.cpp:126-131).
+                let make = ui.add_enabled(path_empty, make_btn);
+                if path_empty {
+                    if make.clicked() {
                         app.modals.contour_empty_rejected = true;
-                    } else {
-                        app.modals.contour_empty_rejected = false;
-                        app.left_layers.ensure_domain_layer(
-                            strata_types::schema::DomainLayerKey::SectionLine,
-                        );
-                        app.home_map.draw_guide_message = Some(format!(
-                            "측량점 등고선 약 {}줄(간격 {:.1} m)과 표고점 248개를 생성했습니다.",
-                            line_est, app.modals.contour_interval_m
-                        ));
-                        app.is_dirty = true;
-                        app.modals.active = None;
                     }
+                } else {
+                    make.on_disabled_hover_text(DEFERRED_W29);
                 }
             });
         });
 }
+
+#[path = "survey_contour_sheet.rs"]
+mod survey_contour_sheet;
 
 #[cfg(test)]
 #[path = "dlg_survey_contour_tests.rs"]
