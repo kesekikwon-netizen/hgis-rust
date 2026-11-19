@@ -12,6 +12,8 @@ mod opacity_placement_input_tests;
 mod escape;
 #[path = "gui_shell_chords.rs"]
 mod chords;
+#[path = "shell_focus.rs"]
+mod shell_focus;
 #[path = "native_menu_input.rs"]
 mod native_menu_input;
 pub(crate) use native_menu_input::menu_button as native_menu_button;
@@ -31,6 +33,7 @@ impl StrataAppState {
     pub(crate) fn handle_cpp_keyboard_shortcuts(&mut self, ctx: &egui::Context) -> escape::PendingCanvasInput {
         let pending = self.pending_canvas_input(ctx);
         // C++ 모달 창(KaFeatureFormDialog·조사구역 설정·도형 속성) 뒤에서는 주 창 단축키가 듣지 않는다 — 창이 Enter·Esc 를 맡는다.
+        // QMessageBox::about is inside modal_window_open (MainWindow.cpp:3048).
         if self.modal_window_open() || self.modals.active == Some(ActiveModalDialog::PaperSetup) {
             return pending;
         }
@@ -44,15 +47,7 @@ impl StrataAppState {
         let mut fullscreen: Option<bool> = None;
         let history = ctx.input(|i| {
             if i.key_pressed(egui::Key::F9) {
-                self.right_inspector.left_panel_collapsed = !self.right_inspector.left_panel_collapsed;
-                self.home_map.draw_guide_message = Some(
-                    if self.right_inspector.left_panel_collapsed {
-                        "왼쪽 패널을 접었습니다. F9 키를 누르면 다시 펼칩니다."
-                    } else {
-                        "왼쪽 패널을 펼쳤습니다."
-                    }
-                    .to_owned(),
-                );
+                self.toggle_left_panel();
             }
             if i.key_pressed(egui::Key::F10) {
                 self.right_inspector.right_panel_collapsed = !self.right_inspector.right_panel_collapsed;
@@ -65,7 +60,7 @@ impl StrataAppState {
                     .to_owned(),
                 );
             }
-            // F11, Ctrl+F11, Ctrl+F and F2 live in gui_shell_chords.rs. F9 and F10 stay here.
+            // F11 is full screen. Ctrl+F11 calls toggle_map_focus (shell_focus.rs). Ctrl+F and F2 too.
             fullscreen = self.window_chords(i, wants_kb);
             if !wants_kb && i.modifiers.is_none() && i.key_pressed(egui::Key::A) {
                 self.active_tab = MainTab::Map;
@@ -297,3 +292,7 @@ mod paper_setup_input_tests;
 #[cfg(test)]
 #[path = "legend_frame_input_tests.rs"]
 mod legend_frame_input_tests;
+
+#[cfg(test)]
+#[path = "more_menu_input_tests.rs"]
+mod more_menu_input_tests;

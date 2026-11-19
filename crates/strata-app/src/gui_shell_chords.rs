@@ -11,10 +11,6 @@ use eframe::egui::{self, Key};
 
 use crate::app_state::StrataAppState;
 
-const MAP_FOCUS_ON: &str =
-    "지도 넓게 보기 — Ctrl+F11 키를 다시 누르면 리본과 왼쪽 패널이 돌아옵니다.";
-const MAP_FOCUS_OFF: &str = "지도 넓게 보기를 끝냈습니다.";
-
 impl StrataAppState {
     /// `Some(on)` is the full-screen state F11 should apply. The caller sends the viewport command
     /// outside `ctx.input`, which holds the context.
@@ -33,26 +29,14 @@ impl StrataAppState {
         }
         let ctrl_f11 = i.modifiers.ctrl && !i.modifiers.shift && !i.modifiers.alt;
         if i.key_pressed(Key::F11) && ctrl_f11 {
-            self.toggle_map_focus_chord();
+            // Same toggle the 더보기 row calls (shell_focus.rs, KaShellFocus.cpp:146).
+            self.toggle_map_focus();
             return None;
         }
         if i.key_pressed(Key::F11) && i.modifiers.is_none() {
             return Some(!i.viewport().fullscreen.unwrap_or(false));
         }
         None
-    }
-
-    /// `KaShellFocus::toggleMapFocus` (`KaShellFocus.cpp:146`, messages `:133-143`).
-    fn toggle_map_focus_chord(&mut self) {
-        self.right_inspector.map_focused = !self.right_inspector.map_focused;
-        self.home_map.draw_guide_message = Some(
-            if self.right_inspector.map_focused {
-                MAP_FOCUS_ON
-            } else {
-                MAP_FOCUS_OFF
-            }
-            .to_owned(),
-        );
     }
 
     /// `renameSelectedLayer` with no argument: the current legend row, or the information text.

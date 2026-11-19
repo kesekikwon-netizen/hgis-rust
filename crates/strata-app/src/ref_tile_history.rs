@@ -14,6 +14,16 @@ mod tests;
 /// `LayerOps` text when no key is stored (`BasemapOps.cpp`, pinned by the C++ test_cadastral.cpp:143-153).
 const NO_KEY: &str = "1919 조선지형도는 국사편찬위원회 역사지리정보DB API 키가 필요합니다. 더보기 → API 키 입력에서 키를 저장하세요. https://hgis.history.go.kr/api/intro.do";
 
+/// `MainWindow::updateHistoricalMapButtons` (MainWindow.cpp:1425-1436): the menu row and its tooltip.
+#[must_use]
+pub(crate) fn history_1919_menu(has_key: bool) -> (&'static str, bool) {
+    if has_key {
+        ("1919년 조선지형도 1:5만 (국사편찬위원회 WMTS, EPSG:5179)", true)
+    } else {
+        ("더보기 → API 키 입력에 역사지리정보DB 키를 저장하면 켤 수 있습니다", false)
+    }
+}
+
 /// The 1919 map. The finest level of the server's grid is 16.
 pub(crate) const MAP_1919: RefTileLayer = RefTileLayer {
     key: "ref_history_1919",

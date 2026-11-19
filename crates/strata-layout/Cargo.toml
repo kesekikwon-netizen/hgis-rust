@@ -8,6 +8,8 @@ license.workspace = true
 strata-types = { path = "../strata-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Reads TrueType tables so the sheet PDF can embed a subset. MIT OR Apache-2.0, 0.25.1 (2025-01-10).
+ttf-parser = "=0.25.1"
 
 [lints]
 workspace = true

@@ -149,6 +149,7 @@ fn paint_triangle(picture: &mut Picture, texture: &Texture, cut: [usize; 4], cor
 }
 
 /// Paints `primitives` (in points) on white paper of `size` pixels, `scale` pixels to the point.
+#[cfg(test)]
 pub(crate) fn paint(primitives: &[ClippedPrimitive], textures: &Textures, scale: f32, size: [usize; 2]) -> Picture {
     paint_region(primitives, textures, scale, size, [0.0, 0.0])
 }

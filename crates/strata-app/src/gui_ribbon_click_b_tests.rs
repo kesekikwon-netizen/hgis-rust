@@ -3,6 +3,7 @@
 //! MapGeoTiffExport.cpp); the Rust writer made a header-only TIFF.
 
 use crate::app_state::{MainTab, StrataAppState};
+use crate::dialogs_modal::ActiveModalDialog;
 
 #[test]
 fn geotiff_chip_is_deferred_r7_and_click_does_nothing() {
@@ -18,4 +19,14 @@ fn geotiff_chip_is_deferred_r7_and_click_does_nothing() {
         assert!(app.modals.active.is_none(), "no dialog");
         assert!(app.active_tab == tab, "tab unchanged");
     }
+}
+
+/// MainWindowRibbon.cpp:709-711 — 「더보기」 is an InstantPopup. This arm used to open AccountSettings.
+#[test]
+fn more_ribbon_click_opens_the_menu_and_not_account_settings() {
+    let mut app = StrataAppState::new_startup();
+    app.handle_ribbon_click("더보기");
+    assert!(app.ribbon.more_menu_open, "더보기 did not open its menu");
+    assert_ne!(app.modals.active, Some(ActiveModalDialog::AccountSettings));
+    assert!(app.modals.active.is_none());
 }

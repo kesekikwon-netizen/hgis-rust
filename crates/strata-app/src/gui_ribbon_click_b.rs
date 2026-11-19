@@ -73,7 +73,12 @@ impl StrataAppState {
             // header-only TIFF, so the click opens no dialog, writes nothing and says nothing.
             "GeoTIFF" => {}
             "검수·제출" => self.modals.active = Some(ActiveModalDialog::ExportSubmitPackage),
-            "더보기" => self.modals.active = Some(ActiveModalDialog::AccountSettings),
+            // MainWindowRibbon.cpp:709-711 InstantPopup. The painted chip uses the same opener
+            // (gui_ribbon_top.rs). Snap steps and handle_ribbon_click reach this arm directly.
+            "더보기" => {
+                let anchor = eframe::egui::Rect::from_min_size(self.ribbon.context_menu_anchor, eframe::egui::Vec2::ZERO);
+                self.open_ribbon_context_menu(label, anchor);
+            }
             _ => self.active_tab = MainTab::Map,
         }
     }

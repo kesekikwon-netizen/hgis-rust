@@ -56,6 +56,8 @@ mod gui_tab_drawing_toolbar;
 pub(crate) mod sheet_coord_points;
 #[path = "sheet_pdf_file.rs"]
 mod sheet_pdf_file;
+#[path = "sheet_pdf_source.rs"]
+mod sheet_pdf_source;
 #[path = "sheet_raster.rs"]
 pub(crate) mod sheet_raster;
 #[path = "sheet_scene.rs"]

@@ -225,14 +225,20 @@ impl StrataAppState {
             // target/cpp-ref/src/app/MainWindowRibbon.cpp:490: QMenu owns outside presses until dismissal.
             let id = egui::Id::new("ka_old_map_menu");
             let area = egui::Area::new(id).kind(egui::UiKind::Modal).sense(egui::Sense::hover()).fixed_pos(anchor).order(egui::Order::Foreground);
+            let history_key_ready = !(self.history_gis_key_reader)().trim().is_empty();
             let shown = egui::Modal::new(id)
                 .area(area)
                 .backdrop_color(Color32::TRANSPARENT)
                 .show(ctx, |ui| {
                     for item in ["▤  대동여지도", "▤  1919 조선지형도 1:5만"] {
-                        let row = ui.add_sized([196.0, 26.0], egui::Button::new(egui::RichText::new(item).size(12.5)).fill(Color32::TRANSPARENT).stroke(Stroke::NONE));
-                        // MainWindow.cpp:1425-1436 updateHistoricalMapButtons: what the 1919 row is.
-                        let row = if item.contains("1919") { row.on_hover_text("1919년 조선지형도 1:5만 (국사편찬위원회 WMTS, EPSG:5179)") } else { row };
+                        let (tip, enabled) = if item.contains("1919") {
+                            // MainWindow.cpp:1425-1436 updateHistoricalMapButtons.
+                            crate::ref_tile_layers::history::history_1919_menu(history_key_ready)
+                        } else {
+                            ("", true)
+                        };
+                        let row = ui.add_enabled(enabled, egui::Button::new(egui::RichText::new(item).size(12.5)).min_size(egui::vec2(196.0, 26.0)).fill(Color32::TRANSPARENT).stroke(Stroke::NONE));
+                        let row = if tip.is_empty() { row } else { row.on_hover_text(tip).on_disabled_hover_text(tip) };
                         if row.clicked() {
                             picked = Some(item);
                         }
