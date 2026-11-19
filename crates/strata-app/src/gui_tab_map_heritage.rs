@@ -22,12 +22,15 @@ impl StrataAppState {
         let sel_layer = self.right_inspector.selected_layer_key.as_deref();
 
         let layer_color = |name: &str, base: Color32| -> Color32 {
-            let (op, br) = if sel_layer == Some(name) {
-                (rs.layer_opacity, rs.layer_brightness)
+            // MainWindow.cpp:994 — each painted layer uses its own opacity. The shared slot is not that layer.
+            let op = self.rail_opacity(name);
+            let br = if sel_layer == Some(name) {
+                rs.layer_brightness
             } else {
                 ctx.data_mut(|d| {
                     d.get_temp::<(f32, f32)>(egui::Id::new(("ka_layer_op_br", name)))
-                        .unwrap_or((rs.layer_opacity, rs.layer_brightness))
+                        .map(|pair| pair.1)
+                        .unwrap_or(rs.layer_brightness)
                 })
             };
             modulate_color_with_opacity_brightness(base, op, br)
@@ -155,3 +158,7 @@ impl StrataAppState {
         self.paint_survey_tables(ctx, p, rect);
     }
 }
+
+#[cfg(test)]
+#[path = "gui_tab_map_heritage_opacity_tests.rs"]
+mod opacity_tests;
