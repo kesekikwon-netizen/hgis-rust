@@ -14,7 +14,7 @@ rusqlite = { workspace = true }
 sha2 = { workspace = true }
 zip = { workspace = true }
 quick-xml = { workspace = true }
-# R2-2 submit package builder (feature `gdal`; the app does not enable it until R2-3).
+# R2 submit package builder (feature `gdal`). The app enables it for the package button (WU-06).
 strata-engine = { path = "../strata-engine", optional = true }
 tempfile = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }

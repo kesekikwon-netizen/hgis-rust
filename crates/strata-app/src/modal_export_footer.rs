@@ -14,6 +14,7 @@ pub(crate) fn paint_export_submit_footer(
     _open: &mut bool,
     status_txt: &str,
 ) {
+        crate::submit_package_run::paint_submit_phase(app, ui);
         // KaSubmitDialog.cpp:85-105 — 하단 버튼 행 (다시 검수 / 레이어 5179 변환… / 제출 꾸러미 만들기… / 닫기)
         ui.horizontal(|ui| {
             if ui.button("다시 검수").clicked() {
@@ -35,9 +36,10 @@ pub(crate) fn paint_export_submit_footer(
                 .fill(Color32::from_rgb(181, 87, 58))
                 .corner_radius(6.0)
                 .min_size(Vec2::new(160.0, 32.0));
-                // F1b: 100 m 정사각형 「현장경계」 SHP·빈 조사도면.pdf 를 임시 폴더에 쓰고 「생성 완료」라던 단추 —
-                // R2(SubmitPackageExporter 실물) 전까지 흐림.
-                ui.add_enabled(false, export_btn).on_disabled_hover_text(DEFERRED_R2);
+                // KaSubmitFlow.cpp:81 — the real package (submit_builder), not the placeholder square.
+                if ui.add(export_btn).clicked() {
+                    app.begin_submit_package();
+                }
             });
         });
 }
