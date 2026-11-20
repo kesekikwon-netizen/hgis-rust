@@ -21,7 +21,7 @@ use crate::cadastral_download_ui::{
         let survey = folder.path().join("경주_월성북편.gpkg");
         std::fs::write(&survey, b"").expect("survey file");
         let dir = cadastral_raw_dir(Some(&survey)).expect("조사 파일이 있으면 경로가 나온다");
-        assert!(dir.ends_with(r"지적도\원본"), "{}", dir.display());
+        assert!(dir.ends_with(std::path::Path::new("지적도").join("원본")), "{}", dir.display());
         assert!(dir.starts_with(folder.path()), "{}", dir.display());
         assert_eq!(cadastral_raw_dir(None), None);
         // F1c-4 — ReferenceStorage.cpp:39-43: a survey path whose file is missing has no folder.

@@ -6,6 +6,7 @@ use crate::download_jobs::StopCode;
 use std::sync::mpsc::TryRecvError;
 
 impl StrataAppState {
+    #[cfg(any(windows, test))]
     pub(crate) fn heritage_browser_ended(&mut self) {
         if self
             .heritage

@@ -16,10 +16,15 @@ use crate::dem_download_ui::*;
 // C++ `MainWindowDownloads.cpp:134-135` — 조사 폴더 옆 `DEM/원본/dem.tif`
 #[test]
 fn test_dem_target_base_path_follows_cpp_dem_raw_folder_rule() {
-    let survey = Path::new(r"C:\조사\경주_월성북편.gpkg");
+    // A parent/file pair on this OS. On Windows that is `C:\조사\...`, the same path the assertion used.
+    let survey = if cfg!(windows) {
+        Path::new(r"C:\조사\경주_월성북편.gpkg")
+    } else {
+        Path::new("/조사/경주_월성북편.gpkg")
+    };
     let target = dem_target_base_path(Some(survey)).expect("조사 파일이 있으면 경로가 나온다");
-    assert!(target.ends_with(r"DEM\원본\dem.tif"), "{target}");
-    assert!(target.starts_with(r"C:\조사\"), "{target}");
+    let expected = survey.parent().unwrap().join("DEM").join("원본").join("dem.tif");
+    assert_eq!(target, expected.to_string_lossy());
 
     // 조사가 없으면 C++ :129-133 처럼 받지 않는다.
     assert_eq!(dem_target_base_path(None), None);

@@ -36,6 +36,7 @@ target/release/ka-hgis.exe --smoke-quit           # 켜졌다 바로 꺼짐, 종
 ```
 
 - 이 PC 는 빌드를 여러 개 동시에 돌리다 전원이 나간 적이 있다. `-j 3` 을 지킨다.
+- Linux에서 같은 워크스페이스를 빌드할 때 막히는 환경(clang이 GCC 14를 고르는데 `libstdc++-14-dev`가 없음, `alsa-sys`의 `libasound2-dev`)은 [`build-linux.md`](build-linux.md)에 있다. 제품 코드를 그 이유로 바꾸지 않는다.
 - GitHub Actions(`.github/workflows/ci.yml`)는 `cargo clippy --workspace`, `cargo test --workspace`, `ka-hgis --verify-all`, GDAL 기능 시험을 돈다.
 - 증분 빌드가 꼬여 링크 오류(LLVM `anon.*` 기호 없음, LNK1120)가 나면 `cargo clean -p strata-app` 뒤 다시 빌드한다.
 - **화면 확인(사진 실행)**: `ka-hgis.exe --snap <출력 폴더> --snap-steps "<단계들>"`. 단계는 쉼표로 잇고 각 단계는 `@동작:사진이름` 이다. 단계마다 그 이름의 PNG 를 찍는다(이름이 없으면 그 단계는 실행되지 않는다). 동작 목록은 `crates/strata-app/src/snap_shot_steps.rs` 에 있다. 자주 쓰는 것: `@open=<조사.gpkg>`, `@wait`, `@tab_drawing`, `@drop=<파일;파일>`, `@pdf=<경로>`, `@heritage=<보관 폴더;시도;시군>`, `@coord=dx;dy`, `@dem`. **반드시 사용자 조사 파일의 임시 사본으로** 한다. 마우스·키보드 흉내 입력은 쓰지 않는다.

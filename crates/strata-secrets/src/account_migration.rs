@@ -13,7 +13,9 @@ use base64::Engine;
 use crate::accounts::AccountKind;
 use crate::dpapi::{protect_verified_many, wipe, xor_entropy};
 
-#[cfg(test)]
+// The Windows migration test reaches this name through `use super::*`. On other systems that test
+// is not compiled, so the import would be an unused-import error (`account_migration_tests.rs`).
+#[cfg(all(test, windows))]
 use crate::accounts::AccountSettings;
 
 const LEGACY_PREFIX: &[u8] = b"DPAPI1:";

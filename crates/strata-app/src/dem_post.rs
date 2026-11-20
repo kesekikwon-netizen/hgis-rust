@@ -9,12 +9,17 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Map, Value};
+#[cfg(any(windows, test))]
+use serde_json::{json, Map};
+use serde_json::Value;
+#[cfg(any(windows, test))]
 use strata_topo::archive::{prepare, Limits};
 use strata_types::crs::CrsCode;
 
+#[cfg(any(windows, test))]
 use super::post::TopoPost;
 use crate::app_state::StrataAppState;
+#[cfg(any(windows, test))]
 use crate::download_jobs::{DownloadJobHandle, StopCode};
 use crate::ref_vector::data::{HeightRamp, LoadSpec, Look};
 
@@ -39,11 +44,15 @@ pub(crate) const DEM_TITLE: &str = "DEM";
 pub(crate) const RELIEF_KEY: &str = "ref_dem_relief";
 pub(crate) const RELIEF_TITLE: &str = "지형 음영";
 /// The end words of the run, as the sheet run has them (docs/RUST_PLAN.md 4.3 F4).
+#[cfg(any(windows, test))]
 pub(crate) const DEM_READY: &str = "DEM을 준비했습니다.";
 /// This app's own words: the C++ has no order that could end without a file.
+#[cfg(any(windows, test))]
 const NO_DEM: &str = "지도에 올릴 DEM 이 없습니다.";
+#[cfg(any(windows, test))]
 const NO_RASTER: &str = "받은 묶음에 DEM 파일(.img)이 없습니다.";
 /// The folder of the DEM folder that archives are unpacked into.
+#[cfg(any(windows, test))]
 const UNPACKED: &str = "풀림";
 
 /// One received DEM: the 1:50,000 sheet it is of, the year of the product, and its file, relative to the
@@ -70,7 +79,8 @@ pub(crate) fn read_list(root: &Path) -> Vec<DemEntry> {
 /// Puts the entries into the list of the folder, each in the place of an older entry of its sheet.
 ///
 /// # Errors
-/// The folder cannot be written.
+/// The folder cannot be written. The hidden DEM session that writes the list is Windows-only; tests call this.
+#[cfg(any(windows, test))]
 pub(crate) fn add_to_list(root: &Path, entries: &[DemEntry]) -> std::io::Result<()> {
     let mut list = read_list(root);
     for entry in entries {
@@ -103,12 +113,14 @@ pub(crate) fn files_of(root: &Path) -> Vec<PathBuf> {
     kept(root).map(|entry| root.join(entry.file)).collect()
 }
 
+#[cfg(any(windows, test))]
 fn is_raster(file: &Path) -> bool {
     file.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("img"))
 }
 
 /// The raster of a received file: the file itself, or the raster of the archive it came in, unpacked under
 /// the DEM folder (the archive is left as it came).
+#[cfg(any(windows, test))]
 fn raster_of(root: &Path, received: &Path) -> Result<PathBuf, String> {
     if is_raster(received) {
         return Ok(received.to_path_buf());
@@ -122,6 +134,7 @@ fn raster_of(root: &Path, received: &Path) -> Result<PathBuf, String> {
 
 /// What a download handed on, as entries of the list, and what could not be made ready, said by sheet
 /// (`<도엽> · <이유>`). A file the portal has no DEM record for is left out.
+#[cfg(any(windows, test))]
 pub(crate) fn entries_of(root: &Path, received: &[(PathBuf, Map<String, Value>)]) -> (Vec<DemEntry>, Vec<String>) {
     let text = |record: &Map<String, Value>, key: &str| record.get(key).and_then(Value::as_str).unwrap_or_default().to_owned();
     // The unpacker names its files by the folder's full path; the list keeps them from the DEM folder.
@@ -193,6 +206,7 @@ impl StrataAppState {
 
     /// The end of a DEM run: what it brought is unpacked and listed, and the DEM the survey now has goes on
     /// the map. Nothing here takes long (a sheet's DEM is some hundred kilobytes), so nothing is left running.
+    #[cfg(any(windows, test))]
     pub(crate) fn begin_dem_post(&mut self, received: Vec<(PathBuf, Map<String, Value>)>, job: DownloadJobHandle) -> Option<TopoPost> {
         let Some(root) = crate::survey_folder::survey_folder(self.survey_path.as_deref()).map(|folder| folder.join("DEM")) else {
             job.report_stopped(StopCode::Dir1, "먼저 새 조사를 만들거나 기존 조사를 여세요. 조사 폴더 안의 DEM 폴더에 저장합니다.");

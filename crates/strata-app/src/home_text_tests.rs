@@ -4,15 +4,19 @@ use chrono::NaiveDate;
 
 use super::*;
 
+#[cfg(windows)]
 const DESK: Option<&str> = Some("C:/Users/u/Desktop");
+#[cfg(windows)]
 const DOCS: Option<&str> = Some("C:/Users/u/Documents");
 
+#[cfg(windows)]
 fn f(path: &str) -> String {
     folder_in(path, DESK, DOCS)
 }
 
 /// 바탕 화면·문서 안이면 그 이름부터, 아니면 경로 마디를 「 › 」로 잇는다(대소문자 무시).
 #[test]
+#[cfg(windows)]
 fn folder_starts_at_desktop_or_documents() {
     assert_eq!(f("C:/Users/u/Documents/경주시/경주시.gpkg"), "문서 › 경주시");
     assert_eq!(f("C:/Users/u/Desktop/andong/andong.gpkg"), "바탕 화면 › andong");
@@ -24,6 +28,26 @@ fn folder_starts_at_desktop_or_documents() {
     );
     assert_eq!(f("C:/Users/u/Desktopper/a.gpkg"), "C: › Users › u › Desktopper");
     assert_eq!(folder_in("D:/현장/a.gpkg", None, None), "D: › 현장");
+}
+
+/// Same rules as the Windows test, with paths this OS treats as absolute.
+/// `absolute_file_path` would otherwise prefix `C:/...` with the working directory.
+#[test]
+#[cfg(not(windows))]
+fn folder_starts_at_desktop_or_documents() {
+    let desk = "/home/u/Desktop";
+    let docs = "/home/u/Documents";
+    let f = |path: &str| folder_in(path, Some(desk), Some(docs));
+    assert_eq!(f("/home/u/Documents/경주시/경주시.gpkg"), "문서 › 경주시");
+    assert_eq!(f("/home/u/Desktop/andong/andong.gpkg"), "바탕 화면 › andong");
+    assert_eq!(f("/home/u/Desktop/a.gpkg"), "바탕 화면");
+    assert_eq!(f("/HOME/u/Desktop/x/y/a.gpkg"), "바탕 화면 › x › y");
+    assert_eq!(
+        f("/tmp/ka-hgis-cojkmC/ka-hgis-survey-verify/verify1.gpkg"),
+        "tmp › ka-hgis-cojkmC › ka-hgis-survey-verify"
+    );
+    assert_eq!(f("/home/u/Desktopper/a.gpkg"), "home › u › Desktopper");
+    assert_eq!(folder_in("/현장/a.gpkg", None, None), "현장");
 }
 
 /// 목록의 폴더 줄은 마지막 마디만(`folderEnd`), 이어서 작업 표는 끝 두 마디와 조사 이름(`folderTail`).

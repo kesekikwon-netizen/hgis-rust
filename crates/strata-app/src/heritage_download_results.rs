@@ -1,7 +1,12 @@
 //! Accepted group publication (target/cpp-ref/src/app/KaHeritageBrowser.cpp:1206-1217).
 
-use super::{Kind, Phase, Reply, Task};
+#[cfg(any(windows, test))]
+use super::{Kind, Task};
+#[cfg(any(windows, test))]
+use super::Phase;
+use super::Reply;
 use crate::app_state::StrataAppState;
+#[cfg(any(windows, test))]
 use crate::download_jobs::StopCode;
 use strata_net::heritage_auto::DatasetOutcome;
 
@@ -40,8 +45,15 @@ impl StrataAppState {
     pub(super) fn take_heritage_import_with(
         &mut self,
         reply: Reply,
-        mut acknowledge: impl FnMut(&[std::path::PathBuf], DatasetOutcome) -> bool,
+        #[cfg(any(windows, test))] mut acknowledge: impl FnMut(&[std::path::PathBuf], DatasetOutcome) -> bool,
+        #[cfg(not(any(windows, test)))] _acknowledge: impl FnMut(&[std::path::PathBuf], DatasetOutcome) -> bool,
     ) {
+        #[cfg(not(any(windows, test)))]
+        {
+            match reply {}
+        }
+        #[cfg(any(windows, test))]
+        {
         let Some(download) = self.heritage.download.as_mut() else {
             return;
         };
@@ -126,6 +138,7 @@ impl StrataAppState {
                     Err(failure) => self.stop_heritage_download(failure.code, failure.reason),
                 }
             }
+        }
         }
     }
 }

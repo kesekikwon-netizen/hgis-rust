@@ -2,18 +2,24 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+// The access-denied test below is Windows-only (`icacls`). These names are used only there.
+#[cfg(windows)]
+use std::collections::BTreeMap;
 
 use rusqlite::Connection;
 
+#[cfg(windows)]
 use strata_types::crs::WorkCrs;
+#[cfg(windows)]
 use strata_types::schema::DomainLayerKey;
 
-use super::sqlite_read_tests::{
-    append_wal_only_feature, assert_all_survey_readers, build_base_survey, snapshot_dir,
-};
+use super::sqlite_read_tests::{append_wal_only_feature, assert_all_survey_readers, build_base_survey};
+#[cfg(windows)]
+use super::sqlite_read_tests::snapshot_dir;
+#[cfg(windows)]
 use crate::edit_buffer::LayerEditBuffer;
+#[cfg(windows)]
 use crate::gpkg_repository::{GpkgRepository, SurveyWorkspace};
 use crate::gpkg_sql_functions::register_gpkg_sql_functions;
 use crate::sqlite_read::{
